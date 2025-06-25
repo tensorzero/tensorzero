@@ -24,7 +24,7 @@ use tensorzero_core::{
         },
         validate_tags,
     },
-    error::{Error, ErrorDetails},
+    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     gateway_util::{setup_clickhouse, setup_http_client, AppStateData},
 };
 use thiserror::Error;
@@ -796,7 +796,7 @@ impl Client {
     /// IMPORTANT: For now, this function drops datapoints which are bad, e.g. ones where templating fails, the function
     ///            has no variant specified, or where the process of downloading resources fails.
     ///            In future we will make this behavior configurable by the caller.
-    pub async fn experimental_render_inferences(
+    pub async fn experimental_render_samples(
         &self,
         mut stored_inferences: Vec<StoredInference>,
         variants: HashMap<String, String>, // Map from function name to variant name
@@ -826,12 +826,17 @@ impl Client {
         let results = join_all(resolution_futures).await;
 
         // Ensure that the number of results matches the number of inference examples.
-        // This should be guaranteed to be true based on the code above, but we assert it anyway.
-        assert_eq!(
-            stored_inferences.len(),
-            results.len(),
-            "Mismatch between number of inference examples and resolution results. This indicates a bug."
-        );
+        // This should be guaranteed to be true based on the code above, but we check it anyway.
+        if stored_inferences.len() != results.len() {
+            return Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InternalError {
+                    message: format!(
+                        "Mismatch betwen number of inference examples and resolution results. {IMPOSSIBLE_ERROR_MESSAGE}"
+                    ),
+                })
+                .into(),
+            });
+        }
 
         let final_rendered_examples: Vec<RenderedStoredInference> = stored_inferences
             .into_iter() // Consumes Vec<StoredInference>; elements are already mutated

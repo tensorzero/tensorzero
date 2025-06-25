@@ -25,7 +25,7 @@ pub async fn test_render_inferences_empty() {
     // Test with an empty stored inferences array.
     let stored_inferences = vec![];
     let rendered_inferences = client
-        .experimental_render_inferences(stored_inferences, HashMap::new())
+        .experimental_render_samples(stored_inferences, HashMap::new())
         .await
         .unwrap();
     assert!(rendered_inferences.is_empty());
@@ -57,7 +57,7 @@ pub async fn test_render_inferences_no_function() {
     })];
 
     let rendered_inferences = client
-        .experimental_render_inferences(stored_inferences, HashMap::new())
+        .experimental_render_samples(stored_inferences, HashMap::new())
         .await
         .unwrap();
     assert!(rendered_inferences.is_empty());
@@ -90,7 +90,7 @@ pub async fn test_render_inferences_no_variant() {
     })];
 
     let error = client
-        .experimental_render_inferences(
+        .experimental_render_samples(
             stored_inferences,
             HashMap::from([("basic_test".to_string(), "notavariant".to_string())]),
         )
@@ -131,7 +131,7 @@ pub async fn test_render_inferences_missing_variable() {
     })];
 
     let rendered_inferences = client
-        .experimental_render_inferences(
+        .experimental_render_samples(
             stored_inferences,
             HashMap::from([("basic_test".to_string(), "test".to_string())]),
         )
@@ -256,7 +256,7 @@ pub async fn test_render_inferences_normal() {
     ];
 
     let rendered_inferences = client
-        .experimental_render_inferences(
+        .experimental_render_samples(
             stored_inferences,
             HashMap::from([
                 ("json_success".to_string(), "test".to_string()),
@@ -440,7 +440,7 @@ pub async fn test_render_inferences_template_no_schema() {
     })];
 
     let rendered_inferences = client
-        .experimental_render_inferences(
+        .experimental_render_samples(
             stored_inferences,
             HashMap::from([(
                 "basic_test_template_no_schema".to_string(),

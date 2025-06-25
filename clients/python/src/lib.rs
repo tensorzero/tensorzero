@@ -987,7 +987,7 @@ impl TensorZeroGateway {
             .iter()
             .map(|x| deserialize_from_stored_inference(this.py(), x))
             .collect::<Result<Vec<_>, _>>()?;
-        let fut = client.experimental_render_inferences(stored_inferences, variants);
+        let fut = client.experimental_render_samples(stored_inferences, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
 }
@@ -1590,7 +1590,7 @@ impl AsyncTensorZeroGateway {
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
-                .experimental_render_inferences(stored_inferences, variants)
+                .experimental_render_samples(stored_inferences, variants)
                 .await;
             Python::with_gil(|py| match res {
                 Ok(inferences) => Ok(PyList::new(py, inferences)?.unbind()),
