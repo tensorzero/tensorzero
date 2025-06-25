@@ -72,6 +72,7 @@ function renderContentBlock(block: DisplayInputMessageContent, index: number) {
 
     case "tool_call": {
       let serializedArguments;
+      // Arguments is a string that should parse to JSON. If the parsing fails we can just render it as a string.
       try {
         serializedArguments = JSON.stringify(
           JSON.parse(block.arguments),
@@ -163,8 +164,12 @@ export default function InputSnippet({ input }: InputSnippetProps) {
                   let serializedSystem;
                   try {
                     serializedSystem = JSON.stringify(input.system, null, 2);
-                  } catch {
-                    return null;
+                  } catch (e) {
+                    return (
+                      <div style={{ color: "red" }}>
+                        Error serializing system field: {String(e)}
+                      </div>
+                    );
                   }
                   return (
                     <TextMessage content={serializedSystem} type="structured" />
