@@ -263,7 +263,7 @@ const MetricsDisplay = ({
   variantName: string;
 }) => {
   return (
-    <div className="mt-3 border-t border-gray-200 pt-2">
+    <div className="pt-2">
       <div className="space-y-1">
         {metrics.map((metricObj) => {
           const evaluatorConfig = evaluatorsConfig[metricObj.evaluator_name];
@@ -445,54 +445,48 @@ function OutputsSection({
   return (
     <SectionLayout>
       <SectionHeader heading="Output" />
-      <div className="flex flex-row gap-4 overflow-x-auto">
+      <div className="grid grid-flow-col grid-rows-[min-content_min-content_min-content] gap-x-4 gap-y-2 overflow-x-auto">
         {outputsToDisplay.map((result) => (
-          <div key={result.id} className="flex w-1/2 min-w-4/9 flex-col">
-            <div>
-              <div className="mb-2 flex flex-col gap-1">
-                {result.id === "Reference" ? (
-                  <>
-                    <EvaluationRunBadge
-                      runInfo={{
-                        evaluation_run_id: "",
-                        variant_name: result.variant_name,
-                      }}
-                      getColor={() => "bg-gray-100 text-gray-700"}
-                    />
-                    <div className="text-xs text-transparent">
-                      Inference: placeholder
+          <section className="contents" key={result.id}>
+            <div className="row-start-1 flex flex-col gap-1">
+              {result.id === "Reference" ? (
+                <EvaluationRunBadge
+                  runInfo={{
+                    evaluation_run_id: "",
+                    variant_name: result.variant_name,
+                  }}
+                  getColor={() => "bg-gray-100 text-gray-700"}
+                />
+              ) : (
+                <>
+                  <EvaluationRunBadge
+                    runInfo={{
+                      evaluation_run_id: result.id,
+                      variant_name: result.variant_name,
+                    }}
+                    // Use the getColor obtained from the correct context
+                    getColor={getColor}
+                  />
+
+                  {result.inferenceId && (
+                    <div className="text-xs text-gray-500">
+                      Inference:{" "}
+                      <Link
+                        to={`/observability/inferences/${result.inferenceId}`}
+                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        {result.inferenceId}
+                      </Link>
                     </div>
-                  </>
-                ) : (
-                  <>
-                    <EvaluationRunBadge
-                      runInfo={{
-                        evaluation_run_id: result.id,
-                        variant_name: result.variant_name,
-                      }}
-                      // Use the getColor obtained from the correct context
-                      getColor={getColor}
-                    />
-                    {result.inferenceId ? (
-                      <div className="text-xs text-gray-500">
-                        Inference:{" "}
-                        <Link
-                          to={`/observability/inferences/${result.inferenceId}`}
-                          className="text-blue-600 hover:text-blue-800 hover:underline"
-                        >
-                          {result.inferenceId}
-                        </Link>
-                      </div>
-                    ) : (
-                      <div className="text-xs text-transparent">
-                        Inference: placeholder
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-              <Output output={result.output} />
+                  )}
+                </>
+              )}
             </div>
+
+            <section className="row-start-2">
+              <Output output={result.output} />
+            </section>
+
             {result.id !== "Reference" &&
               result.metrics &&
               result.metrics.length > 0 && (
@@ -506,7 +500,7 @@ function OutputsSection({
                   variantName={result.variant_name}
                 />
               )}
-          </div>
+          </section>
         ))}
       </div>
     </SectionLayout>
