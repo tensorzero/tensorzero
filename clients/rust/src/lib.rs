@@ -309,9 +309,15 @@ impl ClientBuilder {
     /// Builds a `Client` in HTTPGateway mode, erroring if the mode is not HTTPGateway
     /// This allows avoiding calling the async `build` method
     pub fn build_http(self) -> Result<Client, ClientBuilderError> {
-        let ClientBuilderMode::HTTPGateway { url } = self.mode else {
+        let ClientBuilderMode::HTTPGateway { mut url } = self.mode else {
             return Err(ClientBuilderError::NotHTTPGateway);
         };
+        // Enforce that the URL has a trailing slash, so that joining endpoints works correctly
+        // This means that passing in a url that looks like 'http://example.com/some/prefix'
+        // will result in inference requests being sent to 'http://example.com/some/prefix/inference'
+        if !url.path().ends_with('/') {
+            url.set_path(&format!("{}/", url.path()));
+        }
         Ok(Client {
             mode: ClientMode::HTTPGateway(HTTPGateway {
                 base_url: url,
@@ -674,6 +680,7 @@ impl Client {
     pub async fn list_datapoints(
         &self,
         dataset_name: String,
+        function_name: Option<String>,
         limit: Option<u32>,
         offset: Option<u32>,
     ) -> Result<Vec<Datapoint>, TensorZeroError> {
@@ -685,10 +692,13 @@ impl Client {
                     })
                     .into(),
                 })?;
-                let builder = client.http_client.get(url).query(&[
-                    ("limit", limit.unwrap_or(100).to_string().as_str()),
-                    ("offset", offset.unwrap_or(0).to_string().as_str()),
-                ]);
+                let mut query_params = Vec::new();
+                query_params.push(("limit", limit.unwrap_or(100).to_string()));
+                query_params.push(("offset", offset.unwrap_or(0).to_string()));
+                if let Some(function_name) = function_name {
+                    query_params.push(("function_name", function_name));
+                }
+                let builder = client.http_client.get(url).query(&query_params);
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
@@ -696,6 +706,7 @@ impl Client {
                     tensorzero_core::endpoints::datasets::list_datapoints(
                         dataset_name,
                         &gateway.state.clickhouse_connection_info,
+                        function_name,
                         limit,
                         offset,
                     )
