@@ -65,6 +65,9 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let _ = tensorzero_error_class(m.py())?;
     let _ = tensorzero_core_error_class(m.py())?;
     // Otel is disabled for now in the Python client until we decide how it should be configured
+    // We might have produced an error when trying to construct the (not yet enabled) OTEL layer,
+    // which will just get ignored here. The HTTP gateway will handle that error, as that's
+    // the only place where we actually try to enable OTEL.
     let _delayed_enable = tokio_block_on_without_gil(
         m.py(),
         tensorzero_rust::observability::setup_observability(LogFormat::Pretty),
@@ -880,15 +883,16 @@ impl TensorZeroGateway {
     ///
     /// :param dataset_name: The name of the dataset to get the datapoints from.
     /// :return: A list of `Datapoint` objects.
-    #[pyo3(signature = (*, dataset_name, limit=None, offset=None))]
+    #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None))]
     fn list_datapoints(
         this: PyRef<'_, Self>,
         dataset_name: String,
+        function_name: Option<String>,
         limit: Option<u32>,
         offset: Option<u32>,
     ) -> PyResult<Bound<'_, PyList>> {
         let client = this.as_super().client.clone();
-        let fut = client.list_datapoints(dataset_name, limit, offset);
+        let fut = client.list_datapoints(dataset_name, function_name, limit, offset);
         let resp = tokio_block_on_without_gil(this.py(), fut);
         match resp {
             Ok(resp) => {
@@ -1472,16 +1476,19 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param dataset_name: The name of the dataset to get the datapoints from.
     /// :return: A list of `Datapoint` objects.
-    #[pyo3(signature = (*, dataset_name, limit=None, offset=None))]
+    #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None))]
     fn list_datapoints(
         this: PyRef<'_, Self>,
         dataset_name: String,
+        function_name: Option<String>,
         limit: Option<u32>,
         offset: Option<u32>,
     ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.list_datapoints(dataset_name, limit, offset).await;
+            let res = client
+                .list_datapoints(dataset_name, function_name, limit, offset)
+                .await;
             Python::with_gil(|py| match res {
                 Ok(resp) => {
                     let datapoints = resp

@@ -50,13 +50,12 @@ derive_builder = "0.20.0"
 futures = { workspace = true }
 futures-core = "0.3.30"
 hex = "0.4.3"
-image = { version = "0.25.6", default-features = false }
 itertools = "0.14.0"
 jsonschema = "0.30.0"
 jsonwebtoken = "9.3.1"
 lazy_static = { workspace = true }
 metrics = "0.24.2"
-metrics-exporter-prometheus = { version = "0.17.0", features = [
+metrics-exporter-prometheus = { version = "0.17.2", features = [
     "http-listener",
 ], default-features = false }
 minijinja = { version = "2.10.2", features = [
@@ -90,7 +89,7 @@ tracing-subscriber = { version = "0.3.18", features = [
 ] }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
-tensorzero-derive = { path = "../tensorzero-derive" }
+tensorzero-derive = { path = "../internal/tensorzero-derive" }
 clap = { workspace = true }
 aws-sdk-sagemakerruntime = { version = "1.75.0", features = [
     "behavior-version-latest",
@@ -125,7 +124,7 @@ tracing-test = { workspace = true }
 tensorzero = { path = "../clients/rust" }
 paste = "1.0.15"
 base64 = "0.22.1"
-aws-sdk-s3 = { version = "1.92.0", default-features = false, features = [
+aws-sdk-s3 = { version = "1.93.0", default-features = false, features = [
     "behavior-version-latest",
     "sigv4a",
     "rt-tokio",

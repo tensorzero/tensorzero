@@ -201,7 +201,7 @@ json_mode = "strict"
 
 [evaluations.evaluation1.evaluators.llm_judge_bool.variants.llama_promptA]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/llama4-maverick-instruct-basic"
+model = "fireworks::accounts/fireworks/models/mixtral-8x22b-instruct"
 system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
 json_mode = "strict"
 
@@ -250,3 +250,19 @@ active = true
 json_mode = "off"
 model = "anthropic::claude-3.5-sonnet"
 system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_float/system_instructions.txt"
+
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                OPTIMIZERS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[optimizers.openai_sft]
+type = "openai_sft"
+model = "gpt-4o-2024-08-06"
+batch_size = 16
+learning_rate_multiplier = 0.1
+n_epochs = 1
+seed = 42
+suffix = "test"
+# credentials = "env:OPENAI_API_KEY"
+# api_base = "http://localhost:1234"

@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -24,6 +25,7 @@ use crate::inference::types::{
 use crate::inference::types::{ContentBlock, FinishReason, ProviderInferenceResponseStreamInner};
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, ModelProvider};
+use crate::providers::helpers::inject_extra_request_data;
 use crate::tool::{ToolCall, ToolCallChunk};
 
 const PROVIDER_NAME: &str = "Dummy";
@@ -233,11 +235,11 @@ impl InferenceProvider for DummyProvider {
         ModelProviderRequest {
             request,
             provider_name: _,
-            model_name: _,
+            model_name,
         }: ModelProviderRequest<'a>,
         _http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-        _model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         if self.model_name == "slow" {
             tokio::time::sleep(Duration::from_secs(5)).await;
@@ -382,6 +384,23 @@ impl InferenceProvider for DummyProvider {
                     text: json!({
                         "extra_body": request.extra_body,
                         "extra_headers": request.extra_headers,
+                    })
+                    .to_string(),
+                })]
+            }
+            "echo_injected_data" => {
+                let mut body = serde_json::json!({});
+                let headers = inject_extra_request_data(
+                    &request.extra_body,
+                    &request.extra_headers,
+                    model_provider,
+                    model_name,
+                    &mut body,
+                )?;
+                vec![ContentBlockOutput::Text(Text {
+                    text: json!({
+                        "injected_body": body,
+                        "injected_headers": headers.into_iter().map(|(k, v)| (k.unwrap().to_string(), v.to_str().unwrap().to_string())).collect::<Vec<_>>(),
                     })
                     .to_string(),
                 })]

@@ -2576,3 +2576,125 @@ async fn test_get_nonexistent_datapoint() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn test_list_datapoints_function_name_filter() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+
+    // Create datapoints for two different functions
+    let datapoints_basic = vec![
+        json!({
+            "function_name": "basic_test",
+            "input": {
+                "system": {"assistant_name": "Claude"},
+                "messages": [{"role": "user", "content": "Hello basic"}]
+            },
+            "output": [{"type": "text", "text": "Response 1"}],
+        }),
+        json!({
+            "function_name": "basic_test",
+            "input": {
+                "system": {"assistant_name": "Claude"},
+                "messages": [{"role": "user", "content": "Hello basic 2"}]
+            },
+            "output": [{"type": "text", "text": "Response 2"}],
+        }),
+    ];
+
+    let datapoints_basic_test_timeout = vec![json!({
+        "function_name": "basic_test_timeout",
+        "input": {
+            "system": "aaa",
+            "messages": [{"role": "user", "content": "Hello weather"}]
+        },
+        "output": [{"type": "text", "text": "Weather response"}],
+    })];
+
+    // Insert basic_test datapoints
+    let resp = client
+        .post(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/bulk",
+        )))
+        .json(&json!({
+            "datapoints": datapoints_basic
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Insert basic_test_timeout datapoints
+    let resp = client
+        .post(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/bulk",
+        )))
+        .json(&json!({
+            "datapoints": datapoints_basic_test_timeout
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Wait for data to be available
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Test listing all datapoints (no filter)
+    let resp = client
+        .get(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints",
+        )))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    let all_datapoints: Vec<Value> = resp.json().await.unwrap();
+    assert_eq!(all_datapoints.len(), 3);
+
+    // Test filtering by basic_test function
+    let resp = client
+        .get(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints?function_name=basic_test",
+        )))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    let basic_datapoints: Vec<Value> = resp.json().await.unwrap();
+    assert_eq!(basic_datapoints.len(), 2);
+
+    // Verify all returned datapoints have function_name = "basic_test"
+    for datapoint in &basic_datapoints {
+        assert_eq!(datapoint["function_name"], "basic_test");
+    }
+
+    // Test filtering by basic_test_timeout function
+    let resp = client
+        .get(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints?function_name=basic_test_timeout",
+        )))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    let weather_datapoints: Vec<Value> = resp.json().await.unwrap();
+    assert_eq!(weather_datapoints.len(), 1);
+
+    // Verify all returned datapoints have function_name = "basic_test_timeout"
+    for datapoint in &weather_datapoints {
+        assert_eq!(datapoint["function_name"], "basic_test_timeout");
+    }
+
+    // Test filtering by non-existent function
+    let resp = client
+        .get(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints?function_name=nonexistent_function",
+        )))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    let empty_datapoints: Vec<Value> = resp.json().await.unwrap();
+    assert_eq!(empty_datapoints.len(), 0);
+}

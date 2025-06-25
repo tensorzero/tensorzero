@@ -1,3 +1,4 @@
+use super::{deserialize_delete, serialize_delete};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -10,7 +11,20 @@ pub struct ExtraBodyConfig {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ExtraBodyReplacement {
     pub pointer: String,
-    pub value: Value,
+    #[serde(flatten)]
+    pub kind: ExtraBodyReplacementKind,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtraBodyReplacementKind {
+    Value(Value),
+    // We only allow `"delete": true` to be set - deserializing `"delete": false` will error
+    #[serde(
+        serialize_with = "serialize_delete",
+        deserialize_with = "deserialize_delete"
+    )]
+    Delete,
 }
 
 /// The 'InferenceExtraBody' options provided directly in an inference request
@@ -61,12 +75,14 @@ pub enum InferenceExtraBody {
     Provider {
         model_provider_name: String,
         pointer: String,
-        value: serde_json::Value,
+        #[serde(flatten)]
+        kind: ExtraBodyReplacementKind,
     },
     Variant {
         variant_name: String,
         pointer: String,
-        value: serde_json::Value,
+        #[serde(flatten)]
+        kind: ExtraBodyReplacementKind,
     },
 }
 

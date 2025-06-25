@@ -212,7 +212,15 @@ impl DelayedDebugLogs {
 /// 2. Deserialize the config file (`tracing::*` macros will work at this point)
 /// 3. Update the logging configuration based on the deserialized config file (e.g. `gateway.debug = true`)
 pub struct DelayedLogConfig {
-    pub delayed_otel: DelayedOtelEnableHandle,
+    /// We allow the OTEL layer creation to fail (e.g. if an invalid `OTEL_` environment variable is set)
+    /// The HTTP gateway will exit if OTLP was explicitly enabled through the config,
+    /// while the embedded gateway will do nothing (as it never actually tries to enable
+    /// OTEL exporting via `delayed_otel`).
+    /// **NOTE** - since the `Error` will have been constructed before we've initialized
+    /// `tracing_subscriber`, it will *not* be automatically logged.
+    /// Instead, consumers that care about OTEL (currently only the HTTP gateway)
+    /// must manually log the error.
+    pub delayed_otel: Result<DelayedOtelEnableHandle, Error>,
     pub delayed_debug_logs: DelayedDebugLogs,
 }
 
@@ -292,9 +300,11 @@ pub async fn setup_observability(log_format: LogFormat) -> Result<DelayedLogConf
     };
 
     // We need to provide a dummy generic parameter to satisfy the compiler
-    let (delayed_otel, otel_layer) =
-        build_opentelemetry_layer::<opentelemetry_otlp::SpanExporter>(None)?;
-
+    let otel_data = build_opentelemetry_layer::<opentelemetry_otlp::SpanExporter>(None);
+    let (delayed_otel, otel_layer) = match otel_data {
+        Ok((delayed_otel, otel_layer)) => (Ok(delayed_otel), Some(otel_layer)),
+        Err(e) => (Err(e), None),
+    };
     tracing_subscriber::registry()
         .with(otel_layer)
         .with(log_layer.with_filter(log_level))

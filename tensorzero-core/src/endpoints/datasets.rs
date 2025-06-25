@@ -438,6 +438,14 @@ pub async fn update_datapoint_handler(
     }))
 }
 
+/// Note: This type should be a Vec<Enum<ChatDatapointInsert, JsonDatapointInsert>>,
+/// however, since the required fields don't distinguish these two types serde will fail to disambiguate them
+/// as it deserializes.
+///
+/// We can disambiguate them by checking the config for the `function_name` that
+/// the datapoint is for and then deserializing it as the correct type.
+///
+/// For the OpenAPI spec we will have to manually create the type for this.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct InsertDatapointParams {
@@ -738,6 +746,7 @@ pub async fn delete_datapoint(
 
 #[derive(Debug, Deserialize)]
 pub struct ListDatapointsQueryParams {
+    function_name: Option<String>,
     limit: Option<u32>,
     offset: Option<u32>,
 }
@@ -756,6 +765,7 @@ pub async fn list_datapoints_handler(
     list_datapoints(
         path_params.dataset_name,
         &app_state.clickhouse_connection_info,
+        query_params.function_name,
         query_params.limit,
         query_params.offset,
     )
@@ -767,10 +777,11 @@ pub async fn list_datapoints_handler(
 pub async fn list_datapoints(
     dataset_name: String,
     clickhouse: &ClickHouseConnectionInfo,
+    function_name: Option<String>,
     limit: Option<u32>,
     offset: Option<u32>,
 ) -> Result<Vec<Datapoint>, Error> {
-    let query = r#"
+    let mut query = r#"
     WITH dataset as (
         SELECT
             'chat' as type,
@@ -789,7 +800,15 @@ pub async fn list_datapoints(
             staled_at
         FROM ChatInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
-        AND staled_at IS NULL
+        AND staled_at IS NULL"#
+        .to_string();
+
+    if function_name.is_some() {
+        query.push_str(" AND function_name = {function_name: String}");
+    }
+
+    query.push_str(
+        r#"
         UNION ALL
         SELECT
             'json' as type,
@@ -808,24 +827,37 @@ pub async fn list_datapoints(
             staled_at
         FROM JsonInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
-        AND staled_at IS NULL
+        AND staled_at IS NULL"#,
+    );
+
+    if function_name.is_some() {
+        query.push_str(" AND function_name = {function_name: String}");
+    }
+
+    query.push_str(
+        r#"
     )
     SELECT * FROM dataset
     ORDER BY id DESC
     LIMIT {limit: UInt32}
     OFFSET {offset: UInt32}
     FORMAT JSONEachRow
-    "#;
+    "#,
+    );
     let limit = limit.unwrap_or(100);
     let offset = offset.unwrap_or(0);
     let limit_str = limit.to_string();
     let offset_str = offset.to_string();
 
-    let params = HashMap::from([
+    let mut params = HashMap::from([
         ("dataset_name", dataset_name.as_str()),
         ("limit", limit_str.as_str()),
         ("offset", offset_str.as_str()),
     ]);
+
+    if let Some(ref fn_name) = function_name {
+        params.insert("function_name", fn_name.as_str());
+    }
 
     let result = clickhouse
         .run_query_synchronous(query.to_string(), &params)

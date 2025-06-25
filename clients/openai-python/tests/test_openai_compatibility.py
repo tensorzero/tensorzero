@@ -47,36 +47,17 @@ async def async_client():
 
 
 @pytest.mark.asyncio
-async def test_async_basic_inference_old_model_format_and_headers(async_client):
-    messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
-        {"role": "user", "content": "Hello"},
-    ]
-
-    result = await async_client.chat.completions.create(
-        extra_headers={"episode_id": str(uuid7())},
-        messages=messages,
-        model="tensorzero::function_name::basic_test",
-        temperature=0.4,
-    )
-    # Verify IDs are valid UUIDs
-    UUID(result.id)  # Will raise ValueError if invalid
-    UUID(result.episode_id)  # Will raise ValueError if invalid
-    assert (
-        result.choices[0].message.content
-        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
-    )
-    usage = result.usage
-    assert usage.prompt_tokens == 10
-    assert usage.completion_tokens == 10
-    assert usage.total_tokens == 20
-    assert result.choices[0].finish_reason == "stop"
-
-
-@pytest.mark.asyncio
 async def test_async_basic_inference(async_client):
     messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
         {"role": "user", "content": "Hello"},
     ]
 
@@ -111,7 +92,15 @@ class DummyModel(BaseModel):
 @pytest.mark.asyncio
 async def test_async_basic_inference_json_schema(async_client):
     messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
         {"role": "user", "content": "Hello"},
     ]
 
@@ -130,7 +119,15 @@ async def test_async_basic_inference_json_schema(async_client):
 @pytest.mark.asyncio
 async def test_async_inference_cache(async_client):
     messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
         {"role": "user", "content": "Hello"},
     ]
 
@@ -172,7 +169,15 @@ async def test_async_inference_cache(async_client):
 @pytest.mark.asyncio
 async def test_async_inference_streaming_with_cache(async_client):
     messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
         {"role": "user", "content": "Hello"},
     ]
 
@@ -272,7 +277,15 @@ async def test_async_inference_streaming_with_cache(async_client):
 async def test_async_inference_streaming(async_client):
     start_time = time()
     messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
         {"role": "user", "content": "Hello"},
     ]
     stream = await async_client.chat.completions.create(
@@ -342,7 +355,17 @@ async def test_async_inference_streaming(async_client):
 async def test_async_inference_streaming_nonexistent_function(async_client):
     with pytest.raises(Exception) as exc_info:
         messages = [
-            {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "tensorzero::arguments": {
+                            "assistant_name": "Alfred Pennyworth"
+                        },
+                    }
+                ],
+            },
             {"role": "user", "content": "Hello"},
         ]
 
@@ -364,7 +387,17 @@ async def test_async_inference_streaming_nonexistent_function(async_client):
 async def test_async_inference_streaming_missing_function(async_client):
     with pytest.raises(Exception) as exc_info:
         messages = [
-            {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "tensorzero::arguments": {
+                            "assistant_name": "Alfred Pennyworth"
+                        },
+                    }
+                ],
+            },
             {"role": "user", "content": "Hello"},
         ]
 
@@ -386,7 +419,17 @@ async def test_async_inference_streaming_missing_function(async_client):
 async def test_async_inference_streaming_malformed_function(async_client):
     with pytest.raises(Exception) as exc_info:
         messages = [
-            {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "tensorzero::arguments": {
+                            "assistant_name": "Alfred Pennyworth"
+                        },
+                    }
+                ],
+            },
             {"role": "user", "content": "Hello"},
         ]
 
@@ -408,7 +451,17 @@ async def test_async_inference_streaming_malformed_function(async_client):
 async def test_async_inference_streaming_missing_model(async_client):
     with pytest.raises(Exception) as exc_info:
         messages = [
-            {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "tensorzero::arguments": {
+                            "assistant_name": "Alfred Pennyworth"
+                        },
+                    }
+                ],
+            },
             {"role": "user", "content": "Hello"},
         ]
 
@@ -425,7 +478,17 @@ async def test_async_inference_streaming_missing_model(async_client):
 async def test_async_inference_streaming_malformed_input(async_client):
     with pytest.raises(Exception) as exc_info:
         messages = [
-            {"role": "system", "content": [{"name_of_assistant": "Alfred Pennyworth"}]},
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "tensorzero::arguments": {
+                            "name_of_assistant": "Alfred Pennyworth"
+                        },
+                    }
+                ],
+            },
             {"role": "user", "content": "Hello"},
         ]
         await async_client.chat.completions.create(
@@ -441,7 +504,15 @@ async def test_async_inference_streaming_malformed_input(async_client):
 @pytest.mark.asyncio
 async def test_async_tool_call_inference(async_client):
     messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
         {
             "role": "user",
             "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?",
@@ -474,7 +545,15 @@ async def test_async_tool_call_inference(async_client):
 @pytest.mark.asyncio
 async def test_async_malformed_tool_call_inference(async_client):
     messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
         {
             "role": "user",
             "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?",
@@ -509,7 +588,15 @@ async def test_async_malformed_tool_call_inference(async_client):
 @pytest.mark.asyncio
 async def test_async_tool_call_streaming(async_client):
     messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
         {
             "role": "user",
             "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?",
@@ -568,8 +655,21 @@ async def test_async_json_streaming(async_client):
     # We don't actually have a streaming JSON function implemented in `dummy.rs` but it doesn't matter for this test since
     # TensorZero doesn't parse the JSON output of the function for streaming calls.
     messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
-        {"role": "user", "content": [{"country": "Japan"}]},
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
+            ],
+        },
     ]
     stream = await async_client.chat.completions.create(
         extra_body={"tensorzero::episode_id": str(uuid7())},
@@ -721,8 +821,21 @@ async def test_async_json_success_non_deprecated(async_client):
 @pytest.mark.asyncio
 async def test_async_json_success(async_client):
     messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
-        {"role": "user", "content": [{"country": "Japan"}]},
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
+            ],
+        },
     ]
     episode_id = str(uuid7())
     result = await async_client.chat.completions.create(
@@ -741,8 +854,21 @@ async def test_async_json_success(async_client):
 @pytest.mark.asyncio
 async def test_async_json_success_strict(async_client):
     messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
-        {"role": "user", "content": [{"country": "Japan"}]},
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
+            ],
+        },
     ]
     episode_id = str(uuid7())
     response_format = {
@@ -782,8 +908,21 @@ async def test_async_json_success_strict(async_client):
 @pytest.mark.asyncio
 async def test_async_json_success_json_object(async_client):
     messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
-        {"role": "user", "content": [{"country": "Japan"}]},
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
+            ],
+        },
     ]
     episode_id = str(uuid7())
     response_format = {
@@ -814,9 +953,22 @@ async def test_async_json_success_override(async_client):
     # Check that if we pass a string to a function with an input schema it is 400
     # We will add explicit support for raw text in the OpenAI API later
     messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
         {"role": "user", "content": [{"type": "text", "text": "Hi how are you?"}]},
-        {"role": "user", "content": [{"country": "Japan"}]},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
+            ],
+        },
     ]
     episode_id = str(uuid7())
     with pytest.raises(BadRequestError) as exc_info:
@@ -840,7 +992,12 @@ async def test_async_json_invalid_system(async_client):
                 }
             ],
         },
-        {"role": "user", "content": [{"country": "Japan"}]},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
+            ],
+        },
     ]
     episode_id = str(uuid7())
     with pytest.raises(BadRequestError) as exc_info:
@@ -864,28 +1021,40 @@ async def test_async_extra_headers_param(async_client):
         extra_body={
             "tensorzero::extra_headers": [
                 {
-                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "model_provider_name": "tensorzero::model_name::dummy::echo_injected_data::provider_name::dummy",
                     "name": "x-my-extra-header",
                     "value": "my-extra-header-value",
+                },
+                {
+                    "variant_name": "dummy::echo_injected_data",
+                    "name": "x-my-variant-header",
+                    "value": "my-variant-value",
+                },
+                # This header will get added, and then immediately deleted by the subsequence 'delete = True' entry
+                # The 'dummy::echo_injected_data' models echos back the final header map (after all 'extra_headers' replacements are applied),
+                # and we assert that it only contains 'x-my-extra-header'
+                {
+                    "variant_name": "dummy::echo_injected_data",
+                    "name": "x-my-delete-header",
+                    "value": "Should be deleted",
+                },
+                {
+                    "variant_name": "dummy::echo_injected_data",
+                    "name": "x-my-delete-header",
+                    "delete": True,
                 },
             ]
         },
         messages=messages,
-        model="tensorzero::model_name::dummy::echo_extra_info",
+        model="tensorzero::model_name::dummy::echo_injected_data",
     )
-    assert result.model == "tensorzero::model_name::dummy::echo_extra_info"
+    assert result.model == "tensorzero::model_name::dummy::echo_injected_data"
     assert json.loads(result.choices[0].message.content) == {
-        "extra_body": {"inference_extra_body": []},
-        "extra_headers": {
-            "inference_extra_headers": [
-                {
-                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
-                    "name": "x-my-extra-header",
-                    "value": "my-extra-header-value",
-                }
-            ],
-            "variant_extra_headers": None,
-        },
+        "injected_body": {},
+        "injected_headers": [
+            ["x-my-extra-header", "my-extra-header-value"],
+            ["x-my-variant-header", "my-variant-value"],
+        ],
     }
 
 
@@ -928,7 +1097,15 @@ async def test_async_extra_body_param(async_client):
 @pytest.mark.asyncio
 async def test_async_json_failure(async_client):
     messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
         {"role": "user", "content": "Hello, world!"},
     ]
     result = await async_client.chat.completions.create(
@@ -950,7 +1127,15 @@ async def test_async_json_failure(async_client):
 async def test_dynamic_tool_use_inference_openai(async_client):
     episode_id = str(uuid7())
     messages = [
-        {"role": "system", "content": [{"assistant_name": "Dr. Mehta"}]},
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Dr. Mehta"},
+                }
+            ],
+        },
         {
             "role": "user",
             "content": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.",
@@ -1005,7 +1190,6 @@ async def test_dynamic_tool_use_inference_openai(async_client):
 
 @pytest.mark.asyncio
 async def test_dynamic_json_mode_inference_body_param_openai(async_client):
-    header_episode_id = str(uuid7())
     body_episode_id = str(uuid7())
     output_schema = {
         "type": "object",
@@ -1026,15 +1210,23 @@ async def test_dynamic_json_mode_inference_body_param_openai(async_client):
         {
             "role": "system",
             "content": [
-                {"assistant_name": "Dr. Mehta", "schema": serialized_output_schema}
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {
+                        "assistant_name": "Dr. Mehta",
+                        "schema": serialized_output_schema,
+                    },
+                }
             ],
         },
-        {"role": "user", "content": [{"country": "Japan"}]},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
+            ],
+        },
     ]
     result = await async_client.chat.completions.create(
-        extra_headers={
-            "episode_id": header_episode_id,
-        },
         extra_body={
             "tensorzero::episode_id": body_episode_id,
             "tensorzero::variant_name": "openai",
@@ -1076,10 +1268,21 @@ async def test_dynamic_json_mode_inference_openai(async_client):
         {
             "role": "system",
             "content": [
-                {"assistant_name": "Dr. Mehta", "schema": serialized_output_schema}
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {
+                        "assistant_name": "Dr. Mehta",
+                        "schema": serialized_output_schema,
+                    },
+                }
             ],
         },
-        {"role": "user", "content": [{"country": "Japan"}]},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
+            ],
+        },
     ]
     result = await async_client.chat.completions.create(
         extra_body={

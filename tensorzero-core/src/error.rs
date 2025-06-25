@@ -10,6 +10,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::inference::types::storage::StoragePath;
+use crate::inference::types::Thought;
 
 /// Controls whether to include raw request/response details in error output
 ///
@@ -36,6 +37,16 @@ pub fn set_debug(debug: bool) -> Result<(), Error> {
             message: "Failed to set debug mode".to_string(),
         })
     })
+}
+
+pub fn warn_discarded_thought_block(provider_type: &str, thought: &Thought) {
+    if *DEBUG.get().unwrap_or(&false) {
+        tracing::warn!("Provider type `{provider_type}` does not support input thought blocks, discarding: {thought}");
+    } else {
+        tracing::warn!(
+            "Provider type `{provider_type}` does not support input thought blocks, discarding"
+        );
+    }
 }
 
 pub fn warn_discarded_unknown_chunk(provider_type: &str, part: &str) {
@@ -493,7 +504,7 @@ impl ErrorDetails {
             ErrorDetails::MissingFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
-            ErrorDetails::Observability { .. } => tracing::Level::ERROR,
+            ErrorDetails::Observability { .. } => tracing::Level::WARN,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::OptimizationResponse { .. } => tracing::Level::ERROR,

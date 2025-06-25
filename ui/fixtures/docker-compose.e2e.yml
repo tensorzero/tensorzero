@@ -44,7 +44,7 @@ services:
       target: gateway
     volumes:
       - ./config:/app/config:ro
-    command: --config-file /app/config/tensorzero.e2e.toml
+    command: --config-file ${TENSORZERO_GATEWAY_CONFIG:-/app/config/tensorzero.e2e.toml}
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
     env_file:
@@ -64,7 +64,7 @@ services:
           "--no-verbose",
           "--tries=1",
           "--spider",
-          "http://localhost:3000/health",
+          "${TENSORZERO_GATEWAY_URL:-http://localhost:3000}/health",
         ]
       start_period: 30s
       start_interval: 1s
@@ -85,8 +85,7 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
-    command:
-      ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
+    command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
     # Added healthcheck to wait for the marker file created by the script
     healthcheck:
       test: ["CMD", "test", "-f", "/load_complete.marker"]
