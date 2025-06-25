@@ -20,6 +20,7 @@ import { adjacentIdsSchema } from "./inference";
 import {
   contentBlockOutputSchema,
   CountSchema,
+  displayInputToInput,
   inputSchema,
   jsonInferenceOutputSchema,
 } from "./common";
@@ -541,7 +542,9 @@ export async function getDatapoint(
 
 async function parseDatapointRow(row: DatapointRow): Promise<ParsedDatasetRow> {
   const parsedInput = inputSchema.parse(JSON.parse(row.input));
-  const resolvedInput = await resolveInput(parsedInput);
+  const config = await getConfig();
+  const functionConfig = config.functions[row.function_name];
+  const resolvedInput = await resolveInput(parsedInput, functionConfig);
   if ("tool_params" in row) {
     // Chat inference row
     const processedRow = {
@@ -644,13 +647,14 @@ export async function insertDatapoint(
     "tool_params" in datapoint
       ? "ChatInferenceDatapoint"
       : "JsonInferenceDatapoint";
+  const input = displayInputToInput(datapoint.input);
   const values = [
     {
       dataset_name: datapoint.dataset_name,
       function_name: datapoint.function_name,
       id: datapoint.id,
       episode_id: datapoint.episode_id,
-      input: datapoint.input,
+      input: input,
       output: datapoint.output,
       tags: datapoint.tags,
       auxiliary: datapoint.auxiliary,

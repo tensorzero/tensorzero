@@ -14,7 +14,12 @@ import {
 import { PageLayout } from "~/components/layout/PageLayout";
 import InputSnippet from "~/components/inference/InputSnippet";
 
-import { data, isRouteErrorResponse, redirect } from "react-router";
+import {
+  data,
+  isRouteErrorResponse,
+  redirect,
+  type RouteHandle,
+} from "react-router";
 import Output from "~/components/inference/NewOutput";
 import {
   consolidate_evaluation_results,
@@ -49,6 +54,10 @@ import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
+
+export const handle: RouteHandle = {
+  crumb: (match) => ["Datapoints", match.params.datapoint_id!],
+};
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const evaluation_name = params.evaluation_name;

@@ -15,10 +15,10 @@ use tensorzero::{
     ClientInferenceParams, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
     InferenceResponse,
 };
-use tensorzero_internal::cache::CacheEnabledMode;
-use tensorzero_internal::config_parser::MetricConfigOptimize;
-use tensorzero_internal::evaluations::{EvaluationConfig, EvaluatorConfig};
-use tensorzero_internal::{
+use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::config_parser::MetricConfigOptimize;
+use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
+use tensorzero_core::{
     clickhouse::ClickHouseConnectionInfo, config_parser::Config, endpoints::datasets::Datapoint,
     function::FunctionConfig,
 };
@@ -476,7 +476,7 @@ impl ThrottledTensorZeroClient {
 
 #[cfg(test)]
 mod tests {
-    use tensorzero_internal::evaluations::ExactMatchConfig;
+    use tensorzero_core::evaluations::ExactMatchConfig;
 
     use super::*;
 

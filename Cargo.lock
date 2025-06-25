@@ -291,9 +291,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-s3"
-version = "1.92.0"
+version = "1.93.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f68db68f26c6337fb89c15916d5ac59c1b4224eb0111492a4f7b85c1058f9ca8"
+checksum = "16b9734dc8145b417a3c22eae8769a2879851690982dba718bdc52bd28ad04ce"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
@@ -885,18 +885,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ce89b21cab1437276d2650d57e971f9d548a2d9037cc231abdc0562b97498ce"
 
 [[package]]
-name = "bytemuck"
-version = "1.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6b1fc10dbac614ebc03540c9dbd60e83887fda27794998c6528f1782047d540"
-
-[[package]]
-name = "byteorder-lite"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f1fe948ff07f4bd06c30984e69f5b4899c516a3ef74f34df92a2df2ab535495"
-
-[[package]]
 name = "bytes"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1206,7 +1194,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tensorzero",
- "tensorzero-internal",
+ "tensorzero-core",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1433,7 +1421,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tensorzero",
- "tensorzero-internal",
+ "tensorzero-core",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1632,7 +1620,7 @@ dependencies = [
  "reqwest",
  "serde",
  "tempfile",
- "tensorzero-internal",
+ "tensorzero-core",
  "tokio",
  "tower-http",
  "tracing",
@@ -2193,17 +2181,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "image"
-version = "0.25.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db35664ce6b9810857a38a906215e75a9c879f0696556a39f59c62829710251a"
-dependencies = [
- "bytemuck",
- "byteorder-lite",
- "num-traits",
-]
-
-[[package]]
 name = "indexmap"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2407,9 +2384,9 @@ dependencies = [
 
 [[package]]
 name = "libmimalloc-sys"
-version = "0.1.42"
+version = "0.1.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec9d6fac27761dabcd4ee73571cdb06b7022dc99089acbe5435691edffaac0f4"
+checksum = "bf88cd67e9de251c1781dbe2f641a1a3ad66eaae831b8a2c38fbdc5ddae16d4d"
 dependencies = [
  "cc",
  "libc",
@@ -2541,9 +2518,9 @@ dependencies = [
 
 [[package]]
 name = "metrics-exporter-prometheus"
-version = "0.17.0"
+version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df88858cd28baaaf2cfc894e37789ed4184be0e1351157aec7bf3c2266c793fd"
+checksum = "2b166dea96003ee2531cf14833efedced545751d800f03535801d833313f8c15"
 dependencies = [
  "base64",
  "http-body-util",
@@ -2561,9 +2538,9 @@ dependencies = [
 
 [[package]]
 name = "metrics-util"
-version = "0.19.1"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8496cc523d1f94c1385dd8f0f0c2c480b2b8aeccb5b7e4485ad6365523ae376"
+checksum = "fe8db7a05415d0f919ffb905afa37784f71901c9a773188876984b4f769ab986"
 dependencies = [
  "crossbeam-epoch",
  "crossbeam-utils",
@@ -2577,9 +2554,9 @@ dependencies = [
 
 [[package]]
 name = "mimalloc"
-version = "0.1.46"
+version = "0.1.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "995942f432bbb4822a7e9c3faa87a695185b0d09273ba85f097b54f4e458f2af"
+checksum = "b1791cbe101e95af5764f06f20f6760521f7158f69dbf9d6baf941ee1bf6bc40"
 dependencies = [
  "libmimalloc-sys",
 ]
@@ -3712,9 +3689,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.27"
+version = "0.23.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "730944ca083c1c233a75c09f199e973ca499344a2b7ba9e755c457e86fb4a321"
+checksum = "7160e3e10bf4535308537f3c4e1641468cd0e485175d6163087c0393c7d46643"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -4149,9 +4126,9 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "syn"
-version = "2.0.103"
+version = "2.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4307e30089d6fd6aff212f2da3a1f9e32f3223b1f010fb09b7c95f90f3ca1e8"
+checksum = "17b6f705963418cdb9927482fa304bc562ece2fdd4f616084c50b7023b435a40"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4228,8 +4205,8 @@ dependencies = [
  "serde-untagged",
  "serde_json",
  "serde_path_to_error",
+ "tensorzero-core",
  "tensorzero-derive",
- "tensorzero-internal",
  "thiserror 2.0.12",
  "tokio",
  "tokio-stream",
@@ -4241,20 +4218,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tensorzero-derive"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "syn",
- "trybuild",
-]
-
-[[package]]
-name = "tensorzero-internal"
+name = "tensorzero-core"
 version = "2025.6.2"
 dependencies = [
  "async-stream",
@@ -4283,7 +4247,6 @@ dependencies = [
  "hex",
  "http 1.3.1",
  "http-body-util",
- "image",
  "indexmap 2.9.0",
  "init-tracing-opentelemetry",
  "itertools 0.14.0",
@@ -4333,6 +4296,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tensorzero-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "syn",
+ "trybuild",
+]
+
+[[package]]
 name = "tensorzero-python"
 version = "2025.6.2"
 dependencies = [
@@ -4344,7 +4320,7 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "tensorzero",
- "tensorzero-internal",
+ "tensorzero-core",
  "tokio",
  "tracing",
  "url",

@@ -1,14 +1,14 @@
 [workspace]
 members = [
-    "tensorzero-internal",
-    "tensorzero-internal/tests/mock-inference-provider",
+    "tensorzero-core",
+    "tensorzero-core/tests/mock-inference-provider",
     "gateway",
     "ui/app/utils/minijinja",
     "clients/rust",
     "clients/python",
     "provider-proxy",
     "evaluations",
-    "tensorzero-derive",
+    "internal/tensorzero-derive",
     "examples/integrations/cursor/experimental",
 ]
 resolver = "2"
