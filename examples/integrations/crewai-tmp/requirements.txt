@@ -45,7 +45,7 @@ tensorzero==2025.6.2 \
     --hash=sha256:6b31ccea665232fdd70c923fcd41cf86c008b2d9a313fff80f1977a32ae2bfcf \
     --hash=sha256:95efe4ba31def003512a954e00a3b76b538cc23e23c9053080d3b721c2f7167b \
     --hash=sha256:ef0f15f01f3d90e3c59aef37090f26d1407f3c5e65b90e2accb1b2e50c82d4fb
-    # via tensorzero-examples-guides-streaming-inference
+    # via tensorzero-examples-integrations-crewai
 typing-extensions==4.14.0 \
     --hash=sha256:8676b788e32f02ab42d9e7c61324048ae4c6d844a399eebace3d4979d75ceef4 \
     --hash=sha256:a1514509136dd0b477638fc68d6a91497af5076466ad0fa6c338e44e359944af
