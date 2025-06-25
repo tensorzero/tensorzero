@@ -69,6 +69,7 @@ pub async fn get_tensorzero_client() -> Client {
         ))),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await
