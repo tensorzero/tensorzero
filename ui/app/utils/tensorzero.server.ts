@@ -85,7 +85,7 @@ export async function addHumanFeedback(formData: FormData) {
   });
   if (!feedbackRequest.success) {
     throw new TensorZeroServerError.InputValidation(
-      "Feedback request schema validation failed",
+      feedbackRequest.error.message,
     );
   }
   const response = await tensorZeroClient.feedback(feedbackRequest.data);
