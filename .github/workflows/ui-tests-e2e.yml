@@ -78,22 +78,18 @@ jobs:
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --no-build -d
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml wait fixtures
 
-      # - name: Run UI E2E tests
-      #   id: e2e_tests
-      #   env:
-      #     TENSORZERO_CI: 1
-      #   continue-on-error: true
-      #   run: pnpm ui:test:e2e --grep-invert "fine-tune on image"
-
-      - name: Debugging with ssh
-        uses: lhotari/action-upterm@v1
+      - name: Run UI E2E tests
+        id: e2e_tests
+        env:
+          TENSORZERO_CI: 1
+        continue-on-error: true
+        run: pnpm ui:test:e2e --grep-invert "fine-tune on image"
 
       - name: Restart UI container with native SFT flag
         working-directory: ui
         run: |
           echo "TENSORZERO_UI_FF_USE_NATIVE_SFT=1" >> fixtures/.env
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml restart ui
-          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml wait ui
 
       - name: Run Rust E2E tests
         id: rust_e2e_tests
