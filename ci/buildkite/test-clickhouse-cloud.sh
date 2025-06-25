@@ -1,0 +1,29 @@
+#!/bin/bash
+set -euxo pipefail
+echo "CLICKHOUSE_ID=${CLICKHOUSE_ID}"
+export TENSORZERO_CLICKHOUSE_SERVICE=$(curl --user "$CLICKHOUSE_API_KEY:$CLICKHOUSE_KEY_SECRET" https://api.clickhouse.cloud/v1/organizations/b55f1935-803f-4931-90b3-4d26089004d4/services | jq '.result[] | select(.name == "dev-tensorzero-e2e-tests-instance-0") | .id')
+export TENSORZERO_CLICKHOUSE_URL=$(buildkite-agent secret get tensorzero_clickhouse_url)
+curl $TENSORZERO_CLICKHOUSE_URL --data-binary 'SHOW DATABASES'
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  -s -- -y
+. "$HOME/.cargo/env"
+curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+source $HOME/.local/bin/env
+curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
+uv run ./ui/fixtures/download-fixtures.py
+./ci/delete-clickhouse-dbs.sh
+cargo build-e2e
+cargo run-e2e > e2e_logs.txt 2>&1 &
+    count=0
+    max_attempts=30
+    while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+        echo "Waiting for gateway to be healthy..."
+        sleep 1
+        count=$((count + 1))
+        if [ $count -ge $max_attempts ]; then
+        echo "Gateway failed to become healthy after $max_attempts attempts"
+        exit 1
+        fi
+    done
+    export GATEWAY_PID=$!
+cargo test-e2e-no-creds -- --skip test_concurrent_clickhouse_migrations
+cat e2e_logs.txt
