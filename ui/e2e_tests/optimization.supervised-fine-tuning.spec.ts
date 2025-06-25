@@ -34,6 +34,13 @@ test.describe("Custom user agent", () => {
       .click();
     await page.getByRole("option", { name: "extract_entities JSON" }).click();
 
+    // Select metric
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Select a metric" })
+      .click();
+    await page.getByText("exact_match", { exact: true }).click();
+
     // Select variant
     await page
       .getByRole("combobox")
