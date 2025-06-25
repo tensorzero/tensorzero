@@ -42,7 +42,6 @@ use tensorzero_core::{
     gateway_util::ShutdownHandle,
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
-        file::serialize_with_file_data,
     },
 };
 use tensorzero_rust::{
@@ -55,7 +54,6 @@ use tensorzero_rust::{
 use tokio::sync::Mutex;
 use url::Url;
 
-mod internal;
 mod python_helpers;
 
 #[pymodule]
@@ -1599,72 +1597,6 @@ impl AsyncTensorZeroGateway {
                 Err(e) => Err(convert_error(py, e)),
             })
         })
-    }
-
-    /// For internal use only - do not call.
-    // This is a helper function used by `optimization-server` to get the template config
-    // when applying a new prompt template during fine-tuning
-    #[pyo3(signature = (*, function_name, variant_name))]
-    fn _internal_get_template_config(
-        this: PyRef<'_, Self>,
-        function_name: &str,
-        variant_name: &str,
-    ) -> PyResult<Py<PyDict>> {
-        let Some(config) = this.as_super().client.get_config() else {
-            return Err(tensorzero_core_error(
-                this.py(),
-                "Called _get_template_config on HTTP gateway",
-            )?);
-        };
-        crate::internal::get_template_config(this.py(), &config, function_name, variant_name)
-    }
-
-    /// For internal use only - do not call.
-    // This is a helper function used by `optimization-server` to get inferences used for fine-tuning
-    #[pyo3(signature = (*, function_name, metric_name=None, threshold=None, max_samples=None))]
-    fn _internal_get_curated_inferences(
-        this: PyRef<'_, Self>,
-        function_name: String,
-        metric_name: Option<String>,
-        threshold: Option<f64>,
-        max_samples: Option<u64>,
-    ) -> PyResult<Py<PyAny>> {
-        let Some(app_state) = this.as_super().client.get_app_state_data().cloned() else {
-            return Err(tensorzero_core_error(
-                this.py(),
-                "Called _internal_get_curated_inferences on HTTP gateway",
-            )?);
-        };
-        let client = this.as_super().client.clone();
-        Ok(
-            pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-                let inferences_result = crate::internal::get_curated_inferences(
-                    &app_state.config,
-                    &app_state.clickhouse_connection_info,
-                    &client,
-                    &function_name,
-                    metric_name.as_deref(),
-                    threshold,
-                    max_samples,
-                )
-                .await;
-
-                Python::with_gil(|py| {
-                    let inferences = inferences_result.map_err(|e| convert_error(py, e))?;
-                    let mut dict_inferences = Vec::with_capacity(inferences.len());
-                    for inference in inferences {
-                        dict_inferences.push(serialize_to_dict(
-                            py,
-                            serialize_with_file_data(&inference).map_err(|e| {
-                                convert_error(py, TensorZeroError::Other { source: e.into() })
-                            })?,
-                        )?);
-                    }
-                    Ok(PyList::new(py, dict_inferences)?.unbind())
-                })
-            })?
-            .unbind(),
-        )
     }
 }
 

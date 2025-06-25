@@ -171,13 +171,13 @@ impl FunctionConfig {
 
     #[instrument(skip_all, fields(inference_id))]
     #[expect(clippy::too_many_arguments)]
-    pub async fn prepare_response<'a, 'request>(
+    pub async fn prepare_response<'request>(
         &self,
         inference_id: Uuid,
         content_blocks: Vec<ContentBlockOutput>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'_, 'request>,
         inference_params: InferenceParams,
         original_response: Option<String>,
     ) -> Result<InferenceResult, Error> {

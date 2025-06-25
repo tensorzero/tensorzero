@@ -13,6 +13,7 @@ use tensorzero::{RenderedStoredInference, Role};
 use tensorzero_core::{
     cache::CacheOptions,
     clickhouse::ClickHouseConnectionInfo,
+    config_parser::ProviderTypesConfig,
     endpoints::inference::InferenceClients,
     inference::types::{
         resolved_input::FileWithPath,
@@ -20,6 +21,7 @@ use tensorzero_core::{
         Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
         ModelInput, RequestMessage, Text,
     },
+    optimization::JobHandle,
     optimization::{Optimizer, OptimizerInfo, OptimizerOutput, OptimizerStatus},
     tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
@@ -45,15 +47,9 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .launch(&client, test_examples, val_examples, &credentials)
         .await
         .unwrap();
-    let mut status = optimizer_info
-        .poll(&client, &job_handle, &credentials)
-        .await
-        .unwrap();
-    while !matches!(status, OptimizerStatus::Completed(_)) {
-        status = optimizer_info
-            .poll(&client, &job_handle, &credentials)
-            .await
-            .unwrap();
+    let mut status = job_handle.poll(&client, &credentials).await.unwrap();
+    while !matches!(status, OptimizerStatus::Completed { .. }) {
+        status = job_handle.poll(&client, &credentials).await.unwrap();
         println!("Status: {status:?}");
         // Sleep for a minute
         sleep(Duration::from_secs(60)).await;
@@ -61,10 +57,16 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             panic!("Optimization failed");
         }
     }
-    assert!(matches!(status, OptimizerStatus::Completed(_)));
-    let OptimizerStatus::Completed(OptimizerOutput::Model(model_config)) = status else {
+    assert!(matches!(status, OptimizerStatus::Completed { .. }));
+    let OptimizerStatus::Completed {
+        output: OptimizerOutput::Model(model_config),
+    } = status
+    else {
         panic!("Expected model config");
     };
+    let model_config = model_config
+        .load("test-fine-tuned-model", &ProviderTypesConfig::default())
+        .unwrap();
     let system = "You are a helpful assistant named Dr. M.M. Patel.".to_string();
     let messages = vec![RequestMessage {
         role: Role::User,
