@@ -181,6 +181,9 @@ pub enum ErrorDetails {
         dataset_name: String,
         datapoint_id: Uuid,
     },
+    DuplicateTool {
+        name: String,
+    },
     DynamicJsonSchema {
         message: String,
     },
@@ -460,6 +463,7 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
             ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::DuplicateTool { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
@@ -553,6 +557,7 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -786,6 +791,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Datapoint not found for dataset: {dataset_name} and id: {datapoint_id}"
                 )
+            }
+            ErrorDetails::DuplicateTool { name } => {
+                write!(f, "Duplicate tool name: {name}. Tool names must be unique.")
             }
             ErrorDetails::DynamicJsonSchema { message } => {
                 write!(
