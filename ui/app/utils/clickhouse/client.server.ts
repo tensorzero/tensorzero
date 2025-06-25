@@ -24,6 +24,7 @@ export const clickhouseClient = (() => {
       "Failed to create ClickHouse client. Please ensure that the `TENSORZERO_CLICKHOUSE_URL` environment variable is set correctly and that the ClickHouse server is running.\n\n" +
         "Failed with the following message:\n\n" +
         (isErrorLike(error) ? error.message : String(error)),
+      { cause: error },
     );
   }
 })();
