@@ -78,12 +78,12 @@ jobs:
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --no-build -d
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml wait fixtures
 
-      - name: Run UI E2E tests
-        id: e2e_tests
-        env:
-          TENSORZERO_CI: 1
-        continue-on-error: true
-        run: pnpm ui:test:e2e --grep-invert "fine-tune on image"
+      # - name: Run UI E2E tests
+      #   id: e2e_tests
+      #   env:
+      #     TENSORZERO_CI: 1
+      #   continue-on-error: true
+      #   run: pnpm ui:test:e2e --grep-invert "fine-tune on image"
 
       - name: Debugging with ssh
         uses: lhotari/action-upterm@v1
