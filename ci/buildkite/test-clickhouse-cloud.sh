@@ -6,8 +6,9 @@ echo "CLICKHOUSE_ID=${CLICKHOUSE_ID}"
 # This allows us to distribute our tests across multiple ClickHouse cloud instances (since running too many parallel tests will overload any single instance).
 export CLICKHOUSE_API_KEY=$(buildkite-agent secret get clickhouse_api_key)
 export CLICKHOUSE_KEY_SECRET=$(buildkite-agent secret get clickhouse_key_secret)
-export TENSORZERO_CLICKHOUSE_SERVICE=$(curl --user "$CLICKHOUSE_API_KEY:$CLICKHOUSE_KEY_SECRET" https://api.clickhouse.cloud/v1/organizations/b55f1935-803f-4931-90b3-4d26089004d4/services | jq ".result[] | select(.name == \"dev-tensorzero-e2e-tests-instance-${CLICKHOUSE_ID}\") | .id")
-echo $TENSORZERO_CLICKHOUSE_URL | buildkite-agent redactor add
+export CLICKHOUSE_USERNAME=$(buildkite-agent secret get clickhouse_username)
+export CLICKHOUSE_PASSWORD=$(buildkite-agent secret get clickhouse_password)
+export TENSORZERO_CLICKHOUSE_URL=$(curl --user "$CLICKHOUSE_API_KEY:$CLICKHOUSE_KEY_SECRET" https://api.clickhouse.cloud/v1/organizations/b55f1935-803f-4931-90b3-4d26089004d4/services | jq -r ".result[] | select(.name == \"dev-tensorzero-e2e-tests-instance-${CLICKHOUSE_ID}\") | .endpoints[] | select(.protocol == \"https\") | \"https://$CLICKHOUSE_USERNAME:$CLICKHOUSE_PASSWORD@\" + .host + \":\" + (.port | tostring)")
 curl "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SHOW DATABASES'
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  -s -- -y
 . "$HOME/.cargo/env"
