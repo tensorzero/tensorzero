@@ -1,0 +1,8 @@
+agents:
+  queue: "t0-merge-queue"
+
+steps:
+  - label: "Clickhouse Cloud tests"
+    concurrency: 1
+    concurrency_group: 'clickhouse-cloud-${CLICKHOUSE_ID}'
+    command: ./ci/buildkite/test-clickhouse-cloud.sh
