@@ -1,7 +1,7 @@
 use std::env;
 
 use tensorzero_core::inference::types::extra_headers::{
-    InferenceExtraHeader, UnfilteredInferenceExtraHeaders,
+    ExtraHeaderKind, InferenceExtraHeader, UnfilteredInferenceExtraHeaders,
 };
 
 /// Our self-hosted providers require modal credentials to be
@@ -16,21 +16,21 @@ pub fn get_extra_headers() -> UnfilteredInferenceExtraHeaders {
                 "tensorzero::model_name::qwen2.5-0.5b-instruct-vllm::provider_name::vllm"
                     .to_string(),
             name: "Modal-Key".to_string(),
-            value: modal_key.clone(),
+            kind: ExtraHeaderKind::Value(modal_key.clone()),
         });
         extra_headers.push(InferenceExtraHeader::Provider {
             model_provider_name:
                 "tensorzero::model_name::qwen2.5-0.5b-instruct-vllm-dynamic::provider_name::vllm"
                     .to_string(),
             name: "Modal-Key".to_string(),
-            value: modal_key.clone(),
+            kind: ExtraHeaderKind::Value(modal_key.clone()),
         });
         extra_headers.push(InferenceExtraHeader::Provider {
             model_provider_name:
                 "tensorzero::model_name::Qwen/Qwen2.5-1.5B-Instruct::provider_name::sglang"
                     .to_string(),
             name: "Modal-Key".to_string(),
-            value: modal_key.clone(),
+            kind: ExtraHeaderKind::Value(modal_key.clone()),
         });
     }
     if let Ok(modal_secret) = env::var("MODAL_SECRET") {
@@ -39,21 +39,21 @@ pub fn get_extra_headers() -> UnfilteredInferenceExtraHeaders {
                 "tensorzero::model_name::qwen2.5-0.5b-instruct-vllm::provider_name::vllm"
                     .to_string(),
             name: "Modal-Secret".to_string(),
-            value: modal_secret.clone(),
+            kind: ExtraHeaderKind::Value(modal_secret.clone()),
         });
         extra_headers.push(InferenceExtraHeader::Provider {
             model_provider_name:
                 "tensorzero::model_name::qwen2.5-0.5b-instruct-vllm-dynamic::provider_name::vllm"
                     .to_string(),
             name: "Modal-Secret".to_string(),
-            value: modal_secret.clone(),
+            kind: ExtraHeaderKind::Value(modal_secret.clone()),
         });
         extra_headers.push(InferenceExtraHeader::Provider {
             model_provider_name:
                 "tensorzero::model_name::Qwen/Qwen2.5-1.5B-Instruct::provider_name::sglang"
                     .to_string(),
             name: "Modal-Secret".to_string(),
-            value: modal_secret.clone(),
+            kind: ExtraHeaderKind::Value(modal_secret.clone()),
         });
     }
     UnfilteredInferenceExtraHeaders {

@@ -329,6 +329,7 @@ impl<'a> HyperbolicRequest<'a> {
             request.system.as_deref(),
             &request.messages,
             Some(&request.json_mode),
+            PROVIDER_TYPE,
         )?;
         Ok(HyperbolicRequest {
             messages,

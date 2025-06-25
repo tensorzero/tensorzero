@@ -15,7 +15,7 @@ tracing-subscriber = { version = "0.3.18", features = [
     "json",
 ] }
 tokio = { workspace = true }
-mimalloc = "0.1.45"
+mimalloc = "0.1.47"
 clap = { workspace = true }
 serde = { workspace = true }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true }
@@ -31,3 +31,4 @@ default = []
 [dev-dependencies]
 reqwest.workspace = true
 tempfile = "3.20.0"
+tensorzero = { path = "../clients/rust"}

@@ -12,8 +12,10 @@ use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::{
         batch::{ProviderBatchInferenceOutput, ProviderBatchInferenceResponse},
-        extra_body::{FullExtraBodyConfig, InferenceExtraBody},
-        extra_headers::{ExtraHeader, FullExtraHeadersConfig, InferenceExtraHeader},
+        extra_body::{ExtraBodyReplacementKind, FullExtraBodyConfig, InferenceExtraBody},
+        extra_headers::{
+            ExtraHeader, ExtraHeaderKind, FullExtraHeadersConfig, InferenceExtraHeader,
+        },
         ProviderInferenceResponseChunk,
     },
     model::{fully_qualified_name, ModelProviderRequestInfo},
@@ -207,11 +209,14 @@ pub fn inject_extra_request_data(
         .flat_map(|c| &c.data)
         .chain(model_provider.extra_body.iter().flat_map(|c| &c.data))
     {
-        write_json_pointer_with_parent_creation(
-            body,
-            &replacement.pointer,
-            replacement.value.clone(),
-        )?;
+        match &replacement.kind {
+            ExtraBodyReplacementKind::Value(value) => {
+                write_json_pointer_with_parent_creation(body, &replacement.pointer, value.clone())?;
+            }
+            ExtraBodyReplacementKind::Delete => {
+                delete_json_pointer(body, &replacement.pointer)?;
+            }
+        }
     }
 
     let expected_provider_name = fully_qualified_name(model_name, &model_provider.provider_name);
@@ -224,17 +229,29 @@ pub fn inject_extra_request_data(
                 // Any remaining `InferenceExtraBody::Variant` values should be applied to the current request
                 variant_name: _,
                 pointer,
-                value,
-            } => {
-                write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
-            }
+                kind,
+            } => match kind {
+                ExtraBodyReplacementKind::Value(value) => {
+                    write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
+                }
+                ExtraBodyReplacementKind::Delete => {
+                    delete_json_pointer(body, pointer)?;
+                }
+            },
             InferenceExtraBody::Provider {
                 model_provider_name,
                 pointer,
-                value,
+                kind,
             } => {
                 if *model_provider_name == expected_provider_name {
-                    write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
+                    match kind {
+                        ExtraBodyReplacementKind::Value(value) => {
+                            write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
+                        }
+                        ExtraBodyReplacementKind::Delete => {
+                            delete_json_pointer(body, pointer)?;
+                        }
+                    }
                 }
             }
         }
@@ -251,25 +268,32 @@ pub fn inject_extra_request_data(
     .into_iter()
     .flatten()
     {
-        for ExtraHeader { name, value } in &extra_headers.data {
-            headers.insert(
-                http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Invalid header name `{name}`: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?,
-                http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Invalid header value `{value}`: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?,
-            );
+        for ExtraHeader { name, kind } in &extra_headers.data {
+            let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Invalid header name `{name}`: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
+            match kind {
+                ExtraHeaderKind::Value(value) => {
+                    let value =
+                        http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Invalid header value `{value}`: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                            })
+                        })?;
+                    headers.insert(name, value);
+                }
+                ExtraHeaderKind::Delete => {
+                    headers.remove(name);
+                }
+            }
         }
     }
 
@@ -281,34 +305,44 @@ pub fn inject_extra_request_data(
                 // Any remaining `InferenceExtraHeader::Variant` values should be applied to the current request
                 variant_name: _,
                 name,
-                value,
+                kind,
             } => {
-                headers.insert(
-                    http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: format!(
-                                "Invalid header name `{name}`: {}",
-                                DisplayOrDebugGateway::new(e)
-                            ),
-                        })
-                    })?,
-                    http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: format!(
-                                "Invalid header value `{value}`: {}",
-                                DisplayOrDebugGateway::new(e)
-                            ),
-                        })
-                    })?,
-                );
+                let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Invalid header name `{name}`: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
+                match kind {
+                    ExtraHeaderKind::Value(value) => {
+                        headers.insert(
+                            name,
+                            http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(
+                                |e| {
+                                    Error::new(ErrorDetails::Serialization {
+                                        message: format!(
+                                            "Invalid header value `{value}`: {}",
+                                            DisplayOrDebugGateway::new(e)
+                                        ),
+                                    })
+                                },
+                            )?,
+                        );
+                    }
+                    ExtraHeaderKind::Delete => {
+                        headers.remove(name);
+                    }
+                }
             }
             InferenceExtraHeader::Provider {
                 model_provider_name,
                 name,
-                value,
+                kind,
             } => {
                 if *model_provider_name == expected_provider_name {
-                    headers.insert(
+                    let name =
                         http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                             Error::new(ErrorDetails::Serialization {
                                 message: format!(
@@ -316,21 +350,31 @@ pub fn inject_extra_request_data(
                                     DisplayOrDebugGateway::new(e)
                                 ),
                             })
-                        })?,
-                        http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
-                            Error::new(ErrorDetails::Serialization {
-                                message: format!(
-                                    "Invalid header value `{value}`: {}",
-                                    DisplayOrDebugGateway::new(e)
-                                ),
-                            })
-                        })?,
-                    );
+                        })?;
+                    match kind {
+                        ExtraHeaderKind::Value(value) => {
+                            headers.insert(
+                                name,
+                                http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(
+                                    |e| {
+                                        Error::new(ErrorDetails::Serialization {
+                                            message: format!(
+                                                "Invalid header value `{value}`: {}",
+                                                DisplayOrDebugGateway::new(e)
+                                            ),
+                                        })
+                                    },
+                                )?,
+                            );
+                        }
+                        ExtraHeaderKind::Delete => {
+                            headers.remove(name);
+                        }
+                    }
                 }
             }
         }
     }
-
     Ok(headers)
 }
 
@@ -342,6 +386,101 @@ fn parse_index(s: &str) -> Option<usize> {
         return None;
     }
     s.parse().ok()
+}
+
+fn delete_json_pointer(mut value: &mut serde_json::Value, pointer: &str) -> Result<(), Error> {
+    if pointer.is_empty() {
+        return Err(Error::new(ErrorDetails::ExtraBodyReplacement {
+            message: "Pointer cannot be empty".to_string(),
+            pointer: pointer.to_string(),
+        }));
+    }
+    if !pointer.starts_with('/') {
+        return Err(Error::new(ErrorDetails::ExtraBodyReplacement {
+            message: "Pointer must start with '/'".to_string(),
+            pointer: pointer.to_string(),
+        }));
+    }
+
+    if pointer.ends_with('/') {
+        return Err(Error::new(ErrorDetails::ExtraBodyReplacement {
+            message: "Pointer cannot end with '/'".to_string(),
+            pointer: pointer.to_string(),
+        }));
+    }
+
+    let mut components = pointer
+        .split('/')
+        .skip(1)
+        .map(|x| x.replace("~1", "/").replace("~0", "~"))
+        .peekable();
+    while let Some(token) = components.next() {
+        // This isn't the last component, so navigate deeper
+        if components.peek().is_some() {
+            match value {
+                Value::Object(map) => match map.entry(token.clone()) {
+                    // Move inside an object if the current pointer component is a valid key
+                    Entry::Occupied(occupied) => value = occupied.into_mut(),
+                    Entry::Vacant(_) => {
+                        tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - parent of pointer doesn't exist");
+                        // If a parent of our target pointer doesn't exist, then do nothing,
+                        // since `value`` is already an object where the target pointer doesn't exist
+                        return Ok(());
+                    }
+                },
+                Value::Array(list) => {
+                    match parse_index(&token) {
+                        Some(index) => {
+                            if let Some(target) = list.get_mut(index) {
+                                value = target;
+                            } else {
+                                tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - index `{token}` out of bounds");
+                                // If a parent of our target pointer doesn't exist, then do nothing,
+                                // since `value`` is already an object where the target pointer doesn't exist
+                                return Ok(());
+                            }
+                        }
+                        None => {
+                            tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - non-numeric array index `{token}`");
+                            // If a parent of our target pointer doesn't exist, then do nothing,
+                            // since `value`` is already an object where the target pointer doesn't exist
+                            return Ok(());
+                        }
+                    }
+                }
+                other => {
+                    tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - found non array/object target {other}");
+                    return Ok(());
+                }
+            }
+        } else {
+            match value {
+                Value::Object(map) => {
+                    if map.remove(&token).is_none() {
+                        tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - key `{token}` doesn't exist");
+                    }
+                }
+                Value::Array(list) => match parse_index(&token) {
+                    Some(index) => {
+                        if index < list.len() {
+                            list.remove(index);
+                        } else {
+                            tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - index `{token}` out of bounds");
+                        }
+                    }
+                    None => {
+                        tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - non-numeric array index `{token}`");
+                    }
+                },
+                other => {
+                    tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - found non array/object target {other}");
+                    return Ok(());
+                }
+            }
+            return Ok(());
+        }
+    }
+    Ok(())
 }
 
 // Based on https://github.com/serde-rs/json/blob/400eaa977f1f0a1c9ad5e35d634ed2226bf1218c/src/value/mod.rs#L834
@@ -502,6 +641,7 @@ mod tests {
     use std::time::Duration;
 
     use futures::{stream, StreamExt};
+    use tracing_test::traced_test;
 
     use crate::inference::types::{
         extra_body::{ExtraBodyConfig, ExtraBodyReplacement, FilteredInferenceExtraBody},
@@ -598,7 +738,9 @@ mod tests {
                     data: vec![InferenceExtraBody::Provider {
                         model_provider_name: "wrong_provider".to_string(),
                         pointer: "/my_key".to_string(),
-                        value: "My Value".to_string().into(),
+                        kind: ExtraBodyReplacementKind::Value(Value::String(
+                            "My Value".to_string(),
+                        )),
                     }],
                 },
             },
@@ -608,7 +750,7 @@ mod tests {
                     data: vec![InferenceExtraHeader::Provider {
                         model_provider_name: "wrong_provider".to_string(),
                         name: "X-My-Header".to_string(),
-                        value: "My Value".to_string(),
+                        kind: ExtraHeaderKind::Value("My Value".to_string()),
                     }],
                 },
             },
@@ -655,15 +797,23 @@ mod tests {
                     data: vec![
                         ExtraHeader {
                             name: "X-My-Overridden".to_string(),
-                            value: "My variant value".to_string(),
+                            kind: ExtraHeaderKind::Value("My variant value".to_string()),
                         },
                         ExtraHeader {
                             name: "X-My-Overridden-Inference".to_string(),
-                            value: "My variant value".to_string(),
+                            kind: ExtraHeaderKind::Value("My variant value".to_string()),
                         },
                         ExtraHeader {
                             name: "X-My-Variant".to_string(),
-                            value: "My variant header".to_string(),
+                            kind: ExtraHeaderKind::Value("My variant header".to_string()),
+                        },
+                        ExtraHeader {
+                            name: "X-My-Delete".to_string(),
+                            kind: ExtraHeaderKind::Value("Should be deleted".to_string()),
+                        },
+                        ExtraHeader {
+                            name: "X-My-Delete-Inference".to_string(),
+                            kind: ExtraHeaderKind::Delete,
                         },
                     ],
                 }),
@@ -674,12 +824,12 @@ mod tests {
                                 "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
                                     .to_string(),
                             name: "X-My-Inference".to_string(),
-                            value: "My inference header value".to_string(),
+                            kind: ExtraHeaderKind::Value("My inference header value".to_string()),
                         },
                         InferenceExtraHeader::Variant {
                             variant_name: "dummy_variant".to_string(),
                             name: "X-My-Overridden-Inference".to_string(),
-                            value: "My inference value".to_string(),
+                            kind: ExtraHeaderKind::Value("My inference value".to_string()),
                         },
                     ],
                 },
@@ -691,15 +841,15 @@ mod tests {
                     data: vec![
                         ExtraHeader {
                             name: "X-My-Overridden".to_string(),
-                            value: "My model provider value".to_string(),
+                            kind: ExtraHeaderKind::Value("My model provider value".to_string()),
                         },
                         ExtraHeader {
                             name: "X-My-Overridden-Inference".to_string(),
-                            value: "My model provider value".to_string(),
+                            kind: ExtraHeaderKind::Value("My model provider value".to_string()),
                         },
                         ExtraHeader {
                             name: "X-My-ModelProvider".to_string(),
-                            value: "My model provider header".to_string(),
+                            kind: ExtraHeaderKind::Value("My model provider header".to_string()),
                         },
                     ],
                 }),
@@ -741,13 +891,13 @@ mod tests {
                     data: vec![
                         ExtraBodyReplacement {
                             pointer: "/generationConfig".to_string(),
-                            value: serde_json::json!({
+                            kind: ExtraBodyReplacementKind::Value(serde_json::json!({
                                 "otherNestedKey": "otherNestedValue"
-                            }),
+                            })),
                         },
                         ExtraBodyReplacement {
                             pointer: "/generationConfig/temperature".to_string(),
-                            value: serde_json::json!(0.123),
+                            kind: ExtraBodyReplacementKind::Value(serde_json::json!(0.123)),
                         },
                     ],
                 }),
@@ -757,7 +907,9 @@ mod tests {
                             "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
                                 .to_string(),
                         pointer: "/generationConfig/valueFromInference".to_string(),
-                        value: "inferenceValue".to_string().into(),
+                        kind: ExtraBodyReplacementKind::Value(Value::String(
+                            "inferenceValue".to_string(),
+                        )),
                     }],
                 },
             },
@@ -794,7 +946,8 @@ mod tests {
             "otherKey": "otherValue",
             "generationConfig": {
                 "temperature": 123
-            }
+            },
+            "delete_me": {"some": "value"}
         });
         inject_extra_request_data(
             &FullExtraBodyConfig {
@@ -802,15 +955,25 @@ mod tests {
                     data: vec![
                         ExtraBodyReplacement {
                             pointer: "/generationConfig/otherNestedKey".to_string(),
-                            value: Value::String("otherNestedValue".to_string()),
+                            kind: ExtraBodyReplacementKind::Value(Value::String(
+                                "otherNestedValue".to_string(),
+                            )),
                         },
                         ExtraBodyReplacement {
                             pointer: "/variantKey".to_string(),
-                            value: Value::String("variantValue".to_string()),
+                            kind: ExtraBodyReplacementKind::Value(Value::String(
+                                "variantValue".to_string(),
+                            )),
                         },
                         ExtraBodyReplacement {
                             pointer: "/multiOverride".to_string(),
-                            value: Value::String("from variant".to_string()),
+                            kind: ExtraBodyReplacementKind::Value(Value::String(
+                                "from variant".to_string(),
+                            )),
+                        },
+                        ExtraBodyReplacement {
+                            pointer: "/delete_me".to_string(),
+                            kind: ExtraBodyReplacementKind::Delete,
                         },
                     ],
                 }),
@@ -820,7 +983,9 @@ mod tests {
                             "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
                                 .to_string(),
                         pointer: "/multiOverride".to_string(),
-                        value: Value::String("from inference".to_string()),
+                        kind: ExtraBodyReplacementKind::Value(Value::String(
+                            "from inference".to_string(),
+                        )),
                     }],
                 },
             },
@@ -831,15 +996,21 @@ mod tests {
                     data: vec![
                         ExtraBodyReplacement {
                             pointer: "/variantKey".to_string(),
-                            value: Value::String("modelProviderOverride".to_string()),
+                            kind: ExtraBodyReplacementKind::Value(Value::String(
+                                "modelProviderOverride".to_string(),
+                            )),
                         },
                         ExtraBodyReplacement {
                             pointer: "/modelProviderKey".to_string(),
-                            value: Value::String("modelProviderValue".to_string()),
+                            kind: ExtraBodyReplacementKind::Value(Value::String(
+                                "modelProviderValue".to_string(),
+                            )),
                         },
                         ExtraBodyReplacement {
                             pointer: "/multiOverride".to_string(),
-                            value: Value::String("from model provider".to_string()),
+                            kind: ExtraBodyReplacementKind::Value(Value::String(
+                                "from model provider".to_string(),
+                            )),
                         },
                     ],
                 }),
@@ -1039,6 +1210,114 @@ mod tests {
         assert!(
             err.contains("TensorZero doesn't support pointing an index (0) if its container doesn't exist. We'd love to hear about your use case (& help)! Please open a GitHub Discussion: https://github.com/tensorzero/tensorzero/discussions/new` with pointer: `/new-key/0`"),
             "Unexpected error message: {err:?}"
+        );
+    }
+
+    #[test]
+    fn test_delete_json_pointer_simple() {
+        let mut obj = serde_json::json!({
+            "object1": "value1",
+            "my_array": ["value1", true],
+            "object2": {
+                "key1": "value1",
+            }
+        });
+        delete_json_pointer(&mut obj, "/object1").unwrap();
+        assert_eq!(
+            obj,
+            serde_json::json!({
+                "my_array": ["value1", true],
+                "object2": {
+                    "key1": "value1",
+                }
+            })
+        );
+
+        delete_json_pointer(&mut obj, "/object2/key1").unwrap();
+        assert_eq!(
+            obj,
+            serde_json::json!({
+                "my_array": ["value1", true],
+                "object2": {
+                }
+            })
+        );
+
+        delete_json_pointer(&mut obj, "/object2").unwrap();
+        assert_eq!(
+            obj,
+            serde_json::json!({
+                "my_array": ["value1", true],
+            })
+        );
+
+        delete_json_pointer(&mut obj, "/my_array/0").unwrap();
+        assert_eq!(
+            obj,
+            serde_json::json!({
+                "my_array": [true],
+            })
+        );
+
+        delete_json_pointer(&mut obj, "/my_array").unwrap();
+        assert_eq!(obj, serde_json::json!({}));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_delete_json_pointer_errors() {
+        let mut obj = serde_json::json!({"other": "value"});
+        delete_json_pointer(&mut obj, "/object1").unwrap();
+        assert!(logs_contain(
+            "Skipping deletion of extra_body pointer `/object1` - key `object1` doesn't exist"
+        ));
+        assert_eq!(obj, serde_json::json!({"other": "value"}));
+
+        let mut obj = serde_json::json!({
+            "my_array": ["value1", true],
+        });
+        delete_json_pointer(&mut obj, "/my_array/2").unwrap();
+        assert!(logs_contain(
+            "Skipping deletion of extra_body pointer `/my_array/2` - index `2` out of bounds"
+        ));
+        assert_eq!(
+            obj,
+            serde_json::json!({
+                "my_array": ["value1", true],
+            })
+        );
+
+        delete_json_pointer(&mut obj, "/fake/pointer").unwrap();
+        assert!(logs_contain(
+            "Skipping deletion of extra_body pointer `/fake/pointer` - parent of pointer doesn't exist"
+        ));
+        assert_eq!(
+            obj,
+            serde_json::json!({
+                "my_array": ["value1", true],
+            })
+        );
+
+        delete_json_pointer(&mut obj, "/my_array/non-int-index").unwrap();
+        assert!(logs_contain(
+            "Skipping deletion of extra_body pointer `/my_array/non-int-index` - non-numeric array index `non-int-index`"
+        ));
+        assert_eq!(
+            obj,
+            serde_json::json!({
+                "my_array": ["value1", true],
+            })
+        );
+
+        delete_json_pointer(&mut obj, "/my_array/0/bad-index").unwrap();
+        assert!(logs_contain(
+            "Skipping deletion of extra_body pointer `/my_array/0/bad-index` - found non array/object target \"value1\""
+        ));
+        assert_eq!(
+            obj,
+            serde_json::json!({
+                "my_array": ["value1", true],
+            })
         );
     }
 

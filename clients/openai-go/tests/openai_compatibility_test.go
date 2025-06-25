@@ -52,18 +52,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func OldFormatSystemMessageWithAssistant(t *testing.T, assistant_name string) *openai.ChatCompletionSystemMessageParam {
-	t.Helper()
-
-	sysMsg := param.OverrideObj[openai.ChatCompletionSystemMessageParam](map[string]interface{}{
-		"content": []map[string]interface{}{
-			{"assistant_name": assistant_name},
-		},
-		"role": "system",
-	})
-	return &sysMsg
-}
-
 func systemMessageWithAssistant(t *testing.T, assistant_name string) *openai.ChatCompletionSystemMessageParam {
 	t.Helper()
 
@@ -132,7 +120,7 @@ func TestBasicInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -175,7 +163,7 @@ func TestBasicInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -214,7 +202,7 @@ func TestBasicInference(t *testing.T) {
 
 	t.Run("it should handle basic json schema parsing and throw proper validation error", func(t *testing.T) {
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -248,7 +236,7 @@ func TestBasicInference(t *testing.T) {
 
 	t.Run("it should handle inference with cache", func(t *testing.T) {
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -510,12 +498,17 @@ func TestBasicInference(t *testing.T) {
 
 		userMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
 			"content": []map[string]interface{}{
-				{"country": "Japan"},
+				{
+					"type": "text",
+					"tensorzero::arguments": map[string]interface{}{
+						"country": "Japan",
+					},
+				},
 			},
 			"role": "user",
 		})
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			{OfUser: &userMsg},
 		}
 
@@ -568,7 +561,12 @@ func TestBasicInference(t *testing.T) {
 		})
 		userMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
 			"content": []map[string]interface{}{
-				{"country": "Japan"},
+				{
+					"type": "text",
+					"tensorzero::arguments": map[string]interface{}{
+						"country": "Japan",
+					},
+				},
 			},
 			"role": "user",
 		})
@@ -596,7 +594,7 @@ func TestBasicInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello, world!"),
 		}
 
@@ -647,7 +645,7 @@ func TestStreamingInference(t *testing.T) {
 			" pizza.",
 		}
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -740,7 +738,7 @@ func TestStreamingInference(t *testing.T) {
 	t.Run("it should handle streaming inference with cache", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -849,7 +847,7 @@ func TestStreamingInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -875,7 +873,7 @@ func TestStreamingInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -900,7 +898,7 @@ func TestStreamingInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -925,7 +923,7 @@ func TestStreamingInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -951,7 +949,12 @@ func TestStreamingInference(t *testing.T) {
 
 		sysMsg := param.OverrideObj[openai.ChatCompletionSystemMessageParam](map[string]interface{}{
 			"content": []map[string]interface{}{
-				{"name_of_assistant": "Alfred Pennyworth"},
+				{
+					"type": "text",
+					"tensorzero::arguments": map[string]interface{}{
+						"name_of_assistant": "Alfred Pennyworth",
+					},
+				},
 			},
 			"role": "system",
 		})
@@ -986,12 +989,17 @@ func TestStreamingInference(t *testing.T) {
 
 		userMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
 			"content": []map[string]interface{}{
-				{"country": "Japan"},
+				{
+					"type": "text",
+					"tensorzero::arguments": map[string]interface{}{
+						"country": "Japan",
+					},
+				},
 			},
 			"role": "user",
 		})
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			{OfUser: &userMsg},
 		}
 
@@ -1089,7 +1097,7 @@ func TestToolCallingInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hi I'm visiting Brooklyn from Brazil. What's the weather?"),
 		}
 
@@ -1135,7 +1143,7 @@ func TestToolCallingInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hi I'm visiting Brooklyn from Brazil. What's the weather?"),
 		}
 
@@ -1175,7 +1183,7 @@ func TestToolCallingInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hi I'm visiting Brooklyn from Brazil. What's the weather?"),
 		}
 
@@ -1268,7 +1276,7 @@ func TestToolCallingInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Dr. Mehta")},
+			{OfSystem: systemMessageWithAssistant(t, "Dr. Mehta")},
 			openai.UserMessage("What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."),
 		}
 
@@ -1353,12 +1361,17 @@ func TestToolCallingInference(t *testing.T) {
 
 		usrMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
 			"content": []map[string]interface{}{
-				{"country": "Japan"},
+				{
+					"type": "text",
+					"tensorzero::arguments": map[string]interface{}{
+						"country": "Japan",
+					},
+				},
 			},
 			"role": "user",
 		})
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hi how are you?"),
 			{OfUser: &usrMsg},
 		}
