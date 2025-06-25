@@ -693,12 +693,8 @@ impl Client {
                     .into(),
                 })?;
                 let mut query_params = Vec::new();
-                if let Some(limit) = limit {
-                    query_params.push(("limit", limit.to_string()));
-                }
-                if let Some(offset) = offset {
-                    query_params.push(("offset", offset.to_string()));
-                }
+                query_params.push(("limit", limit.unwrap_or(100).to_string()));
+                query_params.push(("offset", offset.unwrap_or(0).to_string()));
                 if let Some(function_name) = function_name {
                     query_params.push(("function_name", function_name));
                 }
