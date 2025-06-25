@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Pick a ClickHouse cloud instance to use, based on the build BUILDKITE_BUILD_NUMBER
 # This distributes builds across '$CLICKHOUSE_CLOUD_COUNT' different instances.
 # The chosen 'CLICKHOUSE_ID' is used in the concurrency group key, limiting us to one
