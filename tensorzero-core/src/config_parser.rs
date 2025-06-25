@@ -1001,6 +1001,7 @@ impl UninitializedVariantInfo {
 pub struct UninitializedToolConfig {
     pub description: String,
     pub parameters: PathBuf,
+    pub name: Option<String>,
     #[serde(default)]
     pub strict: bool,
 }
@@ -1013,7 +1014,7 @@ impl UninitializedToolConfig {
     ) -> Result<StaticToolConfig, Error> {
         let parameters = StaticJSONSchema::from_path(self.parameters, base_path.as_ref())?;
         Ok(StaticToolConfig {
-            name,
+            name: self.name.unwrap_or(name),
             description: self.description,
             parameters,
             strict: self.strict,
@@ -1293,6 +1294,17 @@ mod tests {
         assert_eq!(metric.r#type, MetricConfigType::Float);
         assert_eq!(metric.optimize, MetricConfigOptimize::Min);
         assert_eq!(metric.level, MetricConfigLevel::Inference);
+
+        // Check that there are 2 tools and both have name "get_temperature"
+        assert_eq!(config.tools.len(), 2);
+        assert_eq!(
+            config.tools.get("get_temperature").unwrap().name,
+            "get_temperature"
+        );
+        assert_eq!(
+            config.tools.get("get_temperature_with_name").unwrap().name,
+            "get_temperature"
+        );
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field

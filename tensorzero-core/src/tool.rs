@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -135,6 +138,7 @@ impl ToolCallConfig {
             .allowed_tools
             .as_deref()
             .unwrap_or(function_tools);
+        let mut tool_display_names = HashSet::new();
 
         // Get each tool from the static tool config.
         let tools_available: Result<Vec<ToolConfig>, Error> = allowed_tools
@@ -169,6 +173,15 @@ impl ToolCallConfig {
                 })
             },
         ));
+        // Check for duplicate tool names.
+        for tool in &tools_available {
+            let duplicate = !tool_display_names.insert(tool.name());
+            if duplicate {
+                return Err(Error::new(ErrorDetails::DuplicateTool {
+                    name: tool.name().to_string(),
+                }));
+            }
+        }
 
         let tool_choice = dynamic_tool_params
             .tool_choice
