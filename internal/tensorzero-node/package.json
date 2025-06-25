@@ -52,8 +52,8 @@
     "typecheck": "tsc",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}\" --ignore-path .prettierignore",
     "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}\" --ignore-path .prettierignore",
-    "lint": "eslint . --fix --max-warnings=0 --config eslint.config.js --cache --ignore-pattern \"dist/\"",
-    "lint:check": "eslint . --max-warnings=0 --config eslint.config.js --cache --ignore-pattern \"dist/\"",
+    "lint": "eslint . --fix --max-warnings=0 --config eslint.config.js --cache --ignore-pattern \"dist/\" --ignore-pattern \"index.d.ts\"",
+    "lint:check": "eslint . --max-warnings=0 --config eslint.config.js --cache --ignore-pattern \"dist/\" --ignore-pattern \"index.d.ts\"",
     "universal": "napi universal",
     "version": "napi version"
   }
