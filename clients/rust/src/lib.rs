@@ -309,9 +309,15 @@ impl ClientBuilder {
     /// Builds a `Client` in HTTPGateway mode, erroring if the mode is not HTTPGateway
     /// This allows avoiding calling the async `build` method
     pub fn build_http(self) -> Result<Client, ClientBuilderError> {
-        let ClientBuilderMode::HTTPGateway { url } = self.mode else {
+        let ClientBuilderMode::HTTPGateway { mut url } = self.mode else {
             return Err(ClientBuilderError::NotHTTPGateway);
         };
+        // Enforce that the URL has a trailing slash, so that joining endpoints works correctly
+        // This means that passing in a url that looks like 'http://example.com/some/prefix'
+        // will result in inference requests being sent to 'http://example.com/some/prefix/inference'
+        if !url.path().ends_with('/') {
+            url.set_path(&format!("{}/", url.path()));
+        }
         Ok(Client {
             mode: ClientMode::HTTPGateway(HTTPGateway {
                 base_url: url,
@@ -353,7 +359,7 @@ impl Client {
     }
 
     #[cfg(feature = "pyo3")]
-    pub fn get_config(&self) -> Option<Arc<Config>> {
+    pub fn get_config(&self) -> Option<Arc<Config<'_>>> {
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, .. } => Some(gateway.state.config.clone()),
             _ => None,

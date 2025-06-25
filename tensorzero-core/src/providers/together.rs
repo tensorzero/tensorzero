@@ -390,7 +390,7 @@ pub(super) fn prepare_together_messages<'a>(
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages.iter() {
-        messages.extend(tensorzero_to_openai_messages(message)?);
+        messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
     }
 
     if let Some(system_msg) = tensorzero_to_together_system_message(request.system.as_deref()) {
