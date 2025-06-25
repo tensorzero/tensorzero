@@ -34,7 +34,7 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { DatapointActions } from "./DatapointActions";
-import type { ResolvedInputMessage } from "~/utils/clickhouse/common";
+import type { DisplayInputMessage } from "~/utils/clickhouse/common";
 import { getConfig } from "~/utils/config/index.server";
 import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
 import {
@@ -219,7 +219,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setInput({ ...input, system });
   };
 
-  const handleMessagesChange = (messages: ResolvedInputMessage[]) => {
+  const handleMessagesChange = (messages: DisplayInputMessage[]) => {
     setInput({ ...input, messages });
   };
 

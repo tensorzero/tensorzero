@@ -170,23 +170,6 @@ jobs:
       #   run: |
       #     TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-e2e --no-fail-fast ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}"
       #   continue-on-error: true
-
-      - name: Print e2e logs
-        if: always()
-        run: cat e2e_logs.txt
-
-      - name: Print provider-proxy logs
-        if: always()
-        run: cat provider_proxy_logs.txt
-
-      - name: Print vLLM modal logs
-        if: always()
-        run: cat vllm_modal_logs.txt
-
-      - name: Print SGLang modal logs
-        if: always()
-        run: cat sglang_modal_logs.txt
-
       - name: Install Python for python async client tests
         run: uv python install 3.9
 
@@ -230,6 +213,26 @@ jobs:
           echo "Killing gateway with pid $GATEWAY_PID"
           kill $GATEWAY_PID
 
+      - name: Check e2e logs for deprecation warnings
+        run: |
+          ! grep -i "Deprecation Warning" e2e_logs.txt
+
+      - name: Print e2e logs
+        if: always()
+        run: cat e2e_logs.txt
+
+      - name: Print provider-proxy logs
+        if: always()
+        run: cat provider_proxy_logs.txt
+
+      - name: Print vLLM modal logs
+        if: always()
+        run: cat vllm_modal_logs.txt
+
+      - name: Print SGLang modal logs
+        if: always()
+        run: cat sglang_modal_logs.txt
+  
       - name: Upload provider-proxy cache
         # Only upload the cache when we're running from a 'good' run
         # (a merge queue entry which passed this check, or a cron job)

@@ -1,5 +1,5 @@
 import { PageSubNav } from "./PageSubNav";
-import { useBreadcrumbs } from "~/hooks/useBreadcrumbs";
+import { useBreadcrumbs } from "~/hooks/use-breadcrumbs";
 
 export function ContentLayout({ children }: React.PropsWithChildren) {
   const breadcrumbs = useBreadcrumbs();

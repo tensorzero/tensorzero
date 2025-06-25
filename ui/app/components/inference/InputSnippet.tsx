@@ -1,7 +1,7 @@
 import type {
-  ResolvedInput,
-  ResolvedInputMessageContent,
-  ResolvedInputMessage,
+  DisplayInput,
+  DisplayInputMessageContent,
+  DisplayInputMessage,
 } from "~/utils/clickhouse/common";
 import {
   SnippetLayout,
@@ -14,61 +14,50 @@ import {
   ToolCallMessage,
   ToolResultMessage,
   ImageMessage,
-  ImageErrorMessage,
+  FileErrorMessage,
+  FileMessage,
+  AudioMessage,
   TextMessage,
   EmptyMessage,
 } from "~/components/layout/SnippetContent";
 
 interface InputSnippetProps {
-  input: ResolvedInput;
+  input: DisplayInput;
 }
 
-function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
+function renderContentBlock(block: DisplayInputMessageContent, index: number) {
   switch (block.type) {
-    case "text": {
-      if (typeof block.value === "object") {
-        let serializedContent;
-        try {
-          serializedContent = JSON.stringify(block.value, null, 2);
-        } catch {
-          return null;
-        }
-        return (
-          <TextMessage
-            key={index}
-            label="Text (Arguments)"
-            content={serializedContent}
-            type="structured"
-          />
-        );
-      }
+    case "structured_text": {
+      return (
+        <TextMessage
+          key={index}
+          label="Text (Arguments)"
+          content={JSON.stringify(block.arguments, null, 2)}
+          type="structured"
+        />
+      );
+    }
 
-      // Try to parse JSON strings
-      if (typeof block.value === "string") {
-        try {
-          const parsedJson = JSON.parse(block.value);
-          if (typeof parsedJson === "object") {
-            let serializedContent;
-            try {
-              serializedContent = JSON.stringify(block.value, null, 2);
-            } catch {
-              return null;
-            }
-            return (
-              <TextMessage
-                key={index}
-                label="Text (Arguments)"
-                content={serializedContent}
-                type="structured"
-              />
-            );
-          }
-        } catch {
-          // Not valid JSON, continue with regular text message
-        }
-      }
+    case "unstructured_text": {
+      return (
+        <TextMessage
+          key={index}
+          label="Text"
+          content={block.text}
+          type="default"
+        />
+      );
+    }
 
-      return <TextMessage key={index} label="Text" content={block.value} />;
+    case "missing_function_text": {
+      return (
+        <TextMessage
+          key={index}
+          label="Text (Missing Function Config)"
+          content={block.value}
+          type="default"
+        />
+      );
     }
 
     case "raw_text":
@@ -118,33 +107,43 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
         return (
           <ImageMessage
             key={index}
-            url={block.file.url}
+            url={block.file.dataUrl}
             downloadName={`tensorzero_${block.storage_path.path}`}
+          />
+        );
+      } else if (block.file.mime_type.startsWith("audio/")) {
+        return (
+          <AudioMessage
+            key={index}
+            fileData={block.file.dataUrl}
+            mimeType={block.file.mime_type}
+            filePath={block.storage_path.path}
           />
         );
       } else {
         return (
-          <div key={index}>
-            <ImageErrorMessage
-              key={index}
-              error={`Unsupported file type: ${block.file.mime_type}`}
-            />
-          </div>
+          <FileMessage
+            key={index}
+            fileData={block.file.dataUrl}
+            mimeType={block.file.mime_type}
+            filePath={block.storage_path.path}
+          />
         );
       }
+
     case "file_error":
-      return <ImageErrorMessage key={index} error="Failed to retrieve image" />;
+      return <FileErrorMessage key={index} error="Failed to retrieve file" />;
 
     default:
       return null;
   }
 }
 
-function renderMessage(message: ResolvedInputMessage, messageIndex: number) {
+function renderMessage(message: DisplayInputMessage, messageIndex: number) {
   return (
     <SnippetMessage variant="input" key={messageIndex} role={message.role}>
       {message.content.map(
-        (block: ResolvedInputMessageContent, blockIndex: number) =>
+        (block: DisplayInputMessageContent, blockIndex: number) =>
           renderContentBlock(block, blockIndex),
       )}
     </SnippetMessage>
