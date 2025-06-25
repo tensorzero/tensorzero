@@ -31,7 +31,7 @@ exceptiongroup==1.2.2
     #   ipython
 executing==2.1.0
     # via stack-data
-h11==0.14.0
+h11==0.16.0
     # via httpcore
 httpcore==1.0.5
     # via httpx

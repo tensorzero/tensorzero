@@ -8,7 +8,7 @@ certifi==2024.12.14
     #   httpx
 exceptiongroup==1.2.2
     # via anyio
-h11==0.14.0
+h11==0.16.0
     # via httpcore
 httpcore==1.0.7
     # via httpx

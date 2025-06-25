@@ -56,7 +56,7 @@ fastjsonschema==2.21.1
     # via nbformat
 fqdn==1.5.1
     # via jsonschema
-h11==0.14.0
+h11==0.16.0
     # via httpcore
 httpcore==1.0.7
     # via httpx
