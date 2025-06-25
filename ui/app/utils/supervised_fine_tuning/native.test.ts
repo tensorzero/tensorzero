@@ -13,6 +13,7 @@ if (!clickhouseUrl) {
 const client = await TensorZeroClient.build(configPath, clickhouseUrl);
 
 describe("native sft", () => {
+  // NOTE: This test hits a fake server so you can run it anytime without paying OpenAI
   it("should launch a job and poll it", async () => {
     const metric = "exact_match";
     const threshold = 0.9; // irrelevant
