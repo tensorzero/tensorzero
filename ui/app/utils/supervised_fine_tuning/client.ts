@@ -23,6 +23,7 @@ if (!clickhouseUrl) {
 const client = await TensorZeroClient.build(configPath, clickhouseUrl);
 const useNativeSFT = process.env.TENSORZERO_UI_FF_USE_NATIVE_SFT === "1";
 const openAINativeSFTBase = process.env.OPENAI_BASE_URL ?? null;
+console.log("useNativeSFT", useNativeSFT);
 
 export function launch_sft_job(data: SFTFormValues): Promise<SFTJob> {
   if (useNativeSFT) {
