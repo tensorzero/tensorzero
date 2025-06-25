@@ -85,6 +85,9 @@ jobs:
         continue-on-error: true
         run: pnpm ui:test:e2e --grep-invert "fine-tune on image"
 
+      - name: Debugging with ssh
+        uses: lhotari/action-upterm@v1
+
       - name: Restart UI container with native SFT flag
         working-directory: ui
         run: |
