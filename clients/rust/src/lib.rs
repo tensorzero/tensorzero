@@ -680,6 +680,7 @@ impl Client {
     pub async fn list_datapoints(
         &self,
         dataset_name: String,
+        function_name: Option<String>,
         limit: Option<u32>,
         offset: Option<u32>,
     ) -> Result<Vec<Datapoint>, TensorZeroError> {
@@ -691,10 +692,13 @@ impl Client {
                     })
                     .into(),
                 })?;
-                let builder = client.http_client.get(url).query(&[
-                    ("limit", limit.unwrap_or(100).to_string().as_str()),
-                    ("offset", offset.unwrap_or(0).to_string().as_str()),
-                ]);
+                let mut query_params = Vec::new();
+                query_params.push(("limit", limit.unwrap_or(100).to_string()));
+                query_params.push(("offset", offset.unwrap_or(0).to_string()));
+                if let Some(function_name) = function_name {
+                    query_params.push(("function_name", function_name));
+                }
+                let builder = client.http_client.get(url).query(&query_params);
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
@@ -702,6 +706,7 @@ impl Client {
                     tensorzero_core::endpoints::datasets::list_datapoints(
                         dataset_name,
                         &gateway.state.clickhouse_connection_info,
+                        function_name,
                         limit,
                         offset,
                     )
