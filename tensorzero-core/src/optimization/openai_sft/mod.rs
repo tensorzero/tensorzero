@@ -7,7 +7,7 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model::{build_creds_caching_default, CredentialLocation},
-    optimization::{Optimizer, OptimizerStatus},
+    optimization::{JobHandle, Optimizer, OptimizerStatus},
     providers::openai::{
         default_api_key_location,
         optimization::{
@@ -29,6 +29,7 @@ pub struct OpenAISFTConfig {
     pub learning_rate_multiplier: Option<f64>,
     pub n_epochs: Option<usize>,
     pub credentials: OpenAICredentials,
+    pub credential_location: Option<CredentialLocation>,
     pub seed: Option<u64>,
     pub suffix: Option<String>,
     pub api_base: Option<Url>,
@@ -58,11 +59,12 @@ impl UninitializedOpenAISFTConfig {
             learning_rate_multiplier: self.learning_rate_multiplier,
             n_epochs: self.n_epochs,
             credentials: build_creds_caching_default(
-                self.credentials,
+                self.credentials.clone(),
                 default_api_key_location(),
                 PROVIDER_TYPE,
                 &DEFAULT_CREDENTIALS,
             )?,
+            credential_location: self.credentials,
             seed: self.seed,
             suffix: self.suffix,
         })
@@ -75,10 +77,12 @@ impl UninitializedOpenAISFTConfig {
 pub struct OpenAISFTJobHandle {
     pub job_id: String,
     pub job_url: Url,
+    #[cfg_attr(test, ts(type = "string | null"))]
+    pub credential_location: Option<CredentialLocation>,
 }
 
 impl Optimizer for OpenAISFTConfig {
-    type JobHandle = OpenAISFTJobHandle;
+    type Handle = OpenAISFTJobHandle;
 
     async fn launch(
         &self,
@@ -86,7 +90,7 @@ impl Optimizer for OpenAISFTConfig {
         train_examples: Vec<RenderedStoredInference>,
         val_examples: Option<Vec<RenderedStoredInference>>,
         credentials: &InferenceCredentials,
-    ) -> Result<Self::JobHandle, Error> {
+    ) -> Result<Self::Handle, Error> {
         let train_rows: Vec<OpenAISupervisedRow> = train_examples
             .iter()
             .map(OpenAISupervisedRow::try_from)
@@ -202,17 +206,25 @@ impl Optimizer for OpenAISFTConfig {
         Ok(OpenAISFTJobHandle {
             job_id: job.id.clone(),
             job_url,
+            credential_location: self.credential_location.clone(),
         })
     }
+}
 
+impl JobHandle for OpenAISFTJobHandle {
     async fn poll(
         &self,
         client: &reqwest::Client,
-        job_handle: &Self::JobHandle,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizerStatus, Error> {
-        let mut request = client.get(job_handle.job_url.clone());
-        let api_key = self.credentials.get_api_key(credentials)?;
+        let openai_credentials = build_creds_caching_default(
+            self.credential_location.clone(),
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+        )?;
+        let mut request = client.get(self.job_url.clone());
+        let api_key = openai_credentials.get_api_key(credentials)?;
         if let Some(api_key) = api_key {
             request = request.bearer_auth(api_key.expose_secret());
         }

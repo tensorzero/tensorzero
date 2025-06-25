@@ -256,7 +256,7 @@ where
     match Helper::deserialize(deserializer)? {
         Helper::String(s) => {
             if s.is_empty() {
-                Ok(None)
+                Err(D::Error::custom("empty string is not a valid u64"))
             } else {
                 s.parse::<u64>()
                     .map(Some)

@@ -21,6 +21,7 @@ use tensorzero_core::{
         Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
         ModelInput, RequestMessage, Text,
     },
+    optimization::JobHandle,
     optimization::{Optimizer, OptimizerInfo, OptimizerOutput, OptimizerStatus},
     tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
@@ -46,15 +47,9 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .launch(&client, test_examples, val_examples, &credentials)
         .await
         .unwrap();
-    let mut status = optimizer_info
-        .poll(&client, &job_handle, &credentials)
-        .await
-        .unwrap();
+    let mut status = job_handle.poll(&client, &credentials).await.unwrap();
     while !matches!(status, OptimizerStatus::Completed { .. }) {
-        status = optimizer_info
-            .poll(&client, &job_handle, &credentials)
-            .await
-            .unwrap();
+        status = job_handle.poll(&client, &credentials).await.unwrap();
         println!("Status: {status:?}");
         // Sleep for a minute
         sleep(Duration::from_secs(60)).await;

@@ -11,7 +11,9 @@ use crate::{
     config_parser::Config,
     endpoints::{inference::InferenceCredentials, stored_inference::render_inferences},
     error::{Error, ErrorDetails},
-    optimization::{Optimizer, OptimizerJobHandle, OptimizerStatus, UninitializedOptimizerInfo},
+    optimization::{
+        JobHandle, Optimizer, OptimizerJobHandle, OptimizerStatus, UninitializedOptimizerInfo,
+    },
     serde_util::deserialize_option_u64,
     stored_inference::RenderedStoredInference,
 };
@@ -133,9 +135,8 @@ pub async fn poll_optimization(
     http_client: &reqwest::Client,
     job_handle: &OptimizerJobHandle,
 ) -> Result<OptimizerStatus, Error> {
-    let optimizer = UninitializedOptimizerInfo::load_from_default_optimizer(job_handle)?;
-    optimizer
-        .poll(http_client, job_handle, &InferenceCredentials::default())
+    job_handle
+        .poll(http_client, &InferenceCredentials::default())
         .await
 }
 

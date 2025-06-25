@@ -40,6 +40,18 @@ pub enum OptimizerJobHandle {
     OpenAISFT(OpenAISFTJobHandle),
 }
 
+impl JobHandle for OptimizerJobHandle {
+    async fn poll(
+        &self,
+        client: &reqwest::Client,
+        credentials: &InferenceCredentials,
+    ) -> Result<OptimizerStatus, Error> {
+        match self {
+            OptimizerJobHandle::OpenAISFT(job_handle) => job_handle.poll(client, credentials).await,
+        }
+    }
+}
+
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, ts(export))]
@@ -67,52 +79,40 @@ pub enum OptimizerStatus {
     Failed,
 }
 
-pub trait Optimizer {
-    type JobHandle;
-
-    async fn launch(
-        &self,
-        client: &reqwest::Client,
-        train_examples: Vec<RenderedStoredInference>,
-        val_examples: Option<Vec<RenderedStoredInference>>,
-        credentials: &InferenceCredentials,
-    ) -> Result<Self::JobHandle, Error>;
-
+pub trait JobHandle {
     async fn poll(
         &self,
         client: &reqwest::Client,
-        job_handle: &Self::JobHandle,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizerStatus, Error>;
 }
 
-impl Optimizer for OptimizerInfo {
-    type JobHandle = OptimizerJobHandle;
+pub trait Optimizer {
+    type Handle: JobHandle;
+
     async fn launch(
         &self,
         client: &reqwest::Client,
         train_examples: Vec<RenderedStoredInference>,
         val_examples: Option<Vec<RenderedStoredInference>>,
         credentials: &InferenceCredentials,
-    ) -> Result<Self::JobHandle, Error> {
+    ) -> Result<Self::Handle, Error>;
+}
+
+impl Optimizer for OptimizerInfo {
+    type Handle = OptimizerJobHandle;
+    async fn launch(
+        &self,
+        client: &reqwest::Client,
+        train_examples: Vec<RenderedStoredInference>,
+        val_examples: Option<Vec<RenderedStoredInference>>,
+        credentials: &InferenceCredentials,
+    ) -> Result<Self::Handle, Error> {
         match &self.inner {
             OptimizerConfig::OpenAISFT(config) => config
                 .launch(client, train_examples, val_examples, credentials)
                 .await
                 .map(OptimizerJobHandle::OpenAISFT),
-        }
-    }
-
-    async fn poll(
-        &self,
-        client: &reqwest::Client,
-        job_handle: &OptimizerJobHandle,
-        credentials: &InferenceCredentials,
-    ) -> Result<OptimizerStatus, Error> {
-        match (&self.inner, job_handle) {
-            (OptimizerConfig::OpenAISFT(config), OptimizerJobHandle::OpenAISFT(job_handle)) => {
-                config.poll(client, job_handle, credentials).await
-            }
         }
     }
 }
@@ -129,14 +129,6 @@ impl UninitializedOptimizerInfo {
     pub fn load(self) -> Result<OptimizerInfo, Error> {
         Ok(OptimizerInfo {
             inner: self.inner.load()?,
-        })
-    }
-
-    pub fn load_from_default_optimizer(
-        job_handle: &OptimizerJobHandle,
-    ) -> Result<OptimizerInfo, Error> {
-        Ok(OptimizerInfo {
-            inner: UninitializedOptimizerConfig::load_from_default_optimizer(job_handle)?,
         })
     }
 }
@@ -158,19 +150,5 @@ impl UninitializedOptimizerConfig {
                 OptimizerConfig::OpenAISFT(config.load()?)
             }
         })
-    }
-
-    /// Load an optimizer config from a job handle.
-    /// This is useful because when we poll we might need an OptimizerConfig to do the work
-    /// but we may not have the original one anymore. For polling, all information should be in the JobHandle.
-    /// So, the default optimizer is fine for this use cse.
-    fn load_from_default_optimizer(
-        job_handle: &OptimizerJobHandle,
-    ) -> Result<OptimizerConfig, Error> {
-        match job_handle {
-            OptimizerJobHandle::OpenAISFT(_) => Ok(OptimizerConfig::OpenAISFT(
-                UninitializedOpenAISFTConfig::default().load()?,
-            )),
-        }
     }
 }
