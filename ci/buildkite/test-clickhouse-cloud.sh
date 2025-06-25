@@ -5,7 +5,6 @@ echo "CLICKHOUSE_ID=${CLICKHOUSE_ID}"
 # We also use this id as part of the concurrent group key in '.buildkite/pipeline.yml', so we're guaranteed to be the only job trying to use this instance.
 # This allows us to distribute our tests across multiple ClickHouse cloud instances (since running too many parallel tests will overload any single instance).
 export TENSORZERO_CLICKHOUSE_SERVICE=$(curl --user "$CLICKHOUSE_API_KEY:$CLICKHOUSE_KEY_SECRET" https://api.clickhouse.cloud/v1/organizations/b55f1935-803f-4931-90b3-4d26089004d4/services | jq ".result[] | select(.name == \"dev-tensorzero-e2e-tests-instance-${CLICKHOUSE_ID}\") | .id")
-export TENSORZERO_CLICKHOUSE_URL=$(buildkite-agent secret get tensorzero_clickhouse_url)
 curl "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SHOW DATABASES'
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  -s -- -y
 . "$HOME/.cargo/env"
