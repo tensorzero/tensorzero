@@ -1193,4 +1193,41 @@ mod tests {
 
         assert!(logs_contain("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object."))
     }
+
+    #[tokio::test]
+    async fn test_duplicate_tool_names_error() {
+        // Test case where dynamic tool params add a tool with the same name as a static tool
+        let dynamic_tool_params = DynamicToolParams {
+            additional_tools: Some(vec![Tool {
+                name: "get_temperature".to_string(), // Same name as static tool
+                description: "Another temperature tool".to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "city": {"type": "string"}
+                    },
+                    "required": ["city"]
+                }),
+                strict: false,
+            }]),
+            ..Default::default()
+        };
+
+        let err = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_tool_params,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err,
+            ErrorDetails::DuplicateTool {
+                name: "get_temperature".to_string()
+            }
+            .into()
+        );
+    }
 }
