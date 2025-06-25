@@ -407,7 +407,7 @@ impl ClickHouseConnectionInfo {
         }
         // Note - we do *not* run this is a normal migration
         // We decided to add this table after we had already created lots of migrations.
-        // We create this table immediately after creating the databsae, so that
+        // We create this table immediately after creating the database, so that
         // we can insert rows into it when running migrations
         self.run_query_synchronous_no_params(
             r#"CREATE TABLE IF NOT EXISTS TensorZeroMigration (
