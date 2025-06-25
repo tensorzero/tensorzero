@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::Deserialize;
+use serde::Serialize;
 
 use crate::config_parser::LoadableConfig;
 use crate::config_parser::PathWithContents;
@@ -39,7 +40,9 @@ use super::{
 /// We need a helper to deserialize the config because it relies on
 /// a path to a file for system instructions and we need to use the
 /// load() step to get the fully qualified path.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct DiclConfig {
     pub weight: Option<f64>,
     pub embedding_model: Arc<str>,

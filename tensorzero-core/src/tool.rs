@@ -23,7 +23,9 @@ use crate::{
  */
 
 /// A Tool object describes how a tool can be dynamically configured by the user.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct Tool {
@@ -215,7 +217,9 @@ impl ToolCallConfig {
 
 /// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
 /// It is used to insert the ToolCallConfig into the database.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ToolCallConfigDatabaseInsert {
     pub tools_available: Vec<Tool>,
@@ -279,7 +283,9 @@ pub struct BatchDynamicToolParams {
 pub struct BatchDynamicToolParamsWithSize(pub BatchDynamicToolParams, pub usize);
 
 /// A ToolCall is a request by a model to call a Tool
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ToolCall {
     pub name: String,
@@ -359,7 +365,9 @@ impl TryFrom<ToolCallInput> for ToolCall {
 
 /// A ToolCallOutput is a request by a model to call a Tool
 /// in the form that we return to the client / ClickHouse
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ToolCallOutput {
     pub arguments: Option<Value>,
@@ -433,7 +441,9 @@ impl ToolCallConfig {
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct ToolResult {
     pub name: String,
@@ -460,7 +470,9 @@ impl ToolResult {
 /// and even specify which tool to be used.
 ///
 /// This enum is used to denote this tool choice.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
 pub enum ToolChoice {

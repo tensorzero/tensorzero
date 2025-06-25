@@ -144,7 +144,7 @@ jobs:
   validate:
     runs-on: namespace-profile-tensorzero-8x16
 
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -343,6 +343,21 @@ jobs:
       - name: Run minijinja WASM tests
         working-directory: ui/app/utils/minijinja
         run: wasm-pack test --node --features console_error_panic_hook
+
+      - name: Build npm workspace
+        run: pnpm -r build
+
+      - name: Check tensorzero-node bindings are properly exported
+        run: pnpm --filter=tensorzero-node run check-exports
+
+      - name: Format tensorzero-node package
+        run: pnpm --filter=tensorzero-node run format:check
+
+      - name: Lint tensorzero-node package
+        run: pnpm --filter=tensorzero-node run lint:check
+
+      - name: Typecheck tensorzero-node package
+        run: pnpm --filter=tensorzero-node run typecheck
 
       - name: Run ESLint
         run: pnpm --filter=tensorzero-ui run lint:check
