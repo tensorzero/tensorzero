@@ -119,48 +119,51 @@ export function DatasetBuilderForm({
         onSubmit={(e) => {
           handleSubmit(onSubmit)(e);
         }}
-        className="flex flex-col gap-4 w-full max-w-200"
+        className="flex w-full max-w-200 flex-col gap-4"
       >
-          <div className="flex flex-col gap-3 w-full p-4 border border-border rounded-xl">
-            <span className="text-fg-primary text-lg font-medium">Create or update a dataset</span>
-            <DatasetSelector
+        <div className="border-border flex w-full flex-col gap-3 rounded-xl border p-4">
+          <span className="text-fg-primary text-lg font-medium">
+            Create or update a dataset
+          </span>
+          <DatasetSelector
+            control={form.control}
+            dataset_counts={dataset_counts}
+            setIsNewDataset={setIsNewDataset}
+          />
+        </div>
+        <div className="border-border flex w-full flex-col gap-3 rounded-xl border p-4">
+          <span className="text-fg-primary text-lg font-medium">
+            Use data from
+          </span>
+          <div className="flex flex-col gap-6">
+            <FunctionSelector<DatasetBuilderFormValues>
               control={form.control}
-              dataset_counts={dataset_counts}
-              setIsNewDataset={setIsNewDataset}
+              name="function"
+              config={config}
             />
-          </div>
-          <div className="flex flex-col gap-3 w-full p-4 border border-border rounded-xl">
-            <span className="text-fg-primary text-lg font-medium">Use data from</span>
-            <div className="flex flex-col gap-6">
-              <FunctionSelector<DatasetBuilderFormValues>
-                control={form.control}
-                name="function"
-                inferenceCount={counts.inferenceCount}
-                config={config}
-              />
-              {functionName && (
+            {functionName && (
               <>
-              <CurationMetricSelector<DatasetBuilderFormValues>
-                control={form.control}
-                name="metric_name"
-                functionFieldName="function"
-                feedbackCount={counts.feedbackCount}
-                curatedInferenceCount={counts.curatedInferenceCount}
-                config={config}
-                removeDemonstrations={true}
-              />
-              <OutputSourceSelector control={form.control} />
-              <DatasetCountDisplay
-                control={form.control}
-                setCountToInsert={setCountToInsert}
-                functionInferenceCount={counts.inferenceCount}
-                metricFeedbackCount={counts.feedbackCount}
-                metricCuratedInferenceCount={counts.curatedInferenceCount}
-              />
+                <CurationMetricSelector<DatasetBuilderFormValues>
+                  control={form.control}
+                  name="metric_name"
+                  functionFieldName="function"
+                  feedbackCount={counts.feedbackCount}
+                  curatedInferenceCount={counts.curatedInferenceCount}
+                  config={config}
+                  removeDemonstrations={true}
+                />
+                <OutputSourceSelector control={form.control} />
+                <DatasetCountDisplay
+                  control={form.control}
+                  setCountToInsert={setCountToInsert}
+                  functionInferenceCount={counts.inferenceCount}
+                  metricFeedbackCount={counts.feedbackCount}
+                  metricCuratedInferenceCount={counts.curatedInferenceCount}
+                />
               </>
-              )}
-            </div>
+            )}
           </div>
+        </div>
         <Button
           type="submit"
           disabled={

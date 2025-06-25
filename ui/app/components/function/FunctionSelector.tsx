@@ -13,7 +13,6 @@ import { FunctionBadges } from "~/components/function/FunctionBadges";
 type FunctionSelectorProps<T extends Record<string, unknown>> = {
   control: Control<T>;
   name: Path<T>;
-  inferenceCount: number | null;
   config: Config;
   hide_default_function?: boolean;
 };
@@ -21,7 +20,6 @@ type FunctionSelectorProps<T extends Record<string, unknown>> = {
 export function FunctionSelector<T extends Record<string, unknown>>({
   control,
   name,
-  inferenceCount,
   config,
   hide_default_function = false,
 }: FunctionSelectorProps<T>) {

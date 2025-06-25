@@ -30,32 +30,32 @@ export function VariantSelector({
         <FormItem className="flex flex-col gap-1">
           <FormLabel>Prompt</FormLabel>
           <div className="flex flex-row items-center gap-2">
-          <Select
-            onValueChange={field.onChange}
-            defaultValue={field.value}
-            disabled={!hasVariants}
-          >
-            <SelectTrigger>
-              <SelectValue
-                placeholder={
-                  hasVariants
-                    ? "Select a variant name"
-                    : "No variants available"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(chatCompletionVariants).map(([name]) => (
-                <SelectItem key={name} value={name}>
-                  <span>{name}</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <TemplateDetailsDialog
-            variant={field.value}
-            disabled={!field.value}
-            chatCompletionVariants={chatCompletionVariants}
+            <Select
+              onValueChange={field.onChange}
+              defaultValue={field.value}
+              disabled={!hasVariants}
+            >
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={
+                    hasVariants
+                      ? "Select a variant name"
+                      : "No variants available"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(chatCompletionVariants).map(([name]) => (
+                  <SelectItem key={name} value={name}>
+                    <span>{name}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <TemplateDetailsDialog
+              variant={field.value}
+              disabled={!field.value}
+              chatCompletionVariants={chatCompletionVariants}
             />
           </div>
         </FormItem>

@@ -47,8 +47,6 @@ export default function CurationMetricSelector<
   control,
   name,
   functionFieldName,
-  feedbackCount,
-  curatedInferenceCount,
   config,
   removeDemonstrations = false,
 }: CurationMetricSelectorProps<T>) {
@@ -177,14 +175,14 @@ export default function CurationMetricSelector<
               />
             )}
           </div>
-          
+
           {/* keeping temporary until full update
           <div className="text-muted-foreground space-y-1 text-sm">
             <div>
               Feedbacks:{" "}
               {field.value === "" ? (
                 <Skeleton className="inline-block h-4 w-16 align-middle" />
-              ) : 
+              ) :
               field.value === null ? (
                 <span className="font-medium">N/A</span>
               ) : (
@@ -195,7 +193,7 @@ export default function CurationMetricSelector<
               Curated Inferences:{" "}
               {field.value === "" ? (
                 <Skeleton className="inline-block h-4 w-16 align-middle" />
-              ) : 
+              ) :
               field.value === null ? (
                 <span className="font-medium">N/A</span>
               ) : (
