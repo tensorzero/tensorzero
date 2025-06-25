@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { tensorZeroClient } from "./tensorzero.server";
-import { type JsonInferenceDatapoint } from "./tensorzero";
-import { getDatapoint } from "./clickhouse/datasets.server";
+import { tensorZeroClient } from "~/utils/tensorzero.server";
+import { getDatapoint } from "~/utils/clickhouse/datasets.server";
+import { type JsonInferenceDatapoint } from "~/utils/tensorzero";
 
 describe("update datapoints and make sure the source_inference_id is removed if the input changed", () => {
   test("should remove the source_inference_id if the input changed", async () => {
