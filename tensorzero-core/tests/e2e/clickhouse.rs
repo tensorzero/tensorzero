@@ -26,7 +26,9 @@ use tensorzero_core::clickhouse::migration_manager::migrations::migration_0009::
 use tensorzero_core::clickhouse::migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_core::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
 
-use tensorzero_core::clickhouse::migration_manager::{self, make_all_migrations, MigrationRecordDatabaseInsert};
+use tensorzero_core::clickhouse::migration_manager::{
+    self, make_all_migrations, MigrationRecordDatabaseInsert,
+};
 use tensorzero_core::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
 
@@ -672,7 +674,8 @@ async fn test_clickhouse_migration_manager() {
                 "SELECT * FROM TensorZeroMigration ORDER BY migration_id FORMAT JSONEachRow"
                     .to_string(),
             )
-            .await.unwrap(),
+            .await
+            .unwrap(),
     )
     .unwrap();
     assert_eq!(rows.len(), migrations.len());
@@ -692,7 +695,8 @@ async fn test_clickhouse_migration_manager() {
                 "SELECT * FROM TensorZeroMigration ORDER BY migration_id FORMAT JSONEachRow"
                     .to_string(),
             )
-            .await.unwrap(),
+            .await
+            .unwrap(),
     )
     .unwrap();
     assert_eq!(new_rows, rows);
