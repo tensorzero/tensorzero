@@ -41,7 +41,7 @@ export class TensorZeroClient {
   }
 
   async experimentalLaunchOptimizationWorkflow(
-    params: LaunchOptimizationWorkflowParams
+    params: LaunchOptimizationWorkflowParams,
   ): Promise<OptimizerJobHandle> {
     const paramsString = JSON.stringify(params, (_key, value) =>
       typeof value === "bigint" ? value.toString() : value,
