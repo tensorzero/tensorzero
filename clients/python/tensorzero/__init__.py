@@ -7,6 +7,7 @@ from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGat
 from .tensorzero import (
     Datapoint,
     RenderedSample,
+    RenderedStoredInference,
     ResolvedInput,
     ResolvedInputMessage,
     StoredInference,

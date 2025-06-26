@@ -1,5 +1,7 @@
 #[cfg(feature = "pyo3")]
-use crate::inference::types::pyo3_helpers::{content_block_chat_output_to_python, uuid_to_python};
+use crate::inference::types::pyo3_helpers::{
+    content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
+};
 use axum::extract::{Path, Query, State};
 use axum::Json;
 use futures::future;
@@ -1156,6 +1158,14 @@ impl Datapoint {
             Some(tool_params) => tool_params.clone().into_bound_py_any(py),
             None => Ok(py.None().into_bound(py)),
         }
+    }
+
+    #[getter]
+    pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(match self.output_schema() {
+            Some(output_schema) => serialize_to_dict(py, output_schema)?.into_bound(py),
+            None => py.None().into_bound(py),
+        })
     }
 }
 

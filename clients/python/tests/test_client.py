@@ -3317,6 +3317,7 @@ async def test_async_bulk_insert_delete_datapoints(
     assert datapoint.input.messages[0].role == "user"
     assert len(datapoint.input.messages[0].content) == 1
     assert datapoint.input.messages[0].content[0].type == "text"
+    assert isinstance(datapoint.input.messages[0].content[0], Text)
     assert datapoint.input.messages[0].content[0].text == "bar"
     assert datapoint.output is None
 
@@ -3331,6 +3332,7 @@ async def test_async_bulk_insert_delete_datapoints(
     assert datapoint.input.messages[0].role == "user"
     assert len(datapoint.input.messages[0].content) == 1
     assert datapoint.input.messages[0].content[0].type == "text"
+    assert isinstance(datapoint.input.messages[0].content[0], Text)
     assert datapoint.input.messages[0].content[0].arguments == {"country": "US"}
     assert datapoint.output is None
 

@@ -18,7 +18,6 @@ import uuid_utils
 from tensorzero import (
     ChatDatapointInsert,
     ContentBlock,
-    Datapoint,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
     ExtraBody,
@@ -85,13 +84,32 @@ class RenderedStoredInference(RenderedSample):
     # DEPRECATED: use RenderedSample instead
     pass
 
-@final
 class RenderedSample:
     function_name: str
     input: ModelInput
     output: Optional[List[ContentBlock]]
     tool_params: Optional[ToolCallConfigDatabaseInsert]
     output_schema: Optional[Dict[str, Any]]
+
+@final
+class Datapoint:
+    Chat: Type["Datapoint"]
+    Json: Type["Datapoint"]
+
+    @property
+    def id(self) -> UUID: ...
+    @property
+    def input(self) -> ResolvedInput: ...
+    @property
+    def output(self) -> Any: ...
+    @property
+    def dataset_name(self) -> str: ...
+    @property
+    def function_name(self) -> str: ...
+    @property
+    def tool_params(self) -> Optional[Any]: ...
+    @property
+    def output_schema(self) -> Optional[Any]: ...
 
 class BaseTensorZeroGateway:
     pass
@@ -684,6 +702,7 @@ class LocalHttpGateway(object):
 __all__ = [
     "AsyncTensorZeroGateway",
     "BaseTensorZeroGateway",
+    "Datapoint",
     "TensorZeroGateway",
     "LocalHttpGateway",
     "_start_http_gateway",
