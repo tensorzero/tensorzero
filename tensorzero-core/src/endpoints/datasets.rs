@@ -1,6 +1,8 @@
 use axum::extract::{Path, Query, State};
 use axum::Json;
 use futures::future;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -1057,8 +1059,9 @@ pub struct InsertDatapointResponse {
     id: Uuid,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub enum Datapoint {
     Chat(ChatInferenceDatapoint),
     Json(JsonInferenceDatapoint),
@@ -1101,6 +1104,13 @@ impl Datapoint {
     }
 }
 
+impl std::fmt::Display for Datapoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
 /// These input datapoints are used as input typesby the `insert_datapoint` endpoint
 /// The distinction here is that they do not include the `dataset_name` field,
 /// which is instead specified as a path parameter.
@@ -1130,7 +1140,8 @@ pub struct JsonDatapointInsert {
     pub tags: Option<HashMap<String, String>>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -1160,7 +1171,15 @@ pub struct ChatInferenceDatapoint {
     pub staled_at: Option<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+impl std::fmt::Display for ChatInferenceDatapoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -1186,6 +1205,13 @@ pub struct JsonInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub staled_at: Option<String>,
+}
+
+impl std::fmt::Display for JsonInferenceDatapoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 impl StoredSample for Datapoint {

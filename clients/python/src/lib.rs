@@ -28,7 +28,7 @@ use tensorzero_core::{
     clickhouse::ClickhouseFormat,
     inference::types::{
         pyo3_helpers::{
-            deserialize_from_pyobj, deserialize_from_stored_inference, serialize_to_dict,
+            deserialize_from_pyobj, deserialize_from_stored_sample, serialize_to_dict,
             tensorzero_core_error, tensorzero_core_error_class, tensorzero_error_class, JSON_DUMPS,
             JSON_LOADS,
         },
@@ -894,6 +894,7 @@ impl TensorZeroGateway {
         let resp = tokio_block_on_without_gil(this.py(), fut);
         match resp {
             Ok(resp) => {
+                // TODO(Viraj): Make Datapoint a Pyclass
                 let datapoints = resp
                     .into_iter()
                     .map(|x| parse_datapoint(this.py(), x))
@@ -982,10 +983,11 @@ impl TensorZeroGateway {
         stored_inferences: Vec<Bound<'_, PyAny>>,
         variants: HashMap<String, String>,
     ) -> PyResult<Vec<RenderedSample>> {
+        // TODO(Viraj): change the name and deprecate this
         let client = this.as_super().client.clone();
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_stored_inference(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x))
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_samples(stored_inferences, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
@@ -1586,7 +1588,7 @@ impl AsyncTensorZeroGateway {
         let client = this.as_super().client.clone();
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_stored_inference(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
