@@ -34,7 +34,7 @@ model_name = "claude-3-haiku-20240307"
 
 [models.text-embedding-3-small]
 routing = ["openai"]
-endpoints = ["embeddings"]
+endpoints = ["embedding"]
 
 [models.text-embedding-3-small.providers.openai]
 type = "openai"

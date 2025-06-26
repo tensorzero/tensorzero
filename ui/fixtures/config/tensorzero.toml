@@ -23,7 +23,7 @@ model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
 
 [models.text-embedding-3-small]
 routing = ["openai"]
-endpoints = ["embeddings"]
+endpoints = ["embedding"]
 
 [models.text-embedding-3-small.providers.openai]
 type = "openai"

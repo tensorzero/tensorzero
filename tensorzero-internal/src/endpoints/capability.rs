@@ -19,7 +19,7 @@ impl EndpointCapability {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Chat => "chat",
-            Self::Embeddings => "embeddings",
+            Self::Embeddings => "embedding",
         }
     }
 }

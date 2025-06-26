@@ -2857,7 +2857,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         
         [models.text-embedding-model]
         routing = ["openai"]
-        endpoints = ["embeddings"]
+        endpoints = ["embedding"]
         
         [models.text-embedding-model.providers.openai]
         type = "openai"
@@ -2922,7 +2922,7 @@ model_name = "chat_test"
 
 [models.embedding_model]
 routing = ["dummy"]
-endpoints = ["embeddings"]
+endpoints = ["embedding"]
 
 [models.embedding_model.providers.dummy]
 type = "dummy"
@@ -2930,7 +2930,7 @@ model_name = "embedding_test"
 
 [models.multi_capability]
 routing = ["dummy"]
-endpoints = ["chat", "embeddings"]
+endpoints = ["chat", "embedding"]
 
 [models.multi_capability.providers.dummy]
 type = "dummy"
@@ -3091,7 +3091,7 @@ model_name = "chat"
 
 [models.embedding_only]
 routing = ["dummy"]
-endpoints = ["embeddings"]
+endpoints = ["embedding"]
 
 [models.embedding_only.providers.dummy]
 type = "dummy"
@@ -3099,7 +3099,7 @@ model_name = "embed"
 
 [models.both]
 routing = ["dummy"]
-endpoints = ["chat", "embeddings"]
+endpoints = ["chat", "embedding"]
 
 [models.both.providers.dummy]
 type = "dummy"

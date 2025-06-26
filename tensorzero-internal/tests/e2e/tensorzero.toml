@@ -629,7 +629,7 @@ model_name = "reasoner"
 
 [models.text-embedding-3-small]
 routing = ["openai"]
-endpoints = ["embeddings"]
+endpoints = ["embedding"]
 
 [models.text-embedding-3-small.providers.openai]
 type = "openai"
