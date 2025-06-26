@@ -674,9 +674,16 @@ async fn test_clickhouse_migration_manager() {
     );
     let rows = get_all_migration_records(&clickhouse).await;
     println!("Rows: {rows:#?}");
+    // Migration0029 is currently skipped, because 'StaticEvaluationHumanFeedbackFloatView' is created
+    // by a banned migration
+    let expected_migrations = migrations
+        .iter()
+        .filter(|m| m.name() != "Migration0029")
+        .collect::<Vec<_>>();
+
     // Check that we wrote out migration records for all migrations
-    assert_eq!(rows.len(), migrations.len());
-    for (migration_record, migration) in rows.iter().zip(migrations.iter()) {
+    assert_eq!(rows.len(), expected_migrations.len());
+    for (migration_record, migration) in rows.iter().zip(expected_migrations.iter()) {
         assert_eq!(
             migration_record.migration_id,
             migration.migration_num().unwrap()
