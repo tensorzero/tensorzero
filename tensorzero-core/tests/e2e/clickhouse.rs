@@ -672,17 +672,8 @@ async fn test_clickhouse_migration_manager() {
             24
         ]
     );
+    let rows = get_all_migration_records(&clickhouse).await;
     // Check that we wrote out migration records for all migrations
-    let rows = serde_json::from_str::<Vec<MigrationRecordDatabaseInsert>>(
-        &clickhouse
-            .run_query_synchronous_no_params(
-                "SELECT * FROM TensorZeroMigration ORDER BY migration_id FORMAT JSONEachRow"
-                    .to_string(),
-            )
-            .await
-            .unwrap(),
-    )
-    .unwrap();
     assert_eq!(rows.len(), migrations.len());
     for (migration_record, migration) in rows.iter().zip(migrations.iter()) {
         assert_eq!(
@@ -693,18 +684,28 @@ async fn test_clickhouse_migration_manager() {
         assert_eq!(migration_record.gateway_version, TENSORZERO_VERSION);
     }
     run_all(&clickhouse, &migrations).await;
-    // Since we've already ran all of the migrations, we shouldn't write out any new records
-    let new_rows = serde_json::from_str::<Vec<MigrationRecordDatabaseInsert>>(
-        &clickhouse
-            .run_query_synchronous_no_params(
-                "SELECT * FROM TensorZeroMigration ORDER BY migration_id FORMAT JSONEachRow"
-                    .to_string(),
-            )
-            .await
-            .unwrap(),
-    )
-    .unwrap();
+    let new_rows = get_all_migration_records(&clickhouse).await;
+    // Since we've already ran all of the migrations, we shouldn't have written any new records
+
     assert_eq!(new_rows, rows);
+}
+
+async fn get_all_migration_records(
+    clickhouse: &ClickHouseConnectionInfo,
+) -> Vec<MigrationRecordDatabaseInsert> {
+    let mut rows = Vec::new();
+    for row in clickhouse
+        .run_query_synchronous_no_params(
+            "SELECT * FROM TensorZeroMigration ORDER BY migration_id FORMAT JSONEachRow"
+                .to_string(),
+        )
+        .await
+        .unwrap()
+        .lines()
+    {
+        rows.push(serde_json::from_str::<MigrationRecordDatabaseInsert>(row).unwrap());
+    }
+    rows
 }
 
 #[tokio::test]

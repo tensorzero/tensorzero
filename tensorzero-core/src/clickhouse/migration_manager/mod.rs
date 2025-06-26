@@ -112,6 +112,8 @@ pub struct MigrationRecordDatabaseInsert {
     pub migration_id: u32,
     pub migration_name: String,
     pub gateway_version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub applied_at: Option<String>,
 }
 
 async fn insert_migration_record(
@@ -126,6 +128,7 @@ async fn insert_migration_record(
                 migration_id,
                 migration_name,
                 gateway_version: TENSORZERO_VERSION.to_string(),
+                applied_at: None,
             }],
             "TensorZeroMigration",
         )
