@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test("should show the supervised fine-tuning page", async ({ page }) => {
   await page.goto("/optimization/supervised-fine-tuning");
-  await expect(page.getByText("Advanced Parameters")).toBeVisible();
+  await expect(page.getByText("Fine-tune a model")).toBeVisible();
 
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
@@ -18,16 +18,30 @@ test.describe("Custom user agent", () => {
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
+    // Select model first (using new Command-based selector)
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Select a model..." })
+      .click();
+    await page
+      .getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" })
+      .click();
+
+    // Select function
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a function" })
       .click();
     await page.getByRole("option", { name: "extract_entities JSON" }).click();
+
+    // Select metric
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a metric" })
       .click();
     await page.getByText("exact_match", { exact: true }).click();
+
+    // Select variant
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a variant name" })
@@ -35,13 +49,6 @@ test.describe("Custom user agent", () => {
     await page
       .getByLabel("gpt4o_mini_initial_prompt")
       .getByText("gpt4o_mini_initial_prompt")
-      .click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a model..." })
-      .click();
-    await page
-      .getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" })
       .click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
@@ -77,16 +84,30 @@ model_name = "mock-inference-finetune-1234"
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
+    // Select model first
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Select a model..." })
+      .click();
+    await page
+      .getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" })
+      .click();
+
+    // Select function
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a function" })
       .click();
     await page.getByRole("option", { name: "extract_entities JSON" }).click();
+
+    // Select metric
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a metric" })
       .click();
     await page.getByText("demonstration", { exact: true }).click();
+
+    // Select variant
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a variant name" })
@@ -94,13 +115,6 @@ model_name = "mock-inference-finetune-1234"
     await page
       .getByLabel("gpt4o_mini_initial_prompt")
       .getByText("gpt4o_mini_initial_prompt")
-      .click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a model..." })
-      .click();
-    await page
-      .getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" })
       .click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
@@ -190,16 +204,30 @@ model_name = "mock-inference-finetune-1234"
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
+    // Select model first
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Select a model..." })
+      .click();
+    await page
+      .getByRole("option", { name: "llama-3.2-3b-instruct Fireworks" })
+      .click();
+
+    // Select function
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a function" })
       .click();
     await page.getByRole("option", { name: "extract_entities JSON" }).click();
+
+    // Select metric
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a metric" })
       .click();
     await page.getByText("exact_match", { exact: true }).click();
+
+    // Select variant
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a variant name" })
@@ -207,13 +235,6 @@ model_name = "mock-inference-finetune-1234"
     await page
       .getByLabel("gpt4o_mini_initial_prompt")
       .getByText("gpt4o_mini_initial_prompt")
-      .click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a model..." })
-      .click();
-    await page
-      .getByRole("option", { name: "llama-3.2-3b-instruct Fireworks" })
       .click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
@@ -229,7 +250,9 @@ model_name = "mock-inference-finetune-1234"
       "Prompt: gpt4o_mini_initial_prompt",
     );
 
-    await page.getByText("completed", { exact: true });
+    await page
+      .getByText("completed", { exact: true })
+      .waitFor({ timeout: 3000 });
     await expect(page.locator("body")).toContainText("Configuration");
     await expect(page.locator("body")).toContainText(`
 [models."accounts/fake_fireworks_account/models/mock-fireworks-model"]
