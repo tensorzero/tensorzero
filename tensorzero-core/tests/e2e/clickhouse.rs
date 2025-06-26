@@ -673,6 +673,7 @@ async fn test_clickhouse_migration_manager() {
         ]
     );
     let rows = get_all_migration_records(&clickhouse).await;
+    println!("Rows: {rows:#?}");
     // Check that we wrote out migration records for all migrations
     assert_eq!(rows.len(), migrations.len());
     for (migration_record, migration) in rows.iter().zip(migrations.iter()) {
