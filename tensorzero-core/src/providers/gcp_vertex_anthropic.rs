@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::fmt::Display;
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -8,6 +9,7 @@ use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::fmt::Debug;
 use tokio::time::Instant;
 
 use super::helpers::{
@@ -63,42 +65,43 @@ pub struct GCPVertexAnthropicProvider {
 
 static DEFAULT_CREDENTIALS: OnceLock<GCPVertexCredentials> = OnceLock::new();
 
-pub async fn make_gcp_sdk_credentials(
+fn handle_gcp_error(
     // This is only used in test mode
     #[cfg_attr(not(any(test, feature = "e2e_tests")), expect(unused_variables))]
     provider_type: &str,
+    e: impl Display + Debug,
 ) -> Result<GCPVertexCredentials, Error> {
-    let creds_result = google_cloud_auth::credentials::Builder::default().build();
-
-    let handle_err = |e| {
-        if skip_credential_validation() {
-            #[cfg(any(test, feature = "e2e_tests"))]
-            {
-                tracing::warn!(
-                    "Failed to get GCP SDK credentials for a model provider of type `{provider_type}`, so the associated tests will likely fail: {e}",
-                );
-            }
-            Ok(GCPVertexCredentials::None)
-        } else {
-            Err(Error::new(ErrorDetails::GCPCredentials {
-                message: format!(
-                    "Failed to create GCP Vertex credentials from SDK: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            }))
+    if skip_credential_validation() {
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            tracing::warn!(
+                "Failed to get GCP SDK credentials for a model provider of type `{provider_type}`, so the associated tests will likely fail: {e}",
+            );
         }
-    };
+        Ok(GCPVertexCredentials::None)
+    } else {
+        Err(Error::new(ErrorDetails::GCPCredentials {
+            message: format!(
+                "Failed to create GCP Vertex credentials from SDK: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
+        }))
+    }
+}
+
+pub async fn make_gcp_sdk_credentials(provider_type: &str) -> Result<GCPVertexCredentials, Error> {
+    let creds_result = google_cloud_auth::credentials::Builder::default().build();
 
     let creds = match creds_result {
         Ok(creds) => creds,
         Err(e) => {
-            return handle_err(e);
+            return handle_gcp_error(provider_type, e);
         }
     };
     // Test that the credentials are valid by getting headers
     match creds.headers(http::Extensions::default()).await {
         Ok(_) => Ok(GCPVertexCredentials::Sdk(creds)),
-        Err(e) => handle_err(e),
+        Err(e) => handle_gcp_error(provider_type, e),
     }
 }
 
