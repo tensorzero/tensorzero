@@ -383,7 +383,8 @@ export async function insertRowsForDataset(
       false as is_deleted,
       now64() as updated_at,
       null as staled_at,
-      subquery.id as source_inference_id
+      subquery.id as source_inference_id,
+      false as is_custom
     FROM (
       ${sourceQuery}
     ) AS subquery
@@ -475,6 +476,7 @@ export async function getDatapoint(
       tags,
       auxiliary,
       source_inference_id,
+      is_custom,
       formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at,
       formatDateTime(staled_at, '%Y-%m-%dT%H:%i:%SZ') as staled_at
     FROM ChatInferenceDatapoint FINAL
@@ -497,6 +499,7 @@ export async function getDatapoint(
       tags,
       auxiliary,
       source_inference_id,
+      is_custom,
       formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at,
       formatDateTime(staled_at, '%Y-%m-%dT%H:%i:%SZ') AS staled_at
     FROM JsonInferenceDatapoint FINAL
@@ -603,6 +606,7 @@ export async function staleDatapoint(
       auxiliary,
       is_deleted,
       source_inference_id,
+      is_custom,
       staled_at,
       updated_at
     )
@@ -618,6 +622,7 @@ export async function staleDatapoint(
       auxiliary,
       is_deleted,
       source_inference_id,
+      is_custom,
       now64() as staled_at,
       now64() as updated_at
     FROM {table:Identifier} FINAL
@@ -667,6 +672,7 @@ export async function insertDatapoint(
         ? { output_schema: datapoint.output_schema }
         : {}),
       source_inference_id: datapoint.source_inference_id,
+      is_custom: datapoint.is_custom,
     },
   ];
 

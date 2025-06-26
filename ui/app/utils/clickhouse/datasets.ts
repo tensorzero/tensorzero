@@ -23,6 +23,7 @@ export const ChatInferenceDatapointRowSchema = z
     updated_at: z.string().datetime().default(new Date().toISOString()),
     staled_at: z.string().datetime().nullable(),
     source_inference_id: z.string().uuid().nullable(),
+    is_custom: z.boolean(),
   })
   .strict();
 export type ChatInferenceDatapointRow = z.infer<
@@ -47,6 +48,7 @@ export const JsonInferenceDatapointRowSchema = z
     updated_at: z.string().datetime(),
     staled_at: z.string().datetime().nullable(),
     source_inference_id: z.string().uuid().nullable(),
+    is_custom: z.boolean(),
   })
   .strict();
 export type JsonInferenceDatapointRow = z.infer<
