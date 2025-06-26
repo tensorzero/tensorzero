@@ -33,11 +33,14 @@ fn skip_serialize_file_data(_: &Option<String>) -> bool {
     !SERIALIZE_FILE_DATA.is_set()
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64File {
     // The original url we used to download the file
     pub url: Option<Url>,
+    #[cfg_attr(test, ts(type = "string"))]
     pub mime_type: MediaType,
     // TODO - should we add a wrapper type to enforce base64?
     #[serde(skip_serializing_if = "skip_serialize_file_data")]

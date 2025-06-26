@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
@@ -28,7 +28,9 @@ use super::{
     InferModelRequestArgs, InferenceConfig, ModelUsedInfo, RetryConfig, Variant,
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ChatCompletionConfig {
     pub weight: Option<f64>,
     pub model: Arc<str>,

@@ -99,6 +99,19 @@ repos:
         exclude: '.*\.ipynb$'
         pass_filenames: false
 
+      - id: "prettier: tensorzero-node"
+        name: "prettier: tensorzero-node"
+        entry: bash -c 'pnpm --filter=tensorzero-node run format'
+        language: node
+        types_or:
+          [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
+        additional_dependencies:
+          - prettier
+          - prettier-plugin-tailwindcss
+          - "@prettier/plugin-xml"
+        exclude: '.*\.ipynb$'
+        pass_filenames: false
+
       - id: "eslint: ui"
         name: "eslint: ui"
         entry: bash -c 'pnpm --filter=tensorzero-ui run lint'
@@ -121,6 +134,17 @@ repos:
           - "@typescript-eslint/eslint-plugin"
         pass_filenames: false
 
+      - id: "eslint: tensorzero-node"
+        name: "eslint: tensorzero-node"
+        entry: bash -c 'pnpm --filter=tensorzero-node run lint'
+        language: node
+        types_or: [javascript, jsx, ts, tsx]
+        additional_dependencies:
+          - eslint
+          - "@typescript-eslint/parser"
+          - "@typescript-eslint/eslint-plugin"
+        pass_filenames: false
+
       - id: "tsc: ui"
         name: "tsc: ui"
         entry: bash -c 'pnpm --filter=tensorzero-ui run typecheck'
@@ -133,6 +157,15 @@ repos:
       - id: "tsc: openai-node"
         name: "tsc: openai-node"
         entry: bash -c 'pnpm --filter=openai-node run typecheck'
+        language: node
+        types_or: [ts, tsx]
+        additional_dependencies:
+          - typescript
+        pass_filenames: false
+
+      - id: "tsc: tensorzero-node"
+        name: "tsc: tensorzero-node"
+        entry: bash -c 'pnpm --filter=tensorzero-node run typecheck'
         language: node
         types_or: [ts, tsx]
         additional_dependencies:
