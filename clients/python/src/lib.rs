@@ -48,8 +48,8 @@ use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString,
     DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, ListInferencesParams, RenderedStoredInference,
-    StoredInference, TensorZeroError, Tool,
+    InferenceParams, InferenceStream, ListInferencesParams, RenderedSample, StoredInference,
+    TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -75,7 +75,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<AsyncTensorZeroGateway>()?;
     m.add_class::<TensorZeroGateway>()?;
     m.add_class::<LocalHttpGateway>()?;
-    m.add_class::<RenderedStoredInference>()?;
+    m.add_class::<RenderedSample>()?;
     m.add_class::<StoredInference>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
@@ -981,7 +981,7 @@ impl TensorZeroGateway {
         this: PyRef<'_, Self>,
         stored_inferences: Vec<Bound<'_, PyAny>>,
         variants: HashMap<String, String>,
-    ) -> PyResult<Vec<RenderedStoredInference>> {
+    ) -> PyResult<Vec<RenderedSample>> {
         let client = this.as_super().client.clone();
         let stored_inferences = stored_inferences
             .iter()

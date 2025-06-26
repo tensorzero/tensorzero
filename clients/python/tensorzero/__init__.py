@@ -5,6 +5,7 @@ import httpx
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
+    RenderedSample,
     RenderedStoredInference,
     ResolvedInput,
     ResolvedInputMessage,
@@ -106,7 +107,8 @@ __all__ = [
     "OrNode",  # DEPRECATED
     "patch_openai_client",
     "RawText",
-    "RenderedStoredInference",
+    "RenderedStoredInference",  # DEPRECATED
+    "RenderedSample",
     "System",
     "TensorZeroError",
     "TensorZeroGateway",

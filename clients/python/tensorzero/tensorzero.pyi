@@ -81,13 +81,15 @@ class StoredInference:
     def type(self) -> str: ...
 
 @final
-class RenderedStoredInference:
+class RenderedStoredInference(RenderedSample):
+    # DEPRECATED: use RenderedSample instead
+    pass
+
+@final
+class RenderedSample:
     function_name: str
-    variant_name: str
     input: ModelInput
-    output: List[ContentBlock]
-    episode_id: UUID
-    inference_id: UUID
+    output: Optional[List[ContentBlock]]
     tool_params: Optional[ToolCallConfigDatabaseInsert]
     output_schema: Optional[Dict[str, Any]]
 
@@ -343,9 +345,11 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     def experimental_render_inferences(
         self,
         *,
-        stored_inferences: List[StoredInference],
+        stored_inferences: List[
+            StoredInference
+        ],  # TODO (Viraj): make this a union type
         variants: Dict[str, str],
-    ) -> List[RenderedStoredInference]:
+    ) -> List[RenderedSample]:
         """
         Render a list of stored inferences into a list of rendered stored inferences.
 
@@ -360,7 +364,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
         :param stored_inferences: A list of stored inferences to render.
         :param variants: A mapping from function name to variant name.
-        :return: A list of rendered stored inferences.
+        :return: A list of rendered samples.
         """
 
     def close(self) -> None:
@@ -629,9 +633,11 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     async def experimental_render_inferences(
         self,
         *,
-        stored_inferences: List[StoredInference],
+        stored_inferences: List[
+            StoredInference
+        ],  # TODO (Viraj): make this a union type
         variants: Dict[str, str],
-    ) -> List[RenderedStoredInference]:
+    ) -> List[RenderedSample]:
         """
         Render a list of stored inferences into a list of rendered stored inferences.
 
@@ -646,7 +652,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
         :param stored_inferences: A list of stored inferences to render.
         :param variants: A mapping from function name to variant name.
-        :return: A list of rendered stored inferences.
+        :return: A list of rendered samples.
         """
 
     async def close(self) -> None:
@@ -681,6 +687,7 @@ __all__ = [
     "TensorZeroGateway",
     "LocalHttpGateway",
     "_start_http_gateway",
+    "RenderedSample",
     "RenderedStoredInference",
     "StoredInference",
     "ResolvedInput",

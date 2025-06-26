@@ -17,13 +17,13 @@ use uuid::Uuid;
 
 use crate::providers::common::make_embedded_gateway;
 
-/// Test that the render_inferences function works when given an empty array of stored inferences.
+/// Test that the render_samples function works when given an empty array of stored inferences.
 #[tokio::test(flavor = "multi_thread")]
-pub async fn test_render_inferences_empty() {
+pub async fn test_render_samples_empty() {
     let client = make_embedded_gateway().await;
 
     // Test with an empty stored inferences array.
-    let stored_inferences = vec![];
+    let stored_inferences: Vec<StoredInference> = vec![];
     let rendered_inferences = client
         .experimental_render_samples(stored_inferences, HashMap::new())
         .await
@@ -31,11 +31,11 @@ pub async fn test_render_inferences_empty() {
     assert!(rendered_inferences.is_empty());
 }
 
-/// Test that the render_inferences function drops the stored inference when the variants map is empty.
+/// Test that the render_samples function drops the stored inference when the variants map is empty.
 /// Also test that a warning is logged.
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
-pub async fn test_render_inferences_no_function() {
+pub async fn test_render_samples_no_function() {
     let client = make_embedded_gateway().await;
 
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
@@ -64,11 +64,11 @@ pub async fn test_render_inferences_no_function() {
     assert!(logs_contain("Missing function in variants: basic_test"));
 }
 
-/// Test that the render_inferences function errors when the variants map contains a function with a nonexistent variant.
+/// Test that the render_samples function errors when the variants map contains a function with a nonexistent variant.
 /// Also test that a warning is logged.
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
-pub async fn test_render_inferences_no_variant() {
+pub async fn test_render_samples_no_variant() {
     let client = make_embedded_gateway().await;
 
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
@@ -104,12 +104,12 @@ pub async fn test_render_inferences_no_variant() {
     ));
 }
 
-/// Test that the render_inferences function drops the inference example when the
+/// Test that the render_samples function drops the inference example when the
 /// input is missing a required variable that the schema uses.
 /// Also test that a warning is logged.
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
-pub async fn test_render_inferences_missing_variable() {
+pub async fn test_render_samples_missing_variable() {
     let client = make_embedded_gateway().await;
 
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
@@ -141,10 +141,10 @@ pub async fn test_render_inferences_missing_variable() {
     assert!(logs_contain("Could not render template: undefined value"));
 }
 
-/// Test that the render_inferences function can render a normal chat example, a tool call example, a json example, and an example using images.
+/// Test that the render_samples function can render a normal chat example, a tool call example, a json example, and an example using images.
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
-pub async fn test_render_inferences_normal() {
+pub async fn test_render_samples_normal() {
     let client = make_embedded_gateway().await;
 
     let stored_inferences = vec![
@@ -287,14 +287,13 @@ pub async fn test_render_inferences_normal() {
     assert_eq!(text.text, "Hello, world!");
 
     // Check other fields
-    assert!(first_inference.output.is_empty());
+    assert!(first_inference.output.as_ref().unwrap().is_empty());
     assert!(first_inference.tool_params.is_some());
     assert!(first_inference.output_schema.is_none());
 
     // Check the second rendered inference
     let second_inference = &rendered_inferences[1];
     assert_eq!(second_inference.function_name, "json_success");
-    assert_eq!(second_inference.variant_name, "dummy");
 
     // Check the input
     assert_eq!(
@@ -313,8 +312,9 @@ pub async fn test_render_inferences_normal() {
     assert_eq!(text.text, "What is the name of the capital city of Japan?");
 
     // Check the output
-    assert_eq!(second_inference.output.len(), 1);
-    let ContentBlockChatOutput::Text(output_text) = &second_inference.output[0] else {
+    assert_eq!(second_inference.output.as_ref().unwrap().len(), 1);
+    let ContentBlockChatOutput::Text(output_text) = &second_inference.output.as_ref().unwrap()[0]
+    else {
         panic!("Expected text output");
     };
     assert_eq!(output_text.text, "{}");
@@ -326,7 +326,6 @@ pub async fn test_render_inferences_normal() {
     // Check the third rendered inference
     let third_inference = &rendered_inferences[2];
     assert_eq!(third_inference.function_name, "weather_helper");
-    assert_eq!(third_inference.variant_name, "dummy");
 
     // Check the input
     assert_eq!(
@@ -345,8 +344,9 @@ pub async fn test_render_inferences_normal() {
     assert_eq!(text.text, "Hello, world!");
 
     // Check the output
-    assert_eq!(third_inference.output.len(), 1);
-    let ContentBlockChatOutput::ToolCall(tool_call) = &third_inference.output[0] else {
+    assert_eq!(third_inference.output.as_ref().unwrap().len(), 1);
+    let ContentBlockChatOutput::ToolCall(tool_call) = &third_inference.output.as_ref().unwrap()[0]
+    else {
         panic!("Expected tool call output");
     };
     assert_eq!(tool_call.raw_name, "get_temperature");
@@ -361,7 +361,6 @@ pub async fn test_render_inferences_normal() {
     // Check the fourth rendered inference
     let fourth_inference = &rendered_inferences[3];
     assert_eq!(fourth_inference.function_name, "basic_test");
-    assert_eq!(fourth_inference.variant_name, "gpt-4o-mini-2024-07-18");
 
     // Check the input
     assert_eq!(
@@ -391,16 +390,16 @@ pub async fn test_render_inferences_normal() {
     }
 
     // Check the output
-    assert_eq!(fourth_inference.output.len(), 0);
+    assert_eq!(fourth_inference.output.as_ref().unwrap().len(), 0);
 
     // Check other fields
     assert!(fourth_inference.tool_params.is_some());
     assert!(fourth_inference.output_schema.is_none());
 }
 
-/// Test that the render_inferences function can render a normal chat example, a tool call example, a json example, and an example using images.
+/// Test that the render_samples function can render a normal chat example, a tool call example, a json example, and an example using images.
 #[tokio::test(flavor = "multi_thread")]
-pub async fn test_render_inferences_template_no_schema() {
+pub async fn test_render_samples_template_no_schema() {
     let client = make_embedded_gateway().await;
 
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
@@ -491,7 +490,7 @@ pub async fn test_render_inferences_template_no_schema() {
     );
 
     // Check other fields
-    assert!(first_inference.output.is_empty());
+    assert!(first_inference.output.as_ref().unwrap().is_empty());
     assert!(first_inference.tool_params.is_some());
     assert!(first_inference.output_schema.is_none());
 }

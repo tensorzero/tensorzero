@@ -23,6 +23,27 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+/// This trait is used to represent a stored sample of data.
+/// It should contain all the methods used by `render_samples`
+/// from the stored sample of data so that we can abstract over the
+/// different places where we could get training samples from, notably
+/// datasets and stored inferences.
+pub trait StoredSample {
+    fn function_name(&self) -> &str;
+    fn input(&self) -> &ResolvedInput;
+    fn input_mut(&mut self) -> &mut ResolvedInput;
+    fn owned_simple_info(self) -> SimpleStoredSampleInfo;
+}
+
+/// Utility struct that contains the information needed for a RenderedSample
+/// that is just copied over from the StoredSample.
+pub struct SimpleStoredSampleInfo {
+    function_name: String,
+    output: Option<Vec<ContentBlockChatOutput>>,
+    tool_params: Option<ToolCallConfigDatabaseInsert>,
+    output_schema: Option<Value>,
+}
+
 /// Represents an stored inference to be used for optimization.
 /// These are retrieved from the database in this format.
 /// NOTE / TODO: As an incremental step we are deserializing this enum from Python.
@@ -258,24 +279,47 @@ impl StoredJsonInference {
     }
 }
 
-impl StoredInference {
-    pub fn input_mut(&mut self) -> &mut ResolvedInput {
+impl StoredSample for StoredInference {
+    fn input_mut(&mut self) -> &mut ResolvedInput {
         match self {
             StoredInference::Chat(example) => &mut example.input,
             StoredInference::Json(example) => &mut example.input,
         }
     }
-    pub fn input(&self) -> &ResolvedInput {
+    fn input(&self) -> &ResolvedInput {
         match self {
             StoredInference::Chat(example) => &example.input,
             StoredInference::Json(example) => &example.input,
         }
     }
 
-    pub fn function_name(&self) -> &str {
+    fn function_name(&self) -> &str {
         match self {
             StoredInference::Chat(example) => &example.function_name,
             StoredInference::Json(example) => &example.function_name,
+        }
+    }
+
+    fn owned_simple_info(self) -> SimpleStoredSampleInfo {
+        match self {
+            StoredInference::Chat(example) => SimpleStoredSampleInfo {
+                function_name: example.function_name,
+                output: Some(example.output),
+                tool_params: Some(example.tool_params),
+                output_schema: None,
+            },
+            StoredInference::Json(example) => {
+                let output = match example.output.raw {
+                    Some(raw) => vec![ContentBlockChatOutput::Text(Text { text: raw })],
+                    None => vec![],
+                };
+                SimpleStoredSampleInfo {
+                    function_name: example.function_name,
+                    output: Some(output),
+                    tool_params: None,
+                    output_schema: Some(example.output_schema),
+                }
+            }
         }
     }
 }
@@ -286,28 +330,20 @@ impl StoredInference {
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct RenderedStoredInference {
+pub struct RenderedSample {
     pub function_name: String,
-    pub variant_name: String,
     pub input: ModelInput,
-    pub output: Vec<ContentBlockChatOutput>,
-    pub episode_id: Uuid,
-    pub inference_id: Uuid,
+    pub output: Option<Vec<ContentBlockChatOutput>>,
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
 }
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl RenderedStoredInference {
+impl RenderedSample {
     #[getter]
     pub fn get_function_name(&self) -> &str {
         &self.function_name
-    }
-
-    #[getter]
-    pub fn get_variant_name(&self) -> &str {
-        &self.variant_name
     }
 
     #[getter]
@@ -317,22 +353,15 @@ impl RenderedStoredInference {
 
     #[getter]
     pub fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let output = self
-            .output
-            .iter()
-            .map(|x| content_block_chat_output_to_python(py, x.clone()))
-            .collect::<PyResult<Vec<_>>>()?;
-        PyList::new(py, output).map(|list| list.into_any())
-    }
-
-    #[getter]
-    pub fn get_episode_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        uuid_to_python(py, self.episode_id)
-    }
-
-    #[getter]
-    pub fn get_inference_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        uuid_to_python(py, self.inference_id)
+        if let Some(output) = &self.output {
+            let output = output
+                .iter()
+                .map(|x| content_block_chat_output_to_python(py, x.clone()))
+                .collect::<PyResult<Vec<_>>>()?;
+            PyList::new(py, output).map(|list| list.into_any())
+        } else {
+            Ok(py.None().into_bound(py))
+        }
     }
 
     #[getter]
@@ -350,7 +379,7 @@ impl RenderedStoredInference {
     }
 }
 
-impl std::fmt::Display for RenderedStoredInference {
+impl std::fmt::Display for RenderedSample {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Serialize the rendered inference to pretty-printed JSON
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
@@ -363,18 +392,17 @@ impl std::fmt::Display for RenderedStoredInference {
 /// as the stored inference is being rendered.
 /// This does not handle resolving network resources (e.g. images).
 fn render_model_input(
-    inference_example: &StoredInference,
+    resolved_input: &ResolvedInput,
+    function_name: &str,
     config: &Config,
     variants: &HashMap<String, String>,
 ) -> Result<ModelInput, Error> {
-    let variant_name = variants
-        .get(inference_example.function_name())
-        .ok_or_else(|| {
-            Error::new(ErrorDetails::MissingFunctionInVariants {
-                function_name: inference_example.function_name().to_string(),
-            })
-        })?;
-    let function_config = config.get_function(inference_example.function_name())?;
+    let variant_name = variants.get(function_name).ok_or_else(|| {
+        Error::new(ErrorDetails::MissingFunctionInVariants {
+            function_name: function_name.to_string(),
+        })
+    })?;
+    let function_config = config.get_function(function_name)?;
     let variant_config = function_config
         .variants()
         .get(variant_name)
@@ -385,7 +413,7 @@ fn render_model_input(
         })?;
     let VariantConfig::ChatCompletion(chat_completion_config) = &variant_config.inner else {
         return Err(Error::new(ErrorDetails::InvalidVariantForOptimization {
-            function_name: inference_example.function_name().to_string(),
+            function_name: function_name.to_string(),
             variant_name: variant_name.clone(),
         }));
     };
@@ -417,8 +445,8 @@ fn render_model_input(
         })
         .transpose()?;
     prepare_model_input(
-        inference_example.input().system.as_ref(),
-        &inference_example.input().messages,
+        resolved_input.system.as_ref(),
+        &resolved_input.messages,
         &config.templates,
         system_template_name,
         user_template_name,
@@ -427,45 +455,35 @@ fn render_model_input(
     )
 }
 
-/// Render a StoredInference to a RenderedStoredInference.
+/// Render an impl StoredSample to a RenderedStoredInference.
 /// `variants` should be a map from function name to variant name, i.e. what variant to use for a particular function
 /// as the inference example is being rendered.
 ///
 /// This does not handle resolving network resources (e.g. images).
-pub fn render_stored_inference(
-    inference_example: StoredInference,
+pub fn render_stored_sample<T: StoredSample>(
+    stored_sample: T,
     config: &Config,
     variants: &HashMap<String, String>,
-) -> Result<RenderedStoredInference, Error> {
-    let model_input = render_model_input(&inference_example, config, variants)?;
-    match inference_example {
-        StoredInference::Chat(example) => Ok(RenderedStoredInference {
-            function_name: example.function_name,
-            variant_name: example.variant_name,
-            input: model_input,
-            output: example.output,
-            episode_id: example.episode_id,
-            inference_id: example.inference_id,
-            tool_params: Some(example.tool_params),
-            output_schema: None,
-        }),
-        StoredInference::Json(example) => {
-            let output: Vec<ContentBlockChatOutput> = match example.output.raw {
-                Some(raw) => vec![ContentBlockChatOutput::Text(Text { text: raw })],
-                None => vec![],
-            };
-            Ok(RenderedStoredInference {
-                function_name: example.function_name,
-                variant_name: example.variant_name,
-                input: model_input,
-                output,
-                episode_id: example.episode_id,
-                inference_id: example.inference_id,
-                tool_params: None,
-                output_schema: Some(example.output_schema),
-            })
-        }
-    }
+) -> Result<RenderedSample, Error> {
+    let model_input = render_model_input(
+        stored_sample.input(),
+        stored_sample.function_name(),
+        config,
+        variants,
+    )?;
+    let SimpleStoredSampleInfo {
+        function_name,
+        output,
+        tool_params,
+        output_schema,
+    } = stored_sample.owned_simple_info();
+    Ok(RenderedSample {
+        function_name,
+        input: model_input,
+        output,
+        tool_params,
+        output_schema,
+    })
 }
 
 /// Since we store the input in the database in the form of ResolvedInput but without e.g. images inside,
