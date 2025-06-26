@@ -1,17 +1,17 @@
 agents:
   queue: "t0-merge-queue"
 
+# We need to use individual steps instead of a build matrix, as we can't use matrix keys
+# inside concurrency_group
 steps:
-  - label: "Clickhouse Cloud tests"
+  - label: "Clickhouse Cloud tests - normal release channel"
     concurrency: 1
-    concurrency_group: 'clickhouse-cloud-${CLICKHOUSE_ID}'
-    # Test on both normal and fast release channels
-    matrix:
-      setup:
-        clickhouse_prefix:
-          - "dev-tensorzero-e2e-tests-instance-"
-          - "dev-tensorzero-e2e-tests-fast-instance-"
-    command: CLICKHOUSE_PREFIX={{matrix.clickhouse_prefix}} ./ci/buildkite/test-clickhouse-cloud.sh
+    concurrency_group: 'clickhouse-cloud-normal-${CLICKHOUSE_ID}'
+    command: CLICKHOUSE_PREFIX="dev-tensorzero-e2e-tests-instance-" ./ci/buildkite/test-clickhouse-cloud.sh
+  - label: "Clickhouse Cloud tests - fast release channel"
+    concurrency: 1
+    concurrency_group: 'clickhouse-cloud-fast-${CLICKHOUSE_ID}'
+    command: CLICKHOUSE_PREFIX="dev-tensorzero-e2e-tests-fast-instance-" ./ci/buildkite/test-clickhouse-cloud.sh
 
 notify:
   - github_commit_status:
