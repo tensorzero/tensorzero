@@ -38,10 +38,10 @@ pub trait StoredSample {
 /// Utility struct that contains the information needed for a RenderedSample
 /// that is just copied over from the StoredSample.
 pub struct SimpleStoredSampleInfo {
-    function_name: String,
-    output: Option<Vec<ContentBlockChatOutput>>,
-    tool_params: Option<ToolCallConfigDatabaseInsert>,
-    output_schema: Option<Value>,
+    pub function_name: String,
+    pub output: Option<Vec<ContentBlockChatOutput>>,
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub output_schema: Option<Value>,
 }
 
 /// Represents an stored inference to be used for optimization.

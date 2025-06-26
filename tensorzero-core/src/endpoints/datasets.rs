@@ -8,6 +8,8 @@ use std::{collections::HashMap, future::Future, pin::Pin};
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::inference::types::Text;
+use crate::stored_inference::{SimpleStoredSampleInfo, StoredSample};
 use crate::{
     clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     config_parser::Config,
@@ -1184,6 +1186,52 @@ pub struct JsonInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub staled_at: Option<String>,
+}
+
+impl StoredSample for Datapoint {
+    fn function_name(&self) -> &str {
+        match self {
+            Datapoint::Chat(datapoint) => &datapoint.function_name,
+            Datapoint::Json(datapoint) => &datapoint.function_name,
+        }
+    }
+
+    fn input(&self) -> &ResolvedInput {
+        match self {
+            Datapoint::Chat(datapoint) => &datapoint.input,
+            Datapoint::Json(datapoint) => &datapoint.input,
+        }
+    }
+
+    fn input_mut(&mut self) -> &mut ResolvedInput {
+        match self {
+            Datapoint::Chat(datapoint) => &mut datapoint.input,
+            Datapoint::Json(datapoint) => &mut datapoint.input,
+        }
+    }
+
+    fn owned_simple_info(self) -> SimpleStoredSampleInfo {
+        match self {
+            Datapoint::Chat(datapoint) => SimpleStoredSampleInfo {
+                function_name: datapoint.function_name,
+                output: datapoint.output,
+                tool_params: datapoint.tool_params,
+                output_schema: None,
+            },
+            Datapoint::Json(datapoint) => {
+                let output = datapoint.output.map(|output| match output.raw {
+                    Some(raw) => vec![ContentBlockChatOutput::Text(Text { text: raw })],
+                    None => vec![],
+                });
+                SimpleStoredSampleInfo {
+                    function_name: datapoint.function_name,
+                    output,
+                    tool_params: None,
+                    output_schema: Some(datapoint.output_schema),
+                }
+            }
+        }
+    }
 }
 
 /// If the input is None then we should return None
