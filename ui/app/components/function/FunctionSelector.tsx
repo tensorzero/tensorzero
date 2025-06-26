@@ -1,6 +1,6 @@
 import type { Control, Path } from "react-hook-form";
 import type { Config } from "tensorzero-node";
-import { FormField, FormItem } from "~/components/ui/form";
+import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import {
   Popover,
   PopoverContent,
@@ -42,12 +42,41 @@ export function FunctionSelector<T extends Record<string, unknown>>({
     setInputValue(input);
   };
 
+  const renderButtonContent = (fieldValue: string) => {
+    const currentFunctionName = fieldValue;
+    const selectedFn = currentFunctionName
+      ? config.functions[currentFunctionName]
+      : undefined;
+
+    if (selectedFn) {
+      const iconConfig = getFunctionTypeIcon(selectedFn.type);
+      return (
+        <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
+          <div className={`${iconConfig.iconBg} rounded-sm p-0.5`}>
+            {iconConfig.icon}
+          </div>
+          <span className="truncate text-sm">{fieldValue}</span>
+        </div>
+      );
+    } else {
+      return (
+        <div className="text-fg-muted flex items-center gap-x-2">
+          <Functions className="text-fg-muted h-4 w-4 shrink-0" />
+          <span className="text-fg-secondary flex text-sm">
+            Select a function
+          </span>
+        </div>
+      );
+    }
+  };
+
   return (
     <FormField
       control={control}
       name={name}
       render={({ field }) => (
         <FormItem className="flex flex-col gap-1">
+          <FormLabel className="sr-only">Function</FormLabel>
           <div className="w-full space-y-2">
             <Popover open={open} onOpenChange={setOpen}>
               <PopoverTrigger asChild>
@@ -58,37 +87,7 @@ export function FunctionSelector<T extends Record<string, unknown>>({
                   className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border font-normal hover:cursor-pointer"
                 >
                   <div className="min-w-0 flex-1">
-                    {(() => {
-                      const currentFunctionName = field.value as string;
-                      const selectedFn = currentFunctionName
-                        ? config.functions[currentFunctionName]
-                        : undefined;
-
-                      if (selectedFn) {
-                        const iconConfig = getFunctionTypeIcon(selectedFn.type);
-                        return (
-                          <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
-                            <div
-                              className={`${iconConfig.iconBg} rounded-sm p-0.5`}
-                            >
-                              {iconConfig.icon}
-                            </div>
-                            <span className="truncate text-sm">
-                              {String(field.value)}
-                            </span>
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div className="text-fg-muted flex items-center gap-x-2">
-                            <Functions className="text-fg-muted h-4 w-4 shrink-0" />
-                            <span className="text-fg-secondary flex text-sm">
-                              Select a function
-                            </span>
-                          </div>
-                        );
-                      }
-                    })()}
+                    {renderButtonContent(field.value as string)}
                   </div>
                   <ChevronDown
                     className={clsx(
@@ -115,14 +114,15 @@ export function FunctionSelector<T extends Record<string, unknown>>({
                     </CommandEmpty>
                     <CommandGroup>
                       {Object.entries(config.functions)
-                        .filter(
-                          ([name]) =>
+                        .filter(([name]) => {
+                          const passesDefaultFilter =
                             !hide_default_function ||
-                            name !== "tensorzero::default",
-                        )
-                        .filter(([name]) =>
-                          name.toLowerCase().includes(inputValue.toLowerCase()),
-                        )
+                            name !== "tensorzero::default";
+                          const passesSearchFilter = name
+                            .toLowerCase()
+                            .includes(inputValue.toLowerCase());
+                          return passesDefaultFilter && passesSearchFilter;
+                        })
                         .map(([name, fn]) => {
                           const iconConfig = getFunctionTypeIcon(fn.type);
                           return (
