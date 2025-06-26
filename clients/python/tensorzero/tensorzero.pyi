@@ -80,10 +80,6 @@ class StoredInference:
     def type(self) -> str: ...
 
 @final
-class RenderedStoredInference(RenderedSample):
-    # DEPRECATED: use RenderedSample instead
-    pass
-
 class RenderedSample:
     function_name: str
     input: ModelInput
@@ -707,7 +703,6 @@ __all__ = [
     "LocalHttpGateway",
     "_start_http_gateway",
     "RenderedSample",
-    "RenderedStoredInference",
     "StoredInference",
     "ResolvedInput",
     "ResolvedInputMessage",

@@ -7,7 +7,6 @@ from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGat
 from .tensorzero import (
     Datapoint,
     RenderedSample,
-    RenderedStoredInference,
     ResolvedInput,
     ResolvedInputMessage,
     StoredInference,
@@ -65,6 +64,9 @@ from .types import (
     UnknownContentBlock,
     Usage,
 )
+
+type RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample instead
+
 
 __all__ = [
     "AndFilter",
