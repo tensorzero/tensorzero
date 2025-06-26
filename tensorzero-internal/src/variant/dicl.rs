@@ -18,7 +18,6 @@ use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::model::ModelTable;
-use crate::model_table::ShorthandModelConfig;
 use crate::{
     embeddings::EmbeddingRequest,
     endpoints::inference::{InferenceClients, InferenceParams},
@@ -98,7 +97,7 @@ impl Variant for DiclConfig {
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
                 input,
-                models.embedding_models,
+                models.models,
                 clients,
                 inference_config.function_name,
                 inference_config.variant_name.ok_or_else(|| {
@@ -166,7 +165,7 @@ impl Variant for DiclConfig {
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
                 input,
-                models.embedding_models,
+                models.models,
                 clients,
                 inference_config.function_name,
                 inference_config.variant_name.ok_or_else(|| {
@@ -216,7 +215,7 @@ impl Variant for DiclConfig {
         &self,
         _function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &EmbeddingModelTable,
+        _embedding_models: &EmbeddingModelTable,
         _templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
@@ -237,24 +236,19 @@ impl Variant for DiclConfig {
         }
         // Validate that the generation model and embedding model are valid
         models.validate(&self.model)?;
-        let embedding_model = embedding_models
-            .get(&self.embedding_model).await?
+
+        // Validate embedding model using the unified model table
+        use crate::model::ModelTableExt;
+        let _embedding_model = models
+            .get_with_capability(&self.embedding_model, crate::endpoints::capability::EndpointCapability::Embedding)
+            .await?
             .ok_or_else(|| Error::new(ErrorDetails::Config {
                 message: format!(
-                    "`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name"
+                    "`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name with embeddings capability"
                 ),
             }))?;
 
-        embedding_model
-            .validate(&self.embedding_model)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Config {
-                    message: format!(
-                "`functions.{function_name}.variants.{variant_name}` and embedding model `{}`: {e}",
-                self.embedding_model
-                ),
-                })
-            })?;
+        // Embedding model validation is already done by checking it exists with embeddings capability
         Ok(())
     }
 
@@ -305,7 +299,7 @@ impl DiclConfig {
     async fn retrieve_relevant_examples<'a>(
         &'a self,
         input: &ResolvedInput,
-        embedding_models: &'a EmbeddingModelTable,
+        models: &'a crate::model::ModelTable,
         clients: &InferenceClients<'_>,
         function_name: &str,
         variant_name: &str,
@@ -320,17 +314,25 @@ impl DiclConfig {
             })
         })?;
 
-        let embedding_model = embedding_models
-            .get(&self.embedding_model)
+        use crate::model::ModelTableExt;
+        let embedding_model = models
+            .get_with_capability(
+                &self.embedding_model,
+                crate::endpoints::capability::EndpointCapability::Embedding,
+            )
             .await?
             .ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {
-                    message: format!("Embedding model {} not found", self.embedding_model),
+                    message: format!(
+                        "Model {} not found or does not support embeddings",
+                        self.embedding_model
+                    ),
                 })
             })?;
 
         let embedding_request = EmbeddingRequest {
-            input: serialized_input.to_string(),
+            input: crate::embeddings::EmbeddingInput::Single(serialized_input.to_string()),
+            encoding_format: None,
         };
 
         // Embed the input via an API request

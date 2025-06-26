@@ -32,10 +32,11 @@ model_name = "claude-3-haiku-20240307"
 # │                              EMBEDDING MODELS                              │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[embedding_models.text-embedding-3-small]
+[models.text-embedding-3-small]
 routing = ["openai"]
+endpoints = ["embedding"]
 
-[embedding_models.text-embedding-3-small.providers.openai]
+[models.text-embedding-3-small.providers.openai]
 type = "openai"
 model_name = "text-embedding-3-small"
 

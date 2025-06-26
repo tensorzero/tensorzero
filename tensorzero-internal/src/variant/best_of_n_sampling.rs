@@ -1223,6 +1223,7 @@ mod tests {
                         extra_headers: Default::default(),
                     },
                 )]),
+                endpoints: crate::endpoints::capability::default_capabilities(),
             },
         )]))
         .expect("Failed to create model table");
@@ -1320,6 +1321,7 @@ mod tests {
                             extra_headers: Default::default(),
                         },
                     )]),
+                    endpoints: crate::endpoints::capability::default_capabilities(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1384,6 +1386,7 @@ mod tests {
                             extra_headers: Default::default(),
                         },
                     )]),
+                    endpoints: crate::endpoints::capability::default_capabilities(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1465,6 +1468,7 @@ mod tests {
                         extra_headers: Default::default(),
                     },
                 )]),
+                endpoints: crate::endpoints::capability::default_capabilities(),
             },
         );
         let big_models = ModelTable::try_from(big_models).expect("Failed to create model table");

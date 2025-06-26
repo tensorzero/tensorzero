@@ -23,7 +23,6 @@ use uuid::Uuid;
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::{Config, ObjectStoreInfo};
-use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::function::{sample_variant, FunctionConfigChat};
@@ -381,10 +380,7 @@ pub async fn inference(
     };
 
     let models = config.models.read().await;
-    let inference_models = InferenceModels {
-        models: &models,
-        embedding_models: &config.embedding_models,
-    };
+    let inference_models = InferenceModels { models: &models };
     let resolved_input = params
         .input
         .resolve(&FetchContext {
@@ -1212,7 +1208,6 @@ pub struct InferenceClients<'a> {
 #[derive(Debug)]
 pub struct InferenceModels<'a> {
     pub models: &'a ModelTable,
-    pub embedding_models: &'a EmbeddingModelTable,
 }
 
 /// InferenceParams is the top-level struct for inference parameters.

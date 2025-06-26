@@ -43,3 +43,4 @@ node_modules/
 CLAUDE.md
 
 ui/fixtures/s3-fixtures
+test_tensorzero.toml

@@ -7,6 +7,7 @@ debug = true
 
 [models."gpt-4o-mini-2024-07-18"]
 routing = ["openai"]
+endpoints = ["chat"]
 
 [models."gpt-4o-mini-2024-07-18".providers.openai]
 type = "openai"
@@ -14,20 +15,23 @@ model_name = "gpt-4o-mini-2024-07-18"
 
 [models."llama-3.1-8b-instruct"]
 routing = ["fireworks"]
+endpoints = ["chat"]
 
 [models."llama-3.1-8b-instruct".providers.fireworks]
 type = "fireworks"
 model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
 
-[embedding_models.text-embedding-3-small]
+[models.text-embedding-3-small]
 routing = ["openai"]
+endpoints = ["embedding"]
 
-[embedding_models.text-embedding-3-small.providers.openai]
+[models.text-embedding-3-small.providers.openai]
 type = "openai"
 model_name = "text-embedding-3-small"
 
 [models."ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"]
 routing = ["openai"]
+endpoints = ["chat"]
 
 [models."ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j".providers.openai]
 type = "openai"

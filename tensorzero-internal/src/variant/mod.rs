@@ -1085,6 +1085,7 @@ mod tests {
                     extra_headers: Default::default(),
                 },
             )]),
+            endpoints: crate::endpoints::capability::default_capabilities(),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1192,6 +1193,7 @@ mod tests {
                     extra_headers: Default::default(),
                 },
             )]),
+            endpoints: crate::endpoints::capability::default_capabilities(),
         };
 
         // Create the arguments struct
@@ -1249,6 +1251,7 @@ mod tests {
                     extra_headers: Default::default(),
                 },
             )]),
+            endpoints: crate::endpoints::capability::default_capabilities(),
         };
 
         // Create the arguments struct
@@ -1390,6 +1393,7 @@ mod tests {
                     },
                 ),
             ]),
+            endpoints: crate::endpoints::capability::default_capabilities(),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1486,6 +1490,7 @@ mod tests {
                     extra_headers: Default::default(),
                 },
             )]),
+            endpoints: crate::endpoints::capability::default_capabilities(),
         }));
 
         // Prepare the model inference request
@@ -1677,6 +1682,7 @@ mod tests {
                     },
                 ),
             ]),
+            endpoints: crate::endpoints::capability::default_capabilities(),
         }));
         let retry_config = RetryConfig::default();
 
