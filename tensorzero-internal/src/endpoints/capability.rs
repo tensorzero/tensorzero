@@ -6,7 +6,7 @@ use std::collections::HashSet;
 #[serde(rename_all = "lowercase")]
 pub enum EndpointCapability {
     Chat,
-    Embeddings,
+    Embedding,
     // Future capabilities can be added here:
     // Completions,
     // Images,
@@ -19,7 +19,7 @@ impl EndpointCapability {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Chat => "chat",
-            Self::Embeddings => "embedding",
+            Self::Embedding => "embedding",
         }
     }
 }

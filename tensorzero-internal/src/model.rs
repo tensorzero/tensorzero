@@ -93,7 +93,7 @@ fn determine_capabilities_from_model_name(model_name: &str) -> HashSet<EndpointC
         .iter()
         .any(|pattern| lower_name.contains(pattern))
     {
-        capabilities.insert(EndpointCapability::Embeddings);
+        capabilities.insert(EndpointCapability::Embedding);
     } else {
         // Default to chat capability for non-embedding models
         capabilities.insert(EndpointCapability::Chat);
@@ -117,9 +117,9 @@ impl ModelConfig {
         clients: &crate::endpoints::inference::InferenceClients<'_>,
     ) -> Result<crate::embeddings::EmbeddingResponse, Error> {
         // Verify this model supports embeddings
-        if !self.supports_endpoint(EndpointCapability::Embeddings) {
+        if !self.supports_endpoint(EndpointCapability::Embedding) {
             return Err(Error::new(ErrorDetails::CapabilityNotSupported {
-                capability: EndpointCapability::Embeddings.as_str().to_string(),
+                capability: EndpointCapability::Embedding.as_str().to_string(),
                 provider: model_name.to_string(),
             }));
         }
@@ -1381,7 +1381,7 @@ impl ModelProvider {
             }
             // Other providers don't support embeddings yet
             _ => Err(Error::new(ErrorDetails::CapabilityNotSupported {
-                capability: EndpointCapability::Embeddings.as_str().to_string(),
+                capability: EndpointCapability::Embedding.as_str().to_string(),
                 provider: self.name.to_string(),
             })),
         }
@@ -2645,7 +2645,7 @@ mod tests {
     fn test_model_supports_endpoint() {
         let mut endpoints = HashSet::new();
         endpoints.insert(EndpointCapability::Chat);
-        endpoints.insert(EndpointCapability::Embeddings);
+        endpoints.insert(EndpointCapability::Embedding);
 
         let model = ModelConfig {
             routing: vec!["test".into()],
@@ -2654,7 +2654,7 @@ mod tests {
         };
 
         assert!(model.supports_endpoint(EndpointCapability::Chat));
-        assert!(model.supports_endpoint(EndpointCapability::Embeddings));
+        assert!(model.supports_endpoint(EndpointCapability::Embedding));
     }
 
     #[test]
@@ -2699,11 +2699,11 @@ mod tests {
         chat_endpoints.insert(EndpointCapability::Chat);
 
         let mut embedding_endpoints = HashSet::new();
-        embedding_endpoints.insert(EndpointCapability::Embeddings);
+        embedding_endpoints.insert(EndpointCapability::Embedding);
 
         let mut both_endpoints = HashSet::new();
         both_endpoints.insert(EndpointCapability::Chat);
-        both_endpoints.insert(EndpointCapability::Embeddings);
+        both_endpoints.insert(EndpointCapability::Embedding);
 
         let mut models = HashMap::new();
         models.insert(
@@ -2742,8 +2742,7 @@ mod tests {
         assert!(chat_model_names.contains("both"));
 
         // Test filtering by embeddings capability
-        let embedding_models =
-            model_table.get_models_for_capability(EndpointCapability::Embeddings);
+        let embedding_models = model_table.get_models_for_capability(EndpointCapability::Embedding);
         assert_eq!(embedding_models.len(), 2);
         let embedding_model_names: HashSet<&str> = embedding_models
             .iter()
@@ -2792,7 +2791,7 @@ mod tests {
 
                 // Test getting model with wrong capability
                 let result = model_table
-                    .get_with_capability("chat_model", EndpointCapability::Embeddings)
+                    .get_with_capability("chat_model", EndpointCapability::Embedding)
                     .await;
                 assert!(result.is_err());
                 let error = result.unwrap_err();
@@ -2906,7 +2905,7 @@ mod tests {
 
             // Create a mock response that simulates unsupported capability
             let error = Error::new(ErrorDetails::CapabilityNotSupported {
-                capability: EndpointCapability::Embeddings.as_str().to_string(),
+                capability: EndpointCapability::Embedding.as_str().to_string(),
                 provider: "test_provider".to_string(),
             });
 
@@ -2943,15 +2942,15 @@ mod tests {
         let serialized = serde_json::to_string(&cap).unwrap();
         assert_eq!(serialized, "\"chat\"");
 
-        let cap = EndpointCapability::Embeddings;
+        let cap = EndpointCapability::Embedding;
         let serialized = serde_json::to_string(&cap).unwrap();
-        assert_eq!(serialized, "\"embeddings\"");
+        assert_eq!(serialized, "\"embedding\"");
 
         // Test deserialization
         let deserialized: EndpointCapability = serde_json::from_str("\"chat\"").unwrap();
         assert_eq!(deserialized, EndpointCapability::Chat);
 
-        let deserialized: EndpointCapability = serde_json::from_str("\"embeddings\"").unwrap();
-        assert_eq!(deserialized, EndpointCapability::Embeddings);
+        let deserialized: EndpointCapability = serde_json::from_str("\"embedding\"").unwrap();
+        assert_eq!(deserialized, EndpointCapability::Embedding);
     }
 }

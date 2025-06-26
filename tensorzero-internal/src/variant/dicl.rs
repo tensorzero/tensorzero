@@ -240,7 +240,7 @@ impl Variant for DiclConfig {
         // Validate embedding model using the unified model table
         use crate::model::ModelTableExt;
         let _embedding_model = models
-            .get_with_capability(&self.embedding_model, crate::endpoints::capability::EndpointCapability::Embeddings)
+            .get_with_capability(&self.embedding_model, crate::endpoints::capability::EndpointCapability::Embedding)
             .await?
             .ok_or_else(|| Error::new(ErrorDetails::Config {
                 message: format!(
@@ -318,7 +318,7 @@ impl DiclConfig {
         let embedding_model = models
             .get_with_capability(
                 &self.embedding_model,
-                crate::endpoints::capability::EndpointCapability::Embeddings,
+                crate::endpoints::capability::EndpointCapability::Embedding,
             )
             .await?
             .ok_or_else(|| {

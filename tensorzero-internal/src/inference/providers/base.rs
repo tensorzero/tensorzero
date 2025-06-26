@@ -86,7 +86,7 @@ pub trait UnifiedProvider: Send + Sync {
         async {
             Err(Error::new(
                 crate::error::ErrorDetails::CapabilityNotSupported {
-                    capability: EndpointCapability::Embeddings.as_str().to_string(),
+                    capability: EndpointCapability::Embedding.as_str().to_string(),
                     provider: std::any::type_name::<Self>().to_string(),
                 },
             ))
@@ -109,7 +109,7 @@ impl ProviderCapabilities {
             capabilities.insert(EndpointCapability::Chat);
         }
         if self.embeddings {
-            capabilities.insert(EndpointCapability::Embeddings);
+            capabilities.insert(EndpointCapability::Embedding);
         }
         capabilities
     }

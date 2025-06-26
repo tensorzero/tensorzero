@@ -1387,7 +1387,7 @@ pub async fn embedding_handler(
     let model = models
         .get_with_capability(
             &model_id,
-            crate::endpoints::capability::EndpointCapability::Embeddings,
+            crate::endpoints::capability::EndpointCapability::Embedding,
         )
         .await?
         .ok_or_else(|| {

@@ -389,7 +389,7 @@ impl<'c> Config<'c> {
                         // Convert EmbeddingModelConfig to ModelConfig
                         let mut endpoints = HashSet::new();
                         endpoints
-                            .insert(crate::endpoints::capability::EndpointCapability::Embeddings);
+                            .insert(crate::endpoints::capability::EndpointCapability::Embedding);
 
                         let providers = embedding_config
                             .providers
@@ -1143,7 +1143,7 @@ mod tests {
             .unwrap();
         assert_eq!(embedding_model.routing, vec!["openai".into()]);
         assert_eq!(embedding_model.providers.len(), 1);
-        assert!(embedding_model.supports_endpoint(EndpointCapability::Embeddings));
+        assert!(embedding_model.supports_endpoint(EndpointCapability::Embedding));
 
         // Check that the function for the LLM Judge evaluation is added to the functions table
         let function = config
@@ -2957,17 +2957,17 @@ model = "chat_model"
         // Verify chat model has correct capabilities
         let chat_model = models.get("chat_model").await.unwrap().unwrap();
         assert!(chat_model.supports_endpoint(EndpointCapability::Chat));
-        assert!(!chat_model.supports_endpoint(EndpointCapability::Embeddings));
+        assert!(!chat_model.supports_endpoint(EndpointCapability::Embedding));
 
         // Verify embedding model has correct capabilities
         let embedding_model = models.get("embedding_model").await.unwrap().unwrap();
         assert!(!embedding_model.supports_endpoint(EndpointCapability::Chat));
-        assert!(embedding_model.supports_endpoint(EndpointCapability::Embeddings));
+        assert!(embedding_model.supports_endpoint(EndpointCapability::Embedding));
 
         // Verify multi-capability model
         let multi_model = models.get("multi_capability").await.unwrap().unwrap();
         assert!(multi_model.supports_endpoint(EndpointCapability::Chat));
-        assert!(multi_model.supports_endpoint(EndpointCapability::Embeddings));
+        assert!(multi_model.supports_endpoint(EndpointCapability::Embedding));
     }
 
     #[tokio::test]
@@ -3008,12 +3008,12 @@ model = "existing_chat"
         // Verify chat model has default capabilities
         let chat_model = models.get("existing_chat").await.unwrap().unwrap();
         assert!(chat_model.supports_endpoint(EndpointCapability::Chat));
-        assert!(!chat_model.supports_endpoint(EndpointCapability::Embeddings));
+        assert!(!chat_model.supports_endpoint(EndpointCapability::Embedding));
 
         // Verify converted embedding model has embeddings capability
         let embedding_model = models.get("text_embedding").await.unwrap().unwrap();
         assert!(!embedding_model.supports_endpoint(EndpointCapability::Chat));
-        assert!(embedding_model.supports_endpoint(EndpointCapability::Embeddings));
+        assert!(embedding_model.supports_endpoint(EndpointCapability::Embedding));
     }
 
     #[tokio::test]
@@ -3075,7 +3075,7 @@ model = "default_model"
         let models = config.models.read().await;
         let model = models.get("default_model").await.unwrap().unwrap();
         assert!(model.supports_endpoint(EndpointCapability::Chat));
-        assert!(!model.supports_endpoint(EndpointCapability::Embeddings));
+        assert!(!model.supports_endpoint(EndpointCapability::Embedding));
     }
 
     #[tokio::test]
@@ -3119,7 +3119,7 @@ model_name = "multi"
         let chat_models = models.get_models_for_capability(EndpointCapability::Chat);
         assert_eq!(chat_models.len(), 2);
 
-        let embedding_models = models.get_models_for_capability(EndpointCapability::Embeddings);
+        let embedding_models = models.get_models_for_capability(EndpointCapability::Embedding);
         assert_eq!(embedding_models.len(), 2);
 
         // Verify specific models in each category
