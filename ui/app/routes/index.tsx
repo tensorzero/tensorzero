@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, type RouteHandle } from "react-router";
 import { Card } from "~/components/ui/card";
 import { PageLayout } from "~/components/layout/PageLayout";
 import {
@@ -29,6 +29,10 @@ import {
   countDynamicEvaluationProjects,
   countDynamicEvaluationRuns,
 } from "~/utils/clickhouse/dynamic_evaluations.server";
+
+export const handle: RouteHandle = {
+  hideBreadcrumbs: true,
+};
 
 interface DirectoryCardProps {
   source: string;
