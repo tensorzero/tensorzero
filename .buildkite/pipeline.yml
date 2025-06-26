@@ -7,9 +7,10 @@ steps:
     concurrency_group: 'clickhouse-cloud-${CLICKHOUSE_ID}'
     # Test on both normal and fast release channels
     matrix:
-      - clickhouse_prefix: "dev-tensorzero-e2e-tests-instance-"
-      - clickhouse_prefix: "dev-tensorzero-e2e-tests-fast-instance-"
-    command: CLICKHOUSE_PREFIX=${clickhouse_prefix} ./ci/buildkite/test-clickhouse-cloud.sh
+      clickhouse_prefix:
+        - "dev-tensorzero-e2e-tests-instance-"
+        - "dev-tensorzero-e2e-tests-fast-instance-"
+    command: CLICKHOUSE_PREFIX=${matrix.clickhouse_prefix} ./ci/buildkite/test-clickhouse-cloud.sh
 
 notify:
   - github_commit_status:
