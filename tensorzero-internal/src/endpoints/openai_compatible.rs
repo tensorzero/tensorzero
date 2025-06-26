@@ -1343,17 +1343,18 @@ pub async fn embedding_handler(
         // Fallback to the full model name if no prefix found
         openai_compatible_params.model.clone()
     };
-    
+
     // Get the original model name from header for error messages
-    let original_model_name = if let Some(original_model) = headers.get("x-tensorzero-original-model") {
-        original_model
-            .to_str()
-            .unwrap_or(&openai_compatible_params.model)
-            .to_string()
-    } else {
-        model_id.clone()
-    };
-    
+    let original_model_name =
+        if let Some(original_model) = headers.get("x-tensorzero-original-model") {
+            original_model
+                .to_str()
+                .unwrap_or(&openai_compatible_params.model)
+                .to_string()
+        } else {
+            model_id.clone()
+        };
+
     // Convert OpenAI request to internal format
     let internal_input = match &openai_compatible_params.input {
         OpenAICompatibleEmbeddingInput::Single(text) => {
