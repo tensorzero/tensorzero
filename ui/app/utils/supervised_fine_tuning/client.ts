@@ -11,6 +11,7 @@ import type {
   OptimizerStatus,
 } from "tensorzero-node";
 import { getConfig } from "~/utils/config/index.server";
+import { getEnv } from "../env";
 
 let _tensorZeroClient: TensorZeroClient | undefined;
 async function getTensorZeroClient(): Promise<TensorZeroClient> {
@@ -33,10 +34,8 @@ async function getTensorZeroClient(): Promise<TensorZeroClient> {
   return client;
 }
 
-const useNativeSFT = process.env.TENSORZERO_UI_FF_USE_NATIVE_SFT === "1";
-const openAINativeSFTBase = process.env.OPENAI_BASE_URL ?? null;
-
 export function launch_sft_job(data: SFTFormValues): Promise<SFTJob> {
+  const useNativeSFT = getEnv().TENSORZERO_UI_FF_USE_NATIVE_SFT === 1;
   if (useNativeSFT) {
     return launch_sft_job_native(data);
   } else {
@@ -137,6 +136,7 @@ class NativeSFTJob extends SFTJob {
 }
 
 async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
+  const openAINativeSFTBase = getEnv().OPENAI_BASE_URL;
   if (data.model.provider !== "openai") {
     throw new Error("Native SFT is only supported for OpenAI");
   }
