@@ -496,6 +496,7 @@ jobs:
 
   check-all-general-jobs-passed:
     needs: [check-all-general-jobs-passed-intermediate]
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - if: ${{ needs.check-all-general-jobs-passed-intermediate.result != 'success' }}
