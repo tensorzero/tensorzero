@@ -10,7 +10,7 @@ steps:
       clickhouse_prefix:
         - "dev-tensorzero-e2e-tests-instance-"
         - "dev-tensorzero-e2e-tests-fast-instance-"
-    command: CLICKHOUSE_PREFIX=${matrix.clickhouse_prefix} ./ci/buildkite/test-clickhouse-cloud.sh
+    command: CLICKHOUSE_PREFIX={{matrix.clickhouse_prefix}} ./ci/buildkite/test-clickhouse-cloud.sh
 
 notify:
   - github_commit_status:
