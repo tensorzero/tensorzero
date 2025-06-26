@@ -22,7 +22,7 @@ const { TensorZeroClient: NativeTensorZeroClient } =
 // just parse the JSON and it should be type safe to use the types we generated.
 export class TensorZeroClient {
   private nativeClient: NativeTensorZeroClientType;
-  
+
   constructor(client: NativeTensorZeroClientType) {
     this.nativeClient = client;
   }
