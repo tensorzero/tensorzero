@@ -5,12 +5,15 @@ use std::{
 
 use futures::future::join_all;
 use git::GitInfo;
-use input_handling::reresolve_input_for_fine_tuning;
 use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
-use tensorzero_core::stored_inference::render_stored_inference;
+pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
+pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
+use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
+pub use tensorzero_core::optimization::{OptimizerJobHandle, OptimizerStatus};
+use tensorzero_core::stored_inference::{render_stored_inference, reresolve_input_for_fine_tuning};
 use tensorzero_core::{
     config_parser::Config,
     endpoints::{
@@ -209,6 +212,7 @@ pub enum ClientBuilderMode {
         /// A timeout for all TensorZero gateway processing.
         /// If this timeout is hit, any in-progress LLM requests may be aborted.
         timeout: Option<std::time::Duration>,
+        verify_credentials: bool,
     },
 }
 
@@ -255,16 +259,20 @@ impl ClientBuilder {
                 config_file,
                 clickhouse_url,
                 timeout,
+                verify_credentials,
             } => {
                 let config = if let Some(config_file) = config_file {
                     Arc::new(
-                        Config::load_and_verify_from_path(config_file)
-                            .await
-                            .map_err(|e| {
-                                ClientBuilderError::ConfigParsing(TensorZeroError::Other {
-                                    source: e.into(),
-                                })
-                            })?,
+                        Config::load_from_path_optional_verify_credentials(
+                            config_file,
+                            *verify_credentials,
+                        )
+                        .await
+                        .map_err(|e| {
+                            ClientBuilderError::ConfigParsing(TensorZeroError::Other {
+                                source: e.into(),
+                            })
+                        })?,
                     )
                 } else {
                     tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
@@ -813,7 +821,7 @@ impl Client {
             // Create a future for each call to reresolve_input_for_fine_tuning.
             // This function modifies inference_example.input_mut() in place.
             // `self` (the client) is passed by immutable reference.
-            reresolve_input_for_fine_tuning(inference_example.input_mut(), self)
+            reresolve_input_for_fine_tuning(inference_example.input_mut(), &gateway.state.config)
         });
 
         // Await all futures concurrently.
@@ -850,6 +858,86 @@ impl Client {
             .collect();
 
         Ok(final_rendered_examples)
+    }
+
+    /// Launch an optimization job.
+    pub async fn experimental_launch_optimization(
+        &self,
+        params: tensorzero_core::endpoints::optimization::LaunchOptimizationParams,
+    ) -> Result<OptimizerJobHandle, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                // TODO: do we want this?
+                Ok(with_embedded_timeout(*timeout, async {
+                    launch_optimization(&gateway.state.http_client, params)
+                        .await
+                        .map_err(err_to_http)
+                })
+                .await?)
+            }
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    /// Start an optimization job.
+    /// NOTE: This is the composition of `list_inferences`, `render_inferences`, and `launch_optimization`.
+    pub async fn experimental_launch_optimization_workflow(
+        &self,
+        params: LaunchOptimizationWorkflowParams,
+    ) -> Result<OptimizerJobHandle, TensorZeroError> {
+        let ClientMode::EmbeddedGateway { gateway, timeout } = &self.mode else {
+            return Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            });
+        };
+        with_embedded_timeout(*timeout, async {
+            launch_optimization_workflow(
+                &gateway.state.http_client,
+                gateway.state.config.clone(),
+                &gateway.state.clickhouse_connection_info,
+                params,
+            )
+            .await
+            .map_err(err_to_http)
+        })
+        .await
+    }
+
+    /// Poll an optimization job for status.
+    pub async fn experimental_poll_optimization(
+        &self,
+        job_handle: OptimizerJobHandle,
+    ) -> Result<OptimizerStatus, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::optimization::poll_optimization(
+                        &gateway.state.http_client,
+                        &job_handle,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await?)
+            }
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
     }
 
     async fn parse_http_response<T: serde::de::DeserializeOwned>(
@@ -1166,6 +1254,7 @@ mod tests {
             )),
             clickhouse_url: None,
             timeout: None,
+            verify_credentials: true,
         })
         .build()
         .await
@@ -1187,6 +1276,7 @@ mod tests {
             )),
             clickhouse_url: None,
             timeout: None,
+            verify_credentials: true,
         })
         .build()
         .await
@@ -1204,6 +1294,7 @@ mod tests {
             config_file: None,
             clickhouse_url: None,
             timeout: None,
+            verify_credentials: true,
         })
         .build()
         .await

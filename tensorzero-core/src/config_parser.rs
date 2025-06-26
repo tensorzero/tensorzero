@@ -58,16 +58,20 @@ pub struct Config<'c> {
     pub optimizers: HashMap<String, OptimizerInfo>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct NonStreamingTimeouts {
     #[serde(default)]
     /// The total time allowed for the non-streaming request to complete.
     pub total_ms: Option<u64>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct StreamingTimeouts {
     #[serde(default)]
     /// The time allowed for the first token to be produced.
@@ -76,7 +80,9 @@ pub struct StreamingTimeouts {
 
 /// Configures the timeouts for both streaming and non-streaming requests.
 /// This can be attached to various other configs (e.g. variants, models, model providers)
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct TimeoutsConfig {
     #[serde(default)]
@@ -995,6 +1001,7 @@ impl UninitializedVariantInfo {
 pub struct UninitializedToolConfig {
     pub description: String,
     pub parameters: PathBuf,
+    pub name: Option<String>,
     #[serde(default)]
     pub strict: bool,
 }
@@ -1007,7 +1014,7 @@ impl UninitializedToolConfig {
     ) -> Result<StaticToolConfig, Error> {
         let parameters = StaticJSONSchema::from_path(self.parameters, base_path.as_ref())?;
         Ok(StaticToolConfig {
-            name,
+            name: self.name.unwrap_or(name),
             description: self.description,
             parameters,
             strict: self.strict,
@@ -1015,8 +1022,11 @@ impl UninitializedToolConfig {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct PathWithContents {
+    #[cfg_attr(test, ts(type = "string"))]
     pub path: PathBuf,
     pub contents: String,
 }
@@ -1284,6 +1294,17 @@ mod tests {
         assert_eq!(metric.r#type, MetricConfigType::Float);
         assert_eq!(metric.optimize, MetricConfigOptimize::Min);
         assert_eq!(metric.level, MetricConfigLevel::Inference);
+
+        // Check that there are 2 tools and both have name "get_temperature"
+        assert_eq!(config.tools.len(), 2);
+        assert_eq!(
+            config.tools.get("get_temperature").unwrap().name,
+            "get_temperature"
+        );
+        assert_eq!(
+            config.tools.get("get_temperature_with_name").unwrap().name,
+            "get_temperature"
+        );
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
@@ -2392,7 +2413,7 @@ mod tests {
         let config_str = r#"
         [functions.bash_assistant]
         type = "chat"
-        
+
         [functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219]
         type = "chat_completion"
         model = "anthropic::claude-3-7-sonnet-20250219"

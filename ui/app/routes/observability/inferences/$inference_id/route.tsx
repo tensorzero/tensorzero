@@ -52,9 +52,10 @@ import { AddToDatasetButton } from "./AddToDatasetButton";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
-import { isServerRequestError, JSONParseError } from "~/utils/common";
-import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
+import { JSONParseError } from "~/utils/common";
 import { processJson } from "~/utils/syntax-highlighting.server";
+import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
+import { isTensorZeroServerError } from "~/utils/tensorzero";
 
 export const handle: RouteHandle = {
   crumb: (match) => [match.params.inference_id!],
@@ -200,10 +201,10 @@ export async function action({ request }: Route.ActionArgs) {
         url.searchParams.set("newFeedbackId", response.feedback_id);
         return data<ActionData>({ redirectTo: url.pathname + url.search });
       } catch (error) {
-        if (isServerRequestError(error)) {
+        if (isTensorZeroServerError(error)) {
           return data<ActionData>(
             { error: error.message },
-            { status: error.statusCode },
+            { status: error.status },
           );
         }
         return data<ActionData>(

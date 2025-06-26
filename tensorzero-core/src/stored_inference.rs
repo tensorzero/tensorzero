@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
+use crate::endpoints::object_storage::get_object;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, deserialize_from_pyobj, serialize_to_dict, uuid_to_python,
 };
-use crate::inference::types::Text;
+use crate::inference::types::{ResolvedInputMessageContent, Text};
 use crate::{
     config_parser::Config,
     error::{Error, ErrorDetails},
@@ -13,6 +14,7 @@ use crate::{
     tool::ToolCallConfigDatabaseInsert,
     variant::{chat_completion::prepare_model_input, VariantConfig},
 };
+use futures::future::try_join_all;
 #[cfg(feature = "pyo3")]
 use pyo3::types::{PyAny, PyList};
 #[cfg(feature = "pyo3")]
@@ -282,7 +284,8 @@ impl StoredInference {
 /// This is constructed by rendering a StoredInference with a variant for messages
 /// and by resolving all network resources (e.g. images).
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[derive(Debug, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct RenderedStoredInference {
     pub function_name: String,
     pub variant_name: String,
@@ -463,6 +466,60 @@ pub fn render_stored_inference(
             })
         }
     }
+}
+
+/// Since we store the input in the database in the form of ResolvedInput but without e.g. images inside,
+/// we need to reresolve the input when we retrieve it from the database.
+/// Resolves images in place.
+pub async fn reresolve_input_for_fine_tuning(
+    input: &mut ResolvedInput,
+    config: &Config<'static>,
+) -> Result<(), Error> {
+    let mut file_fetch_tasks = Vec::new();
+
+    for (message_index, message) in input.messages.iter_mut().enumerate() {
+        // First pass: identify files to fetch and collect tasks
+        for (content_index, content) in message.content.iter_mut().enumerate() {
+            if let ResolvedInputMessageContent::File(file_with_path) = content {
+                if file_with_path.file.data.is_none() {
+                    let storage_path = file_with_path.storage_path.clone();
+                    let fut = async move {
+                        let result = get_object(config, storage_path).await?;
+                        Ok::<_, Error>((message_index, content_index, result.data))
+                    };
+                    file_fetch_tasks.push(fut);
+                }
+            }
+        }
+    }
+
+    // Execute fetch tasks concurrently for the current message
+    if !file_fetch_tasks.is_empty() {
+        let fetched_data_results = try_join_all(file_fetch_tasks).await?;
+
+        // Second pass: update the content with fetched data
+        for (message_index, content_index, fetched_data) in fetched_data_results {
+            if let Some(message) = input.messages.get_mut(message_index) {
+                if let Some(ResolvedInputMessageContent::File(file_with_path)) =
+                    message.content.get_mut(content_index)
+                {
+                    file_with_path.file.data = Some(fetched_data);
+                } else {
+                    return Err(ErrorDetails::Serialization {
+                        message: "Content type changed or index invalid during input reresolution"
+                            .to_string(),
+                    }
+                    .into());
+                }
+            } else {
+                return Err(Error::new(ErrorDetails::Serialization {
+                    message: "Message index invalid during input reresolution".to_string(),
+                }));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

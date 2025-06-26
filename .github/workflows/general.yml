@@ -6,100 +6,11 @@ on:
   pull_request:
     branches: ["main"]
 
-# Hack to cancel existing merge-queue workflows when a new one is created.
-# This ensures that we don't have multiple ClickHouse cloud tests running at the same time.
-concurrency:
-  # This is how you do a ternary-if in Github Actions.defaults:
-  # In the merge queue, we use a fixed concurrency group name, which will cancel any
-  # leftover workflow runs when a PR was removed from the merge queue.
-  # Otherwise, we use the unique 'github.run_id' field, which will create a new concurrency group,
-  # and avoid cancelling any existing workflow runs.
-  group: ${{ (github.event_name == 'merge_group' && 'merge-group-general-checks') || github.run_id }}
-  cancel-in-progress: true
-
 env:
   FORCE_COLOR: 1
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
 
 jobs:
-  clickhouse-tests-cloud:
-    if: github.event_name == 'merge_group'
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        cloud_instance:
-          - release_channel: regular
-            url_secret: CLICKHOUSE_CLOUD_URL
-          - release_channel: fast
-            url_secret: CLICKHOUSE_CLOUD_FAST_CHANNEL_URL
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
-        with:
-          cache-provider: "buildjet"
-          shared-key: "build-gateway-cache"
-          save-if: false
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
-        with:
-          tool: cargo-nextest
-
-      - name: Set up TENSORZERO_CLICKHOUSE_URL
-        run: |
-          echo "TENSORZERO_CLICKHOUSE_URL=${{ secrets[matrix.cloud_instance.url_secret] }}" >> $GITHUB_ENV
-
-      - name: Wake up ClickHouse cloud
-        run: |
-          curl "$TENSORZERO_CLICKHOUSE_URL" --retry 4 --retry-all-errors --data-binary 'SHOW DATABASES'
-
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
-
-      - name: Download ClickHouse fixtures
-        run: uv run ./ui/fixtures/download-fixtures.py
-
-      - name: Delete old ClickHouse cloud dbs
-        run: ./ci/delete-clickhouse-dbs.sh
-
-      # We run this as a separate step so that we can see live build logs
-      # (and fail the job immediately if the build fails)
-      - name: Build the gateway for E2E tests
-        run: cargo build-e2e
-
-      - name: Launch the gateway for E2E tests
-        run: |
-          cargo run-e2e > e2e_logs.txt 2>&1 &
-            count=0
-            max_attempts=30
-            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
-              echo "Waiting for gateway to be healthy..."
-              sleep 1
-              count=$((count + 1))
-              if [ $count -ge $max_attempts ]; then
-                echo "Gateway failed to become healthy after $max_attempts attempts"
-                exit 1
-              fi
-            done
-          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
-
-      - name: Test (Rust)
-        # This test causes a huge slowdown on ClickHouse cloud, even though it uses a fresh database
-        # For now, let's skip it (we still run it in the local docker ClickHouse tests)
-        # See https://github.com/tensorzero/tensorzero/issues/2216
-        # Also, `test_clickhouse_migration_manager` is consistently taking a very long time (and timing out)
-        # on the fast release channel, so we temporarily skip it
-        run: |
-          if [ "${{ matrix.cloud_instance.release_channel }}" = "fast" ]; then
-            cargo test-e2e-no-creds -- --skip test_concurrent_clickhouse_migrations --skip test_clickhouse_migration_manager
-          else
-            cargo test-e2e-no-creds -- --skip test_concurrent_clickhouse_migrations
-          fi
-
-      - name: Print e2e logs
-        if: always()
-        run: cat e2e_logs.txt
-
   check-docker-compose:
     permissions:
       # Permission to checkout the repository
@@ -144,7 +55,7 @@ jobs:
   validate:
     runs-on: namespace-profile-tensorzero-8x16
 
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -344,6 +255,21 @@ jobs:
         working-directory: ui/app/utils/minijinja
         run: wasm-pack test --node --features console_error_panic_hook
 
+      - name: Build npm workspace
+        run: pnpm -r build
+
+      - name: Check tensorzero-node bindings are properly exported
+        run: pnpm --filter=tensorzero-node run check-exports
+
+      - name: Format tensorzero-node package
+        run: pnpm --filter=tensorzero-node run format:check
+
+      - name: Lint tensorzero-node package
+        run: pnpm --filter=tensorzero-node run lint:check
+
+      - name: Typecheck tensorzero-node package
+        run: pnpm --filter=tensorzero-node run typecheck
+
       - name: Run ESLint
         run: pnpm --filter=tensorzero-ui run lint:check
 
@@ -467,7 +393,6 @@ jobs:
     if: always()
     needs:
       [
-        clickhouse-tests-cloud,
         check-docker-compose,
         check-python-client-build,
         build-windows,
