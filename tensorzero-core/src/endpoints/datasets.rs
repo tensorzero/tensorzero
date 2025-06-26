@@ -1,8 +1,12 @@
+#[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::{content_block_chat_output_to_python, uuid_to_python};
 use axum::extract::{Path, Query, State};
 use axum::Json;
 use futures::future;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::IntoPyObjectExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -1100,6 +1104,57 @@ impl Datapoint {
         match self {
             Datapoint::Chat(datapoint) => datapoint.id,
             Datapoint::Json(datapoint) => datapoint.id,
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Datapoint {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+
+    #[getter]
+    pub fn get_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        uuid_to_python(py, self.id())
+    }
+
+    #[getter]
+    pub fn get_input<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.input().clone().into_bound_py_any(py)
+    }
+
+    #[getter]
+    pub fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(match self {
+            Datapoint::Chat(datapoint) => match &datapoint.output {
+                Some(output) => output
+                    .iter()
+                    .map(|x| content_block_chat_output_to_python(py, x.clone()))
+                    .collect::<PyResult<Vec<_>>>()?
+                    .into_bound_py_any(py)?,
+                None => py.None().into_bound(py),
+            },
+            Datapoint::Json(datapoint) => datapoint.output.clone().into_bound_py_any(py)?,
+        })
+    }
+
+    #[getter]
+    pub fn get_dataset_name(&self) -> String {
+        self.dataset_name().to_string()
+    }
+
+    #[getter]
+    pub fn get_function_name(&self) -> String {
+        self.function_name().to_string()
+    }
+
+    #[getter]
+    pub fn get_tool_params<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self.tool_call_config() {
+            Some(tool_params) => tool_params.clone().into_bound_py_any(py),
+            None => Ok(py.None().into_bound(py)),
         }
     }
 }

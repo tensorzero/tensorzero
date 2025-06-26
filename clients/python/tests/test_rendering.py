@@ -1,5 +1,3 @@
-from uuid import UUID
-
 import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
@@ -124,7 +122,6 @@ def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway)
     chat_inference = rendered_inferences[0]
 
     assert chat_inference.function_name == "basic_test"
-    assert chat_inference.variant_name == "default"
     input = chat_inference.input
     # Test that templating actually happens here.
     assert input.system == "You are a helpful and friendly assistant named foo"
@@ -176,8 +173,6 @@ def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway)
     assert isinstance(output[0], Text)
     assert output[0].type == "text"
     assert output[0].text == "Hello world"
-    assert isinstance(rendered_inferences[0].episode_id, UUID)
-    assert isinstance(rendered_inferences[0].inference_id, UUID)
     tool_params = rendered_inferences[0].tool_params
     assert tool_params is not None
     tools_available = tool_params.tools_available
@@ -195,7 +190,6 @@ def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway)
 
     json_inference = rendered_inferences[1]
     assert json_inference.function_name == "json_success"
-    assert json_inference.variant_name == "dummy"
     input = json_inference.input
     # templating happens here
     assert (
@@ -227,8 +221,6 @@ Example Response:
         "type": "object",
         "properties": {"answer": {"type": "string"}},
     }
-    assert isinstance(json_inference.episode_id, UUID)
-    assert isinstance(json_inference.inference_id, UUID)
     assert json_inference.tool_params is None
     assert json_inference.output_schema == {
         "type": "object",
@@ -492,7 +484,6 @@ async def test_async_render_inferences_success(
     chat_inference = rendered_inferences[0]
 
     assert chat_inference.function_name == "basic_test"
-    assert chat_inference.variant_name == "default"
     input = chat_inference.input
     # Test that templating actually happens here.
     assert input.system == "You are a helpful and friendly assistant named foo"
@@ -545,8 +536,6 @@ async def test_async_render_inferences_success(
     assert output[0].type == "text"
     assert isinstance(output[0], Text)
     assert output[0].text == "Hello world"
-    assert isinstance(rendered_inferences[0].episode_id, UUID)
-    assert isinstance(rendered_inferences[0].inference_id, UUID)
     tool_params = rendered_inferences[0].tool_params
     assert tool_params is not None
     tools_available = tool_params.tools_available
@@ -564,7 +553,6 @@ async def test_async_render_inferences_success(
 
     json_inference = rendered_inferences[1]
     assert json_inference.function_name == "json_success"
-    assert json_inference.variant_name == "dummy"
     input = json_inference.input
     # templating happens here
     assert (
@@ -596,8 +584,6 @@ Example Response:
         "type": "object",
         "properties": {"answer": {"type": "string"}},
     }
-    assert isinstance(json_inference.episode_id, UUID)
-    assert isinstance(json_inference.inference_id, UUID)
     assert json_inference.tool_params is None
     assert json_inference.output_schema == {
         "type": "object",

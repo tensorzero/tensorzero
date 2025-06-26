@@ -7,8 +7,7 @@ use pyo3::{exceptions::PyValueError, prelude::*, sync::GILOnceCell};
 use tensorzero_core::endpoints::dynamic_evaluation_run::DynamicEvaluationRunEpisodeResponse;
 use tensorzero_core::inference::types::pyo3_helpers::{deserialize_from_pyobj, serialize_to_dict};
 use tensorzero_rust::{
-    Datapoint, DynamicEvaluationRunResponse, FeedbackResponse, InferenceResponse,
-    InferenceResponseChunk, Tool,
+    DynamicEvaluationRunResponse, FeedbackResponse, InferenceResponse, InferenceResponseChunk, Tool,
 };
 use uuid::Uuid;
 
@@ -41,20 +40,6 @@ pub fn parse_inference_response(py: Python<'_>, data: InferenceResponse) -> PyRe
             Ok(self_module.getattr("parse_inference_response")?.unbind())
         })?;
     let python_parsed = parse_inference_response.call1(py, (json_data,))?;
-    Ok(python_parsed.into_any())
-}
-
-pub fn parse_datapoint(py: Python<'_>, data: Datapoint) -> PyResult<Py<PyAny>> {
-    let json_datapoint = serialize_to_dict(py, data)?;
-    static PARSE_DATAPOINT: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
-    // This should never actually fail, since we're just importing code defined in our own Python
-    // package. However, we still produce a Python error if it fails, rather than panicking
-    // and bringing down the entire Python process.
-    let parse_datapoint = PARSE_DATAPOINT.get_or_try_init::<_, PyErr>(py, || {
-        let self_module = PyModule::import(py, "tensorzero.types")?;
-        Ok(self_module.getattr("parse_datapoint")?.unbind())
-    })?;
-    let python_parsed = parse_datapoint.call1(py, (json_datapoint,))?;
     Ok(python_parsed.into_any())
 }
 

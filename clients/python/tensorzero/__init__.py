@@ -5,8 +5,8 @@ import httpx
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
+    Datapoint,
     RenderedSample,
-    RenderedStoredInference,
     ResolvedInput,
     ResolvedInputMessage,
     StoredInference,
@@ -24,7 +24,6 @@ from .types import (
     ChatInferenceDatapointInput,  # DEPRECATED
     ChatInferenceResponse,
     ContentBlock,
-    Datapoint,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
     ExtraBody,

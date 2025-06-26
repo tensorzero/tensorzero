@@ -165,11 +165,8 @@ impl StoredInference {
                 .iter()
                 .map(|x| content_block_chat_output_to_python(py, x.clone()))
                 .collect::<PyResult<Vec<_>>>()?
-                .into_py_any(py)?
-                .into_bound(py),
-            StoredInference::Json(example) => {
-                example.output.clone().into_py_any(py)?.into_bound(py)
-            }
+                .into_bound_py_any(py)?,
+            StoredInference::Json(example) => example.output.clone().into_bound_py_any(py)?,
         })
     }
 

@@ -307,14 +307,14 @@ pub enum StoredSampleItem {
 impl StoredSample for StoredSampleItem {
     fn function_name(&self) -> &str {
         match self {
-            StoredSampleItem::StoredInference(inference) => &inference.function_name(),
-            StoredSampleItem::Datapoint(datapoint) => &datapoint.function_name(),
+            StoredSampleItem::StoredInference(inference) => inference.function_name(),
+            StoredSampleItem::Datapoint(datapoint) => datapoint.function_name(),
         }
     }
 
     fn input(&self) -> &ResolvedInput {
         match self {
-            StoredSampleItem::StoredInference(inference) => &inference.input(),
+            StoredSampleItem::StoredInference(inference) => inference.input(),
             StoredSampleItem::Datapoint(datapoint) => datapoint.input(),
         }
     }

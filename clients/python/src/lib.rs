@@ -20,9 +20,9 @@ use pyo3::{
     IntoPyObjectExt,
 };
 use python_helpers::{
-    parse_datapoint, parse_dynamic_evaluation_run_episode_response,
-    parse_dynamic_evaluation_run_response, parse_feedback_response, parse_inference_chunk,
-    parse_inference_response, parse_tool, python_uuid_to_uuid,
+    parse_dynamic_evaluation_run_episode_response, parse_dynamic_evaluation_run_response,
+    parse_feedback_response, parse_inference_chunk, parse_inference_response, parse_tool,
+    python_uuid_to_uuid,
 };
 use tensorzero_core::{
     clickhouse::ClickhouseFormat,
@@ -46,7 +46,7 @@ use tensorzero_core::{
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
-    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString,
+    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, Datapoint,
     DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
     InferenceParams, InferenceStream, ListInferencesParams, RenderedSample, StoredInference,
     TensorZeroError, Tool,
@@ -77,6 +77,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<LocalHttpGateway>()?;
     m.add_class::<RenderedSample>()?;
     m.add_class::<StoredInference>()?;
+    m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
 
@@ -862,19 +863,17 @@ impl TensorZeroGateway {
     /// :param datapoint_id: The ID of the datapoint to get.
     /// :return: A `Datapoint` object.
     #[pyo3(signature = (*, dataset_name, datapoint_id))]
-    fn get_datapoint(
-        this: PyRef<'_, Self>,
+    fn get_datapoint<'py>(
+        this: PyRef<'py, Self>,
         dataset_name: String,
-        datapoint_id: Bound<'_, PyAny>,
-    ) -> PyResult<Py<PyAny>> {
+        datapoint_id: Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Datapoint>> {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         let fut = client.get_datapoint(dataset_name, datapoint_id);
-        let resp = tokio_block_on_without_gil(this.py(), fut);
-        match resp {
-            Ok(resp) => parse_datapoint(this.py(), resp),
-            Err(e) => Err(convert_error(this.py(), e)),
-        }
+        tokio_block_on_without_gil(this.py(), fut)
+            .map(|x| x.into_pyobject(this.py()))
+            .map_err(|e| convert_error(this.py(), e))?
     }
 
     /// Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
@@ -894,10 +893,9 @@ impl TensorZeroGateway {
         let resp = tokio_block_on_without_gil(this.py(), fut);
         match resp {
             Ok(resp) => {
-                // TODO(Viraj): Make Datapoint a Pyclass
                 let datapoints = resp
                     .into_iter()
-                    .map(|x| parse_datapoint(this.py(), x))
+                    .map(|x| x.into_pyobject(this.py()))
                     .collect::<Result<Vec<_>, _>>()?;
                 PyList::new(this.py(), datapoints)
             }
@@ -1459,14 +1457,14 @@ impl AsyncTensorZeroGateway {
     fn get_datapoint<'a>(
         this: PyRef<'a, Self>,
         dataset_name: String,
-        datapoint_id: Bound<'a, PyAny>,
+        datapoint_id: Bound<'_, PyAny>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.get_datapoint(dataset_name, datapoint_id).await;
             Python::with_gil(|py| match res {
-                Ok(resp) => parse_datapoint(py, resp),
+                Ok(resp) => Ok(resp.into_py_any(py)?),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -1490,13 +1488,7 @@ impl AsyncTensorZeroGateway {
                 .list_datapoints(dataset_name, function_name, limit, offset)
                 .await;
             Python::with_gil(|py| match res {
-                Ok(resp) => {
-                    let datapoints = resp
-                        .into_iter()
-                        .map(|x| parse_datapoint(py, x))
-                        .collect::<Result<Vec<_>, _>>()?;
-                    Ok(PyList::new(py, datapoints)?.unbind())
-                }
+                Ok(datapoints) => Ok(PyList::new(py, datapoints)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
