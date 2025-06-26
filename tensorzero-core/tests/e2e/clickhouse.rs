@@ -46,13 +46,13 @@ impl Drop for DeleteDbOnDrop {
                 if allow_db_missing {
                     client
                         .run_query_synchronous_no_params(format!(
-                            "DROP DATABASE IF EXISTS {database}"
+                            "DROP DATABASE IF EXISTS {database} SYNC"
                         ))
                         .await
                         .unwrap();
                 } else {
                     client
-                        .run_query_synchronous_no_params(format!("DROP DATABASE {database}"))
+                        .run_query_synchronous_no_params(format!("DROP DATABASE {database} SYNC"))
                         .await
                         .unwrap();
                 }
