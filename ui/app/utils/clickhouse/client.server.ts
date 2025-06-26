@@ -1,5 +1,6 @@
 import { createClient } from "@clickhouse/client";
 import { canUseDOM, isErrorLike } from "../common";
+import { getEnv } from "../env";
 
 // Ensure this only runs on the server. Vite's React Router plugin should ensure
 // this is unreachable since the filename ends with `.server.ts`, but this check
@@ -22,9 +23,9 @@ export function getClickhouseClient(): ReturnType<typeof createClient> {
     return _clickhouseClient;
   }
 
-  const url = getClickhouseUrl();
+  const env = getEnv();
   try {
-    const client = createClient({ url });
+    const client = createClient({ url: env.TENSORZERO_CLICKHOUSE_URL });
     _clickhouseClient = client;
     return client;
   } catch (error) {
@@ -44,24 +45,6 @@ export async function checkClickHouseConnection(): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-export function getClickhouseUrl() {
-  const url = process.env.TENSORZERO_CLICKHOUSE_URL;
-  if (url) {
-    return url;
-  }
-
-  if (process.env.CLICKHOUSE_URL) {
-    console.warn(
-      'Deprecation Warning: The environment variable "CLICKHOUSE_URL" has been renamed to "TENSORZERO_CLICKHOUSE_URL" and will be removed in a future version. Please update your environment to use "TENSORZERO_CLICKHOUSE_URL" instead.',
-    );
-    return process.env.CLICKHOUSE_URL;
-  }
-
-  throw new ClickHouseClientError(
-    "The environment variable `TENSORZERO_CLICKHOUSE_URL` is required.",
-  );
 }
 
 export function isClickHouseClientError(
