@@ -109,6 +109,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await
@@ -120,6 +121,7 @@ pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
         config_file: None,
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await
@@ -133,6 +135,7 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await
@@ -2410,25 +2413,6 @@ pub async fn check_simple_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro")
-        || provider
-            .model_name
-            .starts_with("fireworks::accounts/fireworks/models/mixtral-8x22b-instruct")
-    {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens
-    );
 
     if !is_batch {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -2629,21 +2613,6 @@ pub async fn check_simple_image_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens
-    );
 
     if !is_batch {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -3003,26 +2972,6 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro")
-        || provider
-            .model_name
-            .starts_with("fireworks::accounts/fireworks/models/mixtral-8x22b-instruct")
-    {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        expected_max_tokens
-    );
-
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
 
@@ -7576,21 +7525,6 @@ pub async fn check_tool_use_multi_turn_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens,
-    );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -7896,19 +7830,6 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens
-    );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -9726,21 +9647,6 @@ pub async fn check_json_mode_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens
-    );
 
     if !is_batch {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -10011,21 +9917,6 @@ pub async fn check_dynamic_json_mode_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens
-    );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);

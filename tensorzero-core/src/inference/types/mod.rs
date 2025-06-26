@@ -246,7 +246,9 @@ impl<'de> Deserialize<'de> for TextKind {
     }
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum Role {
@@ -280,7 +282,9 @@ impl Role {
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct Text {
     pub text: String,
@@ -301,7 +305,9 @@ impl Text {
 }
 
 /// Struct that represents Chain of Thought reasoning
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct Thought {
     pub text: String,
@@ -326,7 +332,9 @@ impl Thought {
 }
 
 /// Core representation of the types of content that could go into a model provider
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
     Text(Text),
@@ -392,7 +400,9 @@ pub enum ContentBlockOutput {
 }
 
 /// Defines the types of content block that can come from a `chat` function
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockChatOutput {
     Text(Text),
@@ -405,7 +415,9 @@ pub enum ContentBlockChatOutput {
 }
 
 /// A RequestMessage is a message sent to a model
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct RequestMessage {
     pub role: Role,
@@ -497,7 +509,9 @@ impl<'a> ModelInferenceRequest<'a> {
 }
 
 /// For use in rendering for optimization purposes
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ModelInput {
     pub system: Option<String>,
