@@ -11,7 +11,7 @@ use std::fmt::Debug;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
-use tensorzero_core::endpoints::stored_inference::render_inferences;
+use tensorzero_core::endpoints::stored_inference::render_samples;
 pub use tensorzero_core::optimization::{OptimizerJobHandle, OptimizerStatus};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
@@ -809,7 +809,7 @@ impl Client {
                 .into(),
             });
         };
-        render_inferences(gateway.state.config.clone(), stored_samples, variants)
+        render_samples(gateway.state.config.clone(), stored_samples, variants)
             .await
             .map_err(err_to_http)
     }

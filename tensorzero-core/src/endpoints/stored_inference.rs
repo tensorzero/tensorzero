@@ -10,7 +10,7 @@ use crate::stored_inference::{
     render_stored_sample, reresolve_input_for_fine_tuning, RenderedSample, StoredSample,
 };
 
-pub async fn render_inferences<T: StoredSample>(
+pub async fn render_samples<T: StoredSample>(
     config: Arc<Config<'static>>,
     mut stored_samples: Vec<T>,
     variants: HashMap<String, String>,
