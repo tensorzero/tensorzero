@@ -2,7 +2,7 @@ import z from "zod";
 import { getInferenceTableName } from "./common";
 import type { MetricConfig } from "../config/metric";
 import type { FunctionConfig } from "../config/function";
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 
 export const timeWindowUnitSchema = z.enum([
   "day",
@@ -213,7 +213,7 @@ ORDER BY
 ;
   `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -303,7 +303,7 @@ ORDER BY
     variant_name ASC
   `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -342,7 +342,7 @@ WHERE function_name = {function_name:String}
 GROUP BY variant_name
 ORDER BY count DESC
 `;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { function_name },
@@ -367,7 +367,7 @@ export async function getUsedVariants(
     WHERE function_name = {function_name:String}
   )
 `;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { function_name },

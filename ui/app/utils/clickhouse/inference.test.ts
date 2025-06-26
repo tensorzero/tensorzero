@@ -24,7 +24,7 @@ import type {
   JsonInferenceOutput,
   TextContent,
 } from "./common";
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 
 // Test countInferencesForFunction
 test("countInferencesForFunction returns correct counts", async () => {
@@ -569,7 +569,7 @@ describe("getAdjacentInferenceIds", () => {
   });
 
   test("returns null for previous inference id if current inference is first", async () => {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query:
         "SELECT uint_to_uuid(min(id_uint)) as first_inference_id FROM InferenceById",
       format: "JSON",
@@ -587,7 +587,7 @@ describe("getAdjacentInferenceIds", () => {
   });
 
   test("returns null for next inference id if current inference is last", async () => {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query:
         "SELECT uint_to_uuid(max(id_uint)) as last_inference_id FROM InferenceById",
       format: "JSON",
@@ -619,7 +619,7 @@ describe("getAdjacentEpisodeIds", () => {
   });
 
   test("returns null for previous episode id if current episode is first", async () => {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query:
         "SELECT uint_to_uuid(min(episode_id_uint)) as first_episode_id FROM InferenceByEpisodeId",
       format: "JSON",
@@ -638,7 +638,7 @@ describe("getAdjacentEpisodeIds", () => {
   });
 
   test("returns null for next episode id if current episode is last", async () => {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query:
         "SELECT uint_to_uuid(max(episode_id_uint)) as last_episode_id FROM InferenceByEpisodeId",
       format: "JSON",

@@ -6,15 +6,18 @@ import {
   type FeedbackResponse,
   type JSONValue,
 } from "~/utils/tensorzero";
+import { getEnv } from "./env";
 
-if (!process.env.TENSORZERO_GATEWAY_URL) {
-  throw new Error("TENSORZERO_GATEWAY_URL environment variable is required");
+let _tensorZeroClient: TensorZeroClient | undefined;
+
+export function getTensorZeroClient() {
+  if (_tensorZeroClient) {
+    return _tensorZeroClient;
+  }
+
+  _tensorZeroClient = new TensorZeroClient(getEnv().TENSORZERO_GATEWAY_URL);
+  return _tensorZeroClient;
 }
-
-// Export a singleton instance
-export const tensorZeroClient = new TensorZeroClient(
-  process.env.TENSORZERO_GATEWAY_URL,
-);
 
 export async function addHumanFeedback(formData: FormData) {
   const metricName = formData.get("metricName")?.toString();
@@ -88,7 +91,7 @@ export async function addHumanFeedback(formData: FormData) {
       feedbackRequest.error.message,
     );
   }
-  const response = await tensorZeroClient.feedback(feedbackRequest.data);
+  const response = await getTensorZeroClient().feedback(feedbackRequest.data);
   return response;
 }
 
@@ -154,6 +157,6 @@ export async function addJudgeDemonstration(formData: FormData) {
     tags: { "tensorzero::human_feedback": "true" },
     internal: true,
   });
-  const response = await tensorZeroClient.feedback(feedbackRequest);
+  const response = await getTensorZeroClient().feedback(feedbackRequest);
   return response;
 }

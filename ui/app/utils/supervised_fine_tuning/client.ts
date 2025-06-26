@@ -2,28 +2,39 @@ import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning
 import { OpenAISFTJob } from "./openai";
 import { FireworksSFTJob } from "./fireworks";
 import { SFTJob, type SFTJobStatus } from "./common";
-import {
-  TensorZeroClient,
-  type InferenceFilterTreeNode,
-  type InferenceOutputSource,
-  type OpenAISFTJobHandle,
-  type OptimizerJobHandle,
-  type OptimizerStatus,
+import { TensorZeroClient } from "tensorzero-node";
+import type {
+  InferenceFilterTreeNode,
+  InferenceOutputSource,
+  OpenAISFTJobHandle,
+  OptimizerJobHandle,
+  OptimizerStatus,
 } from "tensorzero-node";
 import { getConfig } from "~/utils/config/index.server";
 
-const configPath = process.env.TENSORZERO_UI_CONFIG_PATH;
-if (!configPath) {
-  throw new Error("TENSORZERO_UI_CONFIG_PATH is not set");
+let _tensorZeroClient: TensorZeroClient | undefined;
+async function getTensorZeroClient(): Promise<TensorZeroClient> {
+  if (_tensorZeroClient) {
+    return _tensorZeroClient;
+  }
+
+  const configPath = process.env.TENSORZERO_UI_CONFIG_PATH;
+  if (!configPath) {
+    throw new Error("TENSORZERO_UI_CONFIG_PATH is not set");
+  }
+  const clickhouseUrl = process.env.TENSORZERO_CLICKHOUSE_URL;
+  if (!clickhouseUrl) {
+    throw new Error("TENSORZERO_CLICKHOUSE_URL is not set");
+  }
+
+  // Create a new client instance
+  const client = await TensorZeroClient.build(configPath, clickhouseUrl);
+  _tensorZeroClient = client;
+  return client;
 }
-const clickhouseUrl = process.env.TENSORZERO_CLICKHOUSE_URL;
-if (!clickhouseUrl) {
-  throw new Error("TENSORZERO_CLICKHOUSE_URL is not set");
-}
-const client = await TensorZeroClient.build(configPath, clickhouseUrl);
+
 const useNativeSFT = process.env.TENSORZERO_UI_FF_USE_NATIVE_SFT === "1";
 const openAINativeSFTBase = process.env.OPENAI_BASE_URL ?? null;
-console.log("useNativeSFT", useNativeSFT);
 
 export function launch_sft_job(data: SFTFormValues): Promise<SFTJob> {
   if (useNativeSFT) {
@@ -118,6 +129,7 @@ class NativeSFTJob extends SFTJob {
   }
 
   async poll(): Promise<SFTJob> {
+    const client = await getTensorZeroClient();
     const status = await client.experimentalPollOptimization(this.jobHandle);
     this.jobStatus = status;
     return this;
@@ -135,6 +147,7 @@ async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
   } else if (data.metric) {
     filters = await createFilters(data.metric, data.threshold);
   }
+  const client = await getTensorZeroClient();
   const job = await client.experimentalLaunchOptimizationWorkflow({
     function_name: data.function,
     template_variant_name: data.variant,

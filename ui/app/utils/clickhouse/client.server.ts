@@ -15,10 +15,18 @@ class ClickHouseClientError extends Error {
   }
 }
 
-export const clickhouseClient = (() => {
+let _clickhouseClient: ReturnType<typeof createClient> | null = null;
+
+export function getClickhouseClient(): ReturnType<typeof createClient> {
+  if (_clickhouseClient) {
+    return _clickhouseClient;
+  }
+
   const url = getClickhouseUrl();
   try {
-    return createClient({ url });
+    const client = createClient({ url });
+    _clickhouseClient = client;
+    return client;
   } catch (error) {
     throw new ClickHouseClientError(
       "Failed to create ClickHouse client. Please ensure that the `TENSORZERO_CLICKHOUSE_URL` environment variable is set correctly and that the ClickHouse server is running.\n\n" +
@@ -27,18 +35,18 @@ export const clickhouseClient = (() => {
       { cause: error },
     );
   }
-})();
+}
 
 export async function checkClickHouseConnection(): Promise<boolean> {
   try {
-    const result = await clickhouseClient.ping();
+    const result = await getClickhouseClient().ping();
     return result.success;
   } catch {
     return false;
   }
 }
 
-function getClickhouseUrl() {
+export function getClickhouseUrl() {
   const url = process.env.TENSORZERO_CLICKHOUSE_URL;
   if (url) {
     return url;

@@ -21,8 +21,8 @@ const { TensorZeroClient: NativeTensorZeroClient } =
 // However, since we generate types with TS-RS `pnpm build-bindings` we can
 // just parse the JSON and it should be type safe to use the types we generated.
 export class TensorZeroClient {
-  private nativeClient!: NativeTensorZeroClientType;
-
+  private nativeClient: NativeTensorZeroClientType;
+  
   constructor(client: NativeTensorZeroClientType) {
     this.nativeClient = client;
   }
