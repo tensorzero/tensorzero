@@ -7,6 +7,7 @@ import {
   queryDemonstrationFeedbackByInferenceId,
   queryFeedbackBoundsByTargetId,
   queryFeedbackByTargetId,
+  queryLatestFeedbackIdByMetric,
 } from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
 import {
@@ -107,6 +108,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     demonstration_feedback,
     feedback_bounds,
     feedback,
+    latestFeedbackByMetric,
   ] = await Promise.all([
     inferencePromise,
     modelInferencesPromise,
@@ -114,6 +116,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     demonstrationFeedbackPromise,
     feedbackBoundsPromise,
     feedbackDataPromise,
+    queryLatestFeedbackIdByMetric({ target_id: inference_id }),
   ]);
 
   // --- Process results ---
@@ -147,6 +150,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     dataset_counts,
     hasDemonstration: demonstration_feedback.length > 0,
     newFeedbackId,
+    latestFeedbackByMetric,
   };
 }
 
@@ -231,6 +235,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     dataset_counts,
     hasDemonstration,
     newFeedbackId,
+    latestFeedbackByMetric,
   } = loaderData;
   const navigate = useNavigate();
   const [openModal, setOpenModal] = useState<ModalType | null>(null);
@@ -424,7 +429,14 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
                 "This table only includes inference-level feedback. To see episode-level feedback, open the detail page for that episode.",
             }}
           />
-          <FeedbackTable feedback={feedback} />
+          <FeedbackTable
+            feedback={feedback}
+            latestCommentId={feedback_bounds.by_type.comment.last_id!}
+            latestDemonstrationId={
+              feedback_bounds.by_type.demonstration.last_id!
+            }
+            latestFeedbackIdByMetric={latestFeedbackByMetric}
+          />
           <PageButtons
             onNextPage={handleNextFeedbackPage}
             onPreviousPage={handlePreviousFeedbackPage}

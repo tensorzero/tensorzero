@@ -8,6 +8,7 @@ import {
   pollForFeedbackItem,
   queryFeedbackBoundsByTargetId,
   queryFeedbackByTargetId,
+  queryLatestFeedbackIdByMetric,
 } from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
 import {
@@ -70,14 +71,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     inferences,
     inference_bounds,
     feedbacks,
-    feedback_bounds,
+    feedbackBounds,
     num_inferences,
     num_feedbacks,
+    latestFeedbackByMetric,
   ] = await Promise.all([
     queryInferenceTableByEpisodeId({
       episode_id,
-      before: beforeInference || undefined,
-      after: afterInference || undefined,
+      before: beforeInference ?? undefined,
+      after: afterInference ?? undefined,
       page_size: pageSize,
     }),
     queryInferenceTableBoundsByEpisodeId({
@@ -89,6 +91,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     }),
     countInferencesForEpisode(episode_id),
     countFeedbackByTargetId(episode_id),
+    queryLatestFeedbackIdByMetric({ target_id: episode_id }),
   ]);
   if (inferences.length === 0) {
     throw data(`No inferences found for episode ${episode_id}.`, {
@@ -101,10 +104,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     inferences,
     inference_bounds,
     feedbacks,
-    feedback_bounds,
+    feedbackBounds,
     num_inferences,
     num_feedbacks,
     newFeedbackId,
+    latestFeedbackByMetric,
   };
 }
 
@@ -142,10 +146,11 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     inferences,
     inference_bounds,
     feedbacks,
-    feedback_bounds,
+    feedbackBounds,
     num_inferences,
     num_feedbacks,
     newFeedbackId,
+    latestFeedbackByMetric,
   } = loaderData;
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -167,9 +172,9 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   };
   // These are swapped because the table is sorted in descending order
   const disablePreviousInferencePage =
-    inference_bounds.last_id === topInference.id;
+    inference_bounds?.last_id === topInference.id;
   const disableNextInferencePage =
-    inference_bounds.first_id === bottomInference.id;
+    inference_bounds?.first_id === bottomInference.id;
 
   const topFeedback = feedbacks[0] as { id: string } | undefined;
   const bottomFeedback = feedbacks[feedbacks.length - 1] as
@@ -203,13 +208,13 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   // These are swapped because the table is sorted in descending order
   const disablePreviousFeedbackPage =
     !topFeedback?.id ||
-    !feedback_bounds.last_id ||
-    feedback_bounds.last_id === topFeedback.id;
+    !feedbackBounds.last_id ||
+    feedbackBounds.last_id === topFeedback.id;
 
   const disableNextFeedbackPage =
     !bottomFeedback?.id ||
-    !feedback_bounds.first_id ||
-    feedback_bounds.first_id === bottomFeedback.id;
+    !feedbackBounds.first_id ||
+    feedbackBounds.first_id === bottomFeedback.id;
 
   const humanFeedbackFetcher = useFetcherWithReset<typeof action>();
   const formError =
@@ -279,7 +284,14 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
                 "This table only includes episode-level feedback. To see inference-level feedback, open the detail page for that inference.",
             }}
           />
-          <FeedbackTable feedback={feedbacks} />
+          <FeedbackTable
+            feedback={feedbacks}
+            latestCommentId={feedbackBounds.by_type.comment.last_id!}
+            latestDemonstrationId={
+              feedbackBounds.by_type.demonstration.last_id!
+            }
+            latestFeedbackIdByMetric={latestFeedbackByMetric}
+          />
           <PageButtons
             onPreviousPage={handlePreviousFeedbackPage}
             onNextPage={handleNextFeedbackPage}
@@ -292,6 +304,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     </PageLayout>
   );
 }
+
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   console.error(error);
 
