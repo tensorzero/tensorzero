@@ -6,17 +6,6 @@ on:
   pull_request:
     branches: ["main"]
 
-# Hack to cancel existing merge-queue workflows when a new one is created.
-# This ensures that we don't have multiple ClickHouse cloud tests running at the same time.
-concurrency:
-  # This is how you do a ternary-if in Github Actions.defaults:
-  # In the merge queue, we use a fixed concurrency group name, which will cancel any
-  # leftover workflow runs when a PR was removed from the merge queue.
-  # Otherwise, we use the unique 'github.run_id' field, which will create a new concurrency group,
-  # and avoid cancelling any existing workflow runs.
-  group: ${{ (github.event_name == 'merge_group' && 'merge-group-general-checks') || github.run_id }}
-  cancel-in-progress: true
-
 env:
   FORCE_COLOR: 1
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
