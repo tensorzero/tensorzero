@@ -1,0 +1,14 @@
+agents:
+  queue: "t0-merge-queue"
+
+steps:
+  - label: "Clickhouse Cloud tests"
+    concurrency: 1
+    concurrency_group: 'clickhouse-cloud-${CLICKHOUSE_ID}'
+    command: ./ci/buildkite/test-clickhouse-cloud.sh
+
+notify:
+  - github_commit_status:
+      # We need a custom status (without a slash in the name) so that we can report
+      # it as a dummy status in 'dummy.yml' for PRs
+      context: "merge-checks-buildkite"

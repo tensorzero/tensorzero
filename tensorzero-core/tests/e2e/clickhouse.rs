@@ -187,7 +187,9 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
         host = "host.docker.internal";
     }
     let username = url.username();
-    let password = url.password().unwrap_or("");
+    let password = urlencoding::decode(url.password().unwrap_or(""))
+        .unwrap()
+        .to_string();
 
     // We use our latest fixtures - new columns will get ignored when inserting.
     let insert_futures = [
@@ -215,34 +217,37 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
         ("large_json_float_feedback.parquet", "FloatMetricFeedback"),
     ]
     .into_iter()
-    .map(|(file, table)| async move {
-        let mut command = tokio::process::Command::new("docker");
-        command.args([
-            "run",
-            "--add-host=host.docker.internal:host-gateway",
-            "-v",
-            &format!("{s3_fixtures_path}:/s3-fixtures"),
-            "clickhouse/clickhouse-server:25.4-alpine",
-            "clickhouse-client",
-            "--host",
-            host,
-            "--user",
-            username,
-            "--password",
-            password,
-            "--database",
-            database,
-            "--query",
-            &format!(
-                r#"
+    .map(|(file, table)| {
+        let password = password.clone();
+        async move {
+            let mut command = tokio::process::Command::new("docker");
+            command.args([
+                "run",
+                "--add-host=host.docker.internal:host-gateway",
+                "-v",
+                &format!("{s3_fixtures_path}:/s3-fixtures"),
+                "clickhouse/clickhouse-server:25.4-alpine",
+                "clickhouse-client",
+                "--host",
+                host,
+                "--user",
+                username,
+                "--password",
+                &password,
+                "--database",
+                database,
+                "--query",
+                &format!(
+                    r#"
         INSERT INTO {table} FROM INFILE '/s3-fixtures/{file}' FORMAT Parquet
     "#
-            ),
-        ]);
-        assert!(
-            command.spawn().unwrap().wait().await.unwrap().success(),
-            "Failed to insert {table}"
-        );
+                ),
+            ]);
+            assert!(
+                command.spawn().unwrap().wait().await.unwrap().success(),
+                "Failed to insert {table}"
+            );
+        }
     });
 
     futures::future::join_all(insert_futures).await;

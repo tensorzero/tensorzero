@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -135,6 +138,7 @@ impl ToolCallConfig {
             .allowed_tools
             .as_deref()
             .unwrap_or(function_tools);
+        let mut tool_display_names = HashSet::new();
 
         // Get each tool from the static tool config.
         let tools_available: Result<Vec<ToolConfig>, Error> = allowed_tools
@@ -169,6 +173,15 @@ impl ToolCallConfig {
                 })
             },
         ));
+        // Check for duplicate tool names.
+        for tool in &tools_available {
+            let duplicate = !tool_display_names.insert(tool.name());
+            if duplicate {
+                return Err(Error::new(ErrorDetails::DuplicateTool {
+                    name: tool.name().to_string(),
+                }));
+            }
+        }
 
         let tool_choice = dynamic_tool_params
             .tool_choice
@@ -1179,5 +1192,42 @@ mod tests {
         assert_eq!(tool_call.id, "123");
 
         assert!(logs_contain("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object."))
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_tool_names_error() {
+        // Test case where dynamic tool params add a tool with the same name as a static tool
+        let dynamic_tool_params = DynamicToolParams {
+            additional_tools: Some(vec![Tool {
+                name: "get_temperature".to_string(), // Same name as static tool
+                description: "Another temperature tool".to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "city": {"type": "string"}
+                    },
+                    "required": ["city"]
+                }),
+                strict: false,
+            }]),
+            ..Default::default()
+        };
+
+        let err = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_tool_params,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err,
+            ErrorDetails::DuplicateTool {
+                name: "get_temperature".to_string()
+            }
+            .into()
+        );
     }
 }
