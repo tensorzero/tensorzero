@@ -1328,31 +1328,32 @@ pub async fn embedding_handler(
         );
     }
 
-    // Extract the model name from the request
-    let original_model_name =
-        if let Some(original_model) = headers.get("x-tensorzero-original-model") {
-            original_model
-                .to_str()
-                .unwrap_or(&openai_compatible_params.model)
-                .to_string()
-        } else {
-            // Fallback to extracting from the prefixed model name
-            if let Some(model_name) = openai_compatible_params
-                .model
-                .strip_prefix("tensorzero::embedding_model_name::")
-            {
-                model_name.to_string()
-            } else if let Some(model_name) = openai_compatible_params
-                .model
-                .strip_prefix("tensorzero::model_name::")
-            {
-                model_name.to_string()
-            } else {
-                // Fallback to the full model name if no prefix found
-                openai_compatible_params.model.clone()
-            }
-        };
-
+    // Extract the model ID for lookup (this is the UUID)
+    let model_id = if let Some(model_name) = openai_compatible_params
+        .model
+        .strip_prefix("tensorzero::embedding_model_name::")
+    {
+        model_name.to_string()
+    } else if let Some(model_name) = openai_compatible_params
+        .model
+        .strip_prefix("tensorzero::model_name::")
+    {
+        model_name.to_string()
+    } else {
+        // Fallback to the full model name if no prefix found
+        openai_compatible_params.model.clone()
+    };
+    
+    // Get the original model name from header for error messages
+    let original_model_name = if let Some(original_model) = headers.get("x-tensorzero-original-model") {
+        original_model
+            .to_str()
+            .unwrap_or(&openai_compatible_params.model)
+            .to_string()
+    } else {
+        model_id.clone()
+    };
+    
     // Convert OpenAI request to internal format
     let internal_input = match &openai_compatible_params.input {
         OpenAICompatibleEmbeddingInput::Single(text) => {
@@ -1384,7 +1385,7 @@ pub async fn embedding_handler(
     let models = config.models.read().await;
     let model = models
         .get_with_capability(
-            &original_model_name,
+            &model_id,
             crate::endpoints::capability::EndpointCapability::Embeddings,
         )
         .await?
