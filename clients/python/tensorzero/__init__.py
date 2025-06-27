@@ -65,7 +65,10 @@ from .types import (
     Usage,
 )
 
-type RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample instead
+RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample instead
+# Type aliases to preserve backward compatibility with main
+ChatDatapoint = Datapoint.Chat
+JsonDatapoint = Datapoint.Json
 
 
 __all__ = [
@@ -76,6 +79,7 @@ __all__ = [
     "BaseTensorZeroGateway",
     "BooleanMetricFilter",
     "BooleanMetricNode",  # DEPRECATED
+    "ChatDatapoint",
     "ChatDatapointInsert",
     "ChatInferenceDatapointInput",  # DEPRECATED
     "ChatInferenceResponse",
@@ -98,6 +102,7 @@ __all__ = [
     "StoredInference",
     "InferenceInput",
     "InferenceResponse",
+    "JsonDatapoint",
     "JsonDatapointInsert",
     "JsonInferenceDatapointInput",  # DEPRECATED
     "JsonInferenceOutput",

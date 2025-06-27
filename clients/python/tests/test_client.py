@@ -37,10 +37,10 @@ from openai import AsyncOpenAI, OpenAI
 from pytest import FixtureRequest
 from tensorzero import (
     AsyncTensorZeroGateway,
+    ChatDatapoint,
     ChatDatapointInsert,
     ChatInferenceDatapointInput,
     ChatInferenceResponse,
-    Datapoint,
     DynamicEvaluationRunResponse,
     FeedbackResponse,
     FileBase64,
@@ -49,6 +49,7 @@ from tensorzero import (
     ImageBase64,
     ImageUrl,
     InferenceChunk,
+    JsonDatapoint,
     JsonDatapointInsert,
     JsonInferenceDatapointInput,
     JsonInferenceResponse,
@@ -3194,7 +3195,7 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
         function_name="basic_test",
     )
     assert len(listed_datapoints) == 2
-    assert all(isinstance(dp, Datapoint.Chat) for dp in listed_datapoints)
+    assert all(isinstance(dp, ChatDatapoint) for dp in listed_datapoints)
     assert all(dp.function_name == "basic_test" for dp in listed_datapoints)
 
     sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[0])
@@ -3310,7 +3311,7 @@ async def test_async_bulk_insert_delete_datapoints(
         dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
     )
     print(datapoint)
-    assert isinstance(datapoint, Datapoint.Chat)
+    assert isinstance(datapoint, ChatDatapoint)
     assert datapoint.function_name == "basic_test"
     assert datapoint.input.system == {"assistant_name": "foo"}
     assert len(datapoint.input.messages) == 1
@@ -3325,7 +3326,7 @@ async def test_async_bulk_insert_delete_datapoints(
     datapoint = await async_client.get_datapoint(
         dataset_name=dataset_name, datapoint_id=datapoint_ids[2]
     )
-    assert isinstance(datapoint, Datapoint.Json)
+    assert isinstance(datapoint, JsonDatapoint)
     assert datapoint.function_name == "json_success"
     assert datapoint.input.system == {"assistant_name": "foo"}
     assert len(datapoint.input.messages) == 1
@@ -3342,8 +3343,8 @@ async def test_async_bulk_insert_delete_datapoints(
     )
     assert len(listed_datapoints) == 4
     # Assert that there are 2 chat and 2 json datapoints
-    chat_datapoints = [dp for dp in listed_datapoints if isinstance(dp, Datapoint.Chat)]
-    json_datapoints = [dp for dp in listed_datapoints if isinstance(dp, Datapoint.Json)]
+    chat_datapoints = [dp for dp in listed_datapoints if isinstance(dp, ChatDatapoint)]
+    json_datapoints = [dp for dp in listed_datapoints if isinstance(dp, JsonDatapoint)]
     assert len(chat_datapoints) == 2
     assert len(json_datapoints) == 2
 
@@ -3353,7 +3354,7 @@ async def test_async_bulk_insert_delete_datapoints(
         function_name="basic_test",
     )
     assert len(listed_datapoints) == 2
-    assert all(isinstance(dp, Datapoint.Chat) for dp in listed_datapoints)
+    assert all(isinstance(dp, ChatDatapoint) for dp in listed_datapoints)
     assert all(dp.function_name == "basic_test" for dp in listed_datapoints)
 
     await async_client.delete_datapoint(
