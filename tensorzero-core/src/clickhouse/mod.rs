@@ -417,9 +417,8 @@ impl ClickHouseConnectionInfo {
                 applied_at DateTime64(6, 'UTC') DEFAULT now(),
                 extra_data Nullable(String)
             )
-            ENGINE = ReplacingMergeTree(migration_id)
-            PRIMARY KEY (migration_id)
-            ORDER BY (migration_id)"#
+            ENGINE = MergeTree()
+            PRIMARY KEY (migration_id)"#
                 .to_string(),
         )
         .await?;
