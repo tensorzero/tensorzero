@@ -44,7 +44,6 @@ export function ProgressIndicator({
   return (
     <div className="max-w-lg space-y-2">
       <div className="flex items-center justify-between">
-        <span className="font-medium">Estimated Completion</span>
         <CountdownTimer targetDate={estimatedCompletion} />
       </div>
       <Progress
