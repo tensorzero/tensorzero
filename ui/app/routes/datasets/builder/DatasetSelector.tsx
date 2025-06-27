@@ -140,14 +140,7 @@ export function DatasetSelector({
                           className="flex items-center justify-between"
                         >
                           <div className="flex items-center">
-                            <TablePlus
-                              className={clsx(
-                                "mr-2 h-4 w-4",
-                                inputValue.trim()
-                                  ? "text-blue-600"
-                                  : "text-fg-muted",
-                              )}
-                            />
+                            <TablePlus className="mr-2 h-4 w-4 text-blue-600" />
                             <span
                               className={clsx(
                                 "text-sm",
