@@ -415,6 +415,7 @@ impl ClickHouseConnectionInfo {
                 migration_name String,
                 gateway_version String,
                 applied_at DateTime64(6, 'UTC') DEFAULT now(),
+                extra_data Nullable(String)
             )
             ENGINE = ReplacingMergeTree(migration_id)
             PRIMARY KEY (migration_id)
