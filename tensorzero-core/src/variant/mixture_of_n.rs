@@ -2,7 +2,7 @@ use std::path::Path;
 
 use futures::future::join_all;
 use rand::Rng;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
@@ -33,7 +33,9 @@ use super::{
     ModelUsedInfo, Variant,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct MixtureOfNConfig {
     pub weight: Option<f64>,
     pub timeout_s: f64,
@@ -56,8 +58,11 @@ fn default_timeout() -> f64 {
     300.0
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct FuserConfig {
+    #[serde(flatten)]
     pub inner: ChatCompletionConfig,
 }
 

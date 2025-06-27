@@ -7,6 +7,7 @@ import {
   queryDemonstrationFeedbackByInferenceId,
   queryFeedbackBoundsByTargetId,
   queryFeedbackByTargetId,
+  queryLatestFeedbackIdByMetric,
 } from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
 import {
@@ -51,9 +52,10 @@ import { AddToDatasetButton } from "./AddToDatasetButton";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
-import { isServerRequestError, JSONParseError } from "~/utils/common";
-import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
+import { JSONParseError } from "~/utils/common";
 import { processJson } from "~/utils/syntax-highlighting.server";
+import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
+import { isTensorZeroServerError } from "~/utils/tensorzero";
 
 export const handle: RouteHandle = {
   crumb: (match) => [match.params.inference_id!],
@@ -106,6 +108,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     demonstration_feedback,
     feedback_bounds,
     feedback,
+    latestFeedbackByMetric,
   ] = await Promise.all([
     inferencePromise,
     modelInferencesPromise,
@@ -113,6 +116,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     demonstrationFeedbackPromise,
     feedbackBoundsPromise,
     feedbackDataPromise,
+    queryLatestFeedbackIdByMetric({ target_id: inference_id }),
   ]);
 
   // --- Process results ---
@@ -146,6 +150,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     dataset_counts,
     hasDemonstration: demonstration_feedback.length > 0,
     newFeedbackId,
+    latestFeedbackByMetric,
   };
 }
 
@@ -196,10 +201,10 @@ export async function action({ request }: Route.ActionArgs) {
         url.searchParams.set("newFeedbackId", response.feedback_id);
         return data<ActionData>({ redirectTo: url.pathname + url.search });
       } catch (error) {
-        if (isServerRequestError(error)) {
+        if (isTensorZeroServerError(error)) {
           return data<ActionData>(
             { error: error.message },
-            { status: error.statusCode },
+            { status: error.status },
           );
         }
         return data<ActionData>(
@@ -230,6 +235,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     dataset_counts,
     hasDemonstration,
     newFeedbackId,
+    latestFeedbackByMetric,
   } = loaderData;
   const navigate = useNavigate();
   const [openModal, setOpenModal] = useState<ModalType | null>(null);
@@ -423,7 +429,14 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
                 "This table only includes inference-level feedback. To see episode-level feedback, open the detail page for that episode.",
             }}
           />
-          <FeedbackTable feedback={feedback} />
+          <FeedbackTable
+            feedback={feedback}
+            latestCommentId={feedback_bounds.by_type.comment.last_id!}
+            latestDemonstrationId={
+              feedback_bounds.by_type.demonstration.last_id!
+            }
+            latestFeedbackIdByMetric={latestFeedbackByMetric}
+          />
           <PageButtons
             onNextPage={handleNextFeedbackPage}
             onPreviousPage={handlePreviousFeedbackPage}

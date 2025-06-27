@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -23,7 +26,9 @@ use crate::{
  */
 
 /// A Tool object describes how a tool can be dynamically configured by the user.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct Tool {
@@ -133,6 +138,7 @@ impl ToolCallConfig {
             .allowed_tools
             .as_deref()
             .unwrap_or(function_tools);
+        let mut tool_display_names = HashSet::new();
 
         // Get each tool from the static tool config.
         let tools_available: Result<Vec<ToolConfig>, Error> = allowed_tools
@@ -167,6 +173,15 @@ impl ToolCallConfig {
                 })
             },
         ));
+        // Check for duplicate tool names.
+        for tool in &tools_available {
+            let duplicate = !tool_display_names.insert(tool.name());
+            if duplicate {
+                return Err(Error::new(ErrorDetails::DuplicateTool {
+                    name: tool.name().to_string(),
+                }));
+            }
+        }
 
         let tool_choice = dynamic_tool_params
             .tool_choice
@@ -215,7 +230,9 @@ impl ToolCallConfig {
 
 /// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
 /// It is used to insert the ToolCallConfig into the database.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ToolCallConfigDatabaseInsert {
     pub tools_available: Vec<Tool>,
@@ -279,7 +296,9 @@ pub struct BatchDynamicToolParams {
 pub struct BatchDynamicToolParamsWithSize(pub BatchDynamicToolParams, pub usize);
 
 /// A ToolCall is a request by a model to call a Tool
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ToolCall {
     pub name: String,
@@ -359,7 +378,9 @@ impl TryFrom<ToolCallInput> for ToolCall {
 
 /// A ToolCallOutput is a request by a model to call a Tool
 /// in the form that we return to the client / ClickHouse
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ToolCallOutput {
     pub arguments: Option<Value>,
@@ -433,7 +454,9 @@ impl ToolCallConfig {
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct ToolResult {
     pub name: String,
@@ -460,7 +483,9 @@ impl ToolResult {
 /// and even specify which tool to be used.
 ///
 /// This enum is used to denote this tool choice.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
 pub enum ToolChoice {
@@ -1167,5 +1192,42 @@ mod tests {
         assert_eq!(tool_call.id, "123");
 
         assert!(logs_contain("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object."))
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_tool_names_error() {
+        // Test case where dynamic tool params add a tool with the same name as a static tool
+        let dynamic_tool_params = DynamicToolParams {
+            additional_tools: Some(vec![Tool {
+                name: "get_temperature".to_string(), // Same name as static tool
+                description: "Another temperature tool".to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "city": {"type": "string"}
+                    },
+                    "required": ["city"]
+                }),
+                strict: false,
+            }]),
+            ..Default::default()
+        };
+
+        let err = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_tool_params,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err,
+            ErrorDetails::DuplicateTool {
+                name: "get_temperature".to_string()
+            }
+            .into()
+        );
     }
 }

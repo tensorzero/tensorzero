@@ -10,7 +10,6 @@ use std::borrow::Cow;
 use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
-use tracing::instrument;
 use url::Url;
 #[cfg(test)]
 use uuid::Uuid;
@@ -902,48 +901,6 @@ impl<'a> From<&'a ToolConfig> for OpenRouterTool<'a> {
             },
             strict: tool.strict(),
         }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct OpenRouterBatchParams<'a> {
-    file_id: Cow<'a, str>,
-    batch_id: Cow<'a, str>,
-}
-
-impl<'a> OpenRouterBatchParams<'a> {
-    #[instrument(name = "OpenRouterBatchParams::from_ref", skip_all, fields(%value))]
-    fn from_ref(value: &'a Value) -> Result<Self, Error> {
-        let file_id = value
-            .get("file_id")
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidBatchParams {
-                    message: "Missing file_id in batch params".to_string(),
-                })
-            })?
-            .as_str()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidBatchParams {
-                    message: "file_id must be a string".to_string(),
-                })
-            })?;
-        let batch_id = value
-            .get("batch_id")
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidBatchParams {
-                    message: "Missing batch_id in batch params".to_string(),
-                })
-            })?
-            .as_str()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidBatchParams {
-                    message: "batch_id must be a string".to_string(),
-                })
-            })?;
-        Ok(Self {
-            file_id: Cow::Borrowed(file_id),
-            batch_id: Cow::Borrowed(batch_id),
-        })
     }
 }
 
