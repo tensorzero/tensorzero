@@ -238,11 +238,13 @@ jobs:
       - name: Upload test results to Buildkite
         if: always()
         run: |
+          ls ./target/nextest/e2e/
+          ls ./target/nextest/default/
           export BUILDKITE_ANALYTICS_TOKEN=$BUILDKITE_ANALYTICS_TOKEN_PROVIDER_PROXY
           curl \
           -X POST \
           -H "Authorization: Token token=\"$BUILDKITE_ANALYTICS_TOKEN\"" \
-          -F "data=@./target/nextest/default/nextest-junit.xml" \
+          -F "data=@./target/nextest/e2e/nextest-junit.xml" \
           -F "format=junit" \
           -F "run_env[CI]=github" \
           -F "run_env[key]=${{github.run_id}}" \
