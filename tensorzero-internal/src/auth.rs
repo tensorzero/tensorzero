@@ -99,8 +99,8 @@ pub async fn require_api_key(
         ));
     }
 
-    // Parse the JSON body and replace the "model" field with the value from api_config if present
-    let mut val: Value = match serde_json::from_slice(&bytes) {
+    // Parse the JSON body to validate and extract model name
+    let val: Value = match serde_json::from_slice(&bytes) {
         Ok(v) => v,
         Err(_) => {
             return Err(auth_error_response(
@@ -136,31 +136,14 @@ pub async fn require_api_key(
         }
     };
 
-    // Store the original model name before replacing it
-    let original_model = model.to_string();
-
-    // Replace the "model" field in the request body with the value from api_config
-    val["model"] = format!("tensorzero::model_name::{}", metadata.endpoint_id.clone()).into();
-
-    // Re-serialize the modified JSON body for the downstream handler
-    let bytes = match serde_json::to_vec(&val) {
-        Ok(b) => b,
-        Err(_) => {
-            return Err(auth_error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "serialization_error",
-                "Failed to serialize modified request body",
-            ))
-        }
-    };
-
+    // Create request without modifying the body
     let mut request = Request::from_parts(parts, Body::from(bytes));
 
-    // Add the original model name as a custom header
-    if let Ok(header_value) = original_model.parse() {
+    // Add the model name as a custom header for downstream handlers
+    if let Ok(header_value) = model.parse() {
         request
             .headers_mut()
-            .insert("x-tensorzero-original-model", header_value);
+            .insert("x-tensorzero-model-name", header_value);
     }
 
     // Add metadata headers for observability

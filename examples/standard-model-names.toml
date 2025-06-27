@@ -1,0 +1,81 @@
+# Example configuration demonstrating standard model name support
+# for both authenticated and unauthenticated access
+
+[gateway]
+bind_address = "0.0.0.0:3000"
+
+[gateway.authentication]
+# Set to false to allow unauthenticated access with standard model names
+# Default is true (authentication required)
+enabled = false
+
+# Define models with user-friendly names
+[models.gpt-3-5-turbo]
+provider_name = "openai"
+model_name = "gpt-3.5-turbo"
+
+[models.claude-3-opus]
+provider_name = "anthropic"
+model_name = "claude-3-opus-20240229"
+
+[models.text-embedding-ada-002]
+provider_name = "openai"
+model_name = "text-embedding-ada-002"
+
+# Define providers
+[providers.openai]
+provider_type = "openai"
+api_key_location = { env_var = "OPENAI_API_KEY" }
+
+[providers.anthropic]
+provider_type = "anthropic"
+api_key_location = { env_var = "ANTHROPIC_API_KEY" }
+
+# Example function (still requires prefix)
+[functions.summarize]
+type = "chat"
+system_template = "You are a helpful assistant that summarizes text concisely."
+
+[[functions.summarize.variants]]
+name = "gpt"
+type = "chat_completion"
+model = "gpt-3-5-turbo"
+
+[[functions.summarize.variants]]
+name = "claude"
+type = "chat_completion"
+model = "claude-3-opus"
+
+# Usage examples:
+# 
+# 1. Direct model access (no authentication required with this config):
+#    curl -X POST http://localhost:3000/v1/chat/completions \
+#      -H "Content-Type: application/json" \
+#      -d '{
+#        "model": "gpt-3.5-turbo",
+#        "messages": [{"role": "user", "content": "Hello!"}]
+#      }'
+#
+# 2. Function access (still requires prefix):
+#    curl -X POST http://localhost:3000/v1/chat/completions \
+#      -H "Content-Type: application/json" \
+#      -d '{
+#        "model": "tensorzero::function_name::summarize",
+#        "messages": [{"role": "user", "content": "Summarize this text..."}]
+#      }'
+#
+# 3. Embedding access:
+#    curl -X POST http://localhost:3000/v1/embeddings \
+#      -H "Content-Type: application/json" \
+#      -d '{
+#        "model": "text-embedding-ada-002",
+#        "input": "Hello, world!"
+#      }'
+#
+# 4. Backward compatibility - prefixed names still work:
+#    curl -X POST http://localhost:3000/v1/chat/completions \
+#      -H "Content-Type: application/json" \
+#      -d '{
+#        "model": "tensorzero::model_name::gpt-3.5-turbo",
+#        "messages": [{"role": "user", "content": "Hello!"}]
+#      }'

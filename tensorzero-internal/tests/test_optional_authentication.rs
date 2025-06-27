@@ -11,11 +11,11 @@ mod test_optional_authentication {
         config.gateway.authentication = AuthenticationConfig {
             enabled: Some(false),
         };
-        
+
         let app_state = gateway_util::AppStateData::new(Arc::new(config))
             .await
             .unwrap();
-        
+
         // Verify authentication is disabled
         match &app_state.authentication_info {
             gateway_util::AuthenticationInfo::Disabled => {
@@ -31,11 +31,11 @@ mod test_optional_authentication {
     async fn test_authentication_enabled_by_default() {
         // Create config with default authentication (not specified)
         let config = Config::default();
-        
+
         let app_state = gateway_util::AppStateData::new(Arc::new(config))
             .await
             .unwrap();
-        
+
         // Verify authentication is enabled by default
         match &app_state.authentication_info {
             gateway_util::AuthenticationInfo::Enabled(_) => {
@@ -54,11 +54,11 @@ mod test_optional_authentication {
         config.gateway.authentication = AuthenticationConfig {
             enabled: Some(true),
         };
-        
+
         let app_state = gateway_util::AppStateData::new(Arc::new(config))
             .await
             .unwrap();
-        
+
         // Verify authentication is enabled
         match &app_state.authentication_info {
             gateway_util::AuthenticationInfo::Enabled(_) => {

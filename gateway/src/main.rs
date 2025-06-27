@@ -176,13 +176,16 @@ async fn main() {
     if let AuthenticationInfo::Enabled(ref auth) = app_state.authentication_info {
         if let Ok(redis_url) = std::env::var("TENSORZERO_REDIS_URL") {
             if !redis_url.is_empty() {
-                let redis_client = RedisClient::new(&redis_url, app_state.clone(), auth.clone()).await;
+                let redis_client =
+                    RedisClient::new(&redis_url, app_state.clone(), auth.clone()).await;
                 redis_client
                     .start()
                     .await
                     .expect_pretty("Failed to start Redis client");
             } else {
-                tracing::warn!("TENSORZERO_REDIS_URL is empty, so Redis client will not be started");
+                tracing::warn!(
+                    "TENSORZERO_REDIS_URL is empty, so Redis client will not be started"
+                );
             }
         }
     }
@@ -220,12 +223,9 @@ async fn main() {
 
     // Apply authentication middleware only if authentication is enabled
     let openai_routes = match &app_state.authentication_info {
-        AuthenticationInfo::Enabled(auth) => {
-            openai_routes.layer(axum::middleware::from_fn_with_state(
-                auth.clone(),
-                require_api_key,
-            ))
-        }
+        AuthenticationInfo::Enabled(auth) => openai_routes.layer(
+            axum::middleware::from_fn_with_state(auth.clone(), require_api_key),
+        ),
         AuthenticationInfo::Disabled => openai_routes,
     };
 

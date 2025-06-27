@@ -172,10 +172,8 @@ pub fn setup_authentication(config: &Config<'static>) -> AuthenticationInfo {
             AuthenticationInfo::Disabled
         }
         Some(true) | None => {
-            if config.api_keys.is_empty() {
-                if config.gateway.authentication.enabled == Some(true) {
-                    tracing::warn!("Authentication enabled but no API keys configured");
-                }
+            if config.api_keys.is_empty() && config.gateway.authentication.enabled == Some(true) {
+                tracing::warn!("Authentication enabled but no API keys configured");
             }
             AuthenticationInfo::Enabled(Auth::new(config.api_keys.clone()))
         }
@@ -437,10 +435,10 @@ mod tests {
             api_keys: HashMap::from([("test_key".to_string(), HashMap::new())]),
             ..Default::default()
         };
-        
+
         let auth_info = setup_authentication(&config);
         assert!(matches!(auth_info, AuthenticationInfo::Disabled));
-        
+
         // Test explicitly enabled authentication with API keys
         let gateway_config = GatewayConfig {
             authentication: AuthenticationConfig {
@@ -453,10 +451,10 @@ mod tests {
             api_keys: HashMap::from([("test_key".to_string(), HashMap::new())]),
             ..Default::default()
         };
-        
+
         let auth_info = setup_authentication(&config);
         assert!(matches!(auth_info, AuthenticationInfo::Enabled(_)));
-        
+
         // Test explicitly enabled authentication without API keys (should still enable)
         let gateway_config = GatewayConfig {
             authentication: AuthenticationConfig {
@@ -469,15 +467,13 @@ mod tests {
             api_keys: HashMap::new(),
             ..Default::default()
         };
-        
+
         let auth_info = setup_authentication(&config);
         assert!(matches!(auth_info, AuthenticationInfo::Enabled(_)));
-        
+
         // Test default authentication (None) with API keys (should enable)
         let gateway_config = GatewayConfig {
-            authentication: AuthenticationConfig {
-                enabled: None,
-            },
+            authentication: AuthenticationConfig { enabled: None },
             ..Default::default()
         };
         let config = Config {
@@ -485,15 +481,13 @@ mod tests {
             api_keys: HashMap::from([("test_key".to_string(), HashMap::new())]),
             ..Default::default()
         };
-        
+
         let auth_info = setup_authentication(&config);
         assert!(matches!(auth_info, AuthenticationInfo::Enabled(_)));
-        
+
         // Test default authentication (None) without API keys (should still enable for backward compatibility)
         let gateway_config = GatewayConfig {
-            authentication: AuthenticationConfig {
-                enabled: None,
-            },
+            authentication: AuthenticationConfig { enabled: None },
             ..Default::default()
         };
         let config = Config {
@@ -501,7 +495,7 @@ mod tests {
             api_keys: HashMap::new(),
             ..Default::default()
         };
-        
+
         let auth_info = setup_authentication(&config);
         assert!(matches!(auth_info, AuthenticationInfo::Enabled(_)));
     }
