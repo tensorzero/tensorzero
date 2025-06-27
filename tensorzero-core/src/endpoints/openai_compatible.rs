@@ -1509,22 +1509,9 @@ mod tests {
             "type": "text",
             "my_custom_arg": 123
         }]);
-        let value = convert_openai_message_content(other_content.clone()).unwrap();
-        assert_eq!(
-            value,
-            vec![InputMessageContent::Text(TextKind::Arguments {
-                arguments: json!({
-                    "type": "text",
-                    "my_custom_arg": 123
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
-            })]
-        );
-        assert!(logs_contain(
-            r#"Content block `{"type":"text","my_custom_arg":123}` was not a valid OpenAI content block."#
-        ));
+        let err = convert_openai_message_content(other_content.clone())
+            .expect_err("Should not accept invalid block");
+        assert_eq!(err.to_string(), "Invalid request to OpenAI-compatible endpoint: Invalid content block: Either `text` or `tensorzero::arguments` must be set when using `\"type\": \"text\"`");
     }
 
     #[test]
