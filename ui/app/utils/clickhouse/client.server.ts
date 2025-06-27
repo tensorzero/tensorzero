@@ -35,7 +35,7 @@ export function getClickhouseClient(): ClickHouseClient {
         get(target, prop, receiver) {
           const propertyOrMethod = target[prop as keyof ClickHouseClient];
 
-          // Intercept the `query` method to catch errors and throw ClickHouseClientError
+          // Intercept the method to catch errors and throw ClickHouseClientError
           if (typeof propertyOrMethod === "function") {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             return function (...args: any[]) {
@@ -53,7 +53,7 @@ export function getClickhouseClient(): ClickHouseClient {
             };
           }
 
-          // otherwise, just forward the call to the original property/method
+          // Otherwise, just return the property
           return Reflect.get(target, prop, receiver);
         },
       },
