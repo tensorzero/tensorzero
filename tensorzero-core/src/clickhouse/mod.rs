@@ -405,7 +405,7 @@ impl ClickHouseConnectionInfo {
                 }
             }
         }
-        // Note - we do *not* run this is a normal migration
+        // Note - we do *not* run this as a normal migration
         // We decided to add this table after we had already created lots of migrations.
         // We create this table immediately after creating the database, so that
         // we can insert rows into it when running migrations
