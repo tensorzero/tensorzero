@@ -239,7 +239,7 @@ jobs:
         if: always()
         run: |
           ls -R ./target/nextest/
-          export BUILDKITE_ANALYTICS_TOKEN=$BUILDKITE_ANALYTICS_TOKEN_PROVIDER_PROXY
+          export BUILDKITE_ANALYTICS_TOKEN=${{ secrets.BUILDKITE_ANALYTICS_TOKEN_PROVIDER_PROXY }}
           curl \
           -X POST \
           -H "Authorization: Token token=\"$BUILDKITE_ANALYTICS_TOKEN\"" \
