@@ -2,13 +2,6 @@ import { createClient, type ClickHouseClient } from "@clickhouse/client";
 import { canUseDOM, isErrorLike } from "../common";
 import { getEnv } from "../env";
 
-// Ensure this only runs on the server. Vite's React Router plugin should ensure
-// this is unreachable since the filename ends with `.server.ts`, but this check
-// adds additional assurance.
-if (canUseDOM) {
-  throw new Error("clickhouseClient can only be used on the server side");
-}
-
 class ClickHouseClientError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
@@ -18,6 +11,15 @@ class ClickHouseClientError extends Error {
 
 let _clickhouseClient: ClickHouseClient | null = null;
 export function getClickhouseClient(): ClickHouseClient {
+  // Ensure this only runs on the server. Vite's React Router plugin should
+  // ensure this is unreachable since the filename ends with `.server.ts`, but
+  // this check adds additional assurance.
+  if (canUseDOM) {
+    throw new ClickHouseClientError(
+      "clickhouseClient can only be used on the server side",
+    );
+  }
+
   if (_clickhouseClient) {
     return _clickhouseClient;
   }
