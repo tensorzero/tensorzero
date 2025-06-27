@@ -16,9 +16,9 @@ from tensorzero import (
 from tensorzero.util import uuid7
 
 
-def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway):
-    rendered_inferences = embedded_sync_client.experimental_render_inferences(
-        stored_inferences=[
+def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
+    rendered_samples = embedded_sync_client.experimental_render_samples(
+        stored_samples=[
             StoredInference(
                 type="chat",
                 function_name="basic_test",
@@ -118,8 +118,8 @@ def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway)
         ],
         variants={"basic_test": "test", "json_success": "test"},
     )
-    assert len(rendered_inferences) == 2
-    chat_inference = rendered_inferences[0]
+    assert len(rendered_samples) == 2
+    chat_inference = rendered_samples[0]
 
     assert chat_inference.function_name == "basic_test"
     input = chat_inference.input
@@ -157,7 +157,7 @@ def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway)
     assert isinstance(content[2], UnknownContentBlock)
     assert content[2].type == "unknown"
     assert content[2].data == [{"woo": "hoo"}]
-    output = rendered_inferences[0].output
+    output = rendered_samples[0].output
 
     message = messages[2]
     assert message.role == "user"
@@ -173,7 +173,7 @@ def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway)
     assert isinstance(output[0], Text)
     assert output[0].type == "text"
     assert output[0].text == "Hello world"
-    tool_params = rendered_inferences[0].tool_params
+    tool_params = rendered_samples[0].tool_params
     assert tool_params is not None
     tools_available = tool_params.tools_available
     assert len(tools_available) == 1
@@ -186,9 +186,9 @@ def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway)
     # TODO: test this
     # assert tool_params.tool_choice == "auto"
     assert not tool_params.parallel_tool_calls
-    assert rendered_inferences[0].output_schema is None
+    assert rendered_samples[0].output_schema is None
 
-    json_inference = rendered_inferences[1]
+    json_inference = rendered_samples[1]
     assert json_inference.function_name == "json_success"
     input = json_inference.input
     # templating happens here
@@ -228,12 +228,12 @@ Example Response:
     }
 
 
-def test_sync_render_inferences_nonexistent_function(
+def test_sync_render_samples_nonexistent_function(
     embedded_sync_client: TensorZeroGateway,
 ):
-    """Test that render_inferences drops if the function does not exist at all."""
-    rendered_inferences = embedded_sync_client.experimental_render_inferences(
-        stored_inferences=[
+    """Test that render_samples drops if the function does not exist at all."""
+    rendered_samples = embedded_sync_client.experimental_render_samples(
+        stored_samples=[
             StoredInference(
                 type="chat",
                 function_name="non_existent_function",
@@ -261,15 +261,15 @@ def test_sync_render_inferences_nonexistent_function(
         variants={},
     )
     # TODO: test that the warning message is logged (we do this in Rust)
-    assert len(rendered_inferences) == 0
+    assert len(rendered_samples) == 0
 
 
-def test_sync_render_inferences_unspecified_function(
+def test_sync_render_samples_unspecified_function(
     embedded_sync_client: TensorZeroGateway,
 ):
-    """Test that render_inferences drops if the function is not specified in the variants map."""
-    rendered_inferences = embedded_sync_client.experimental_render_inferences(
-        stored_inferences=[
+    """Test that render_samples drops if the function is not specified in the variants map."""
+    rendered_samples = embedded_sync_client.experimental_render_samples(
+        stored_samples=[
             StoredInference(
                 type="chat",
                 function_name="non_existent_function",
@@ -296,15 +296,15 @@ def test_sync_render_inferences_unspecified_function(
         ],
         variants={},
     )
-    assert len(rendered_inferences) == 0
+    assert len(rendered_samples) == 0
     # TODO: test that the warning message is logged (we do this in Rust)
 
 
-def test_sync_render_inferences_no_variant(embedded_sync_client: TensorZeroGateway):
-    """Test that render_inferences drops an example if the variant is not found and logs a warning."""
+def test_sync_render_samples_no_variant(embedded_sync_client: TensorZeroGateway):
+    """Test that render_samples drops an example if the variant is not found and logs a warning."""
     with pytest.raises(Exception) as excinfo:
-        embedded_sync_client.experimental_render_inferences(
-            stored_inferences=[
+        embedded_sync_client.experimental_render_samples(
+            stored_samples=[
                 StoredInference(
                     type="chat",
                     function_name="basic_test",  # This function exists in the config
@@ -336,12 +336,12 @@ def test_sync_render_inferences_no_variant(embedded_sync_client: TensorZeroGatew
     )
 
 
-def test_sync_render_inferences_missing_variable(
+def test_sync_render_samples_missing_variable(
     embedded_sync_client: TensorZeroGateway,
 ):
-    """Test that render_inferences drops an example if a template variable is missing."""
-    rendered_inferences = embedded_sync_client.experimental_render_inferences(
-        stored_inferences=[
+    """Test that render_samples drops an example if a template variable is missing."""
+    rendered_samples = embedded_sync_client.experimental_render_samples(
+        stored_samples=[
             StoredInference(
                 type="chat",
                 function_name="basic_test",  # Uses assistant_name in system prompt
@@ -368,16 +368,16 @@ def test_sync_render_inferences_missing_variable(
         ],
         variants={"basic_test": "test"},
     )
-    assert len(rendered_inferences) == 0
+    assert len(rendered_samples) == 0
     # TODO: test that the warning message is logged (we do this in Rust)
 
 
 @pytest.mark.asyncio
-async def test_async_render_inferences_success(
+async def test_async_render_samples_success(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    rendered_inferences = await embedded_async_client.experimental_render_inferences(
-        stored_inferences=[
+    rendered_samples = await embedded_async_client.experimental_render_samples(
+        stored_samples=[
             StoredInference(
                 type="chat",
                 function_name="basic_test",
@@ -480,8 +480,8 @@ async def test_async_render_inferences_success(
         ],
         variants={"basic_test": "test", "json_success": "test"},
     )
-    assert len(rendered_inferences) == 2
-    chat_inference = rendered_inferences[0]
+    assert len(rendered_samples) == 2
+    chat_inference = rendered_samples[0]
 
     assert chat_inference.function_name == "basic_test"
     input = chat_inference.input
@@ -519,7 +519,7 @@ async def test_async_render_inferences_success(
     assert isinstance(content[2], UnknownContentBlock)
     assert content[2].type == "unknown"
     assert content[2].data == [{"woo": "hoo"}]
-    output = rendered_inferences[0].output
+    output = rendered_samples[0].output
 
     message = messages[2]
     assert message.role == "user"
@@ -536,7 +536,7 @@ async def test_async_render_inferences_success(
     assert output[0].type == "text"
     assert isinstance(output[0], Text)
     assert output[0].text == "Hello world"
-    tool_params = rendered_inferences[0].tool_params
+    tool_params = rendered_samples[0].tool_params
     assert tool_params is not None
     tools_available = tool_params.tools_available
     assert len(tools_available) == 1
@@ -549,9 +549,9 @@ async def test_async_render_inferences_success(
     # TODO: test this
     # assert tool_params.tool_choice == "auto"
     assert not tool_params.parallel_tool_calls
-    assert rendered_inferences[0].output_schema is None
+    assert rendered_samples[0].output_schema is None
 
-    json_inference = rendered_inferences[1]
+    json_inference = rendered_samples[1]
     assert json_inference.function_name == "json_success"
     input = json_inference.input
     # templating happens here
@@ -592,12 +592,12 @@ Example Response:
 
 
 @pytest.mark.asyncio
-async def test_async_render_inferences_nonexistent_function(
+async def test_async_render_samples_nonexistent_function(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    """Test that render_inferences drops if the function does not exist at all."""
-    rendered_inferences = await embedded_async_client.experimental_render_inferences(
-        stored_inferences=[
+    """Test that render_samples drops if the function does not exist at all."""
+    rendered_samples = await embedded_async_client.experimental_render_samples(
+        stored_samples=[
             StoredInference(
                 type="chat",
                 function_name="non_existent_function",
@@ -624,17 +624,17 @@ async def test_async_render_inferences_nonexistent_function(
         ],
         variants={},
     )
-    assert len(rendered_inferences) == 0
+    assert len(rendered_samples) == 0
     # TODO: test that the warning message is logged (we do this in Rust)
 
 
 @pytest.mark.asyncio
-async def test_async_render_inferences_unspecified_function(
+async def test_async_render_samples_unspecified_function(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    """Test that render_inferences drops if the function is not specified in the variants map."""
-    rendered_inferences = await embedded_async_client.experimental_render_inferences(
-        stored_inferences=[
+    """Test that render_samples drops if the function is not specified in the variants map."""
+    rendered_samples = await embedded_async_client.experimental_render_samples(
+        stored_samples=[
             StoredInference(
                 type="chat",
                 function_name="non_existent_function",
@@ -661,18 +661,18 @@ async def test_async_render_inferences_unspecified_function(
         ],
         variants={},
     )
-    assert len(rendered_inferences) == 0
+    assert len(rendered_samples) == 0
     # TODO: test that the warning message is logged (we do this in Rust)
 
 
 @pytest.mark.asyncio
-async def test_async_render_inferences_no_variant(
+async def test_async_render_samples_no_variant(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    """Test that render_inferences drops an example if the variant is not found and logs a warning."""
+    """Test that render_samples drops an example if the variant is not found and logs a warning."""
     with pytest.raises(Exception) as excinfo:
-        await embedded_async_client.experimental_render_inferences(
-            stored_inferences=[
+        await embedded_async_client.experimental_render_samples(
+            stored_samples=[
                 StoredInference(
                     type="chat",
                     function_name="basic_test",  # This function exists in the config
@@ -705,12 +705,12 @@ async def test_async_render_inferences_no_variant(
 
 
 @pytest.mark.asyncio
-async def test_async_render_inferences_missing_variable(
+async def test_async_render_samples_missing_variable(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    """Test that render_inferences drops an example if a template variable is missing."""
-    rendered_inferences = await embedded_async_client.experimental_render_inferences(
-        stored_inferences=[
+    """Test that render_samples drops an example if a template variable is missing."""
+    rendered_samples = await embedded_async_client.experimental_render_samples(
+        stored_samples=[
             StoredInference(
                 type="chat",
                 function_name="basic_test",  # Uses assistant_name in system prompt
@@ -737,5 +737,5 @@ async def test_async_render_inferences_missing_variable(
         ],
         variants={"basic_test": "test"},
     )
-    assert len(rendered_inferences) == 0
+    assert len(rendered_samples) == 0
     # TODO: test that the warning message is logged (we do this in Rust)
