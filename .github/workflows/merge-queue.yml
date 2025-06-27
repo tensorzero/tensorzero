@@ -238,8 +238,7 @@ jobs:
       - name: Upload test results to Buildkite
         if: always()
         run: |
-          ls ./target/nextest/e2e/
-          ls ./target/nextest/default/
+          ls -R ./target/nextest/
           export BUILDKITE_ANALYTICS_TOKEN=$BUILDKITE_ANALYTICS_TOKEN_PROVIDER_PROXY
           curl \
           -X POST \
