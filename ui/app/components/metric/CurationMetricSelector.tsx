@@ -207,6 +207,24 @@ export default function CurationMetricSelector<
                         className="group flex w-full cursor-pointer items-center justify-between"
                       >
                         <span>None</span>
+                        <span
+                          className={clsx(
+                            "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
+                            field.value === null
+                              ? "text-fg-secondary font-medium"
+                              : "text-fg-tertiary font-normal",
+                          )}
+                        >
+                          {metricsFetcher.data?.metrics
+                            ? metricsFetcher.data.metrics
+                                .reduce(
+                                  (total, metric) =>
+                                    total + metric.feedback_count,
+                                  0,
+                                )
+                                .toLocaleString()
+                            : "0"}
+                        </span>
                       </CommandItem>
                       {Object.entries(config.metrics)
                         .filter(
