@@ -156,8 +156,7 @@ export function DatasetSelector({
                                   : "text-fg-muted font-normal",
                               )}
                             >
-                              {inputValue.trim() ||
-                                "Start typing to create a new dataset..."}
+                              {inputValue.trim()}
                             </span>
                           </div>
                           <span
