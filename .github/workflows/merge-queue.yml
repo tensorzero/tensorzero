@@ -19,8 +19,8 @@ env:
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
   FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
   FORCE_COLOR: 1
-  GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
-  GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp_jwt_key.json
+  #GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
+  #GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp_jwt_key.json
   GCP_STORAGE_ACCESS_KEY_ID: ${{ secrets.GCP_STORAGE_ACCESS_KEY_ID }}
   GCP_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.GCP_STORAGE_SECRET_ACCESS_KEY }}
   GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
@@ -74,12 +74,11 @@ jobs:
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
 
       - uses: dtolnay/rust-toolchain@stable
-      # Start testing workload identity federation credentials once the SDK adds support: https://github.com/googleapis/google-cloud-rust/issues/1342
 
-      # - uses: 'google-github-actions/auth@v2'
-      #   with:
-      #     project_id: 'tensozero-public'
-      #     workload_identity_provider: 'projects/454541351720/locations/global/workloadIdentityPools/github/providers/tensorzero'
+      - uses: 'google-github-actions/auth@v2'
+        with:
+          project_id: 'tensozero-public'
+          workload_identity_provider: 'projects/454541351720/locations/global/workloadIdentityPools/github/providers/tensorzero'
 
       - name: Print Rust version
         run: rustc --version
