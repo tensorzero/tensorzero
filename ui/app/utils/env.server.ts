@@ -1,3 +1,5 @@
+// This is the only file in which `process.env` should be accessed directly.
+
 class EnvironmentVariableError extends Error {
   constructor(
     public message: string,
@@ -24,8 +26,6 @@ let _env: Env;
  * process.env directly. This ensures that required environment variables are
  * only checked in specific call-sites rather than at the module level, allowing
  * for better error handling and testing.
- *
- * TODO: Add a lint rule to enforce this pattern.
  */
 export function getEnv(): Env {
   if (_env) {

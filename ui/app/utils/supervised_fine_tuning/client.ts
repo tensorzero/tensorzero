@@ -11,7 +11,7 @@ import type {
   OptimizerStatus,
 } from "tensorzero-node";
 import { getConfig } from "~/utils/config/index.server";
-import { getEnv } from "../env";
+import { getEnv } from "../env.server";
 
 let _tensorZeroClient: TensorZeroClient | undefined;
 async function getTensorZeroClient(): Promise<TensorZeroClient> {

@@ -5,7 +5,7 @@ import {
   EvaluationErrorSchema,
   type DisplayEvaluationError,
 } from "./evaluations";
-import { getEnv } from "./env";
+import { getEnv } from "./env.server";
 /**
  * Get the path to the evaluations binary from environment variables.
  * Defaults to 'evaluations' if not specified.

@@ -6,7 +6,7 @@ import {
   type FeedbackResponse,
   type JSONValue,
 } from "~/utils/tensorzero";
-import { getEnv } from "./env";
+import { getEnv } from "./env.server";
 
 let _tensorZeroClient: TensorZeroClient | undefined;
 

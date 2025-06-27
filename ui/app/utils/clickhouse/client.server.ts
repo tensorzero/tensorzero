@@ -1,6 +1,6 @@
 import { createClient, type ClickHouseClient } from "@clickhouse/client";
 import { canUseDOM, isErrorLike } from "../common";
-import { getEnv } from "../env";
+import { getEnv } from "../env.server";
 
 class ClickHouseClientError extends Error {
   constructor(message: string, options?: ErrorOptions) {
