@@ -30,7 +30,7 @@ const Chip: React.FC<ChipProps> = ({
   iconBg = "bg-none",
 }) => {
   const baseClasses =
-    "inline-flex text-sm text-fg-primary py-1 px-0 md:px-2 gap-1.5 rounded-md whitespace-nowrap overflow-hidden";
+    "inline-flex text-sm text-fg-primary px-0 md:px-2 gap-1.5 rounded-md whitespace-nowrap overflow-hidden";
   const hoverClasses = link ? "md:hover:bg-bg-hover cursor-pointer" : "";
   const fontClasses = font === "mono" ? "font-mono" : "font-sans";
   const combinedClasses = clsx(

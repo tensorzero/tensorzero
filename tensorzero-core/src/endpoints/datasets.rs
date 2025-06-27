@@ -198,6 +198,7 @@ async fn insert_from_existing(
                 tags: Some(inference.tags),
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
+                is_custom: true,
                 source_inference_id: Some(existing.inference_id),
                 staled_at: None,
             };
@@ -235,6 +236,7 @@ async fn insert_from_existing(
                 tags: Some(inference.tags),
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
+                is_custom: true,
                 source_inference_id: Some(existing.inference_id),
                 staled_at: None,
             };
@@ -357,6 +359,7 @@ pub async fn update_datapoint_handler(
                 tags: chat.tags,
                 auxiliary: chat.auxiliary,
                 is_deleted: false,
+                is_custom: true,
                 source_inference_id: chat.source_inference_id,
                 staled_at: None,
             };
@@ -420,6 +423,7 @@ pub async fn update_datapoint_handler(
                 tags: json.tags,
                 auxiliary: json.auxiliary,
                 is_deleted: false,
+                is_custom: true,
                 source_inference_id: json.source_inference_id,
                 staled_at: None,
             };
@@ -572,6 +576,7 @@ pub async fn insert_datapoint(
                     tags: chat.tags,
                     auxiliary: "".to_string(),
                     is_deleted: false,
+                    is_custom: true,
                     source_inference_id: None,
                     staled_at: None,
                 })
@@ -647,6 +652,7 @@ pub async fn insert_datapoint(
                     tags: json.tags,
                     auxiliary: "".to_string(),
                     is_deleted: false,
+                    is_custom: true,
                     source_inference_id: None,
                     staled_at: None,
                 };
@@ -706,18 +712,18 @@ pub async fn delete_datapoint(
     let json_delete_query = r#"
     INSERT INTO JsonInferenceDatapoint
     (dataset_name, function_name, id, episode_id, input, output, output_schema,
-     tags, auxiliary, is_deleted, source_inference_id, updated_at, staled_at)
+     tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
     SELECT dataset_name, function_name, id, episode_id, input, output, output_schema,
-           tags, auxiliary, is_deleted, source_inference_id, now64(), now64()
+           tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
     FROM JsonInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
 "#;
     let chat_delete_query = r#"
     INSERT INTO ChatInferenceDatapoint
     (dataset_name, function_name, id, episode_id, input, output, tool_params,
-     tags, auxiliary, is_deleted, source_inference_id, updated_at, staled_at)
+     tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
     SELECT dataset_name, function_name, id, episode_id, input, output, tool_params,
-           tags, auxiliary, is_deleted, source_inference_id, now64(), now64()
+           tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
     FROM ChatInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
 "#;
@@ -797,6 +803,7 @@ pub async fn list_datapoints(
             auxiliary,
             source_inference_id,
             is_deleted,
+            is_custom,
             staled_at
         FROM ChatInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
@@ -824,6 +831,7 @@ pub async fn list_datapoints(
             auxiliary,
             source_inference_id,
             is_deleted,
+            is_custom,
             staled_at
         FROM JsonInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
@@ -956,6 +964,7 @@ pub async fn get_datapoint(
             auxiliary,
             source_inference_id,
             is_deleted,
+            is_custom,
             staled_at
         FROM ChatInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
@@ -975,6 +984,7 @@ pub async fn get_datapoint(
             auxiliary,
             source_inference_id,
             is_deleted,
+            is_custom,
             staled_at
         FROM JsonInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
@@ -1150,6 +1160,8 @@ pub struct ChatInferenceDatapoint {
     #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
     pub is_deleted: bool,
+    #[serde(default)]
+    pub is_custom: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
@@ -1178,6 +1190,8 @@ pub struct JsonInferenceDatapoint {
     #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
     pub is_deleted: bool,
+    #[serde(default)]
+    pub is_custom: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
@@ -1281,6 +1295,7 @@ async fn put_deduped_chat_datapoints(
             tags,
             auxiliary,
             is_deleted,
+            is_custom,
             source_inference_id
         )
         SELECT
@@ -1294,7 +1309,8 @@ async fn put_deduped_chat_datapoints(
             new_data.tags,
             new_data.auxiliary,
             new_data.is_deleted,
-            new_data.source_inference_id,
+            new_data.is_custom,
+            new_data.source_inference_id
         FROM new_data
         LEFT JOIN ChatInferenceDatapoint AS existing FINAL
           ON new_data.dataset_name = existing.dataset_name
@@ -1302,12 +1318,11 @@ async fn put_deduped_chat_datapoints(
              AND new_data.source_inference_id = existing.source_inference_id
              AND new_data.id != existing.id -- this is to allow us to update the datapoint and keep the same source_inference_id
              AND existing.staled_at IS NULL
-        WHERE existing.source_inference_id IS NULL
         "#;
 
     let external_data = ExternalDataInfo {
         external_data_name: "new_data".to_string(),
-        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, source_inference_id Nullable(UUID)".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID)".to_string(),
         format: "JSONEachRow".to_string(),
         data: serialized_datapoints.join("\n"),
     };
@@ -1345,6 +1360,7 @@ async fn put_deduped_json_datapoints(
             tags,
             auxiliary,
             is_deleted,
+            is_custom,
             source_inference_id
         )
         SELECT
@@ -1358,6 +1374,7 @@ async fn put_deduped_json_datapoints(
             new_data.tags,
             new_data.auxiliary,
             new_data.is_deleted,
+            new_data.is_custom,
             new_data.source_inference_id
         FROM new_data
         LEFT JOIN JsonInferenceDatapoint AS existing FINAL
@@ -1366,12 +1383,11 @@ async fn put_deduped_json_datapoints(
              AND new_data.source_inference_id = existing.source_inference_id
              AND new_data.id != existing.id -- this is to allow us to update the datapoint and keep the same source_inference_id
              AND existing.staled_at IS NULL
-        WHERE existing.source_inference_id IS NULL
         "#;
 
     let external_data = ExternalDataInfo {
         external_data_name: "new_data".to_string(),
-        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, source_inference_id Nullable(UUID)".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID)".to_string(),
         format: "JSONEachRow".to_string(),
         data: serialized_datapoints.join("\n"),
     };

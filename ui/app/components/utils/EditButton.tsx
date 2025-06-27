@@ -22,6 +22,8 @@ export function EditButton({ onClick, className }: EditButtonProps) {
             size="iconSm"
             onClick={onClick}
             className={className}
+            aria-label="Edit"
+            title="Edit"
           >
             <Pencil className="h-4 w-4" />
           </Button>

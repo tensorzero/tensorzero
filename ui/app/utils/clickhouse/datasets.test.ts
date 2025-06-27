@@ -450,6 +450,7 @@ describe("getDatapoint", () => {
       staled_at: null,
       updated_at: "2025-02-19T00:26:06Z",
       source_inference_id: null,
+      is_custom: false,
     });
   });
 
@@ -491,6 +492,7 @@ describe("getDatapoint", () => {
       updated_at: "2025-02-19T00:25:04Z",
       source_inference_id: null,
       tool_params: undefined,
+      is_custom: false,
     });
   });
 
@@ -540,6 +542,7 @@ describe("datapoint operations", () => {
       is_deleted: false,
       staled_at: null,
       source_inference_id,
+      is_custom: false,
     };
 
     // Test insertion
@@ -636,6 +639,7 @@ describe("datapoint operations", () => {
       is_deleted: false,
       staled_at: null,
       source_inference_id,
+      is_custom: false,
     };
 
     // Test insertion
@@ -724,6 +728,7 @@ describe("datapoint operations", () => {
       is_deleted: false,
       staled_at: null,
       source_inference_id,
+      is_custom: false,
     };
 
     // First insertion
@@ -899,6 +904,7 @@ describe("insertDatapoint", () => {
         is_deleted: false,
         staled_at: null,
         source_inference_id: null,
+        is_custom: true,
       }),
     ).rejects.toThrow();
   });
