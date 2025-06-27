@@ -145,12 +145,7 @@ export function DatasetSelector({
                               {inputValue.trim()}
                             </span>
                           </div>
-                          <span
-                            className={clsx(
-                              "text-bg-primary rounded-md bg-blue-600 px-2 py-1 text-xs",
-                              inputValue.trim() ? "font-medium" : "invisible",
-                            )}
-                          >
+                          <span className="text-bg-primary rounded-md bg-blue-600 px-2 py-1 text-xs font-medium">
                             Create New Dataset
                           </span>
                         </CommandItem>
