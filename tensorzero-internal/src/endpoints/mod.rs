@@ -9,6 +9,7 @@ pub mod dynamic_evaluation_run;
 pub mod fallback;
 pub mod feedback;
 pub mod inference;
+pub mod model_resolution;
 pub mod object_storage;
 pub mod openai_compatible;
 pub mod status;

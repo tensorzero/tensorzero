@@ -153,6 +153,7 @@ pub async fn inference_handler(
         http_client,
         clickhouse_connection_info,
         kafka_connection_info,
+        authentication_info: _,
     }): AppState,
     headers: HeaderMap,
     StructuredJson(mut params): StructuredJson<Params>,

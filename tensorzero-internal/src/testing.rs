@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
-use crate::gateway_util::AppStateData;
+use crate::gateway_util::{setup_authentication, AppStateData};
 use crate::kafka::KafkaConnectionInfo;
 
 pub fn get_unit_test_app_state_data(
@@ -16,9 +16,10 @@ pub fn get_unit_test_app_state_data(
     let kafka_connection_info = KafkaConnectionInfo::Disabled;
 
     AppStateData {
-        config,
+        config: config.clone(),
         http_client,
         clickhouse_connection_info,
         kafka_connection_info,
+        authentication_info: setup_authentication(&config),
     }
 }

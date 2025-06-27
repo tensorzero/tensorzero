@@ -15,13 +15,13 @@ use tokio::signal;
 use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
 
-use tensorzero_internal::auth::{require_api_key, Auth};
+use tensorzero_internal::auth::require_api_key;
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::config_parser::Config;
 use tensorzero_internal::endpoints;
 use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_internal::error;
-use tensorzero_internal::gateway_util;
+use tensorzero_internal::gateway_util::{self, AuthenticationInfo};
 use tensorzero_internal::observability::{self, LogFormat, RouterExt};
 use tensorzero_internal::redis_client::RedisClient;
 
@@ -172,19 +172,21 @@ async fn main() {
         .await
         .expect_pretty("Failed to initialize AppState");
 
-    // Initialize Auth with any API keys provided in the config
-    let auth = Auth::new(config.api_keys.clone());
-
-    // Setup Redis client with both app_state and auth
-    if let Ok(redis_url) = std::env::var("TENSORZERO_REDIS_URL") {
-        if !redis_url.is_empty() {
-            let redis_client = RedisClient::new(&redis_url, app_state.clone(), auth.clone()).await;
-            redis_client
-                .start()
-                .await
-                .expect_pretty("Failed to start Redis client");
-        } else {
-            tracing::warn!("TENSORZERO_REDIS_URL is empty, so Redis client will not be started");
+    // Setup Redis client if authentication is enabled
+    if let AuthenticationInfo::Enabled(ref auth) = app_state.authentication_info {
+        if let Ok(redis_url) = std::env::var("TENSORZERO_REDIS_URL") {
+            if !redis_url.is_empty() {
+                let redis_client =
+                    RedisClient::new(&redis_url, app_state.clone(), auth.clone()).await;
+                redis_client
+                    .start()
+                    .await
+                    .expect_pretty("Failed to start Redis client");
+            } else {
+                tracing::warn!(
+                    "TENSORZERO_REDIS_URL is empty, so Redis client will not be started"
+                );
+            }
         }
     }
 
@@ -199,11 +201,17 @@ async fn main() {
         }
     };
 
+    // Create authentication status string for logging
+    let authentication_enabled_pretty = match &app_state.authentication_info {
+        AuthenticationInfo::Disabled => "disabled",
+        AuthenticationInfo::Enabled(_) => "enabled",
+    };
+
     // Set debug mode
     error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");
 
-    // Routes that require authentication
-    let authenticated_routes = Router::new()
+    // OpenAI-compatible routes (conditionally authenticated)
+    let openai_routes = Router::new()
         .route(
             "/v1/chat/completions",
             post(endpoints::openai_compatible::inference_handler),
@@ -211,11 +219,15 @@ async fn main() {
         .route(
             "/v1/embeddings",
             post(endpoints::openai_compatible::embedding_handler),
-        )
-        .layer(axum::middleware::from_fn_with_state(
-            auth.clone(),
-            require_api_key,
-        ));
+        );
+
+    // Apply authentication middleware only if authentication is enabled
+    let openai_routes = match &app_state.authentication_info {
+        AuthenticationInfo::Enabled(auth) => openai_routes.layer(
+            axum::middleware::from_fn_with_state(auth.clone(), require_api_key),
+        ),
+        AuthenticationInfo::Disabled => openai_routes,
+    };
 
     // Routes that don't require authentication
     let public_routes = Router::new()
@@ -282,7 +294,7 @@ async fn main() {
         );
 
     let router = Router::new()
-        .merge(authenticated_routes)
+        .merge(openai_routes)
         .merge(public_routes)
         .fallback(endpoints::fallback::handle_404)
         .layer(axum::middleware::from_fn(add_version_header))
@@ -326,7 +338,7 @@ async fn main() {
     };
 
     tracing::info!(
-        "TensorZero Gateway is listening on {actual_bind_address} with {config_path_pretty} and observability {observability_enabled_pretty}.",
+        "TensorZero Gateway is listening on {actual_bind_address} with {config_path_pretty}, observability {observability_enabled_pretty}, and authentication {authentication_enabled_pretty}.",
     );
 
     axum::serve(listener, router)

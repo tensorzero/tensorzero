@@ -45,6 +45,7 @@ use super::inference::{
     InferenceCredentials, InferenceOutput, InferenceResponse, InferenceResponseChunk,
     InferenceStream,
 };
+use super::model_resolution;
 use crate::embeddings::EmbeddingRequest;
 
 /// A handler for the OpenAI-compatible inference endpoint
@@ -55,6 +56,7 @@ pub async fn inference_handler(
         http_client,
         clickhouse_connection_info,
         kafka_connection_info,
+        authentication_info: _,
     }): AppState,
     headers: HeaderMap,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
@@ -71,33 +73,21 @@ pub async fn inference_handler(
     let stream_options = openai_compatible_params.stream_options;
     let logprobs_requested = matches!(openai_compatible_params.logprobs, Some(true));
 
-    // Check if we have the original model name from the auth middleware
-    let original_model_name =
-        if let Some(original_model) = headers.get("x-tensorzero-original-model") {
-            original_model
-                .to_str()
-                .unwrap_or(&openai_compatible_params.model)
-                .to_string()
-        } else {
-            // Fallback to extracting from the prefixed model name
-            if let Some(model_name) = openai_compatible_params
-                .model
-                .strip_prefix("tensorzero::model_name::")
-            {
-                model_name.to_string()
-            } else if let Some(_function_name) = openai_compatible_params
-                .model
-                .strip_prefix("tensorzero::function_name::")
-            {
-                // For function-based requests, keep the full format
-                openai_compatible_params.model.clone()
-            } else {
-                // Fallback to the full model name if no prefix found
-                openai_compatible_params.model.clone()
-            }
-        };
+    // Resolve the model name based on authentication state
+    let model_resolution = model_resolution::resolve_model_name(
+        &openai_compatible_params.model,
+        &headers,
+        false, // not for embedding
+    )?;
 
-    let mut params = Params::try_from_openai(headers.clone(), openai_compatible_params.clone())?;
+    let original_model_name = model_resolution.original_model_name.to_string();
+
+    // Create params with resolved model/function names
+    let mut params = Params::try_from_openai_with_resolution(
+        headers.clone(),
+        openai_compatible_params.clone(),
+        model_resolution,
+    )?;
 
     // If the caller asked for logprobs, we need the raw provider response so we can
     // copy logprobs back out later.  That is enabled via `include_original_response`.
@@ -431,14 +421,44 @@ struct OpenAICompatibleResponse {
     usage: OpenAICompatibleUsage,
 }
 
-const TENSORZERO_FUNCTION_NAME_PREFIX: &str = "tensorzero::function_name::";
-const TENSORZERO_MODEL_NAME_PREFIX: &str = "tensorzero::model_name::";
-
 impl Params {
+    fn try_from_openai_with_resolution(
+        headers: HeaderMap,
+        openai_compatible_params: OpenAICompatibleParams,
+        model_resolution: model_resolution::ModelResolution,
+    ) -> Result<Self, Error> {
+        let function_name = model_resolution.function_name;
+        let model_name = model_resolution.model_name;
+
+        if let Some(function_name) = &function_name {
+            if function_name.is_empty() {
+                return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                    message: "function_name cannot be empty".to_string(),
+                }
+                .into());
+            }
+        }
+
+        if let Some(model_name) = &model_name {
+            if model_name.is_empty() {
+                return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                    message: "model_name cannot be empty".to_string(),
+                }
+                .into());
+            }
+        }
+
+        Self::create_params(headers, openai_compatible_params, function_name, model_name)
+    }
+
+    #[cfg(test)]
     fn try_from_openai(
         headers: HeaderMap,
         openai_compatible_params: OpenAICompatibleParams,
     ) -> Result<Self, Error> {
+        const TENSORZERO_FUNCTION_NAME_PREFIX: &str = "tensorzero::function_name::";
+        const TENSORZERO_MODEL_NAME_PREFIX: &str = "tensorzero::model_name::";
+
         let (function_name, model_name) = if let Some(function_name) = openai_compatible_params
             .model
             .strip_prefix(TENSORZERO_FUNCTION_NAME_PREFIX)
@@ -466,11 +486,9 @@ impl Params {
         if let Some(function_name) = &function_name {
             if function_name.is_empty() {
                 return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                message:
-                    "function_name (passed in model field after \"tensorzero::function_name::\") cannot be empty"
-                        .to_string(),
-            }
-            .into());
+                    message: "function_name (passed in model field after \"tensorzero::function_name::\") cannot be empty".to_string(),
+                }
+                .into());
             }
         }
 
@@ -483,6 +501,15 @@ impl Params {
             }
         }
 
+        Self::create_params(headers, openai_compatible_params, function_name, model_name)
+    }
+
+    fn create_params(
+        headers: HeaderMap,
+        openai_compatible_params: OpenAICompatibleParams,
+        function_name: Option<String>,
+        model_name: Option<String>,
+    ) -> Result<Self, Error> {
         let header_episode_id = headers
             .get("episode_id")
             .map(|h| {
@@ -1310,6 +1337,7 @@ pub async fn embedding_handler(
         http_client,
         clickhouse_connection_info,
         kafka_connection_info: _,
+        authentication_info: _,
     }): AppState,
     headers: HeaderMap,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
@@ -1328,32 +1356,20 @@ pub async fn embedding_handler(
         );
     }
 
-    // Extract the model ID for lookup (this is the UUID)
-    let model_id = if let Some(model_name) = openai_compatible_params
-        .model
-        .strip_prefix("tensorzero::embedding_model_name::")
-    {
-        model_name.to_string()
-    } else if let Some(model_name) = openai_compatible_params
-        .model
-        .strip_prefix("tensorzero::model_name::")
-    {
-        model_name.to_string()
-    } else {
-        // Fallback to the full model name if no prefix found
-        openai_compatible_params.model.clone()
-    };
+    // Resolve the model name based on authentication state
+    let model_resolution = model_resolution::resolve_model_name(
+        &openai_compatible_params.model,
+        &headers,
+        true, // for embedding
+    )?;
 
-    // Get the original model name from header for error messages
-    let original_model_name =
-        if let Some(original_model) = headers.get("x-tensorzero-original-model") {
-            original_model
-                .to_str()
-                .unwrap_or(&openai_compatible_params.model)
-                .to_string()
-        } else {
-            model_id.clone()
-        };
+    let model_id = model_resolution.model_name.ok_or_else(|| {
+        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+            message: "Embedding requests must specify a model, not a function".to_string(),
+        })
+    })?;
+
+    let original_model_name = model_resolution.original_model_name.to_string();
 
     // Convert OpenAI request to internal format
     let internal_input = match &openai_compatible_params.input {

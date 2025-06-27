@@ -109,6 +109,7 @@ pub async fn start_batch_inference_handler(
         http_client,
         clickhouse_connection_info,
         kafka_connection_info: _,
+        authentication_info: _,
     }): AppState,
     StructuredJson(params): StructuredJson<StartBatchInferenceParams>,
 ) -> Result<Response<Body>, Error> {
@@ -338,6 +339,7 @@ pub async fn poll_batch_inference_handler(
         http_client,
         clickhouse_connection_info,
         kafka_connection_info: _,
+        authentication_info: _,
     }): AppState,
     Path(path_params): Path<PollPathParams>,
 ) -> Result<Response<Body>, Error> {
