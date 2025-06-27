@@ -23,6 +23,7 @@ impl TensorZeroClient {
             config_file: Some(Path::new(&config_path).to_path_buf()),
             clickhouse_url,
             timeout: timeout.map(Duration::from_secs_f64),
+            verify_credentials: false,
         })
         .build()
         .await

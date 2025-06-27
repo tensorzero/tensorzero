@@ -211,6 +211,7 @@ pub enum ClientBuilderMode {
         /// A timeout for all TensorZero gateway processing.
         /// If this timeout is hit, any in-progress LLM requests may be aborted.
         timeout: Option<std::time::Duration>,
+        verify_credentials: bool,
     },
 }
 
@@ -257,16 +258,20 @@ impl ClientBuilder {
                 config_file,
                 clickhouse_url,
                 timeout,
+                verify_credentials,
             } => {
                 let config = if let Some(config_file) = config_file {
                     Arc::new(
-                        Config::load_and_verify_from_path(config_file)
-                            .await
-                            .map_err(|e| {
-                                ClientBuilderError::ConfigParsing(TensorZeroError::Other {
-                                    source: e.into(),
-                                })
-                            })?,
+                        Config::load_from_path_optional_verify_credentials(
+                            config_file,
+                            *verify_credentials,
+                        )
+                        .await
+                        .map_err(|e| {
+                            ClientBuilderError::ConfigParsing(TensorZeroError::Other {
+                                source: e.into(),
+                            })
+                        })?,
                     )
                 } else {
                     tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
@@ -1208,6 +1213,7 @@ mod tests {
             )),
             clickhouse_url: None,
             timeout: None,
+            verify_credentials: true,
         })
         .build()
         .await
@@ -1229,6 +1235,7 @@ mod tests {
             )),
             clickhouse_url: None,
             timeout: None,
+            verify_credentials: true,
         })
         .build()
         .await
@@ -1246,6 +1253,7 @@ mod tests {
             config_file: None,
             clickhouse_url: None,
             timeout: None,
+            verify_credentials: true,
         })
         .build()
         .await
