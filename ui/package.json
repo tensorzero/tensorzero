@@ -20,7 +20,6 @@
   },
   "dependencies": {
     "@clickhouse/client": "^1.11.0",
-    "tensorzero-node": "file:../internal/tensorzero-node",
     "@eslint/js": "^9.23.0",
     "@hookform/resolvers": "^5.0.1",
     "@radix-ui/react-accordion": "^1.2.11",
@@ -63,6 +62,7 @@
     "smol-toml": "^1.3.1",
     "tailwind-merge": "^3.1.0",
     "tailwindcss-animate": "^1.0.7",
+    "tensorzero-node": "file:../internal/tensorzero-node",
     "tiktoken": "^1.0.20",
     "typescript-eslint": "^8.29.0",
     "uuid": "^11.1.0",
@@ -83,6 +83,7 @@
     "@types/react-dom": "^19.1.1",
     "@vitest/browser": "3.1.4",
     "@vitest/coverage-v8": "3.1.4",
+    "dotenv": "^16.5.0",
     "eslint": "^9.23.0",
     "eslint-plugin-storybook": "^9.0.4",
     "playwright": "^1.51.1",
