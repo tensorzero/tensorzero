@@ -32,11 +32,12 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
-    collect_chunks, Base64File, ChatInferenceDatabaseInsert, CollectChunksArgs,
-    ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
-    InferenceResultChunk, InferenceResultStream, Input, InternalJsonInferenceOutput,
-    JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
-    RequestMessage, ResolvedInput, ResolvedInputMessageContent, Usage,
+    collect_chunks, Base64File, ChatInferenceDatabaseInsert, ChatInferenceResultChunk,
+    CollectChunksArgs, ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason,
+    InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
+    InternalJsonInferenceOutput, JsonInferenceDatabaseInsert, JsonInferenceOutput,
+    JsonInferenceResultChunk, ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput,
+    ResolvedInputMessageContent, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
@@ -590,32 +591,31 @@ fn create_stream(
         if let Some(extra_usage) = extra_usage {
             let usage_chunk = match &*function {
                 FunctionConfig::Chat(_model_provider) => {
-                    InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
-                        inference_id: metadata.inference_id,
-                        episode_id: metadata.episode_id,
-                        variant_name: metadata.variant_name.clone(),
+                    InferenceResultChunk::Chat(ChatInferenceResultChunk {
+                        created: 0,
                         content: vec![],
                         usage: Some(extra_usage),
                         finish_reason: None,
-                        original_chunk: None,
+                        latency: Duration::from_millis(0),
+                        raw_response: "".to_string(),
                     })
                 }
                 FunctionConfig::Json(_) => {
-                    InferenceResponseChunk::Json(JsonInferenceResponseChunk {
-                        inference_id: metadata.inference_id,
-                        episode_id: metadata.episode_id,
-                        variant_name: metadata.variant_name.clone(),
-                        raw: "".to_string(),
-                        finish_reason: None,
-                        original_chunk: None,
+                    InferenceResultChunk::Json(JsonInferenceResultChunk {
+                        thought: None,
+                        created: 0,
                         usage: Some(extra_usage),
+                        latency: Duration::from_millis(0),
+                        raw: None,
+                        raw_response: "".to_string(),
+                        finish_reason: None,
                     })
                 }
             };
-            // Don't add it to `buffer`, as we don't want to double-count the usage
-            // `collect_chunks` will correctly calculate the total usage based on
-            // `previous_model_inference_results`
-            yield Ok(usage_chunk);
+            buffer.push(usage_chunk.clone());
+            if let Some(chunk) = prepare_response_chunk(&metadata, usage_chunk, &mut None) {
+                yield Ok(chunk);
+            }
         }
         if !metadata.dryrun {
             // IMPORTANT: The following code will not be reached if the stream is interrupted.
@@ -683,11 +683,6 @@ fn create_stream(
                 if let Some(inference_response) = inference_response {
                     let mut inference_response = inference_response;
                     inference_response.mut_model_inference_results().extend(previous_model_inference_results);
-                    // If we didn't apply 'extra_usage' to any chunks, it won't have been counted
-                    // by 'collect_chunks' yet. Add it to the final usage.
-                    if let Some(extra_usage) = extra_usage {
-                        inference_response.set_usage(*inference_response.usage() + extra_usage);
-                    }
                     let write_metadata = InferenceDatabaseInsertMetadata {
                         function_name,
                         variant_name,
