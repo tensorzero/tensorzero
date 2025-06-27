@@ -66,6 +66,8 @@ pub struct GatewayConfig {
     #[serde(default)]
     pub observability: ObservabilityConfig,
     #[serde(default)]
+    pub authentication: AuthenticationConfig,
+    #[serde(default)]
     pub debug: bool,
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
     /// Defaults to `false`
@@ -240,6 +242,12 @@ pub struct ObservabilityConfig {
     #[serde(default)]
     pub async_writes: bool,
     pub kafka: Option<crate::kafka::KafkaConfig>,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct AuthenticationConfig {
+    pub enabled: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq)]

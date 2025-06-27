@@ -22,7 +22,7 @@ use tensorzero_internal::{
         validate_tags,
     },
     error::{Error, ErrorDetails},
-    gateway_util::{setup_clickhouse, setup_http_client, AppStateData},
+    gateway_util::{setup_authentication, setup_clickhouse, setup_http_client, AppStateData},
 };
 use thiserror::Error;
 use tokio::{sync::Mutex, time::error::Elapsed};
@@ -288,11 +288,12 @@ impl ClientBuilder {
                     mode: ClientMode::EmbeddedGateway {
                         gateway: EmbeddedGateway {
                             state: AppStateData {
-                                config,
+                                config: config.clone(),
                                 http_client,
                                 clickhouse_connection_info,
                                 kafka_connection_info:
                                     tensorzero_internal::kafka::KafkaConnectionInfo::Disabled,
+                                authentication_info: setup_authentication(&config),
                             },
                         },
                         timeout: *timeout,

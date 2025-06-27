@@ -11,6 +11,7 @@ use serde::de::DeserializeOwned;
 use tokio::sync::oneshot::Sender;
 use tracing::instrument;
 
+use crate::auth::Auth;
 use crate::clickhouse::migration_manager;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
@@ -18,6 +19,14 @@ use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::kafka::KafkaConnectionInfo;
 use crate::model::ModelTable;
+
+/// Represents the authentication state of the gateway
+#[derive(Clone)]
+pub enum AuthenticationInfo {
+    Enabled(Auth),
+    Disabled,
+}
+
 /// State for the API
 #[derive(Clone)]
 pub struct AppStateData {
@@ -25,6 +34,7 @@ pub struct AppStateData {
     pub http_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub kafka_connection_info: KafkaConnectionInfo,
+    pub authentication_info: AuthenticationInfo,
 }
 pub type AppState = axum::extract::State<AppStateData>;
 
@@ -48,12 +58,14 @@ impl AppStateData {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let kafka_connection_info = setup_kafka(&config).await?;
         let http_client = setup_http_client()?;
+        let authentication_info = setup_authentication(&config);
 
         Ok(Self {
             config,
             http_client,
             clickhouse_connection_info,
             kafka_connection_info,
+            authentication_info,
         })
     }
     pub async fn update_model_table(&self, mut new_models: ModelTable) {
@@ -149,6 +161,23 @@ pub async fn setup_kafka(config: &Config<'static>) -> Result<KafkaConnectionInfo
         _ => {
             tracing::info!("Kafka integration is disabled");
             Ok(KafkaConnectionInfo::Disabled)
+        }
+    }
+}
+
+pub fn setup_authentication(config: &Config<'static>) -> AuthenticationInfo {
+    match config.gateway.authentication.enabled {
+        Some(false) => {
+            tracing::info!("Authentication explicitly disabled via configuration");
+            AuthenticationInfo::Disabled
+        }
+        Some(true) | None => {
+            if config.api_keys.is_empty() {
+                if config.gateway.authentication.enabled == Some(true) {
+                    tracing::warn!("Authentication enabled but no API keys configured");
+                }
+            }
+            AuthenticationInfo::Enabled(Auth::new(config.api_keys.clone()))
         }
     }
 }
@@ -286,7 +315,8 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
-    use crate::config_parser::{GatewayConfig, ObservabilityConfig};
+    use crate::config_parser::{AuthenticationConfig, GatewayConfig, ObservabilityConfig};
+    use std::collections::HashMap;
 
     #[tokio::test]
     #[traced_test]
@@ -298,6 +328,7 @@ mod tests {
                 async_writes: false,
                 kafka: None,
             },
+            authentication: AuthenticationConfig::default(),
             bind_address: None,
             debug: false,
             enable_template_filesystem_access: false,
@@ -325,6 +356,7 @@ mod tests {
                 async_writes: false,
                 kafka: None,
             },
+            authentication: AuthenticationConfig::default(),
             ..Default::default()
         };
         let config = Box::leak(Box::new(Config {
@@ -351,6 +383,7 @@ mod tests {
                 async_writes: false,
                 kafka: None,
             },
+            authentication: AuthenticationConfig::default(),
             bind_address: None,
             debug: false,
             enable_template_filesystem_access: false,
@@ -374,6 +407,7 @@ mod tests {
                 async_writes: false,
                 kafka: None,
             },
+            authentication: AuthenticationConfig::default(),
             bind_address: None,
             debug: false,
             enable_template_filesystem_access: false,
@@ -389,6 +423,89 @@ mod tests {
         assert!(logs_contain("Invalid ClickHouse database URL"));
     }
 
+    #[test]
+    fn test_setup_authentication() {
+        // Test explicitly disabled authentication
+        let gateway_config = GatewayConfig {
+            authentication: AuthenticationConfig {
+                enabled: Some(false),
+            },
+            ..Default::default()
+        };
+        let config = Config {
+            gateway: gateway_config,
+            api_keys: HashMap::from([("test_key".to_string(), HashMap::new())]),
+            ..Default::default()
+        };
+        
+        let auth_info = setup_authentication(&config);
+        assert!(matches!(auth_info, AuthenticationInfo::Disabled));
+        
+        // Test explicitly enabled authentication with API keys
+        let gateway_config = GatewayConfig {
+            authentication: AuthenticationConfig {
+                enabled: Some(true),
+            },
+            ..Default::default()
+        };
+        let config = Config {
+            gateway: gateway_config,
+            api_keys: HashMap::from([("test_key".to_string(), HashMap::new())]),
+            ..Default::default()
+        };
+        
+        let auth_info = setup_authentication(&config);
+        assert!(matches!(auth_info, AuthenticationInfo::Enabled(_)));
+        
+        // Test explicitly enabled authentication without API keys (should still enable)
+        let gateway_config = GatewayConfig {
+            authentication: AuthenticationConfig {
+                enabled: Some(true),
+            },
+            ..Default::default()
+        };
+        let config = Config {
+            gateway: gateway_config,
+            api_keys: HashMap::new(),
+            ..Default::default()
+        };
+        
+        let auth_info = setup_authentication(&config);
+        assert!(matches!(auth_info, AuthenticationInfo::Enabled(_)));
+        
+        // Test default authentication (None) with API keys (should enable)
+        let gateway_config = GatewayConfig {
+            authentication: AuthenticationConfig {
+                enabled: None,
+            },
+            ..Default::default()
+        };
+        let config = Config {
+            gateway: gateway_config,
+            api_keys: HashMap::from([("test_key".to_string(), HashMap::new())]),
+            ..Default::default()
+        };
+        
+        let auth_info = setup_authentication(&config);
+        assert!(matches!(auth_info, AuthenticationInfo::Enabled(_)));
+        
+        // Test default authentication (None) without API keys (should still enable for backward compatibility)
+        let gateway_config = GatewayConfig {
+            authentication: AuthenticationConfig {
+                enabled: None,
+            },
+            ..Default::default()
+        };
+        let config = Config {
+            gateway: gateway_config,
+            api_keys: HashMap::new(),
+            ..Default::default()
+        };
+        
+        let auth_info = setup_authentication(&config);
+        assert!(matches!(auth_info, AuthenticationInfo::Enabled(_)));
+    }
+
     #[tokio::test]
     #[traced_test]
     async fn test_unhealthy_clickhouse() {
@@ -399,6 +516,7 @@ mod tests {
                 async_writes: false,
                 kafka: None,
             },
+            authentication: AuthenticationConfig::default(),
             bind_address: None,
             debug: false,
             enable_template_filesystem_access: false,

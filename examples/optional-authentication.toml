@@ -1,0 +1,50 @@
+# Example configuration showing how to disable authentication
+# This is useful for development, testing, and internal deployments
+
+[models.openai_gpt_4o_mini]
+type = "openai"
+model_id = "gpt-4o-mini"
+api_key_env_var = "OPENAI_API_KEY"
+
+[functions.generate_story]
+type = "chat"
+system_schema = "system.minijinja"
+user_schema = "user.minijinja"
+
+[[functions.generate_story.variants]]
+weight = 1
+type = "chat_completion"
+model = "openai_gpt_4o_mini"
+
+[metrics.story_rating]
+type = "float"
+optimize = "max"
+level = "inference"
+
+[gateway]
+# Bind to a specific address (optional)
+bind_address = "0.0.0.0:3000"
+
+# Authentication configuration
+[gateway.authentication]
+# Set to false to disable authentication for all endpoints
+# WARNING: Only use this in trusted environments!
+enabled = false
+
+# When authentication is disabled:
+# - OpenAI-compatible endpoints (/v1/chat/completions, /v1/embeddings) 
+#   will be accessible without API keys
+# - Other endpoints remain unaffected
+# - Redis-based dynamic API key updates are disabled
+
+# Default behavior (when not specified or set to null):
+# - Authentication is enabled
+# - API keys are required for OpenAI-compatible endpoints
+
+# Example: Explicitly enable authentication (default behavior)
+# [gateway.authentication]
+# enabled = true
+
+[gateway.observability]
+# Similar pattern for observability configuration
+enabled = false
