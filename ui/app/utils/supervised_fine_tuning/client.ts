@@ -19,19 +19,12 @@ async function getTensorZeroClient(): Promise<TensorZeroClient> {
     return _tensorZeroClient;
   }
 
-  const configPath = process.env.TENSORZERO_UI_CONFIG_PATH;
-  if (!configPath) {
-    throw new Error("TENSORZERO_UI_CONFIG_PATH is not set");
-  }
-  const clickhouseUrl = process.env.TENSORZERO_CLICKHOUSE_URL;
-  if (!clickhouseUrl) {
-    throw new Error("TENSORZERO_CLICKHOUSE_URL is not set");
-  }
-
-  // Create a new client instance
-  const client = await TensorZeroClient.build(configPath, clickhouseUrl);
-  _tensorZeroClient = client;
-  return client;
+  const env = getEnv();
+  _tensorZeroClient = await TensorZeroClient.build(
+    env.TENSORZERO_UI_CONFIG_PATH,
+    env.TENSORZERO_CLICKHOUSE_URL,
+  );
+  return _tensorZeroClient;
 }
 
 export function launch_sft_job(data: SFTFormValues): Promise<SFTJob> {
