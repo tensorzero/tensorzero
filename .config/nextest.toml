@@ -1,7 +1,6 @@
 nextest-version = { recommended = "0.9.87" }
 
 [profile.default]
-junit = { path = "nextest-junit.xml" }
 retries = { backoff = "fixed", count = 2, delay = "5s", jitter = true }
 slow-timeout = { period = "10s", terminate-after = 3 }
 # We look for tests with names containing "no_aws_credentials"
@@ -22,6 +21,7 @@ default-filter = "not test(no_aws_credentials)"
 # The profile can be set with '--profile <profile-name>' when using 'cargo nextest run',
 # We also define cargo aliases for common use-cases (e.g. `cargo test-e2e`)
 [profile.e2e]
+junit = { path = "nextest-junit.xml" }
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 default-filter = "not (test(batch)) and not (test(test_dummy_only) | test(clickhouse))"
 
