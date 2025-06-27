@@ -19,7 +19,7 @@ env:
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
   FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
   FORCE_COLOR: 1
-  #GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
+  GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
   #GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp_jwt_key.json
   GCP_STORAGE_ACCESS_KEY_ID: ${{ secrets.GCP_STORAGE_ACCESS_KEY_ID }}
   GCP_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.GCP_STORAGE_SECRET_ACCESS_KEY }}
