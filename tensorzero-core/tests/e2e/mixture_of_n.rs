@@ -200,6 +200,8 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
         }
     }
 
+    // Each model stream response uses 2 output tokens
+    // We have 3 candidates and 1 fuser, so 4*2=8 output tokens
     if stream {
         assert_eq!(
             usage_sum,
@@ -230,7 +232,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             }
         );
     } else {
-        //assert_eq!(usage_sum, output_usage);
+        assert_eq!(usage_sum, output_usage);
     }
 
     // Check that all expected model names are present
