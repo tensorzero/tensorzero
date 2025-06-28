@@ -188,7 +188,7 @@ impl ModerationCategory {
 }
 
 /// Categories flagged by the moderation API
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ModerationCategories {
     pub hate: bool,
     #[serde(rename = "hate/threatening")]
@@ -211,7 +211,7 @@ pub struct ModerationCategories {
 }
 
 /// Confidence scores for each moderation category
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ModerationCategoryScores {
     pub hate: f32,
     #[serde(rename = "hate/threatening")]
@@ -234,7 +234,7 @@ pub struct ModerationCategoryScores {
 }
 
 /// Result for a single text input
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModerationResult {
     pub flagged: bool,
     pub categories: ModerationCategories,
@@ -507,7 +507,6 @@ pub async fn handle_moderation_request(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
     #[test]
     fn test_moderation_input_single() {
@@ -634,8 +633,9 @@ mod tests {
             },
             raw_request: "test request".to_string(),
             raw_response: "test response".to_string(),
-            input_tokens: Some(10),
-            output_tokens: Some(5),
+            input_tokens: 10,
+            output_tokens: 5,
+            finish_reason: None,
         };
 
         let request = ModerationRequest {

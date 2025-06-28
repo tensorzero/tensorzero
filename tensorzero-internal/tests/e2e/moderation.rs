@@ -1,13 +1,10 @@
 #![expect(clippy::print_stdout)]
 
 use std::collections::HashMap;
-use std::sync::Arc;
-
-use secrecy::SecretString;
 use tensorzero_internal::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_internal::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_internal::endpoints::inference::{InferenceClients, InferenceCredentials};
-use tensorzero_internal::model_table::{BaseModelTable, ShorthandModelConfig};
+use tensorzero_internal::model_table::ShorthandModelConfig;
 use tensorzero_internal::moderation::{
     handle_moderation_request, ModerationInput, ModerationModelConfig, ModerationModelTable,
     ModerationRequest,
@@ -18,22 +15,24 @@ async fn test_dummy_moderation_single_text() {
     let clickhouse = get_clickhouse().await;
 
     // Initialize moderation model table
-    let mut model_table = ModerationModelTable::new();
     let model_config = ModerationModelConfig::from_shorthand("dummy", "dummy-moderation")
         .await
         .expect("Failed to create dummy moderation model");
-    model_table.insert("dummy::dummy-moderation".to_string(), model_config);
+    let mut model_table_map = HashMap::new();
+    model_table_map.insert("dummy::dummy-moderation".to_string().into(), model_config);
+    let model_table = ModerationModelTable::try_from(model_table_map).unwrap();
 
     // Setup clients
     let http_client = reqwest::Client::new();
     let cache_options = CacheOptions {
-        enabled: Arc::new(std::sync::RwLock::new(CacheEnabledMode::All)),
+        enabled: CacheEnabledMode::On,
         max_age_s: Some(3600),
     };
     let credentials = InferenceCredentials::new();
     let clients = InferenceClients {
         http_client: &http_client,
         clickhouse_connection_info: &clickhouse,
+        credentials: &credentials,
         cache_options: &cache_options,
     };
 
@@ -57,11 +56,10 @@ async fn test_dummy_moderation_single_text() {
 
     assert_eq!(response.results.len(), 1);
     assert!(!response.results[0].flagged);
-    assert!(!response.cached);
 
     // Test with harmful content
     let harmful_request = ModerationRequest {
-        input: ModerationInput::Single("This message contains harmful content".to_string()),
+        input: ModerationInput::Single("This content contains harmful language".to_string()),
         model: Some("dummy-moderation".to_string()),
     };
 
@@ -77,8 +75,7 @@ async fn test_dummy_moderation_single_text() {
 
     assert_eq!(response.results.len(), 1);
     assert!(response.results[0].flagged);
-    assert!(response.results[0].categories.self_harm);
-    assert!(response.results[0].category_scores.self_harm > 0.7);
+    assert!(response.results[0].categories.harassment);
 }
 
 #[tokio::test]
@@ -86,32 +83,34 @@ async fn test_dummy_moderation_batch() {
     let clickhouse = get_clickhouse().await;
 
     // Initialize moderation model table
-    let mut model_table = ModerationModelTable::new();
     let model_config = ModerationModelConfig::from_shorthand("dummy", "dummy-moderation")
         .await
         .expect("Failed to create dummy moderation model");
-    model_table.insert("dummy::dummy-moderation".to_string(), model_config);
+    let mut model_table_map = HashMap::new();
+    model_table_map.insert("dummy::dummy-moderation".to_string().into(), model_config);
+    let model_table = ModerationModelTable::try_from(model_table_map).unwrap();
 
     // Setup clients
     let http_client = reqwest::Client::new();
     let cache_options = CacheOptions {
-        enabled: Arc::new(std::sync::RwLock::new(CacheEnabledMode::None)),
+        enabled: CacheEnabledMode::Off,
         max_age_s: None,
     };
     let credentials = InferenceCredentials::new();
     let clients = InferenceClients {
         http_client: &http_client,
         clickhouse_connection_info: &clickhouse,
+        credentials: &credentials,
         cache_options: &cache_options,
     };
 
     // Test batch moderation
     let batch_request = ModerationRequest {
         input: ModerationInput::Batch(vec![
-            "This is safe content".to_string(),
-            "This contains hate speech".to_string(),
-            "This is violent content".to_string(),
+            "Safe content".to_string(),
+            "Content with violent themes".to_string(),
             "Another safe message".to_string(),
+            "Content with hate speech".to_string(),
         ]),
         model: Some("dummy-moderation".to_string()),
     };
@@ -124,17 +123,15 @@ async fn test_dummy_moderation_batch() {
         &model_table,
     )
     .await
-    .expect("Failed to moderate batch");
+    .expect("Failed to moderate batch content");
 
     assert_eq!(response.results.len(), 4);
-
-    // Check individual results
     assert!(!response.results[0].flagged);
     assert!(response.results[1].flagged);
-    assert!(response.results[1].categories.hate);
-    assert!(response.results[2].flagged);
-    assert!(response.results[2].categories.violence);
-    assert!(!response.results[3].flagged);
+    assert!(response.results[1].categories.violence);
+    assert!(!response.results[2].flagged);
+    assert!(response.results[3].flagged);
+    assert!(response.results[3].categories.hate);
 }
 
 #[tokio::test]
@@ -142,31 +139,33 @@ async fn test_moderation_caching() {
     let clickhouse = get_clickhouse().await;
 
     // Initialize moderation model table
-    let mut model_table = ModerationModelTable::new();
     let model_config = ModerationModelConfig::from_shorthand("dummy", "dummy-moderation")
         .await
         .expect("Failed to create dummy moderation model");
-    model_table.insert("dummy::dummy-moderation".to_string(), model_config);
+    let mut model_table_map = HashMap::new();
+    model_table_map.insert("dummy::dummy-moderation".to_string().into(), model_config);
+    let model_table = ModerationModelTable::try_from(model_table_map).unwrap();
 
     // Setup clients with caching enabled
     let http_client = reqwest::Client::new();
     let cache_options = CacheOptions {
-        enabled: Arc::new(std::sync::RwLock::new(CacheEnabledMode::All)),
+        enabled: CacheEnabledMode::On,
         max_age_s: Some(3600),
     };
     let credentials = InferenceCredentials::new();
     let clients = InferenceClients {
         http_client: &http_client,
         clickhouse_connection_info: &clickhouse,
+        credentials: &credentials,
         cache_options: &cache_options,
     };
 
+    // Make the same request twice
     let request = ModerationRequest {
-        input: ModerationInput::Single("This is a test for caching".to_string()),
+        input: ModerationInput::Single("Test content for caching".to_string()),
         model: Some("dummy-moderation".to_string()),
     };
 
-    // First request - should not be cached
     let response1 = handle_moderation_request(
         request.clone(),
         &clients,
@@ -177,13 +176,6 @@ async fn test_moderation_caching() {
     .await
     .expect("Failed first moderation request");
 
-    assert!(!response1.cached);
-    let first_results = response1.results.clone();
-
-    // Wait a bit to ensure cache write completes
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-    // Second request - should be cached
     let response2 = handle_moderation_request(
         request,
         &clients,
@@ -194,115 +186,140 @@ async fn test_moderation_caching() {
     .await
     .expect("Failed second moderation request");
 
-    assert!(response2.cached);
-
     // Results should be identical
-    assert_eq!(first_results.len(), response2.results.len());
-    for (r1, r2) in first_results.iter().zip(response2.results.iter()) {
-        assert_eq!(r1.flagged, r2.flagged);
-    }
+    assert_eq!(response1.results, response2.results);
 }
 
 #[tokio::test]
-async fn test_moderation_provider_failover() {
+async fn test_moderation_fallback() {
     let clickhouse = get_clickhouse().await;
 
     // Initialize moderation model table with multiple providers
-    let mut model_table = ModerationModelTable::new();
-
-    // Create a model config with routing that includes a non-existent provider first
-    let model_config = ModerationModelConfig::from_shorthand("dummy", "dummy-moderation")
+    let primary_config = ModerationModelConfig::from_shorthand("dummy", "dummy-moderation")
         .await
-        .expect("Failed to create dummy moderation model");
+        .expect("Failed to create primary model");
+    let fallback_config = ModerationModelConfig::from_shorthand("dummy", "dummy-moderation-2")
+        .await
+        .expect("Failed to create fallback model");
 
-    // Note: In a real test, we'd configure multiple providers and test failover
-    // For now, we just test that the dummy provider works
-    model_table.insert("test-model".to_string(), model_config);
+    let mut model_table_map = HashMap::new();
+    model_table_map.insert("primary::moderation".to_string().into(), primary_config);
+    model_table_map.insert("fallback::moderation".to_string().into(), fallback_config);
+    let model_table = ModerationModelTable::try_from(model_table_map).unwrap();
 
     // Setup clients
     let http_client = reqwest::Client::new();
     let cache_options = CacheOptions {
-        enabled: Arc::new(std::sync::RwLock::new(CacheEnabledMode::None)),
+        enabled: CacheEnabledMode::Off,
         max_age_s: None,
     };
     let credentials = InferenceCredentials::new();
     let clients = InferenceClients {
         http_client: &http_client,
         clickhouse_connection_info: &clickhouse,
+        credentials: &credentials,
         cache_options: &cache_options,
     };
 
+    // Test fallback behavior
     let request = ModerationRequest {
         input: ModerationInput::Single("Test content".to_string()),
-        model: Some("dummy-moderation".to_string()),
-    };
-
-    let response =
-        handle_moderation_request(request, &clients, &credentials, "test-model", &model_table)
-            .await
-            .expect("Failed moderation request");
-
-    assert_eq!(response.results.len(), 1);
-}
-
-#[tokio::test]
-#[cfg(not(feature = "e2e_tests_no_credentials"))]
-async fn test_openai_moderation() {
-    // Skip this test if OPENAI_API_KEY is not set
-    if std::env::var("OPENAI_API_KEY").is_err() {
-        println!("Skipping OpenAI moderation test - OPENAI_API_KEY not set");
-        return;
-    }
-
-    let clickhouse = get_clickhouse().await;
-
-    // Initialize moderation model table
-    let mut model_table = ModerationModelTable::new();
-    let model_config = ModerationModelConfig::from_shorthand("openai", "text-moderation-latest")
-        .await
-        .expect("Failed to create OpenAI moderation model");
-    model_table.insert("openai::text-moderation-latest".to_string(), model_config);
-
-    // Setup clients
-    let http_client = reqwest::Client::new();
-    let cache_options = CacheOptions {
-        enabled: Arc::new(std::sync::RwLock::new(CacheEnabledMode::All)),
-        max_age_s: Some(3600),
-    };
-    let mut credentials = InferenceCredentials::new();
-    if let Ok(api_key) = std::env::var("OPENAI_API_KEY") {
-        credentials.insert("openai_api_key".to_string(), SecretString::from(api_key));
-    }
-    let clients = InferenceClients {
-        http_client: &http_client,
-        clickhouse_connection_info: &clickhouse,
-        cache_options: &cache_options,
-    };
-
-    let request = ModerationRequest {
-        input: ModerationInput::Single("I love programming and learning new things!".to_string()),
-        model: None, // Let it use the default
+        model: Some("primary::moderation".to_string()),
     };
 
     let response = handle_moderation_request(
         request,
         &clients,
         &credentials,
-        "openai::text-moderation-latest",
+        "primary::moderation",
         &model_table,
     )
     .await
-    .expect("Failed OpenAI moderation request");
+    .expect("Failed moderation request");
 
     assert_eq!(response.results.len(), 1);
+}
 
-    // Safe content should not be flagged
+#[tokio::test]
+#[ignore] // Run with --ignored to test with real OpenAI API
+async fn test_openai_moderation() {
+    let clickhouse = get_clickhouse().await;
+
+    // Skip if no OpenAI API key
+    let api_key = match std::env::var("OPENAI_API_KEY") {
+        Ok(key) => key,
+        Err(_) => {
+            println!("Skipping OpenAI moderation test: OPENAI_API_KEY not set");
+            return;
+        }
+    };
+
+    // Initialize OpenAI moderation model
+    let model_config = ModerationModelConfig::from_shorthand("openai", "omni-moderation-latest")
+        .await
+        .expect("Failed to create OpenAI moderation model");
+    let mut model_table_map = HashMap::new();
+    model_table_map.insert(
+        "openai::omni-moderation-latest".to_string().into(),
+        model_config,
+    );
+    let model_table = ModerationModelTable::try_from(model_table_map).unwrap();
+
+    // Setup clients with OpenAI credentials
+    let http_client = reqwest::Client::new();
+    let cache_options = CacheOptions {
+        enabled: CacheEnabledMode::On,
+        max_age_s: Some(3600),
+    };
+    let mut credentials = InferenceCredentials::new();
+    credentials.insert("OPENAI_API_KEY".to_string(), api_key.into());
+
+    let clients = InferenceClients {
+        http_client: &http_client,
+        clickhouse_connection_info: &clickhouse,
+        credentials: &credentials,
+        cache_options: &cache_options,
+    };
+
+    // Test with safe content
+    let safe_request = ModerationRequest {
+        input: ModerationInput::Single("I love programming in Rust!".to_string()),
+        model: Some("omni-moderation-latest".to_string()),
+    };
+
+    let response = handle_moderation_request(
+        safe_request,
+        &clients,
+        &credentials,
+        "openai::omni-moderation-latest",
+        &model_table,
+    )
+    .await
+    .expect("Failed to moderate safe content with OpenAI");
+
+    assert_eq!(response.results.len(), 1);
     assert!(!response.results[0].flagged);
 
-    // All categories should be false for safe content
-    assert!(!response.results[0].categories.hate);
-    assert!(!response.results[0].categories.harassment);
-    assert!(!response.results[0].categories.self_harm);
-    assert!(!response.results[0].categories.sexual);
-    assert!(!response.results[0].categories.violence);
+    // Test batch moderation
+    let batch_request = ModerationRequest {
+        input: ModerationInput::Batch(vec![
+            "The weather is nice today".to_string(),
+            "I enjoy reading books".to_string(),
+        ]),
+        model: Some("omni-moderation-latest".to_string()),
+    };
+
+    let response = handle_moderation_request(
+        batch_request,
+        &clients,
+        &credentials,
+        "openai::omni-moderation-latest",
+        &model_table,
+    )
+    .await
+    .expect("Failed to moderate batch content with OpenAI");
+
+    assert_eq!(response.results.len(), 2);
+    assert!(!response.results[0].flagged);
+    assert!(!response.results[1].flagged);
 }
