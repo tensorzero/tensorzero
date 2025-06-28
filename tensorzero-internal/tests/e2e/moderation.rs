@@ -1,5 +1,3 @@
-#![expect(clippy::print_stdout)]
-
 use std::collections::HashMap;
 use tensorzero_internal::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_internal::clickhouse::test_helpers::get_clickhouse;
@@ -249,7 +247,6 @@ async fn test_openai_moderation() {
     let api_key = match std::env::var("OPENAI_API_KEY") {
         Ok(key) => key,
         Err(_) => {
-            println!("Skipping OpenAI moderation test: OPENAI_API_KEY not set");
             return;
         }
     };

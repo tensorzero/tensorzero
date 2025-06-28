@@ -662,6 +662,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_shorthand_model_config_openai() {
+        // Skip test if OPENAI_API_KEY is not set
+        if std::env::var("OPENAI_API_KEY").is_err() {
+            return;
+        }
+
         let config = ModerationModelConfig::from_shorthand("openai", "text-moderation-latest")
             .await
             .expect("Failed to create OpenAI config");

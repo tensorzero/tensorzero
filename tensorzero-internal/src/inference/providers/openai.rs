@@ -2238,8 +2238,8 @@ impl<'a> OpenAIModerationRequest<'a> {
 
 #[derive(Debug, Deserialize)]
 struct OpenAIModerationResponse {
-    #[expect(dead_code)]
-    id: String,
+    #[serde(rename = "id")]
+    _id: String,
     model: String,
     results: Vec<OpenAIModerationResult>,
 }
@@ -4053,7 +4053,7 @@ mod tests {
         }"#;
 
         let response: OpenAIModerationResponse = serde_json::from_str(response_json).unwrap();
-        assert_eq!(response.id, "modr-12345");
+        assert_eq!(response._id, "modr-12345");
         assert_eq!(response.model, "text-moderation-stable");
         assert_eq!(response.results.len(), 1);
 
