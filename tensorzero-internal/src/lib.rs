@@ -8,7 +8,6 @@ pub mod clickhouse;
 pub mod config_parser; // TensorZero config file
 pub mod embeddings; // embedding inference
 pub mod endpoints; // API endpoints
-pub mod moderation; // moderation API
 pub mod error; // error handling
 pub mod evaluations; // evaluation
 pub mod function; // types and methods for working with TensorZero functions
@@ -19,6 +18,7 @@ pub mod kafka; // Kafka integration
 mod minijinja_util; // utilities for working with MiniJinja templates
 pub mod model; // types and methods for working with TensorZero-supported models
 pub mod model_table;
+pub mod moderation; // moderation API
 pub mod observability; // utilities for observability (logs, metrics, etc.)
 pub mod redis_client; // redis client
 mod testing;

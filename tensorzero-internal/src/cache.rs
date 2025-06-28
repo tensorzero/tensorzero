@@ -85,7 +85,8 @@ impl<T> Clone for BaseModelProviderRequest<'_, T> {
 
 pub type ModelProviderRequest<'a> = BaseModelProviderRequest<'a, ModelInferenceRequest<'a>>;
 pub type EmbeddingModelProviderRequest<'a> = BaseModelProviderRequest<'a, EmbeddingRequest>;
-pub type ModerationModelProviderRequest<'a> = BaseModelProviderRequest<'a, crate::moderation::ModerationRequest>;
+pub type ModerationModelProviderRequest<'a> =
+    BaseModelProviderRequest<'a, crate::moderation::ModerationRequest>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CacheKey([u8; 32]);
@@ -161,7 +162,6 @@ impl ModerationModelProviderRequest<'_> {
         hasher.update(request_json.as_bytes());
         Ok(hasher.finalize().into())
     }
-
 }
 
 impl ModelProviderRequest<'_> {
@@ -316,8 +316,9 @@ impl Serialize for ModerationCacheData {
     {
         use serde::ser::Error;
 
-        let json_string = serde_json::to_string(&self.results)
-            .map_err(|e| S::Error::custom(format!("Failed to serialize moderation results: {e}")))?;
+        let json_string = serde_json::to_string(&self.results).map_err(|e| {
+            S::Error::custom(format!("Failed to serialize moderation results: {e}"))
+        })?;
         serializer.serialize_str(&json_string)
     }
 }
@@ -344,7 +345,9 @@ impl<'de> Deserialize<'de> for ModerationCacheData {
                 E: Error,
             {
                 let results: Vec<crate::moderation::ModerationResult> = serde_json::from_str(v)
-                    .map_err(|e| E::custom(format!("Failed to deserialize moderation results: {e}")))?;
+                    .map_err(|e| {
+                        E::custom(format!("Failed to deserialize moderation results: {e}"))
+                    })?;
 
                 Ok(ModerationCacheData { results })
             }

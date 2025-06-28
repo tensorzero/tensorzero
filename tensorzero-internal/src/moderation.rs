@@ -30,7 +30,7 @@ pub type ModerationModelTable = BaseModelTable<ModerationModelConfig>;
 impl ShorthandModelConfig for ModerationModelConfig {
     const SHORTHAND_MODEL_PREFIXES: &[&str] = &["openai::"];
     const MODEL_TYPE: &str = "Moderation model";
-    
+
     async fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
@@ -65,7 +65,10 @@ pub struct UninitializedModerationModelConfig {
 }
 
 impl UninitializedModerationModelConfig {
-    pub fn load(self, provider_types: &ProviderTypesConfig) -> Result<ModerationModelConfig, Error> {
+    pub fn load(
+        self,
+        provider_types: &ProviderTypesConfig,
+    ) -> Result<ModerationModelConfig, Error> {
         let providers = self
             .providers
             .into_iter()
@@ -185,7 +188,7 @@ impl ModerationCategory {
 }
 
 /// Categories flagged by the moderation API
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ModerationCategories {
     pub hate: bool,
     #[serde(rename = "hate/threatening")]
@@ -207,26 +210,9 @@ pub struct ModerationCategories {
     pub violence_graphic: bool,
 }
 
-impl Default for ModerationCategories {
-    fn default() -> Self {
-        Self {
-            hate: false,
-            hate_threatening: false,
-            harassment: false,
-            harassment_threatening: false,
-            self_harm: false,
-            self_harm_intent: false,
-            self_harm_instructions: false,
-            sexual: false,
-            sexual_minors: false,
-            violence: false,
-            violence_graphic: false,
-        }
-    }
-}
 
 /// Confidence scores for each moderation category
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ModerationCategoryScores {
     pub hate: f32,
     #[serde(rename = "hate/threatening")]
@@ -248,23 +234,6 @@ pub struct ModerationCategoryScores {
     pub violence_graphic: f32,
 }
 
-impl Default for ModerationCategoryScores {
-    fn default() -> Self {
-        Self {
-            hate: 0.0,
-            hate_threatening: 0.0,
-            harassment: 0.0,
-            harassment_threatening: 0.0,
-            self_harm: 0.0,
-            self_harm_intent: 0.0,
-            self_harm_instructions: 0.0,
-            sexual: 0.0,
-            sexual_minors: 0.0,
-            violence: 0.0,
-            violence_graphic: 0.0,
-        }
-    }
-}
 
 /// Result for a single text input
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -433,21 +402,17 @@ pub async fn handle_moderation_request(
     table_config: &ModerationModelTable,
 ) -> Result<ModerationResponse, Error> {
     // Get the model configuration
-    let model_config = table_config
-        .get(model_name)
-        .await?
-        .ok_or_else(|| Error::new(ErrorDetails::Config {
-            message: format!("Moderation model '{}' not found", model_name),
-        }))?;
+    let model_config = table_config.get(model_name).await?.ok_or_else(|| {
+        Error::new(ErrorDetails::Config {
+            message: format!("Moderation model '{model_name}' not found"),
+        })
+    })?;
 
     // Try each provider in the routing order
     let mut provider_errors = HashMap::new();
-    
+
     for provider_name in &model_config.routing {
-        let provider_config = match model_config
-            .providers
-            .get(provider_name)
-        {
+        let provider_config = match model_config.providers.get(provider_name) {
             Some(config) => config,
             None => {
                 let error = Error::new(ErrorDetails::ProviderNotFound {
@@ -498,7 +463,7 @@ pub async fn handle_moderation_request(
 
         // Make the moderation request
         match provider_config
-            .moderate(&request, &clients.http_client, credentials)
+            .moderate(&request, clients.http_client, credentials)
             .await
         {
             Ok(provider_response) => {
@@ -535,8 +500,181 @@ pub async fn handle_moderation_request(
             }
         }
     }
-    
+
     Err(Error::new(ErrorDetails::ModelProvidersExhausted {
         provider_errors,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_moderation_input_single() {
+        let input = ModerationInput::Single("test text".to_string());
+        assert_eq!(input.len(), 1);
+        assert!(!input.is_empty());
+        assert_eq!(input.as_vec(), vec!["test text"]);
+    }
+
+    #[test]
+    fn test_moderation_input_batch() {
+        let input = ModerationInput::Batch(vec![
+            "text1".to_string(),
+            "text2".to_string(),
+            "text3".to_string(),
+        ]);
+        assert_eq!(input.len(), 3);
+        assert!(!input.is_empty());
+        assert_eq!(input.as_vec(), vec!["text1", "text2", "text3"]);
+    }
+
+    #[test]
+    fn test_moderation_input_empty_batch() {
+        let input = ModerationInput::Batch(vec![]);
+        assert_eq!(input.len(), 0);
+        assert!(input.is_empty());
+        assert!(input.as_vec().is_empty());
+    }
+
+    #[test]
+    fn test_moderation_category_str_conversion() {
+        assert_eq!(ModerationCategory::Hate.as_str(), "hate");
+        assert_eq!(ModerationCategory::HateThreatening.as_str(), "hate/threatening");
+        assert_eq!(ModerationCategory::Harassment.as_str(), "harassment");
+        assert_eq!(ModerationCategory::HarassmentThreatening.as_str(), "harassment/threatening");
+        assert_eq!(ModerationCategory::SelfHarm.as_str(), "self-harm");
+        assert_eq!(ModerationCategory::SelfHarmIntent.as_str(), "self-harm/intent");
+        assert_eq!(ModerationCategory::SelfHarmInstructions.as_str(), "self-harm/instructions");
+        assert_eq!(ModerationCategory::Sexual.as_str(), "sexual");
+        assert_eq!(ModerationCategory::SexualMinors.as_str(), "sexual/minors");
+        assert_eq!(ModerationCategory::Violence.as_str(), "violence");
+        assert_eq!(ModerationCategory::ViolenceGraphic.as_str(), "violence/graphic");
+    }
+
+    #[test]
+    fn test_moderation_category_all() {
+        let all_categories = ModerationCategory::all();
+        assert_eq!(all_categories.len(), 11);
+        assert!(all_categories.contains(&ModerationCategory::Hate));
+        assert!(all_categories.contains(&ModerationCategory::HateThreatening));
+        assert!(all_categories.contains(&ModerationCategory::Harassment));
+        assert!(all_categories.contains(&ModerationCategory::HarassmentThreatening));
+        assert!(all_categories.contains(&ModerationCategory::SelfHarm));
+        assert!(all_categories.contains(&ModerationCategory::SelfHarmIntent));
+        assert!(all_categories.contains(&ModerationCategory::SelfHarmInstructions));
+        assert!(all_categories.contains(&ModerationCategory::Sexual));
+        assert!(all_categories.contains(&ModerationCategory::SexualMinors));
+        assert!(all_categories.contains(&ModerationCategory::Violence));
+        assert!(all_categories.contains(&ModerationCategory::ViolenceGraphic));
+    }
+
+    #[test]
+    fn test_moderation_categories_default() {
+        let categories = ModerationCategories::default();
+        assert!(!categories.hate);
+        assert!(!categories.hate_threatening);
+        assert!(!categories.harassment);
+        assert!(!categories.harassment_threatening);
+        assert!(!categories.self_harm);
+        assert!(!categories.self_harm_intent);
+        assert!(!categories.self_harm_instructions);
+        assert!(!categories.sexual);
+        assert!(!categories.sexual_minors);
+        assert!(!categories.violence);
+        assert!(!categories.violence_graphic);
+    }
+
+    #[test]
+    fn test_moderation_category_scores_default() {
+        let scores = ModerationCategoryScores::default();
+        assert_eq!(scores.hate, 0.0);
+        assert_eq!(scores.hate_threatening, 0.0);
+        assert_eq!(scores.harassment, 0.0);
+        assert_eq!(scores.harassment_threatening, 0.0);
+        assert_eq!(scores.self_harm, 0.0);
+        assert_eq!(scores.self_harm_intent, 0.0);
+        assert_eq!(scores.self_harm_instructions, 0.0);
+        assert_eq!(scores.sexual, 0.0);
+        assert_eq!(scores.sexual_minors, 0.0);
+        assert_eq!(scores.violence, 0.0);
+        assert_eq!(scores.violence_graphic, 0.0);
+    }
+
+    #[test]
+    fn test_moderation_response_from_cache() {
+        let cache_lookup = CacheData {
+            output: ModerationCacheData {
+                results: vec![ModerationResult {
+                    flagged: true,
+                    categories: ModerationCategories {
+                        hate: true,
+                        ..Default::default()
+                    },
+                    category_scores: ModerationCategoryScores {
+                        hate: 0.95,
+                        ..Default::default()
+                    },
+                }],
+            },
+            raw_request: "test request".to_string(),
+            raw_response: "test response".to_string(),
+            input_tokens: Some(10),
+            output_tokens: Some(5),
+        };
+
+        let request = ModerationRequest {
+            input: ModerationInput::Single("test".to_string()),
+            model: Some("test-model".to_string()),
+        };
+
+        let provider_request = ModerationModelProviderRequest {
+            request: &request,
+            model_name: "test-model",
+            provider_name: "test-provider",
+        };
+
+        let response = ModerationResponse::from_cache(cache_lookup, &provider_request);
+
+        assert!(response.cached);
+        assert_eq!(response.model, "cached");
+        assert_eq!(response.moderation_provider_name.as_ref(), "test-provider");
+        assert_eq!(response.results.len(), 1);
+        assert!(response.results[0].flagged);
+        assert!(response.results[0].categories.hate);
+        assert_eq!(response.results[0].category_scores.hate, 0.95);
+    }
+
+    #[tokio::test]
+    async fn test_shorthand_model_config_openai() {
+        let config = ModerationModelConfig::from_shorthand("openai", "text-moderation-latest")
+            .await
+            .expect("Failed to create OpenAI config");
+
+        assert_eq!(config.routing.len(), 1);
+        assert_eq!(config.routing[0].as_ref(), "openai");
+        assert_eq!(config.providers.len(), 1);
+        assert!(config.providers.contains_key("openai"));
+    }
+
+    #[cfg(any(test, feature = "e2e_tests"))]
+    #[tokio::test]
+    async fn test_shorthand_model_config_dummy() {
+        let config = ModerationModelConfig::from_shorthand("dummy", "dummy-moderation")
+            .await
+            .expect("Failed to create dummy config");
+
+        assert_eq!(config.routing.len(), 1);
+        assert_eq!(config.routing[0].as_ref(), "dummy");
+        assert_eq!(config.providers.len(), 1);
+        assert!(config.providers.contains_key("dummy"));
+    }
+
+    #[tokio::test]
+    async fn test_shorthand_model_config_invalid_provider() {
+        let result = ModerationModelConfig::from_shorthand("invalid", "model");
+        assert!(result.await.is_err());
+    }
 }

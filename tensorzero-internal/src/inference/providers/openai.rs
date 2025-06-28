@@ -20,10 +20,6 @@ use uuid::Uuid;
 use crate::cache::ModelProviderRequest;
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
-use crate::moderation::{
-    ModerationCategories, ModerationCategoryScores, ModerationInput, ModerationProvider,
-    ModerationProviderResponse, ModerationRequest, ModerationResult,
-};
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
@@ -42,6 +38,10 @@ use crate::inference::types::{
     FileKind, FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::moderation::{
+    ModerationCategories, ModerationCategoryScores, ModerationInput, ModerationProvider,
+    ModerationProviderResponse, ModerationRequest, ModerationResult,
+};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::inference::providers::helpers::inject_extra_request_data;
@@ -787,10 +787,7 @@ impl ModerationProvider for OpenAIProvider {
         dynamic_api_keys: &InferenceCredentials,
     ) -> Result<ModerationProviderResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_body = OpenAIModerationRequest::new(
-            &request.input,
-            request.model.as_deref(),
-        );
+        let request_body = OpenAIModerationRequest::new(&request.input, request.model.as_deref());
         let request_url =
             get_moderation_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let start_time = Instant::now();
@@ -2228,10 +2225,7 @@ enum OpenAIModerationRequestInput<'a> {
 }
 
 impl<'a> OpenAIModerationRequest<'a> {
-    fn new(
-        input: &'a ModerationInput,
-        model: Option<&'a str>,
-    ) -> Self {
+    fn new(input: &'a ModerationInput, model: Option<&'a str>) -> Self {
         let input = match input {
             ModerationInput::Single(text) => OpenAIModerationRequestInput::Single(text),
             ModerationInput::Batch(texts) => {
@@ -2244,7 +2238,7 @@ impl<'a> OpenAIModerationRequest<'a> {
 
 #[derive(Debug, Deserialize)]
 struct OpenAIModerationResponse {
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     id: String,
     model: String,
     results: Vec<OpenAIModerationResult>,
@@ -3969,5 +3963,105 @@ mod tests {
         .unwrap();
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));
+    }
+
+    #[test]
+    fn test_get_moderation_url() {
+        // Test with standard OpenAI base URL
+        let base_url = Url::parse("https://api.openai.com/v1/").unwrap();
+        let result = get_moderation_url(&base_url).unwrap();
+        assert_eq!(result.as_str(), "https://api.openai.com/v1/moderations");
+
+        // Test with URL without trailing slash
+        let base_url = Url::parse("https://api.openai.com/v1").unwrap();
+        let result = get_moderation_url(&base_url).unwrap();
+        assert_eq!(result.as_str(), "https://api.openai.com/v1/moderations");
+
+        // Test with custom base URL
+        let custom_base = "https://custom.openai.com/api/";
+        let custom_url = get_moderation_url(&Url::parse(custom_base).unwrap()).unwrap();
+        assert_eq!(
+            custom_url.as_str(),
+            "https://custom.openai.com/api/moderations"
+        );
+    }
+
+    #[test]
+    fn test_openai_moderation_request_single() {
+        let input = ModerationInput::Single("test text".to_string());
+        let request = OpenAIModerationRequest::new(&input, Some("text-moderation-latest"));
+        
+        let json = serde_json::to_value(&request).unwrap();
+        assert_eq!(json["input"], "test text");
+        assert_eq!(json["model"], "text-moderation-latest");
+    }
+
+    #[test]
+    fn test_openai_moderation_request_batch() {
+        let input = ModerationInput::Batch(vec![
+            "text1".to_string(),
+            "text2".to_string(),
+            "text3".to_string(),
+        ]);
+        let request = OpenAIModerationRequest::new(&input, None);
+        
+        let json = serde_json::to_value(&request).unwrap();
+        assert!(json["input"].is_array());
+        assert_eq!(json["input"].as_array().unwrap().len(), 3);
+        assert_eq!(json["input"][0], "text1");
+        assert_eq!(json["input"][1], "text2");
+        assert_eq!(json["input"][2], "text3");
+        assert!(json.get("model").is_none());
+    }
+
+    #[test]
+    fn test_openai_moderation_response_parsing() {
+        let response_json = r#"{
+            "id": "modr-12345",
+            "model": "text-moderation-stable",
+            "results": [
+                {
+                    "flagged": true,
+                    "categories": {
+                        "hate": false,
+                        "hate/threatening": false,
+                        "harassment": true,
+                        "harassment/threatening": false,
+                        "self-harm": false,
+                        "self-harm/intent": false,
+                        "self-harm/instructions": false,
+                        "sexual": false,
+                        "sexual/minors": false,
+                        "violence": false,
+                        "violence/graphic": false
+                    },
+                    "category_scores": {
+                        "hate": 0.001,
+                        "hate/threatening": 0.0001,
+                        "harassment": 0.95,
+                        "harassment/threatening": 0.001,
+                        "self-harm": 0.0001,
+                        "self-harm/intent": 0.0001,
+                        "self-harm/instructions": 0.0001,
+                        "sexual": 0.001,
+                        "sexual/minors": 0.0001,
+                        "violence": 0.001,
+                        "violence/graphic": 0.0001
+                    }
+                }
+            ]
+        }"#;
+
+        let response: OpenAIModerationResponse = serde_json::from_str(response_json).unwrap();
+        assert_eq!(response.id, "modr-12345");
+        assert_eq!(response.model, "text-moderation-stable");
+        assert_eq!(response.results.len(), 1);
+        
+        let result = &response.results[0];
+        assert!(result.flagged);
+        assert!(result.categories.harassment);
+        assert!(!result.categories.hate);
+        assert_eq!(result.category_scores.harassment, 0.95);
+        assert_eq!(result.category_scores.hate, 0.001);
     }
 }

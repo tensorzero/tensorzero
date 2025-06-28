@@ -14,6 +14,10 @@ use crate::cache::ModelProviderRequest;
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
+use crate::moderation::{
+    ModerationCategories, ModerationCategoryScores, ModerationProvider, ModerationProviderResponse,
+    ModerationRequest, ModerationResult,
+};
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
 use crate::inference::types::{
@@ -726,4 +730,77 @@ async fn create_streaming_reasoning_response(
         futures::stream::StreamExt::peekable(Box::pin(stream)),
         DUMMY_RAW_REQUEST.to_string(),
     ))
+}
+
+impl ModerationProvider for DummyProvider {
+    async fn moderate(
+        &self,
+        request: &ModerationRequest,
+        _client: &reqwest::Client,
+        _dynamic_api_keys: &InferenceCredentials,
+    ) -> Result<ModerationProviderResponse, Error> {
+        // Create dummy moderation results based on the input
+        let num_inputs = request.input.len();
+        let mut results = Vec::with_capacity(num_inputs);
+        
+        for i in 0..num_inputs {
+            let text = request.input.as_vec()[i];
+            
+            // Flag content that contains certain test keywords
+            let flagged = text.contains("harmful") || text.contains("violent") || text.contains("hate");
+            
+            // Create dummy scores
+            let mut categories = ModerationCategories::default();
+            let mut category_scores = ModerationCategoryScores::default();
+            
+            if text.contains("hate") {
+                categories.hate = true;
+                category_scores.hate = 0.95;
+            }
+            if text.contains("violent") {
+                categories.violence = true;
+                category_scores.violence = 0.85;
+            }
+            if text.contains("harmful") {
+                categories.self_harm = true;
+                category_scores.self_harm = 0.75;
+            }
+            
+            results.push(ModerationResult {
+                flagged,
+                categories,
+                category_scores,
+            });
+        }
+        
+        let raw_response = serde_json::to_string(&json!({
+            "id": "dummy-moderation-id",
+            "model": self.model_name,
+            "results": &results,
+        }))
+        .unwrap_or_default();
+        
+        let response = ModerationProviderResponse {
+            id: Uuid::now_v7(),
+            input: request.input.clone(),
+            results,
+            created: current_timestamp(),
+            model: self.model_name.clone(),
+            raw_request: serde_json::to_string(&json!({
+                "input": request.input,
+                "model": request.model,
+            }))
+            .unwrap_or_default(),
+            raw_response,
+            usage: Usage {
+                input_tokens: 10 * num_inputs as u32,
+                output_tokens: 5 * num_inputs as u32,
+            },
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(50),
+            },
+        };
+        
+        Ok(response)
+    }
 }
