@@ -39,6 +39,9 @@ pub trait StoredSample {
 /// that is just copied over from the StoredSample.
 pub struct SimpleStoredSampleInfo {
     pub function_name: String,
+    pub variant_name: Option<String>,
+    pub episode_id: Option<Uuid>,
+    pub inference_id: Option<Uuid>,
     pub output: Option<Vec<ContentBlockChatOutput>>,
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
@@ -301,6 +304,9 @@ impl StoredSample for StoredInference {
         match self {
             StoredInference::Chat(example) => SimpleStoredSampleInfo {
                 function_name: example.function_name,
+                variant_name: Some(example.variant_name),
+                episode_id: Some(example.episode_id),
+                inference_id: Some(example.inference_id),
                 output: Some(example.output),
                 tool_params: Some(example.tool_params),
                 output_schema: None,
@@ -312,6 +318,9 @@ impl StoredSample for StoredInference {
                 };
                 SimpleStoredSampleInfo {
                     function_name: example.function_name,
+                    variant_name: Some(example.variant_name),
+                    episode_id: Some(example.episode_id),
+                    inference_id: Some(example.inference_id),
                     output: Some(output),
                     tool_params: None,
                     output_schema: Some(example.output_schema),
@@ -329,8 +338,11 @@ impl StoredSample for StoredInference {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct RenderedSample {
     pub function_name: String,
+    pub variant_name: Option<String>,
     pub input: ModelInput,
     pub output: Option<Vec<ContentBlockChatOutput>>,
+    pub episode_id: Option<Uuid>,
+    pub inference_id: Option<Uuid>,
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
 }
@@ -369,6 +381,27 @@ impl RenderedSample {
     #[getter]
     pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         serialize_to_dict(py, self.output_schema.clone()).map(|x| x.into_bound(py))
+    }
+
+    #[getter]
+    pub fn get_variant_name(&self) -> Option<&str> {
+        self.variant_name.as_deref()
+    }
+
+    #[getter]
+    pub fn get_episode_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self.episode_id {
+            Some(id) => uuid_to_python(py, id),
+            None => Ok(py.None().into_bound(py)),
+        }
+    }
+
+    #[getter]
+    pub fn get_inference_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self.inference_id {
+            Some(id) => uuid_to_python(py, id),
+            None => Ok(py.None().into_bound(py)),
+        }
     }
 
     pub fn __repr__(&self) -> String {
@@ -473,9 +506,15 @@ pub fn render_stored_sample<T: StoredSample>(
         output,
         tool_params,
         output_schema,
+        variant_name,
+        episode_id,
+        inference_id,
     } = stored_sample.owned_simple_info();
     Ok(RenderedSample {
         function_name,
+        variant_name,
+        episode_id,
+        inference_id,
         input: model_input,
         output,
         tool_params,

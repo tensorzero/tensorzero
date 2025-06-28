@@ -307,6 +307,7 @@ mod tests {
     fn test_convert_to_sft_row() {
         let inference = RenderedSample {
             function_name: "test".to_string(),
+            variant_name: Some("test_variant".to_string()),
             input: ModelInput {
                 system: Some("You are a helpful assistant named Dr. M.M. Patel.".to_string()),
                 messages: vec![RequestMessage {
@@ -319,6 +320,8 @@ mod tests {
             output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "The capital of France is Paris.".to_string(),
             })]),
+            episode_id: Some(uuid::Uuid::now_v7()),
+            inference_id: Some(uuid::Uuid::now_v7()),
             tool_params: None,
             output_schema: None,
         };
