@@ -559,7 +559,7 @@ async fn get_latest_batch_inference(
 async fn get_all_batch_inferences(
     clickhouse: &ClickHouseConnectionInfo,
     batch_id: Uuid,
-) -> Vec<BatchModelInferenceRow> {
+) -> Vec<BatchModelInferenceRow<'_>> {
     let query = format!(
         "SELECT * FROM BatchModelInference WHERE batch_id = '{batch_id}' FORMAT JSONEachRow",
     );
@@ -3928,7 +3928,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
                "messages": [
                 {
                     "role": "user",
-                    "content": {"country": "Japan"}
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]}],
         "tags": [{"test_type": "json_mode"}]
@@ -4268,7 +4268,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
                "messages": [
                 {
                     "role": "user",
-                    "content": {"country": "Japan"}
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]}],
         "output_schemas": [output_schema.clone()],

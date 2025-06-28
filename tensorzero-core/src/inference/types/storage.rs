@@ -10,7 +10,9 @@ use pyo3::prelude::*;
 /// Configuration for the object storage backend
 /// Currently, we only support S3-compatible object storage and local filesystem storage
 /// We test against Amazon S3, GCS, Cloudflare R2, and Minio
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StorageKind {
     S3Compatible {
@@ -81,7 +83,9 @@ impl StorageKind {
     }
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct StoragePath {
     pub kind: StorageKind,
@@ -89,6 +93,7 @@ pub struct StoragePath {
         serialize_with = "serialize_storage_path",
         deserialize_with = "deserialize_storage_path"
     )]
+    #[cfg_attr(test, ts(type = "string"))]
     pub path: object_store::path::Path,
 }
 

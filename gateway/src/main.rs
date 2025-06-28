@@ -196,7 +196,7 @@ async fn main() {
     // Set debug mode
     error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");
 
-    let router = Router::new()
+    let api_routes = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
         .route(
             "/batch_inference",
@@ -261,7 +261,23 @@ async fn main() {
         .route(
             "/metrics",
             get(move || std::future::ready(metrics_handle.render())),
-        )
+        );
+
+    let base_path = config.gateway.base_path.as_deref().unwrap_or("/");
+    if !base_path.starts_with("/") {
+        tracing::error!("[gateway.base_path] must start with a `/` : `{base_path}`");
+        std::process::exit(1);
+    }
+    let base_path = base_path.trim_end_matches("/");
+
+    // The path was just `/` (or multiple slashes)
+    let router = if base_path.is_empty() {
+        Router::new().merge(api_routes)
+    } else {
+        Router::new().nest(base_path, api_routes)
+    };
+
+    let router = router
         .fallback(endpoints::fallback::handle_404)
         .layer(axum::middleware::from_fn(add_version_header))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
@@ -304,7 +320,7 @@ async fn main() {
     };
 
     tracing::info!(
-        "TensorZero Gateway is listening on {actual_bind_address} with {config_path_pretty} and observability {observability_enabled_pretty}.",
+        "TensorZero Gateway is listening on {actual_bind_address} with {config_path_pretty} and observability {observability_enabled_pretty} and base path `{base_path}`",
     );
 
     axum::serve(listener, router)

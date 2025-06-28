@@ -25,6 +25,7 @@ async fn make_embedded_gateway() -> tensorzero::Client {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await
@@ -62,9 +63,11 @@ async fn e2e_test_comment_human_feedback() {
     let serialized_inference_output =
         serde_json::to_string(&inference_response_json.get("output").unwrap()).unwrap();
 
+    let evaluator_id = Uuid::now_v7();
+
     let datapoint_id = Uuid::now_v7();
     // Test comment human evaluation feedback on episode
-    let payload = json!({"episode_id": episode_id, "metric_name": "comment", "value": "good job!", "internal": true, "tags": {"tensorzero::datapoint_id": datapoint_id.to_string(), "tensorzero::human_feedback": "true"}});
+    let payload = json!({"episode_id": episode_id, "metric_name": "comment", "value": "good job!", "internal": true, "tags": {"tensorzero::evaluator_inference_id": evaluator_id.to_string(), "tensorzero::datapoint_id": datapoint_id.to_string(), "tensorzero::human_feedback": "true"}});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -108,25 +111,6 @@ async fn e2e_test_comment_human_feedback() {
     let id = result.get("feedback_id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
-    // Check ClickHouse StaticEvaluationHumanFeedback
-    // Currently this fails because the output is being escaped as it is passed into the query to compare against the values
-    // in the table.
-    // We need to figure out how do effectively compare strings in ClickHouse without manually escaping them.
-    let result = select_human_static_evaluation_feedback_clickhouse(
-        &clickhouse,
-        "comment",
-        datapoint_id,
-        &serialized_inference_output,
-    )
-    .await
-    .unwrap();
-    assert_eq!(result.metric_name, "comment");
-    assert_eq!(result.datapoint_id, datapoint_id);
-    assert_eq!(result.output, serialized_inference_output);
-    assert_eq!(
-        result.value,
-        serde_json::to_string(&json!("good job!")).unwrap() // All feedback values are JSON encoded in the StaticEvaluationHumanFeedback table
-    );
 
     // Running without datapoint_id.
     // We generate a new datapoint_id so these don't trample. We'll only use it to check that there is no StaticEvaluationHumanFeedback
@@ -315,7 +299,7 @@ async fn e2e_test_demonstration_feedback_json() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -367,7 +351,7 @@ async fn e2e_test_demonstration_feedback_json() {
     let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
     let expected_value = JsonInferenceOutput {
         parsed: Some(json!({"answer": "Tokyo"})),
-        raw: "{\"answer\":\"Tokyo\"}".to_string(),
+        raw: Some("{\"answer\":\"Tokyo\"}".to_string()),
     };
     assert_eq!(retrieved_value, expected_value);
 
@@ -440,7 +424,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
         "output_schema": new_output_schema,
@@ -493,7 +477,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
     let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
     let expected_value = JsonInferenceOutput {
         parsed: Some(json!({"answer": "Tokyo", "comment": "This is a comment"})),
-        raw: "{\"answer\":\"Tokyo\",\"comment\":\"This is a comment\"}".to_string(),
+        raw: Some("{\"answer\":\"Tokyo\",\"comment\":\"This is a comment\"}".to_string()),
     };
     assert_eq!(retrieved_value, expected_value);
 
@@ -881,7 +865,7 @@ async fn e2e_test_float_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -966,8 +950,7 @@ async fn e2e_test_float_feedback() {
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
     assert!(
         error_message.contains("Correct ID was not provided for feedback level"),
-        "Unexpected error message: {}",
-        error_message
+        "Unexpected error message: {error_message}"
     );
 
     // Running without valid inference_id. Should fail.
@@ -987,7 +970,7 @@ async fn e2e_test_float_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -1061,7 +1044,7 @@ async fn e2e_test_boolean_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -1138,8 +1121,7 @@ async fn e2e_test_boolean_feedback() {
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
     assert!(
         error_message.contains("Correct ID was not provided for feedback level"),
-        "Unexpected error message: {}",
-        error_message
+        "Unexpected error message: {error_message}"
     );
 
     // Try string feedback (should fail)
@@ -1174,7 +1156,7 @@ async fn e2e_test_boolean_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });

@@ -15,7 +15,6 @@ from uuid import UUID
 
 import uuid_utils
 
-import tensorzero.internal_optimization_server_types as iost
 from tensorzero import (
     ChatDatapointInsert,
     ContentBlock,
@@ -290,6 +289,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
+        function_name: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> List[Datapoint]:
@@ -297,6 +297,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
 
         :param dataset_name: The name of the dataset to list the datapoints from.
+        :param function_name: The name of the function to list the datapoints from.
         :param limit: The maximum number of datapoints to return.
         :param offset: The offset to start the list from.
         :return: A list of `Datapoint` instances.
@@ -574,6 +575,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
+        function_name: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> List[Datapoint]:
@@ -581,6 +583,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
 
         :param dataset_name: The name of the dataset to list the datapoints from.
+        :param function_name: The name of the function to list the datapoints from.
         :param limit: The maximum number of datapoints to return.
         :param offset: The offset to start the list from.
         :return: A list of `Datapoint` instances.
@@ -658,17 +661,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         exc_val: Optional[BaseException],
         exc_tb: Optional[object],
     ) -> None: ...
-    async def _internal_get_curated_inferences(
-        self,
-        *,
-        function_name: str,
-        metric_name: Optional[str] = None,
-        threshold: Optional[float] = None,
-        max_samples: Optional[int] = None,
-    ) -> List[iost.Sample]: ...
-    def _internal_get_template_config(
-        self, *, function_name: str, variant_name: str
-    ) -> Dict[str, Any]: ...
 
 # Internal helper method
 def _start_http_gateway(

@@ -750,7 +750,10 @@ async def test_async_json_streaming(async_client: AsyncTensorZeroGateway):
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [
-                {"role": "user", "content": {"country": "Japan"}},
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                },
                 {"role": "assistant", "content": "ok"},
                 # This function has a user schema but we can bypass with RawText
                 {"role": "user", "content": [RawText(value="Hello")]},
@@ -3185,6 +3188,15 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
     assert isinstance(datapoint_ids[2], UUID)
     assert isinstance(datapoint_ids[3], UUID)
 
+    # List datapoints filtering by function name
+    listed_datapoints = sync_client.list_datapoints(
+        dataset_name="test",
+        function_name="basic_test",
+    )
+    assert len(listed_datapoints) == 2
+    assert all(isinstance(dp, ChatDatapoint) for dp in listed_datapoints)
+    assert all(dp.function_name == "basic_test" for dp in listed_datapoints)
+
     sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[0])
     sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[1])
     sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[2])
@@ -3330,6 +3342,15 @@ async def test_async_bulk_insert_delete_datapoints(
     json_datapoints = [dp for dp in listed_datapoints if isinstance(dp, JsonDatapoint)]
     assert len(chat_datapoints) == 2
     assert len(json_datapoints) == 2
+
+    # List datapoints filtering by function name
+    listed_datapoints = await async_client.list_datapoints(
+        dataset_name=dataset_name,
+        function_name="basic_test",
+    )
+    assert len(listed_datapoints) == 2
+    assert all(isinstance(dp, ChatDatapoint) for dp in listed_datapoints)
+    assert all(dp.function_name == "basic_test" for dp in listed_datapoints)
 
     await async_client.delete_datapoint(
         dataset_name=dataset_name, datapoint_id=datapoint_ids[0]

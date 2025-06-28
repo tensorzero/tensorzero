@@ -29,6 +29,18 @@ describe("getDynamicEvaluationRuns", () => {
         },
       },
       {
+        id: "0196a0e5-9600-7c83-ab3b-dabb145a9dc0",
+        name: "agent-baseline-compact_context-baseline",
+        num_episodes: 0,
+        project_name: null,
+        tags: {},
+        timestamp: "2025-05-05T14:42:02Z",
+        variant_pins: {
+          compact_context: "baseline",
+          multi_hop_rag_agent: "baseline",
+        },
+      },
+      {
         id: "0196a0e5-9600-7c83-ab3b-dabb145a9dbf",
         name: "agent-baseline-compact_context-baseline",
         num_episodes: 0,
@@ -121,18 +133,6 @@ describe("getDynamicEvaluationRuns", () => {
         timestamp: "2025-05-01T18:04:52Z",
         variant_pins: {
           ask_question: "baseline",
-          answer_question: "baseline",
-        },
-      },
-      {
-        id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
-        name: "gpt-4.1-nano",
-        project_name: "21_questions",
-        num_episodes: 50,
-        tags: { foo: "bar" },
-        timestamp: "2025-05-01T18:02:56Z",
-        variant_pins: {
-          ask_question: "gpt-4.1-nano",
           answer_question: "baseline",
         },
       },
@@ -240,7 +240,7 @@ describe("getDynamicEvaluationRunsByIds", () => {
 describe("countDynamicEvaluationRuns", () => {
   test("should return correct total number of runs", async () => {
     const totalRuns = await countDynamicEvaluationRuns();
-    expect(totalRuns).toBe(10);
+    expect(totalRuns).toBe(11);
   });
 });
 

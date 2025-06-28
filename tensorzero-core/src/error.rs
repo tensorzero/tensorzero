@@ -10,6 +10,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::inference::types::storage::StoragePath;
+use crate::inference::types::Thought;
 
 /// Controls whether to include raw request/response details in error output
 ///
@@ -20,11 +21,12 @@ use crate::inference::types::storage::StoragePath;
 ///
 /// WARNING: Setting this to true will expose potentially sensitive request/response
 /// data in logs and error responses. Use with caution.
-static DEBUG: OnceCell<bool> = if cfg!(feature = "e2e_tests") {
-    OnceCell::const_new_with(true)
-} else {
-    OnceCell::const_new()
-};
+static DEBUG: OnceCell<bool> =
+    if cfg!(feature = "e2e_tests") || cfg!(feature = "optimization_tests") {
+        OnceCell::const_new_with(true)
+    } else {
+        OnceCell::const_new()
+    };
 
 pub fn set_debug(debug: bool) -> Result<(), Error> {
     // We already initialized `DEBUG`, so do nothing
@@ -36,6 +38,16 @@ pub fn set_debug(debug: bool) -> Result<(), Error> {
             message: "Failed to set debug mode".to_string(),
         })
     })
+}
+
+pub fn warn_discarded_thought_block(provider_type: &str, thought: &Thought) {
+    if *DEBUG.get().unwrap_or(&false) {
+        tracing::warn!("Provider type `{provider_type}` does not support input thought blocks, discarding: {thought}");
+    } else {
+        tracing::warn!(
+            "Provider type `{provider_type}` does not support input thought blocks, discarding"
+        );
+    }
 }
 
 pub fn warn_discarded_unknown_chunk(provider_type: &str, part: &str) {
@@ -170,6 +182,9 @@ pub enum ErrorDetails {
         dataset_name: String,
         datapoint_id: Uuid,
     },
+    DuplicateTool {
+        name: String,
+    },
     DynamicJsonSchema {
         message: String,
     },
@@ -292,6 +307,9 @@ pub enum ErrorDetails {
     InvalidVariantForOptimization {
         function_name: String,
         variant_name: String,
+    },
+    InvalidValFraction {
+        val_fraction: f64,
     },
     InvalidUuid {
         raw_uuid: String,
@@ -446,6 +464,7 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
             ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::DuplicateTool { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
@@ -481,6 +500,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidTemplatePath => tracing::Level::ERROR,
             ErrorDetails::InvalidTool { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidUuid { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidValFraction { .. } => tracing::Level::WARN,
             ErrorDetails::JsonRequest { .. } => tracing::Level::WARN,
             ErrorDetails::JsonSchema { .. } => tracing::Level::ERROR,
             ErrorDetails::JsonSchemaValidation { .. } => tracing::Level::ERROR,
@@ -538,6 +558,7 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -560,6 +581,7 @@ impl ErrorDetails {
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InternalError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidValFraction { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::UnsupportedContentBlockType { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidBatchParams { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -706,7 +728,7 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Error fetching image from {url}: {message}")
             }
             ErrorDetails::ObjectStoreUnconfigured { block_type } => {
-                write!(f, "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block")
+                write!(f, "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block. If you don't want to use object storage, you can explicitly set `object_storage.type = \"disabled\"` in your configuration.")
             }
             ErrorDetails::UnsupportedContentBlockType {
                 content_block_type,
@@ -770,6 +792,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Datapoint not found for dataset: {dataset_name} and id: {datapoint_id}"
                 )
+            }
+            ErrorDetails::DuplicateTool { name } => {
+                write!(f, "Duplicate tool name: {name}. Tool names must be unique.")
             }
             ErrorDetails::DynamicJsonSchema { message } => {
                 write!(
@@ -900,6 +925,12 @@ impl std::fmt::Display for ErrorDetails {
                 write!(
                     f,
                     "Invalid model provider: {provider_name} for model: {model_name}"
+                )
+            }
+            ErrorDetails::InvalidValFraction { val_fraction } => {
+                write!(
+                    f,
+                    "Invalid val fraction: {val_fraction}. Must be between 0 and 1."
                 )
             }
             ErrorDetails::InvalidOpenAICompatibleRequest { message } => write!(

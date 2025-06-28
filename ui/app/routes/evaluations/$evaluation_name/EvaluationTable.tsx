@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import React from "react";
 import { useSearchParams, useNavigate } from "react-router";
 
+import * as RadixTooltip from "@radix-ui/react-tooltip";
 import {
   Table,
   TableBody,
@@ -23,12 +24,11 @@ import type {
   EvaluationStatistics,
   ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
-import type { Input, ResolvedInput } from "~/utils/clickhouse/common";
+import type { DisplayInput } from "~/utils/clickhouse/common";
 import type {
   JsonInferenceOutput,
   ContentBlockOutput,
 } from "~/utils/clickhouse/common";
-import InputComponent from "~/components/inference/Input";
 import OutputComponent from "~/components/inference/Output";
 
 // Import the custom tooltip styles
@@ -46,118 +46,81 @@ import {
 } from "~/hooks/evaluations/ColorAssigner";
 import MetricValue, { isCutoffFailed } from "~/components/metric/MetricValue";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
+import InputSnippet from "~/components/inference/InputSnippet";
 
-// Enhanced TruncatedText component that can handle complex structures
-const TruncatedContent = ({
-  content,
-  maxLength = 30,
-  type = "text",
-}: {
-  content: string | ResolvedInput | JsonInferenceOutput | ContentBlockOutput[];
+type TruncatedContentProps = (
+  | {
+      type: "text";
+      content: string;
+    }
+  | {
+      type: "input";
+      content: DisplayInput;
+    }
+  | {
+      type: "output";
+      content: JsonInferenceOutput | ContentBlockOutput[];
+    }
+) & {
   maxLength?: number;
-  type?: "text" | "input" | "output";
-}) => {
-  // For simple strings, use the existing TruncatedText component
-  if (typeof content === "string" && type === "text") {
-    const truncated =
-      content.length > maxLength
-        ? content.slice(0, maxLength) + "..."
-        : content;
-
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
-              <span className="font-mono text-sm">{truncated}</span>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent
-            side="right"
-            align="start"
-            sideOffset={5}
-            className="tooltip-scrollable max-h-[60vh] max-w-md overflow-auto shadow-xs"
-            avoidCollisions={true}
-          >
-            <div className="flex h-full w-full items-center justify-center p-4">
-              <pre className="w-full text-xs whitespace-pre-wrap">
-                {content}
-              </pre>
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  // For Input type
-  if (type === "input" && typeof content !== "string") {
-    // For the truncated display, just show a brief summary
-    const inputSummary = getInputSummary(content as Input);
-
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
-              <span className="font-mono text-sm">{inputSummary}</span>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent
-            side="right"
-            align="start"
-            sideOffset={5}
-            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto shadow-xs"
-            avoidCollisions={true}
-          >
-            <div className="flex h-full w-full items-center justify-center p-4">
-              <InputComponent input={content as ResolvedInput} />
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  // For Output type
-  if (type === "output" && typeof content !== "string") {
-    // For the truncated display, just show a brief summary
-    const outputSummary = getOutputSummary(
-      content as JsonInferenceOutput | ContentBlockOutput[],
-    );
-
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
-              <span className="font-mono text-sm">{outputSummary}</span>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent
-            side="right"
-            align="start"
-            sideOffset={5}
-            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto shadow-xs"
-            avoidCollisions={true}
-          >
-            <div className="flex h-full w-full items-center justify-center p-4">
-              <OutputComponent
-                output={content as JsonInferenceOutput | ContentBlockOutput[]}
-              />
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  // Fallback for unknown types
-  return <span>Unsupported content type</span>;
 };
 
+const TruncatedContent = ({
+  maxLength = 30,
+  type,
+  content,
+}: TruncatedContentProps) => {
+  const truncatedLabel =
+    type === "text"
+      ? content.length > maxLength
+        ? content.slice(0, maxLength) + "..."
+        : content
+      : type === "input"
+        ? getInputSummary(content)
+        : getOutputSummary(content);
+
+  return (
+    <TruncatedContentTooltip truncatedLabel={truncatedLabel}>
+      {type === "text" ? (
+        <div className="flex h-full w-full items-center justify-center p-4">
+          <pre className="w-full text-xs whitespace-pre-wrap">{content}</pre>
+        </div>
+      ) : type === "input" ? (
+        <InputSnippet input={content} />
+      ) : (
+        <OutputComponent output={content} />
+      )}
+    </TruncatedContentTooltip>
+  );
+};
+
+const TruncatedContentTooltip: React.FC<
+  React.PropsWithChildren<{
+    truncatedLabel: string;
+  }>
+> = ({ children, truncatedLabel }) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <div className="flex items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
+        <span className="font-mono text-sm">{truncatedLabel}</span>
+      </div>
+    </TooltipTrigger>
+
+    {/* TODO Reuse animations and such with existing Tooltip component. Other styling doesn't work as well here. */}
+    <RadixTooltip.Content
+      className="animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 max-h-[60vh] max-w-[500px] overflow-auto rounded-lg text-xs shadow-lg"
+      side="right"
+      align="start"
+      sideOffset={2}
+      avoidCollisions={true}
+    >
+      {children}
+    </RadixTooltip.Content>
+  </Tooltip>
+);
+
 // Helper function to generate a summary of an Input object
-function getInputSummary(input: Input): string {
+function getInputSummary(input: DisplayInput): string {
   if (!input || !input.messages || input.messages.length === 0) {
     return "Empty input";
   }
@@ -169,11 +132,24 @@ function getInputSummary(input: Input): string {
   }
 
   const firstContent = firstMessage.content[0];
-  if (firstContent.type === "text") {
-    const text =
-      typeof firstContent.value === "string"
-        ? firstContent.value
-        : JSON.stringify(firstContent.value);
+
+  if (firstContent.type === "structured_text") {
+    const text = JSON.stringify(firstContent.arguments, null, 2);
+    return text.length > 30 ? text.substring(0, 30) + "..." : text;
+  }
+
+  if (firstContent.type === "unstructured_text") {
+    const text = firstContent.text;
+    return text.length > 30 ? text.substring(0, 30) + "..." : text;
+  }
+
+  if (firstContent.type === "missing_function_text") {
+    const text = firstContent.value;
+    return text.length > 30 ? text.substring(0, 30) + "..." : text;
+  }
+
+  if (firstContent.type === "raw_text") {
+    const text = firstContent.value;
     return text.length > 30 ? text.substring(0, 30) + "..." : text;
   }
 
@@ -267,7 +243,7 @@ export function EvaluationTable({
       string,
       {
         id: string;
-        input: ResolvedInput;
+        input: DisplayInput;
         reference_output: JsonInferenceOutput | ContentBlockOutput[];
       }
     >();
