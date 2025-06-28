@@ -3990,7 +3990,7 @@ mod tests {
     fn test_openai_moderation_request_single() {
         let input = ModerationInput::Single("test text".to_string());
         let request = OpenAIModerationRequest::new(&input, Some("text-moderation-latest"));
-        
+
         let json = serde_json::to_value(&request).unwrap();
         assert_eq!(json["input"], "test text");
         assert_eq!(json["model"], "text-moderation-latest");
@@ -4004,7 +4004,7 @@ mod tests {
             "text3".to_string(),
         ]);
         let request = OpenAIModerationRequest::new(&input, None);
-        
+
         let json = serde_json::to_value(&request).unwrap();
         assert!(json["input"].is_array());
         assert_eq!(json["input"].as_array().unwrap().len(), 3);
@@ -4056,7 +4056,7 @@ mod tests {
         assert_eq!(response.id, "modr-12345");
         assert_eq!(response.model, "text-moderation-stable");
         assert_eq!(response.results.len(), 1);
-        
+
         let result = &response.results[0];
         assert!(result.flagged);
         assert!(result.categories.harassment);

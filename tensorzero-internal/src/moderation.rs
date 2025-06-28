@@ -210,7 +210,6 @@ pub struct ModerationCategories {
     pub violence_graphic: bool,
 }
 
-
 /// Confidence scores for each moderation category
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ModerationCategoryScores {
@@ -233,7 +232,6 @@ pub struct ModerationCategoryScores {
     #[serde(rename = "violence/graphic")]
     pub violence_graphic: f32,
 }
-
 
 /// Result for a single text input
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -542,16 +540,31 @@ mod tests {
     #[test]
     fn test_moderation_category_str_conversion() {
         assert_eq!(ModerationCategory::Hate.as_str(), "hate");
-        assert_eq!(ModerationCategory::HateThreatening.as_str(), "hate/threatening");
+        assert_eq!(
+            ModerationCategory::HateThreatening.as_str(),
+            "hate/threatening"
+        );
         assert_eq!(ModerationCategory::Harassment.as_str(), "harassment");
-        assert_eq!(ModerationCategory::HarassmentThreatening.as_str(), "harassment/threatening");
+        assert_eq!(
+            ModerationCategory::HarassmentThreatening.as_str(),
+            "harassment/threatening"
+        );
         assert_eq!(ModerationCategory::SelfHarm.as_str(), "self-harm");
-        assert_eq!(ModerationCategory::SelfHarmIntent.as_str(), "self-harm/intent");
-        assert_eq!(ModerationCategory::SelfHarmInstructions.as_str(), "self-harm/instructions");
+        assert_eq!(
+            ModerationCategory::SelfHarmIntent.as_str(),
+            "self-harm/intent"
+        );
+        assert_eq!(
+            ModerationCategory::SelfHarmInstructions.as_str(),
+            "self-harm/instructions"
+        );
         assert_eq!(ModerationCategory::Sexual.as_str(), "sexual");
         assert_eq!(ModerationCategory::SexualMinors.as_str(), "sexual/minors");
         assert_eq!(ModerationCategory::Violence.as_str(), "violence");
-        assert_eq!(ModerationCategory::ViolenceGraphic.as_str(), "violence/graphic");
+        assert_eq!(
+            ModerationCategory::ViolenceGraphic.as_str(),
+            "violence/graphic"
+        );
     }
 
     #[test]
