@@ -20,6 +20,10 @@ use uuid::Uuid;
 use crate::cache::ModelProviderRequest;
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
+use crate::moderation::{
+    ModerationCategories, ModerationCategoryScores, ModerationInput, ModerationProvider,
+    ModerationProviderResponse, ModerationRequest, ModerationResult,
+};
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
@@ -775,6 +779,101 @@ impl EmbeddingProvider for OpenAIProvider {
     }
 }
 
+impl ModerationProvider for OpenAIProvider {
+    async fn moderate(
+        &self,
+        request: &ModerationRequest,
+        client: &reqwest::Client,
+        dynamic_api_keys: &InferenceCredentials,
+    ) -> Result<ModerationProviderResponse, Error> {
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let request_body = OpenAIModerationRequest::new(
+            &request.input,
+            request.model.as_deref(),
+        );
+        let request_url =
+            get_moderation_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let start_time = Instant::now();
+        let mut request_builder = client
+            .post(request_url)
+            .header("Content-Type", "application/json");
+        if let Some(api_key) = api_key {
+            request_builder = request_builder.bearer_auth(api_key.expose_secret());
+        }
+        let res = request_builder
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: e.status(),
+                    message: format!(
+                        "Error sending request to OpenAI: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                })
+            })?;
+        if res.status().is_success() {
+            let raw_response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
+
+            let response: OpenAIModerationResponse =
+                serde_json::from_str(&raw_response).map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing JSON response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                        raw_response: Some(raw_response.clone()),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
+            let latency = Latency::NonStreaming {
+                response_time: start_time.elapsed(),
+            };
+
+            Ok(OpenAIModerationResponseWithMetadata {
+                response,
+                latency,
+                request: request_body,
+                raw_response,
+                input: request.input.clone(),
+            }
+            .try_into()?)
+        } else {
+            Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
+                res.status(),
+                &res.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing error response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                        raw_response: None,
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?,
+                PROVIDER_TYPE,
+            ))
+        }
+    }
+}
+
 pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource::Error) -> Error {
     let message = e.to_string();
     let mut raw_response = None;
@@ -950,6 +1049,18 @@ fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
         url.set_path(&format!("{}/", url.path()));
     }
     url.join("embeddings").map_err(|e| {
+        Error::new(ErrorDetails::InvalidBaseUrl {
+            message: e.to_string(),
+        })
+    })
+}
+
+fn get_moderation_url(base_url: &Url) -> Result<Url, Error> {
+    let mut url = base_url.clone();
+    if !url.path().ends_with('/') {
+        url.set_path(&format!("{}/", url.path()));
+    }
+    url.join("moderations").map_err(|e| {
         Error::new(ErrorDetails::InvalidBaseUrl {
             message: e.to_string(),
         })
@@ -2100,6 +2211,60 @@ struct OpenAIEmbeddingData {
     embedding: Vec<f32>,
 }
 
+// Moderation structures
+
+#[derive(Debug, Serialize)]
+struct OpenAIModerationRequest<'a> {
+    input: OpenAIModerationRequestInput<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model: Option<&'a str>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum OpenAIModerationRequestInput<'a> {
+    Single(&'a str),
+    Batch(Vec<&'a str>),
+}
+
+impl<'a> OpenAIModerationRequest<'a> {
+    fn new(
+        input: &'a ModerationInput,
+        model: Option<&'a str>,
+    ) -> Self {
+        let input = match input {
+            ModerationInput::Single(text) => OpenAIModerationRequestInput::Single(text),
+            ModerationInput::Batch(texts) => {
+                OpenAIModerationRequestInput::Batch(texts.iter().map(|s| s.as_str()).collect())
+            }
+        };
+        Self { input, model }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIModerationResponse {
+    #[allow(dead_code)]
+    id: String,
+    model: String,
+    results: Vec<OpenAIModerationResult>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIModerationResult {
+    flagged: bool,
+    categories: ModerationCategories,
+    category_scores: ModerationCategoryScores,
+}
+
+struct OpenAIModerationResponseWithMetadata<'a> {
+    response: OpenAIModerationResponse,
+    latency: Latency,
+    request: OpenAIModerationRequest<'a>,
+    raw_response: String,
+    input: ModerationInput,
+}
+
 impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderResponse {
     type Error = Error;
     fn try_from(response: OpenAIEmbeddingResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
@@ -2154,6 +2319,59 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
             response.usage.into(),
             latency,
         ))
+    }
+}
+
+impl<'a> TryFrom<OpenAIModerationResponseWithMetadata<'a>> for ModerationProviderResponse {
+    type Error = Error;
+    fn try_from(response: OpenAIModerationResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let OpenAIModerationResponseWithMetadata {
+            response,
+            latency,
+            request,
+            raw_response,
+            input,
+        } = response;
+        let raw_request = serde_json::to_string(&request).map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+                raw_request: Some(serde_json::to_string(&request).unwrap_or_default()),
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+
+        // Convert OpenAI results to our ModerationResult format
+        let results: Vec<ModerationResult> = response
+            .results
+            .into_iter()
+            .map(|r| ModerationResult {
+                flagged: r.flagged,
+                categories: r.categories,
+                category_scores: r.category_scores,
+            })
+            .collect();
+
+        // Create usage data (OpenAI moderation API doesn't return token counts)
+        let usage = Usage {
+            input_tokens: 0,
+            output_tokens: 0,
+        };
+
+        Ok(ModerationProviderResponse {
+            id: Uuid::now_v7(),
+            input,
+            results,
+            created: crate::inference::types::current_timestamp(),
+            model: response.model,
+            raw_request,
+            raw_response,
+            usage,
+            latency,
+        })
     }
 }
 

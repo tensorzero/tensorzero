@@ -7,6 +7,7 @@ use std::collections::HashSet;
 pub enum EndpointCapability {
     Chat,
     Embedding,
+    Moderation,
     // Future capabilities can be added here:
     // Completions,
     // Images,
@@ -20,6 +21,7 @@ impl EndpointCapability {
         match self {
             Self::Chat => "chat",
             Self::Embedding => "embedding",
+            Self::Moderation => "moderation",
         }
     }
 }
