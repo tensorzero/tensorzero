@@ -50,6 +50,7 @@ pub fn skip_credential_validation() -> bool {
 pub struct Config<'c> {
     pub gateway: GatewayConfig,
     pub models: Arc<RwLock<ModelTable>>, // model name => model config (supports all capabilities)
+    pub moderation_models: Arc<RwLock<crate::moderation::ModerationModelTable>>, // moderation model name => moderation model config
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
@@ -448,11 +449,26 @@ impl<'c> Config<'c> {
 
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
 
+        // Process moderation models
+        let moderation_models = uninitialized_config
+            .moderation_models
+            .into_iter()
+            .map(|(name, config)| {
+                let initialized = config.load(&uninitialized_config.provider_types)?;
+                Ok::<_, Error>((name, initialized))
+            })
+            .collect::<Result<HashMap<_, _>, Error>>()?;
+
         let mut config = Config {
             gateway: uninitialized_config.gateway,
             models: Arc::new(RwLock::new(all_models.try_into().map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!("Failed to load models: {e}"),
+                })
+            })?)),
+            moderation_models: Arc::new(RwLock::new(moderation_models.try_into().map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("Failed to load moderation models: {e}"),
                 })
             })?)),
             functions,
@@ -593,6 +609,18 @@ impl<'c> Config<'c> {
 
         // Embedding models are now part of the unified model table, validated above
 
+        // Validate each moderation model
+        let moderation_models = self.moderation_models.read().await;
+        for model_name in moderation_models.keys() {
+            if model_name.starts_with("tensorzero::") {
+                return Err(ErrorDetails::Config {
+                    message: format!("Moderation model name cannot start with 'tensorzero::': {model_name}"),
+                }
+                .into());
+            }
+        }
+        drop(moderation_models);
+
         // Validate each tool
         for tool_name in self.tools.keys() {
             if tool_name.starts_with("tensorzero::") {
@@ -714,6 +742,8 @@ struct UninitializedConfig {
     pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
     #[serde(default)]
     pub embedding_models: HashMap<Arc<str>, UninitializedEmbeddingModelConfig>, // embedding model name => embedding model config
+    #[serde(default)]
+    pub moderation_models: HashMap<Arc<str>, crate::moderation::UninitializedModerationModelConfig>, // moderation model name => moderation model config
     #[serde(default)]
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
     #[serde(default)]

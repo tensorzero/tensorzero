@@ -219,6 +219,10 @@ async fn main() {
         .route(
             "/v1/embeddings",
             post(endpoints::openai_compatible::embedding_handler),
+        )
+        .route(
+            "/v1/moderations",
+            post(endpoints::openai_compatible::moderation_handler),
         );
 
     // Apply authentication middleware only if authentication is enabled

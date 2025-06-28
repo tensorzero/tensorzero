@@ -1,0 +1,9 @@
+[gateway]
+bind_address = "0.0.0.0:3001"
+
+[moderation_models.test]
+routing = ["openai"]
+
+[moderation_models.test.providers.openai]
+type = "openai"
+model_name = "omni-moderation-latest"

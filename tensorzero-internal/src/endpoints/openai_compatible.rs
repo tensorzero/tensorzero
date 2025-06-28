@@ -1460,6 +1460,133 @@ pub async fn embedding_handler(
     Ok(Json(openai_response).into_response())
 }
 
+/// OpenAI-compatible moderation request structure
+#[derive(Clone, Debug, Deserialize)]
+pub struct OpenAICompatibleModerationParams {
+    pub input: OpenAICompatibleModerationInput,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(flatten)]
+    pub unknown_fields: HashMap<String, Value>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum OpenAICompatibleModerationInput {
+    Single(String),
+    Batch(Vec<String>),
+}
+
+/// OpenAI-compatible moderation response structure
+#[derive(Clone, Debug, Serialize)]
+pub struct OpenAICompatibleModerationResponse {
+    pub id: String,
+    pub model: String,
+    pub results: Vec<crate::moderation::ModerationResult>,
+}
+
+/// A handler for the OpenAI-compatible moderation endpoint
+#[debug_handler(state = AppStateData)]
+pub async fn moderation_handler(
+    State(AppStateData {
+        config,
+        http_client,
+        clickhouse_connection_info,
+        kafka_connection_info: _,
+        authentication_info: _,
+    }): AppState,
+    headers: HeaderMap,
+    StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleModerationParams>,
+) -> Result<Response<Body>, Error> {
+    let unknown_fields: Vec<&str> = openai_compatible_params
+        .unknown_fields
+        .keys()
+        .map(|k| k.as_str())
+        .collect();
+
+    if !unknown_fields.is_empty() {
+        tracing::warn!(
+            "Ignoring unknown fields in OpenAI-compatible moderation request: {:?}",
+            unknown_fields
+        );
+    }
+
+    // Default to omni-moderation-latest if no model specified
+    let model_name = openai_compatible_params
+        .model
+        .clone()
+        .unwrap_or_else(|| "omni-moderation-latest".to_string());
+
+    // Resolve the model name based on authentication state
+    let model_resolution = model_resolution::resolve_model_name(&model_name, &headers, false)?;
+
+    let resolved_model_name = model_resolution
+        .model_name
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: "Moderation requests must specify a model, not a function".to_string(),
+            })
+        })?
+        .to_string();
+
+    // Convert OpenAI request to internal format
+    let internal_input = match &openai_compatible_params.input {
+        OpenAICompatibleModerationInput::Single(text) => {
+            crate::moderation::ModerationInput::Single(text.clone())
+        }
+        OpenAICompatibleModerationInput::Batch(texts) => {
+            if texts.is_empty() {
+                return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                    message: "Batch moderation requests cannot be empty.".to_string(),
+                }));
+            }
+            crate::moderation::ModerationInput::Batch(texts.clone())
+        }
+    };
+
+    let moderation_request = crate::moderation::ModerationRequest {
+        input: internal_input,
+        model: Some(resolved_model_name.clone()),
+    };
+
+    // Get the moderation model table
+    let moderation_models = config.moderation_models.read().await;
+
+    // Create credentials - empty for now as OpenAI compatible endpoint doesn't support dynamic credentials
+    let credentials = InferenceCredentials::default();
+
+    // Create inference clients with no caching for moderation
+    let cache_options = crate::cache::CacheOptions {
+        enabled: crate::cache::CacheEnabledMode::Off,
+        max_age_s: None,
+    };
+    let clients = super::inference::InferenceClients {
+        http_client: &http_client,
+        credentials: &credentials,
+        clickhouse_connection_info: &clickhouse_connection_info,
+        cache_options: &cache_options,
+    };
+
+    // Call the moderation handler
+    let response = crate::moderation::handle_moderation_request(
+        moderation_request,
+        &clients,
+        &credentials,
+        &resolved_model_name,
+        &moderation_models,
+    )
+    .await?;
+
+    // Convert to OpenAI-compatible format
+    let openai_response = OpenAICompatibleModerationResponse {
+        id: format!("modr-{}", Uuid::now_v7()),
+        model: model_resolution.original_model_name.to_string(),
+        results: response.results,
+    };
+
+    Ok(Json(openai_response).into_response())
+}
+
 #[cfg(test)]
 mod tests {
 
