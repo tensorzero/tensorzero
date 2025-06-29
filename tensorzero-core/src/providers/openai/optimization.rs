@@ -14,7 +14,7 @@ use crate::{
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     optimization::{OptimizerOutput, OptimizerStatus},
     providers::openai::PROVIDER_TYPE,
-    stored_inference::RenderedStoredInference,
+    stored_inference::RenderedSample,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -153,9 +153,9 @@ pub struct OpenAISupervisedRow<'a> {
     tools: Vec<OpenAISFTTool<'a>>,
 }
 
-impl<'a> TryFrom<&'a RenderedStoredInference> for OpenAISupervisedRow<'a> {
+impl<'a> TryFrom<&'a RenderedSample> for OpenAISupervisedRow<'a> {
     type Error = Error;
-    fn try_from(inference: &'a RenderedStoredInference) -> Result<Self, Self::Error> {
+    fn try_from(inference: &'a RenderedSample) -> Result<Self, Self::Error> {
         let (parallel_tool_calls, tools) = match &inference.tool_params {
             Some(tool_params) => (
                 tool_params.parallel_tool_calls.unwrap_or_default(),
@@ -173,16 +173,18 @@ impl<'a> TryFrom<&'a RenderedStoredInference> for OpenAISupervisedRow<'a> {
             None,
             PROVIDER_TYPE,
         )?;
-        if inference.output.is_empty() {
+        let Some(output) = &inference.output else {
+            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+                message: "No output in inference".to_string(),
+            }));
+        };
+        if output.is_empty() {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
                 message: "No output in inference".to_string(),
             }));
         }
-        let output_content_blocks: Vec<ContentBlock> = inference
-            .output
-            .iter()
-            .map(|c| c.clone().into())
-            .collect::<Vec<_>>();
+        let output_content_blocks: Vec<ContentBlock> =
+            output.iter().map(|c| c.clone().into()).collect::<Vec<_>>();
         let final_assistant_message = tensorzero_to_openai_assistant_message(
             Cow::Owned(output_content_blocks),
             PROVIDER_TYPE,
@@ -298,15 +300,13 @@ mod tests {
         providers::openai::OpenAIContentBlock,
     };
     use serde_json::json;
-    use uuid::Uuid;
 
     use super::*;
 
     #[test]
     fn test_convert_to_sft_row() {
-        let inference = RenderedStoredInference {
+        let inference = RenderedSample {
             function_name: "test".to_string(),
-            variant_name: "test".to_string(),
             input: ModelInput {
                 system: Some("You are a helpful assistant named Dr. M.M. Patel.".to_string()),
                 messages: vec![RequestMessage {
@@ -316,11 +316,11 @@ mod tests {
                     })],
                 }],
             },
-            output: vec![ContentBlockChatOutput::Text(Text {
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "The capital of France is Paris.".to_string(),
-            })],
-            episode_id: Uuid::now_v7(),
-            inference_id: Uuid::now_v7(),
+            })]),
+            episode_id: Some(uuid::Uuid::now_v7()),
+            inference_id: Some(uuid::Uuid::now_v7()),
             tool_params: None,
             output_schema: None,
         };
