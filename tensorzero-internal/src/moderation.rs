@@ -6,89 +6,20 @@ use crate::cache::{
     moderation_cache_lookup, start_cache_write, CacheData, ModerationCacheData,
     ModerationModelProviderRequest,
 };
-use crate::config_parser::ProviderTypesConfig;
 use crate::endpoints::inference::InferenceClients;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
-use crate::inference::providers::openai::OpenAIProvider;
 use crate::inference::types::{current_timestamp, Latency, Usage};
-use crate::model::ProviderConfig;
-use crate::model::UninitializedProviderConfig;
-use crate::model_table::BaseModelTable;
-use crate::model_table::ShorthandModelConfig;
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use tracing::instrument;
 use uuid::Uuid;
 
-#[cfg(any(test, feature = "e2e_tests"))]
-use crate::inference::providers::dummy::DummyProvider;
 
-pub type ModerationModelTable = BaseModelTable<ModerationModelConfig>;
 
-impl ShorthandModelConfig for ModerationModelConfig {
-    const SHORTHAND_MODEL_PREFIXES: &[&str] = &["openai::"];
-    const MODEL_TYPE: &str = "Moderation model";
+// Note: ModerationModelConfig and related types have been removed as moderation
+// is now handled through the unified model system with endpoint capabilities
 
-    async fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
-        let model_name = model_name.to_string();
-        let provider_config = match provider_type {
-            "openai" => {
-                ModerationProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?)
-            }
-            #[cfg(any(test, feature = "e2e_tests"))]
-            "dummy" => ModerationProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
-            _ => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!("Invalid provider type for moderation: {provider_type}"),
-                }));
-            }
-        };
-        Ok(ModerationModelConfig {
-            routing: vec![provider_type.to_string().into()],
-            providers: HashMap::from([(provider_type.to_string().into(), provider_config)]),
-        })
-    }
-
-    fn validate(&self, _key: &str) -> Result<(), Error> {
-        // Credentials are validated during deserialization
-        Ok(())
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct UninitializedModerationModelConfig {
-    pub routing: Vec<Arc<str>>,
-    pub providers: HashMap<Arc<str>, UninitializedModerationProviderConfig>,
-}
-
-impl UninitializedModerationModelConfig {
-    pub fn load(
-        self,
-        provider_types: &ProviderTypesConfig,
-    ) -> Result<ModerationModelConfig, Error> {
-        let providers = self
-            .providers
-            .into_iter()
-            .map(|(name, config)| {
-                let provider_config = config.load(provider_types)?;
-                Ok((name, provider_config))
-            })
-            .collect::<Result<HashMap<_, _>, Error>>()?;
-        Ok(ModerationModelConfig {
-            routing: self.routing,
-            providers,
-        })
-    }
-}
-
-#[derive(Debug)]
-pub struct ModerationModelConfig {
-    pub routing: Vec<Arc<str>>,
-    pub providers: HashMap<Arc<str>, ModerationProviderConfig>,
-}
 
 /// Represents the input for moderation requests
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -335,69 +266,19 @@ pub trait ModerationProvider {
     ) -> impl Future<Output = Result<ModerationProviderResponse, Error>> + Send;
 }
 
-/// Moderation provider configuration
-#[derive(Debug)]
-pub enum ModerationProviderConfig {
-    OpenAI(OpenAIProvider),
-    #[cfg(any(test, feature = "e2e_tests"))]
-    Dummy(DummyProvider),
-}
+// Note: ModerationProviderConfig has been removed as moderation
+// is now handled through the unified model system
 
-/// Uninitialized moderation provider configuration
-#[derive(Debug, Deserialize)]
-pub struct UninitializedModerationProviderConfig {
-    #[serde(flatten)]
-    config: UninitializedProviderConfig,
-}
+// Note: handle_moderation_request has been removed as moderation
+// is now handled through the unified model system in the OpenAI-compatible endpoint
 
-impl UninitializedModerationProviderConfig {
-    pub fn load(
-        self,
-        provider_types: &ProviderTypesConfig,
-    ) -> Result<ModerationProviderConfig, Error> {
-        let provider_config = self.config.load(provider_types)?;
-        Ok(match provider_config {
-            ProviderConfig::OpenAI(provider) => ModerationProviderConfig::OpenAI(provider),
-            #[cfg(any(test, feature = "e2e_tests"))]
-            ProviderConfig::Dummy(provider) => ModerationProviderConfig::Dummy(provider),
-            _ => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "Unsupported provider config for moderation: {provider_config:?}"
-                    ),
-                }));
-            }
-        })
-    }
-}
-
-impl ModerationProvider for ModerationProviderConfig {
-    async fn moderate(
-        &self,
-        request: &ModerationRequest,
-        client: &Client,
-        dynamic_api_keys: &InferenceCredentials,
-    ) -> Result<ModerationProviderResponse, Error> {
-        match self {
-            ModerationProviderConfig::OpenAI(provider) => {
-                provider.moderate(request, client, dynamic_api_keys).await
-            }
-            #[cfg(any(test, feature = "e2e_tests"))]
-            ModerationProviderConfig::Dummy(provider) => {
-                provider.moderate(request, client, dynamic_api_keys).await
-            }
-        }
-    }
-}
-
-/// Handle moderation request with caching support
-#[instrument(skip(request, clients, credentials, table_config))]
-pub async fn handle_moderation_request(
+#[allow(dead_code)]
+async fn _deprecated_handle_moderation_request(
     mut request: ModerationRequest,
     clients: &InferenceClients<'_>,
-    credentials: &InferenceCredentials,
+    _credentials: &InferenceCredentials,
     model_name: &str,
-    table_config: &ModerationModelTable,
+    table_config: &crate::model::ModelTable,
 ) -> Result<ModerationResponse, Error> {
     // Get the model configuration
     let model_config = table_config.get(model_name).await?.ok_or_else(|| {
@@ -410,7 +291,7 @@ pub async fn handle_moderation_request(
     let mut provider_errors = HashMap::new();
 
     for provider_name in &model_config.routing {
-        let provider_config = match model_config.providers.get(provider_name) {
+        let _provider_config = match model_config.providers.get(provider_name) {
             Some(config) => config,
             None => {
                 let error = Error::new(ErrorDetails::ProviderNotFound {
@@ -421,13 +302,9 @@ pub async fn handle_moderation_request(
             }
         };
 
-        // Set model if not specified
+        // Model configuration would be handled here in the unified system
         if request.model.is_none() {
-            request.model = Some(match provider_config {
-                ModerationProviderConfig::OpenAI(_) => "text-moderation-latest".to_string(),
-                #[cfg(any(test, feature = "e2e_tests"))]
-                ModerationProviderConfig::Dummy(_) => "dummy-moderation".to_string(),
-            });
+            request.model = Some("text-moderation-latest".to_string());
         }
 
         let _provider_request = ModerationProviderRequest {
@@ -459,11 +336,12 @@ pub async fn handle_moderation_request(
             return Ok(cache_response);
         }
 
-        // Make the moderation request
-        match provider_config
-            .moderate(&request, clients.http_client, credentials)
-            .await
-        {
+        // In the unified system, moderation would be called through the provider's moderate method
+        // This is now handled in the OpenAI-compatible endpoint
+        let result: Result<ModerationProviderResponse, Error> = Err(Error::new(ErrorDetails::Config {
+            message: "This function is deprecated. Use the OpenAI-compatible moderation endpoint instead".to_string(),
+        }));
+        match result {
             Ok(provider_response) => {
                 let response = ModerationResponse::new(provider_response, provider_name.clone());
 
@@ -660,39 +538,6 @@ mod tests {
         assert_eq!(response.results[0].category_scores.hate, 0.95);
     }
 
-    #[tokio::test]
-    async fn test_shorthand_model_config_openai() {
-        // Skip test if OPENAI_API_KEY is not set
-        if std::env::var("OPENAI_API_KEY").is_err() {
-            return;
-        }
-
-        let config = ModerationModelConfig::from_shorthand("openai", "text-moderation-latest")
-            .await
-            .expect("Failed to create OpenAI config");
-
-        assert_eq!(config.routing.len(), 1);
-        assert_eq!(config.routing[0].as_ref(), "openai");
-        assert_eq!(config.providers.len(), 1);
-        assert!(config.providers.contains_key("openai"));
-    }
-
-    #[cfg(any(test, feature = "e2e_tests"))]
-    #[tokio::test]
-    async fn test_shorthand_model_config_dummy() {
-        let config = ModerationModelConfig::from_shorthand("dummy", "dummy-moderation")
-            .await
-            .expect("Failed to create dummy config");
-
-        assert_eq!(config.routing.len(), 1);
-        assert_eq!(config.routing[0].as_ref(), "dummy");
-        assert_eq!(config.providers.len(), 1);
-        assert!(config.providers.contains_key("dummy"));
-    }
-
-    #[tokio::test]
-    async fn test_shorthand_model_config_invalid_provider() {
-        let result = ModerationModelConfig::from_shorthand("invalid", "model");
-        assert!(result.await.is_err());
-    }
+    // Tests for ModerationModelConfig have been removed as moderation
+    // is now handled through the unified model system
 }
