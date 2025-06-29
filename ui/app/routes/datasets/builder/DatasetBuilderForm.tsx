@@ -137,10 +137,7 @@ export function DatasetBuilderForm({
             control={form.control}
             name="metric_name"
             functionFieldName="function"
-            feedbackCount={counts.feedbackCount}
-            curatedInferenceCount={counts.curatedInferenceCount}
             config={config}
-            removeDemonstrations={true}
           />
           <OutputSourceSelector control={form.control} />
         </div>
