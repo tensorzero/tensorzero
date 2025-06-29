@@ -47,6 +47,7 @@ use super::inference::{
 };
 use super::model_resolution;
 use crate::embeddings::EmbeddingRequest;
+use crate::moderation::ModerationProvider;
 
 /// A handler for the OpenAI-compatible inference endpoint
 #[debug_handler(state = AppStateData)]
@@ -1546,11 +1547,28 @@ pub async fn moderation_handler(
 
     let moderation_request = crate::moderation::ModerationRequest {
         input: internal_input,
-        model: Some(resolved_model_name.clone()),
+        model: None, // Let the provider set the appropriate model name
     };
 
-    // Get the moderation model table
-    let moderation_models = config.moderation_models.read().await;
+    // Get the regular model table
+    let models = config.models.read().await;
+
+    // Check if the model exists and has moderation capability
+    let model_config = models.get(&resolved_model_name).await?.ok_or_else(|| {
+        Error::new(ErrorDetails::Config {
+            message: format!("Model '{resolved_model_name}' not found"),
+        })
+    })?;
+
+    // Verify the model supports moderation
+    if !model_config
+        .endpoints
+        .contains(&crate::endpoints::capability::EndpointCapability::Moderation)
+    {
+        return Err(Error::new(ErrorDetails::Config {
+            message: format!("Model '{resolved_model_name}' does not support moderation"),
+        }));
+    }
 
     // Create credentials - empty for now as OpenAI compatible endpoint doesn't support dynamic credentials
     let credentials = InferenceCredentials::default();
@@ -1567,15 +1585,58 @@ pub async fn moderation_handler(
         cache_options: &cache_options,
     };
 
-    // Call the moderation handler
-    let response = crate::moderation::handle_moderation_request(
-        moderation_request,
-        &clients,
-        &credentials,
-        &resolved_model_name,
-        &moderation_models,
-    )
-    .await?;
+    // For now, we'll use the first provider in routing that supports moderation
+    // This is a temporary solution until we fully integrate moderation into the regular model system
+    let mut provider_errors = HashMap::new();
+    let mut response = None;
+
+    for provider_name in &model_config.routing {
+        let provider = match model_config.providers.get(provider_name) {
+            Some(p) => &p.config,
+            None => {
+                tracing::warn!("Provider {} not found in model config", provider_name);
+                continue;
+            }
+        };
+
+        // Check if this provider supports moderation
+        tracing::info!("Checking provider {} for moderation support", provider_name);
+        match provider {
+            crate::model::ProviderConfig::OpenAI(openai_provider) => {
+                tracing::info!("Found OpenAI provider for moderation");
+                // For OpenAI, we need to use the provider's configured model name
+                let mut provider_request = moderation_request.clone();
+                provider_request.model = Some(openai_provider.model_name().to_string());
+                // Use the OpenAI provider's moderation capability
+                match openai_provider
+                    .moderate(&provider_request, clients.http_client, &credentials)
+                    .await
+                {
+                    Ok(provider_response) => {
+                        response = Some(crate::moderation::ModerationResponse::new(
+                            provider_response,
+                            provider_name.clone(),
+                        ));
+                        break;
+                    }
+                    Err(e) => {
+                        provider_errors.insert(provider_name.to_string(), e);
+                        continue;
+                    }
+                }
+            }
+            _ => {
+                // Other providers don't support moderation yet
+                continue;
+            }
+        }
+    }
+
+    let response = response.ok_or_else(|| {
+        Error::new(ErrorDetails::Config {
+            message: format!("No providers available for moderation model '{resolved_model_name}'"),
+        })
+    })?;
 
     // Convert to OpenAI-compatible format
     let openai_response = OpenAICompatibleModerationResponse {

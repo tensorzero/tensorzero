@@ -52,8 +52,8 @@ pub struct Config<'c> {
     pub models: Arc<RwLock<ModelTable>>, // model name => model config (supports all capabilities)
     pub moderation_models: Arc<RwLock<crate::moderation::ModerationModelTable>>, // moderation model name => moderation model config
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
-    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
-    pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
+    pub metrics: HashMap<String, MetricConfig>,          // metric name => metric config
+    pub tools: HashMap<String, Arc<StaticToolConfig>>,   // tool name => tool config
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
@@ -466,11 +466,13 @@ impl<'c> Config<'c> {
                     message: format!("Failed to load models: {e}"),
                 })
             })?)),
-            moderation_models: Arc::new(RwLock::new(moderation_models.try_into().map_err(|e| {
-                Error::new(ErrorDetails::Config {
-                    message: format!("Failed to load moderation models: {e}"),
-                })
-            })?)),
+            moderation_models: Arc::new(RwLock::new(moderation_models.try_into().map_err(
+                |e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Failed to load moderation models: {e}"),
+                    })
+                },
+            )?)),
             functions,
             metrics: uninitialized_config.metrics,
             tools,
@@ -614,7 +616,9 @@ impl<'c> Config<'c> {
         for model_name in moderation_models.keys() {
             if model_name.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {
-                    message: format!("Moderation model name cannot start with 'tensorzero::': {model_name}"),
+                    message: format!(
+                        "Moderation model name cannot start with 'tensorzero::': {model_name}"
+                    ),
                 }
                 .into());
             }
