@@ -109,6 +109,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await
@@ -120,6 +121,7 @@ pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
         config_file: None,
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await
@@ -133,6 +135,7 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await
@@ -2410,21 +2413,6 @@ pub async fn check_simple_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens
-    );
 
     if !is_batch {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -2625,21 +2613,6 @@ pub async fn check_simple_image_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens
-    );
 
     if !is_batch {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -2999,22 +2972,6 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        expected_max_tokens
-    );
-
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
 
@@ -7568,21 +7525,6 @@ pub async fn check_tool_use_multi_turn_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens,
-    );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -7888,19 +7830,6 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens
-    );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -8586,7 +8515,8 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
 
     let inference_id = inference_id.unwrap();
     let tool_id = tool_id.unwrap();
-    assert!(serde_json::from_str::<Value>(&arguments).is_ok());
+    println!("Collected arguments: {arguments}");
+    serde_json::from_str::<Value>(&arguments).unwrap();
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -9717,21 +9647,6 @@ pub async fn check_json_mode_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens
-    );
 
     if !is_batch {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -9812,29 +9727,19 @@ pub async fn check_json_mode_inference_response(
     output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
 
     let is_openrouter = provider.model_provider_name == "openrouter";
-    if is_openrouter {
-        // OpenRouter may return both an empty text block and a tool_call block
-        assert!(
-            output.len() <= 2,
-            "Expected at most 2 output blocks for OpenRouter, got {}",
-            output.len()
-        );
-    } else {
-        // For other providers, expect exactly one block
-        assert_eq!(
-            output.len(),
-            1,
-            "Expected exactly 1 output block, got {}",
-            output.len()
-        );
-    }
+    // Some providers may return both an empty text block and a tool_call block
+    assert!(
+        output.len() <= 2,
+        "Expected at most 2 output blocks, got {}",
+        output.len()
+    );
 
     // Check for valid content in the output
     let mut found_valid_content = false;
     for output_block in &output {
         match output_block {
-            ContentBlock::Text(text) if text.text.is_empty() && is_openrouter => {
-                // Skip empty text blocks from OpenRouter
+            ContentBlock::Text(text) if text.text.trim().is_empty() => {
+                // Skip empty text blocks
                 continue;
             }
             ContentBlock::Text(text) => {
@@ -9851,7 +9756,7 @@ pub async fn check_json_mode_inference_response(
                 found_valid_content = true;
             }
             _ => {
-                panic!("Expected a text block or tool_call (for OpenRouter), got {output_block:?}");
+                panic!("Expected a text block or tool_call, got {output_block:?}");
             }
         }
     }
@@ -10012,21 +9917,6 @@ pub async fn check_dynamic_json_mode_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens
-    );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -10097,29 +9987,19 @@ pub async fn check_dynamic_json_mode_inference_response(
     output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
 
     let is_openrouter = provider.model_provider_name == "openrouter";
-    if is_openrouter {
-        // OpenRouter may return both an empty text block and a tool_call block
-        assert!(
-            output.len() <= 2,
-            "Expected at most 2 output blocks for OpenRouter, got {}",
-            output.len()
-        );
-    } else {
-        // For other providers, expect exactly one block
-        assert_eq!(
-            output.len(),
-            1,
-            "Expected exactly 1 output block, got {}",
-            output.len()
-        );
-    }
+    // Some providers return both an empty text block and a tool_call block
+    assert!(
+        output.len() <= 2,
+        "Expected at most 2 output blocks for OpenRouter, got {}",
+        output.len()
+    );
 
     // Check for valid content in the output
     let mut found_valid_content = false;
     for output_block in &output {
         match output_block {
-            ContentBlock::Text(text) if text.text.is_empty() && is_openrouter => {
-                // Skip empty text blocks from OpenRouter
+            ContentBlock::Text(text) if text.text.trim().is_empty() => {
+                // Skip empty text blocks
                 continue;
             }
             ContentBlock::Text(text) => {

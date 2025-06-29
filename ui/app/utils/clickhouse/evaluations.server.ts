@@ -1,6 +1,6 @@
 import { getConfig } from "../config/index.server";
 import { resolveInput } from "../resolve.server";
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 import { CountSchema, inputSchema } from "./common";
 import {
   EvaluationRunInfoSchema,
@@ -45,7 +45,7 @@ export async function getEvaluationRunInfos(
       toUInt128(toUUID(evaluation_run_id)) DESC
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -83,7 +83,7 @@ export async function getEvaluationRunInfosForDatapoint(
     GROUP BY
       tags['tensorzero::evaluation_run_id']
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -98,10 +98,13 @@ export async function getEvaluationRunInfosForDatapoint(
 
 async function parseEvaluationResult(
   result: EvaluationResult,
+  function_name: string,
 ): Promise<ParsedEvaluationResult> {
   // Parse the input field
   const parsedInput = inputSchema.parse(JSON.parse(result.input));
-  const resolvedInput = await resolveInput(parsedInput);
+  const config = await getConfig();
+  const functionConfig = config.functions[function_name];
+  const resolvedInput = await resolveInput(parsedInput, functionConfig);
 
   // Parse the outputs
   const generatedOutput = JSON.parse(result.generated_output);
@@ -128,10 +131,11 @@ async function parseEvaluationResult(
 
 async function parseEvaluationResultWithVariant(
   result: EvaluationResultWithVariant,
+  function_name: string,
 ): Promise<ParsedEvaluationResultWithVariant> {
   try {
     // Parse using the same logic as parseEvaluationResult
-    const parsedResult = await parseEvaluationResult(result);
+    const parsedResult = await parseEvaluationResult(result, function_name);
 
     // Add the variant_name to the parsed result
     const parsedResultWithVariant = {
@@ -253,7 +257,7 @@ export async function getEvaluationResults(
 
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -267,7 +271,9 @@ export async function getEvaluationResults(
     },
   });
   const rows = await result.json<EvaluationResult>();
-  return Promise.all(rows.map((row) => parseEvaluationResult(row)));
+  return Promise.all(
+    rows.map((row) => parseEvaluationResult(row, function_name)),
+  );
 }
 
 /*
@@ -332,7 +338,7 @@ export async function getEvaluationStatistics(
     toUInt128(toUUID(filtered_inference.tags['tensorzero::evaluation_run_id'])) DESC
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -365,7 +371,7 @@ export async function countDatapointsForEvaluation(
       FROM all_datapoint_ids
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -384,7 +390,7 @@ export async function countTotalEvaluationRuns() {
   const query = `
     SELECT toUInt32(uniqExact(value)) as count FROM TagInference WHERE key = 'tensorzero::evaluation_run_id'
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
   });
@@ -423,7 +429,7 @@ export async function getEvaluationRunInfo(
     LIMIT {limit:UInt32}
     OFFSET {offset:UInt32}
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -461,7 +467,7 @@ export async function searchEvaluationRuns(
     OFFSET {offset:UInt32}
     `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -562,7 +568,7 @@ export async function getEvaluationsForDatapoint(
 
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -576,7 +582,7 @@ export async function getEvaluationsForDatapoint(
   });
   const rows = await result.json<EvaluationResultWithVariant>();
   const parsed_rows = await Promise.all(
-    rows.map((row) => parseEvaluationResultWithVariant(row)),
+    rows.map((row) => parseEvaluationResultWithVariant(row, function_name)),
   );
   return parsed_rows;
 }

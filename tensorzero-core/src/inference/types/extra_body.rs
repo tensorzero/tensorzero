@@ -1,14 +1,18 @@
-use serde::de::Error;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use super::{deserialize_delete, serialize_delete};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ExtraBodyConfig {
     pub data: Vec<ExtraBodyReplacement>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ExtraBodyReplacement {
     pub pointer: String,
     #[serde(flatten)]
@@ -17,6 +21,8 @@ pub struct ExtraBodyReplacement {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum ExtraBodyReplacementKind {
     Value(Value),
     // We only allow `"delete": true` to be set - deserializing `"delete": false` will error
@@ -25,26 +31,6 @@ pub enum ExtraBodyReplacementKind {
         deserialize_with = "deserialize_delete"
     )]
     Delete,
-}
-
-fn serialize_delete<S>(s: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    true.serialize(s)
-}
-
-fn deserialize_delete<'de, D>(d: D) -> Result<(), D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let val = bool::deserialize(d)?;
-    if !val {
-        return Err(D::Error::custom(
-            "Error deserializing extra body replacement: 'delete' must be 'true', or not set",
-        ));
-    }
-    Ok(())
 }
 
 /// The 'InferenceExtraBody' options provided directly in an inference request
