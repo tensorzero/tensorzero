@@ -675,7 +675,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         *,
         stored_inferences: List[
             StoredInference
-        ],  # TODO (Viraj): make this a union type
+        ], 
         variants: Dict[str, str],
     ) -> List[RenderedSample]:
         """
