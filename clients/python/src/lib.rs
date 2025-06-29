@@ -1637,16 +1637,20 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    /// Renders stored samples using the templates of the specified variants.
+    /// Render a list of stored samples into a list of rendered stored samples.
     ///
-    /// Warning: This API is experimental and may change without notice. For now
-    ///          we discard samples where the input references a static tool that
-    ///          has no variant specified, or where the process of downloading resources fails.
-    ///          In future we will make this behavior configurable by the caller.
+    /// This function performs two main tasks:
+    /// 1. Resolves all network resources (e.g., images) in the stored samples.
+    /// 2. Prepares all messages into "simple" messages that have been templated for a particular variant.
+    ///    To do this, the function needs to know which variant to use for each function that might appear in the data.
+    ///
+    /// IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
+    /// the function has no variant specified, or the process of downloading resources fails.
+    /// In the future, this behavior may be made configurable by the caller.
     ///
     /// :param stored_samples: A list of stored samples to render.
-    /// :param variants: A map from function name to variant name.
-    /// :return: A list of rendered stored samples.
+    /// :param variants: A mapping from function name to variant name.
+    /// :return: A list of rendered samples.
     #[pyo3(signature = (*, stored_samples, variants))]
     fn experimental_render_samples<'a>(
         this: PyRef<'a, Self>,
