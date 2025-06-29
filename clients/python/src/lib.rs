@@ -984,7 +984,7 @@ impl TensorZeroGateway {
         variants: HashMap<String, String>,
     ) -> PyResult<Vec<RenderedSample>> {
         // TODO(Viraj): change the name and deprecate this
-        tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead.");
+        tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
         let client = this.as_super().client.clone();
         let stored_inferences = stored_inferences
             .iter()
@@ -1621,7 +1621,7 @@ impl AsyncTensorZeroGateway {
         stored_inferences: Vec<Bound<'a, PyAny>>,
         variants: HashMap<String, String>,
     ) -> PyResult<Bound<'a, PyAny>> {
-        tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead.");
+        tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
         let client = this.as_super().client.clone();
         let stored_inferences = stored_inferences
             .iter()

@@ -367,10 +367,10 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     ) -> List[RenderedSample]:
         """
         DEPRECATED: use `experimental_render_samples` instead.
-        Render a list of stored inferences into a list of rendered stored inferences.
+        Render a list of stored samples into a list of rendered stored samples.
 
         This function performs two main tasks:
-        1. Resolves all network resources (e.g., images) in the stored inference.
+        1. Resolves all network resources (e.g., images) in the stored samples.
         2. Prepares all messages into "simple" messages that have been templated for a particular variant.
            To do this, the function needs to know which variant to use for each function that might appear in the data.
 
@@ -378,7 +378,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         the function has no variant specified, or the process of downloading resources fails.
         In the future, this behavior may be made configurable by the caller.
 
-        :param stored_inferences: A list of stored inferences to render.
+        :param stored_inferences: A list of stored samples to render.
         :param variants: A mapping from function name to variant name.
         :return: A list of rendered samples.
         """
@@ -681,10 +681,10 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         """
         DEPRECATED: use `experimental_render_samples` instead.
 
-        Render a list of stored inferences into a list of rendered stored inferences.
+        Render a list of stored samples into a list of rendered stored samples.
 
         This function performs two main tasks:
-        1. Resolves all network resources (e.g., images) in the stored inferences.
+        1. Resolves all network resources (e.g., images) in the stored samples.
         2. Prepares all messages into "simple" messages that have been templated for a particular variant.
            To do this, the function needs to know which variant to use for each function that might appear in the data.
 
@@ -692,7 +692,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         the function has no variant specified, or the process of downloading resources fails.
         In the future, this behavior may be made configurable by the caller.
 
-        :param stored_inferences: A list of stored inferences to render.
+        :param stored_inferences: A list of stored samples to render.
         :param variants: A mapping from function name to variant name.
         :return: A list of rendered samples.
         """
