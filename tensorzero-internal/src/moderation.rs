@@ -1,25 +1,16 @@
-use std::collections::HashMap;
 use std::future::Future;
 use std::sync::Arc;
 
-use crate::cache::{
-    moderation_cache_lookup, start_cache_write, CacheData, ModerationCacheData,
-    ModerationModelProviderRequest,
-};
-use crate::endpoints::inference::InferenceClients;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
-use crate::inference::types::{current_timestamp, Latency, Usage};
+use crate::error::Error;
+use crate::inference::types::{Latency, Usage};
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-
-
 // Note: ModerationModelConfig and related types have been removed as moderation
 // is now handled through the unified model system with endpoint capabilities
-
 
 /// Represents the input for moderation requests
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -221,39 +212,6 @@ impl ModerationResponse {
             cached: false,
         }
     }
-
-    pub fn from_cache(
-        cache_lookup: CacheData<ModerationCacheData>,
-        request: &ModerationModelProviderRequest,
-    ) -> Self {
-        let cache_data = cache_lookup.output;
-        Self {
-            id: Uuid::now_v7(),
-            created: current_timestamp(),
-            input: request.request.input.clone(),
-            results: cache_data.results,
-            model: "cached".to_string(), // We don't store the model in cache
-            raw_request: cache_lookup.raw_request,
-            raw_response: cache_lookup.raw_response,
-            usage: Usage {
-                input_tokens: cache_lookup.input_tokens,
-                output_tokens: cache_lookup.output_tokens,
-            },
-            latency: Latency::NonStreaming {
-                response_time: std::time::Duration::from_millis(0),
-            },
-            moderation_provider_name: Arc::from(request.provider_name),
-            cached: true,
-        }
-    }
-}
-
-/// Request context for moderation providers
-#[derive(Debug, Clone, Copy)]
-pub struct ModerationProviderRequest<'request> {
-    pub request: &'request ModerationRequest,
-    pub model_name: &'request str,
-    pub provider_name: &'request str,
 }
 
 /// Trait for providers that support moderation
@@ -268,119 +226,6 @@ pub trait ModerationProvider {
 
 // Note: ModerationProviderConfig has been removed as moderation
 // is now handled through the unified model system
-
-// Note: handle_moderation_request has been removed as moderation
-// is now handled through the unified model system in the OpenAI-compatible endpoint
-
-#[allow(dead_code)]
-async fn _deprecated_handle_moderation_request(
-    mut request: ModerationRequest,
-    clients: &InferenceClients<'_>,
-    _credentials: &InferenceCredentials,
-    model_name: &str,
-    table_config: &crate::model::ModelTable,
-) -> Result<ModerationResponse, Error> {
-    // Get the model configuration
-    let model_config = table_config.get(model_name).await?.ok_or_else(|| {
-        Error::new(ErrorDetails::Config {
-            message: format!("Moderation model '{model_name}' not found"),
-        })
-    })?;
-
-    // Try each provider in the routing order
-    let mut provider_errors = HashMap::new();
-
-    for provider_name in &model_config.routing {
-        let _provider_config = match model_config.providers.get(provider_name) {
-            Some(config) => config,
-            None => {
-                let error = Error::new(ErrorDetails::ProviderNotFound {
-                    provider_name: provider_name.to_string(),
-                });
-                provider_errors.insert(provider_name.to_string(), error);
-                continue;
-            }
-        };
-
-        // Model configuration would be handled here in the unified system
-        if request.model.is_none() {
-            request.model = Some("text-moderation-latest".to_string());
-        }
-
-        let _provider_request = ModerationProviderRequest {
-            request: &request,
-            model_name,
-            provider_name,
-        };
-
-        // Check cache first
-        let cache_key = ModerationModelProviderRequest {
-            request: &request,
-            model_name,
-            provider_name,
-        };
-        let cache_result = if clients.cache_options.enabled.read() {
-            moderation_cache_lookup(
-                clients.clickhouse_connection_info,
-                &cache_key,
-                clients.cache_options.max_age_s,
-            )
-            .await
-            .ok()
-            .flatten()
-        } else {
-            None
-        };
-
-        if let Some(cache_response) = cache_result {
-            return Ok(cache_response);
-        }
-
-        // In the unified system, moderation would be called through the provider's moderate method
-        // This is now handled in the OpenAI-compatible endpoint
-        let result: Result<ModerationProviderResponse, Error> = Err(Error::new(ErrorDetails::Config {
-            message: "This function is deprecated. Use the OpenAI-compatible moderation endpoint instead".to_string(),
-        }));
-        match result {
-            Ok(provider_response) => {
-                let response = ModerationResponse::new(provider_response, provider_name.clone());
-
-                // Cache the response
-                if clients.cache_options.enabled.write() {
-                    let cache_data = ModerationCacheData {
-                        results: response.results.clone(),
-                    };
-
-                    let _ = start_cache_write(
-                        clients.clickhouse_connection_info,
-                        cache_key.get_cache_key()?,
-                        cache_data,
-                        &response.raw_request,
-                        &response.raw_response,
-                        &response.usage,
-                        None,
-                    );
-                }
-
-                return Ok(response);
-            }
-            Err(e) => {
-                // Log error and save for reporting
-                tracing::warn!(
-                    "Moderation request failed for provider {}: {}",
-                    provider_name,
-                    e
-                );
-                provider_errors.insert(provider_name.to_string(), e);
-                continue;
-            }
-        }
-    }
-
-    Err(Error::new(ErrorDetails::ModelProvidersExhausted {
-        provider_errors,
-    }))
-}
 
 #[cfg(test)]
 mod tests {
@@ -491,51 +336,6 @@ mod tests {
         assert_eq!(scores.sexual_minors, 0.0);
         assert_eq!(scores.violence, 0.0);
         assert_eq!(scores.violence_graphic, 0.0);
-    }
-
-    #[test]
-    fn test_moderation_response_from_cache() {
-        let cache_lookup = CacheData {
-            output: ModerationCacheData {
-                results: vec![ModerationResult {
-                    flagged: true,
-                    categories: ModerationCategories {
-                        hate: true,
-                        ..Default::default()
-                    },
-                    category_scores: ModerationCategoryScores {
-                        hate: 0.95,
-                        ..Default::default()
-                    },
-                }],
-            },
-            raw_request: "test request".to_string(),
-            raw_response: "test response".to_string(),
-            input_tokens: 10,
-            output_tokens: 5,
-            finish_reason: None,
-        };
-
-        let request = ModerationRequest {
-            input: ModerationInput::Single("test".to_string()),
-            model: Some("test-model".to_string()),
-        };
-
-        let provider_request = ModerationModelProviderRequest {
-            request: &request,
-            model_name: "test-model",
-            provider_name: "test-provider",
-        };
-
-        let response = ModerationResponse::from_cache(cache_lookup, &provider_request);
-
-        assert!(response.cached);
-        assert_eq!(response.model, "cached");
-        assert_eq!(response.moderation_provider_name.as_ref(), "test-provider");
-        assert_eq!(response.results.len(), 1);
-        assert!(response.results[0].flagged);
-        assert!(response.results[0].categories.hate);
-        assert_eq!(response.results[0].category_scores.hate, 0.95);
     }
 
     // Tests for ModerationModelConfig have been removed as moderation

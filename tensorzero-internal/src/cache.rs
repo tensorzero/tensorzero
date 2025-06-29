@@ -85,6 +85,9 @@ impl<T> Clone for BaseModelProviderRequest<'_, T> {
 
 pub type ModelProviderRequest<'a> = BaseModelProviderRequest<'a, ModelInferenceRequest<'a>>;
 pub type EmbeddingModelProviderRequest<'a> = BaseModelProviderRequest<'a, EmbeddingRequest>;
+// Note: ModerationModelProviderRequest has been deprecated as moderation is now handled
+// through the unified model system. The OpenAI-compatible endpoint handles moderation
+// without caching.
 pub type ModerationModelProviderRequest<'a> =
     BaseModelProviderRequest<'a, crate::moderation::ModerationRequest>;
 
@@ -248,6 +251,8 @@ pub struct EmbeddingCacheData {
     pub embeddings: Vec<Vec<f32>>,
 }
 
+// Note: ModerationCacheData has been deprecated as moderation is now handled
+// through the unified model system without caching.
 #[derive(Debug)]
 pub struct ModerationCacheData {
     pub results: Vec<crate::moderation::ModerationResult>,
@@ -487,20 +492,6 @@ pub async fn embedding_cache_lookup(
     )
     .await?;
     Ok(result.map(|result| EmbeddingResponse::from_cache(result, request)))
-}
-
-pub async fn moderation_cache_lookup(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
-    request: &ModerationModelProviderRequest<'_>,
-    max_age_s: Option<u32>,
-) -> Result<Option<crate::moderation::ModerationResponse>, Error> {
-    let result = cache_lookup_inner::<ModerationCacheData>(
-        clickhouse_connection_info,
-        request.get_cache_key()?,
-        max_age_s,
-    )
-    .await?;
-    Ok(result.map(|result| crate::moderation::ModerationResponse::from_cache(result, request)))
 }
 
 pub async fn cache_lookup(

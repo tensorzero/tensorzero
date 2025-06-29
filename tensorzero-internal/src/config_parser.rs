@@ -51,8 +51,8 @@ pub struct Config<'c> {
     pub gateway: GatewayConfig,
     pub models: Arc<RwLock<ModelTable>>, // model name => model config (supports all capabilities)
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
-    pub metrics: HashMap<String, MetricConfig>,          // metric name => metric config
-    pub tools: HashMap<String, Arc<StaticToolConfig>>,   // tool name => tool config
+    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
+    pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
@@ -232,7 +232,11 @@ impl ObjectStoreInfo {
 // improved warning messages.
 // We are attempting to find this error: `https://github.com/seanmonstar/reqwest/blob/c4a9fb060fb518f0053b98f78c7583071a760cf4/src/error.rs#L340`
 fn contains_bad_scheme_err(e: &impl StdError) -> bool {
-    format!("{e:?}").contains("BadScheme")
+    let err_str = format!("{e:?}");
+    // Check for BadScheme error or DNS errors that commonly occur with HTTP endpoints
+    err_str.contains("BadScheme")
+        || (err_str.contains("dns error") && err_str.contains("http://"))
+        || (err_str.contains("Name or service not known") && err_str.contains("http://"))
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq)]
