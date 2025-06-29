@@ -5,9 +5,11 @@ use async_trait::async_trait;
 
 use super::check_column_exists;
 
-/// TODO Adds custom `is_custom` column to the `ChatInferenceDatapoint` and `JsonInferenceDatapoint` tables,
-/// denoting whether ...
+/// This migration adds a boolean column `is_custom` to the `ChatInferenceDatapoint` and `JsonInferenceDatapoint` tables,
+/// denoting whether the datapoint has been customized by the user beyond the choice of output taken from
+/// the historical inference, a demonstration, or none.
 ///
+/// This is used to determine whether the datapoint is a custom datapoint or not for the purposes of deduplication.
 pub struct Migration0032<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }

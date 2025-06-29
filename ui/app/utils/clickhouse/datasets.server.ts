@@ -384,7 +384,7 @@ export async function insertRowsForDataset(
       now64() as updated_at,
       null as staled_at,
       subquery.id as source_inference_id,
-      false as is_custom
+      false as is_custom -- if we are using the dataset builder implemented here, the datapoints are not custom
     FROM (
       ${sourceQuery}
     ) AS subquery

@@ -162,12 +162,19 @@ FORMAT JSONEachRow;"#
     Ok(inference_data)
 }
 
+/// This function inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
+/// based on an existing inference (specified by `inference_id`).
+///
+/// The inference is mostly copied as-is, except for the 'output' field.
+/// Based on the 'output' parameter, the output is copied, ignored, or fetched from a demonstration.
+/// Datapoints that are created this way are not marked as custom datapoints.
 async fn insert_from_existing(
     clickhouse: &ClickHouseConnectionInfo,
     path_params: InsertPathParams,
     existing: &ExistingInferenceInfo,
 ) -> Result<Uuid, Error> {
-    let inference_data = query_inference_for_datapoint(clickhouse, existing.inference_id).await?;
+    let inference_data: TaggedInferenceDatabaseInsert =
+        query_inference_for_datapoint(clickhouse, existing.inference_id).await?;
     let datapoint_id = Uuid::now_v7();
 
     match inference_data {
@@ -198,7 +205,7 @@ async fn insert_from_existing(
                 tags: Some(inference.tags),
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
-                is_custom: true,
+                is_custom: false,
                 source_inference_id: Some(existing.inference_id),
                 staled_at: None,
             };
