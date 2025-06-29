@@ -13,6 +13,7 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -45,6 +46,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const { inferences, pageSize, bounds, totalInferences } = loaderData;
+
   const navigate = useNavigate();
 
   const topInference = inferences[0];
@@ -85,7 +87,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

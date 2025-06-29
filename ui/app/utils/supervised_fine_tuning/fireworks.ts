@@ -34,6 +34,7 @@ import type {
   JsonInferenceOutput,
 } from "../clickhouse/common";
 import type { ParsedInferenceExample } from "../clickhouse/curation";
+import { logger } from "~/utils/logger";
 
 // Base URL for the Fireworks API
 export const FIREWORKS_API_URL =
@@ -44,7 +45,7 @@ export const FIREWORKS_API_URL =
 export const FIREWORKS_API_KEY = (() => {
   const key = process.env.FIREWORKS_API_KEY;
   if (!key) {
-    console.warn("FIREWORKS_API_KEY is not set");
+    logger.warn("FIREWORKS_API_KEY is not set");
     return "";
   }
   return key;
@@ -55,7 +56,7 @@ export const FIREWORKS_API_KEY = (() => {
 export const FIREWORKS_ACCOUNT_ID = (() => {
   const id = process.env.FIREWORKS_ACCOUNT_ID;
   if (!id) {
-    console.warn("FIREWORKS_ACCOUNT_ID is not set");
+    logger.warn("FIREWORKS_ACCOUNT_ID is not set");
     return "";
   }
   return id;

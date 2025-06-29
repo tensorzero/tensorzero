@@ -31,6 +31,7 @@ import {
   type ParsedModelInferenceRow,
 } from "./inference";
 import { z } from "zod";
+import { logger } from "~/utils/logger";
 import { getConfig } from "../config/index.server";
 
 /**
@@ -169,7 +170,7 @@ export async function queryInferenceTable(params: {
     const rows = await resultSet.json<InferenceByIdRow>();
     return z.array(inferenceByIdRowSchema).parse(rows);
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error querying inference table", { status: 500 });
   }
 }
@@ -210,7 +211,7 @@ export async function queryInferenceTableBounds(params?: {
 
     return TableBoundsSchema.parse(rows[0]);
   } catch (error) {
-    console.error("Failed to query inference table bounds:", error);
+    logger.error("Failed to query inference table bounds:", error);
     return {
       first_id: null,
       last_id: null,
@@ -309,13 +310,13 @@ export async function queryEpisodeTable(params: {
     const episodeIds = rows.map((episode) => episode.episode_id);
     const uniqueIds = new Set(episodeIds);
     if (uniqueIds.size !== rows.length) {
-      console.warn(
+      logger.warn(
         `Found duplicate episode IDs: ${rows.length - uniqueIds.size} duplicates detected`,
       );
     }
     return z.array(episodeByIdSchema).parse(rows);
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error querying episode table", { status: 500 });
   }
 }
@@ -345,7 +346,7 @@ export async function queryEpisodeTableBounds(): Promise<TableBounds> {
     }
     return TableBoundsSchema.parse(rows[0]);
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error querying inference table bounds", { status: 500 });
   }
 }

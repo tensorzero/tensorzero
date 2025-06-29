@@ -13,6 +13,7 @@ import { ToolConfigSchema } from "./tool";
 import type { FunctionConfig } from "./function";
 import type { EvaluationConfig } from "./evaluations";
 import { RawEvaluationConfigSchema } from "./evaluations.server";
+import { logger } from "~/utils/logger";
 
 const DEFAULT_CONFIG_PATH = "config/tensorzero.toml";
 const ENV_CONFIG_PATH = process.env.TENSORZERO_UI_CONFIG_PATH;
@@ -63,9 +64,9 @@ export async function loadConfig(config_path?: string): Promise<Config> {
     try {
       await fs.access(DEFAULT_CONFIG_PATH);
       config_path = DEFAULT_CONFIG_PATH;
-      console.info(`Found default config at ${DEFAULT_CONFIG_PATH}`);
+      logger.info(`Found default config at ${DEFAULT_CONFIG_PATH}`);
     } catch {
-      console.warn(
+      logger.warn(
         `Config file not found at ${DEFAULT_CONFIG_PATH}. Using blank config. Tip: Set the \`TENSORZERO_UI_CONFIG_PATH\` environment variable to use a different path.`,
       );
       // Return a blank config if no file is available.

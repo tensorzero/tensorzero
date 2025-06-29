@@ -1,3 +1,4 @@
+import { logger } from "~/utils/logger";
 import { getConfig } from "../config/index.server";
 import { resolveInput } from "../resolve.server";
 import { getClickhouseClient } from "./client.server";
@@ -146,7 +147,7 @@ async function parseEvaluationResultWithVariant(
       parsedResultWithVariant,
     );
   } catch (error) {
-    console.warn(
+    logger.warn(
       "Failed to parse evaluation result with variant using structure-based detection:",
       error,
     );
@@ -630,7 +631,7 @@ export async function pollForEvaluations(
   }
 
   if (!found) {
-    console.warn(
+    logger.warn(
       `Evaluation with feedback ${new_feedback_id} for datapoint ${datapoint_id} not found after ${max_retries} retries.`,
     );
   }
@@ -689,7 +690,7 @@ export async function pollForEvaluationResults(
   }
 
   if (!found) {
-    console.warn(
+    logger.warn(
       `Evaluation result with feedback ${new_feedback_id} not found after ${max_retries} retries.`,
     );
   }

@@ -18,6 +18,7 @@ import {
 } from "~/utils/clickhouse/dynamic_evaluations.server";
 import BasicInfo from "./DynamicEvaluationRunBasicInfo";
 import DynamicEvaluationRunEpisodesTable from "./DynamicEvaluationRunEpisodesTable";
+import { logger } from "~/utils/logger";
 
 export const handle: RouteHandle = {
   crumb: (match) => ["Runs", match.params.run_id!],
@@ -105,7 +106,7 @@ export default function DynamicEvaluationRunSummaryPage({
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (
