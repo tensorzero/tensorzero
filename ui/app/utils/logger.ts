@@ -1,7 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-declare const __APP_VERSION__: string;
-declare const __BUILD_TIME__: string;
+import { __APP_VERSION__ } from "./version";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export const logger = {
   info: (message: string, ...args: any[]) => {
     console.log(`[TensorZero UI v${__APP_VERSION__}] ${message}`, ...args);
@@ -19,5 +18,4 @@ export const logger = {
 
 export const getVersionInfo = () => ({
   version: __APP_VERSION__,
-  buildTime: __BUILD_TIME__,
 });
