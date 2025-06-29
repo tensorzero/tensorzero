@@ -1,19 +1,18 @@
 [project]
-name = "tensorzero-examples-gsm8k-custom-recipe-dspy"
+name = "tensorzero-recipes-supervised-fine-tuning-demonstrations-together"
 version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "altair",
-    "aiohttp",
     "clickhouse-connect",
-    "dspy-ai==2.4.1",
     "ipykernel",
+    "minijinja",
     "notebook",
-    "jupyter",
-    "ipywidgets",
+    "numpy",
+    "requests",
     "pandas",
-    "scipy",
+    "toml",
+    "together",
     "tensorzero",
-    "tqdm",
+    "pip",
 ]

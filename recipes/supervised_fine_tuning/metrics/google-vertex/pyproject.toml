@@ -1,19 +1,16 @@
 [project]
-name = "tensorzero-examples-gsm8k-custom-recipe-dspy"
+name = "tensorzero-recipes-supervised-fine-tuning-metrics-google-vertex"
 version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "altair",
-    "aiohttp",
     "clickhouse-connect",
-    "dspy-ai==2.4.1",
+    "google-cloud-aiplatform",
     "ipykernel",
+    "minijinja",
     "notebook",
-    "jupyter",
-    "ipywidgets",
+    "numpy",
     "pandas",
-    "scipy",
     "tensorzero",
-    "tqdm",
+    "toml",
 ]
