@@ -70,16 +70,28 @@ function renderContentBlock(block: DisplayInputMessageContent, index: number) {
         />
       );
 
-    case "tool_call":
+    case "tool_call": {
+      let serializedArguments;
+      // Arguments is a string that should parse to JSON. If the parsing fails we can just render it as a string.
+      try {
+        serializedArguments = JSON.stringify(
+          JSON.parse(block.arguments),
+          null,
+          2,
+        );
+      } catch {
+        serializedArguments = block.arguments;
+      }
       return (
         <ToolCallMessage
           key={index}
           toolName={block.name}
-          toolArguments={JSON.stringify(JSON.parse(block.arguments), null, 2)}
+          toolArguments={serializedArguments}
           // TODO: if arguments is null, display raw arguments without parsing
           toolCallId={block.id}
         />
       );
+    }
 
     case "tool_result":
       return (
@@ -148,10 +160,21 @@ export default function InputSnippet({ input }: InputSnippetProps) {
           <SnippetContent>
             <SnippetMessage>
               {typeof input.system === "object" ? (
-                <TextMessage
-                  content={JSON.stringify(input.system, null, 2)}
-                  type="structured"
-                />
+                (() => {
+                  let serializedSystem;
+                  try {
+                    serializedSystem = JSON.stringify(input.system, null, 2);
+                  } catch (e) {
+                    return (
+                      <div style={{ color: "red" }}>
+                        Error serializing system field: {String(e)}
+                      </div>
+                    );
+                  }
+                  return (
+                    <TextMessage content={serializedSystem} type="structured" />
+                  );
+                })()
               ) : (
                 <TextMessage content={input.system} />
               )}
