@@ -141,7 +141,7 @@ export function DatasetSelector({
                         >
                           <div className="flex items-center">
                             <TablePlus className="mr-2 h-4 w-4 text-blue-600" />
-                            <span className="text-sm text-fg-primary font-mono">
+                            <span className="text-fg-primary font-mono text-sm">
                               {inputValue.trim()}
                             </span>
                           </div>
