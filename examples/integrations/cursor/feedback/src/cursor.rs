@@ -116,7 +116,7 @@ fn parse_cursor_ask_output(output_text: &str) -> Result<Vec<CursorCodeBlock>> {
 ///
 /// To get the code generated:
 /// The generated output seems to always look like this:
-/// ```
+/// ```text
 ///     // Start of Selection
 ///     let Some(Value::String(system)) = system else {
 ///         return Err(anyhow::anyhow!("No system message found"));
