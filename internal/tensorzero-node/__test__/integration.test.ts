@@ -14,9 +14,11 @@ describe("TensorZeroClient Integration Tests", () => {
     );
   });
 
-  it("should have required methods", async () => {
+  it("should have required methods and initialize without credentials", async () => {
+    // unset the OPENAI_API_KEY environment variable
+    process.env.OPENAI_API_KEY = undefined;
     const client = await TensorZeroClient.build(
-      "../../examples/quickstart/config/tensorzero.toml",
+      "../../ui/fixtures/config/tensorzero.toml",
     );
     expect(typeof client.experimentalLaunchOptimizationWorkflow).toBe(
       "function",

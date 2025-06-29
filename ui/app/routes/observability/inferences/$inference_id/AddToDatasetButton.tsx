@@ -113,6 +113,7 @@ export function AddToDatasetButton({
         <DropdownMenuContent className="w-80 p-0">
           <Command>
             <CommandInput
+              autoFocus
               placeholder="Create or find dataset..."
               value={inputValue}
               onValueChange={setInputValue}

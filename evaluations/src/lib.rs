@@ -121,6 +121,7 @@ pub async fn run_evaluation(
             config_file: Some(args.config_file),
             clickhouse_url: Some(clickhouse_url.clone()),
             timeout: None,
+            verify_credentials: true,
         }),
     }
     .build()

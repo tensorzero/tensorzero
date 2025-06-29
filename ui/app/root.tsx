@@ -15,6 +15,7 @@ import { AppSidebar } from "./components/layout/app.sidebar";
 import { SidebarProvider } from "./components/ui/sidebar";
 import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
+import { ReactQueryProvider } from "./providers/react-query";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -61,16 +62,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App({ loaderData: config }: Route.ComponentProps) {
   return (
-    <ConfigProvider value={config}>
-      <SidebarProvider>
-        <div className="fixed inset-0 flex">
-          <AppSidebar />
-          <ContentLayout>
-            <Outlet />
-          </ContentLayout>
-        </div>
-      </SidebarProvider>
-    </ConfigProvider>
+    <ReactQueryProvider>
+      <ConfigProvider value={config}>
+        <SidebarProvider>
+          <div className="fixed inset-0 flex">
+            <AppSidebar />
+            <ContentLayout>
+              <Outlet />
+            </ContentLayout>
+          </div>
+        </SidebarProvider>
+      </ConfigProvider>
+    </ReactQueryProvider>
   );
 }
 

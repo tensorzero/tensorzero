@@ -109,6 +109,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await
@@ -120,6 +121,7 @@ pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
         config_file: None,
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await
@@ -133,6 +135,7 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await

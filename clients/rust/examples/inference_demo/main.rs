@@ -50,6 +50,7 @@ async fn main() {
             config_file: Some(config_file),
             clickhouse_url: std::env::var("TENSORZERO_CLICKHOUSE_URL").ok(),
             timeout: None,
+            verify_credentials: true,
         }),
         (Some(_), Some(_)) => {
             std::process::exit(1);

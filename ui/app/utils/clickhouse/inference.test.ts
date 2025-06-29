@@ -409,6 +409,8 @@ test("queryInferenceTableBoundsByVariantName", async () => {
 
 test(
   "queryEpisodeTable",
+  // https://tensorzero.slack.com/archives/C06FDMR1YKF/p1747844085031149?thread_ts=1747793217.140669&cid=C06FDMR1YKF
+  { timeout: 10_000 },
   async () => {
     const episodes = await queryEpisodeTable({
       page_size: 10,
@@ -458,8 +460,6 @@ test(
       );
     }
   },
-  // https://tensorzero.slack.com/archives/C06FDMR1YKF/p1747844085031149?thread_ts=1747793217.140669&cid=C06FDMR1YKF
-  { timeout: 10_000 },
 );
 
 test("countInferencesForEpisode", async () => {

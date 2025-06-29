@@ -580,6 +580,7 @@ impl TensorZeroGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
             timeout,
+            verify_credentials: true,
         })
         .build();
         let client = tokio_block_on_without_gil(cls.py(), client_fut);
@@ -1138,6 +1139,7 @@ impl AsyncTensorZeroGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
             timeout,
+            verify_credentials: true,
         })
         .build();
 

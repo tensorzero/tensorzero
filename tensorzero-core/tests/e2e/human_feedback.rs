@@ -25,6 +25,7 @@ async fn make_embedded_gateway() -> tensorzero::Client {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await

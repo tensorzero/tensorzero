@@ -7,12 +7,6 @@ on:
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 
-# See 'general.yml' for more details. Note that we use a difference concurrency group,
-# so that general.yml and merge-queue.yml can run in parallel.
-concurrency:
-  group: ${{ (github.event_name == 'merge_group' && 'merge-group-merge-checks') || github.run_id }}
-  cancel-in-progress: true
-
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
