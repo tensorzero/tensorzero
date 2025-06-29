@@ -243,7 +243,7 @@ async fn insert_from_existing(
                 tags: Some(inference.tags),
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
-                is_custom: true,
+                is_custom: false,
                 source_inference_id: Some(existing.inference_id),
                 staled_at: None,
             };
@@ -1325,6 +1325,8 @@ async fn put_deduped_chat_datapoints(
              AND new_data.source_inference_id = existing.source_inference_id
              AND new_data.id != existing.id -- this is to allow us to update the datapoint and keep the same source_inference_id
              AND existing.staled_at IS NULL
+             AND NOT existing.is_custom  -- if the old datapoint is custom, we don't want to use it for deduplication
+          WHERE existing.id IS NULL OR new_data.is_custom -- if the new datapoint is custom, we don't want to use the old datapoint for deduplication
         "#;
 
     let external_data = ExternalDataInfo {
@@ -1390,6 +1392,8 @@ async fn put_deduped_json_datapoints(
              AND new_data.source_inference_id = existing.source_inference_id
              AND new_data.id != existing.id -- this is to allow us to update the datapoint and keep the same source_inference_id
              AND existing.staled_at IS NULL
+             AND NOT existing.is_custom  -- if the old datapoint is custom, we don't want to use it for deduplication
+          WHERE existing.id IS NULL OR new_data.is_custom -- if the new datapoint is custom, we don't want to use the old datapoint for deduplication
         "#;
 
     let external_data = ExternalDataInfo {
