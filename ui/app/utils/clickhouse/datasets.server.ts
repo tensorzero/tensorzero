@@ -1,5 +1,5 @@
 import z from "zod";
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 import {
   DatasetCountInfoSchema,
   DatasetDetailRowSchema,
@@ -20,6 +20,7 @@ import { adjacentIdsSchema } from "./inference";
 import {
   contentBlockOutputSchema,
   CountSchema,
+  displayInputToInput,
   inputSchema,
   jsonInferenceOutputSchema,
 } from "./common";
@@ -207,7 +208,7 @@ export async function selectRowsForDataset(
   params: DatasetQueryParams,
 ): Promise<DatapointInsert[]> {
   const { query, query_params } = buildDatasetSelectQuery(params);
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params,
@@ -236,7 +237,7 @@ export async function countRowsForDataset(
 
   const { query, query_params } = buildDatasetSelectQuery(params);
   const count_query = `SELECT toUInt32(count()) as count FROM (${query})`;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query: count_query,
     format: "JSONEachRow",
     query_params,
@@ -267,7 +268,7 @@ export async function getDatasetCounts(
   page_size?: number,
   offset: number = 0,
 ): Promise<DatasetCountInfo[]> {
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query: `
       SELECT
         dataset_name,
@@ -308,7 +309,7 @@ export async function getDatasetCounts(
 }
 
 export async function getNumberOfDatasets(): Promise<number> {
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query: `
       SELECT
         toUInt32(uniqExact(dataset_name)) as count
@@ -396,7 +397,7 @@ export async function insertRowsForDataset(
     `;
 
   // Execute the INSERT query
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query: wrappedQuery,
     query_params,
   });
@@ -445,7 +446,7 @@ export async function getDatasetRows(
       OFFSET {offset:UInt32}
     `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -508,14 +509,14 @@ export async function getDatapoint(
   }
 
   const [chatResult, jsonResult] = await Promise.all([
-    clickhouseClient
+    getClickhouseClient()
       .query({
         query: chat_query,
         format: "JSONEachRow",
         query_params: { dataset_name, id },
       })
       .then((rs) => rs.json<DatapointRow[]>()),
-    clickhouseClient
+    getClickhouseClient()
       .query({
         query: json_query,
         format: "JSONEachRow",
@@ -542,7 +543,9 @@ export async function getDatapoint(
 
 async function parseDatapointRow(row: DatapointRow): Promise<ParsedDatasetRow> {
   const parsedInput = inputSchema.parse(JSON.parse(row.input));
-  const resolvedInput = await resolveInput(parsedInput);
+  const config = await getConfig();
+  const functionConfig = config.functions[row.function_name];
+  const resolvedInput = await resolveInput(parsedInput, functionConfig);
   if ("tool_params" in row) {
     // Chat inference row
     const processedRow = {
@@ -623,7 +626,7 @@ export async function staleDatapoint(
   `;
 
   try {
-    await clickhouseClient.query({
+    await getClickhouseClient().query({
       query,
       query_params: {
         table,
@@ -645,13 +648,14 @@ export async function insertDatapoint(
     "tool_params" in datapoint
       ? "ChatInferenceDatapoint"
       : "JsonInferenceDatapoint";
+  const input = displayInputToInput(datapoint.input);
   const values = [
     {
       dataset_name: datapoint.dataset_name,
       function_name: datapoint.function_name,
       id: datapoint.id,
       episode_id: datapoint.episode_id,
-      input: datapoint.input,
+      input: input,
       output: datapoint.output,
       tags: datapoint.tags,
       auxiliary: datapoint.auxiliary,
@@ -667,7 +671,7 @@ export async function insertDatapoint(
     },
   ];
 
-  await clickhouseClient.insert({
+  await getClickhouseClient().insert({
     table,
     values,
     format: "JSONEachRow",
@@ -687,7 +691,7 @@ export async function countDatapointsForDatasetFunction(
     function_type === "chat"
       ? "ChatInferenceDatapoint"
       : "JsonInferenceDatapoint";
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query: `SELECT toUInt32(count()) as count FROM {table:Identifier} WHERE dataset_name = {dataset_name:String} AND function_name = {function_name:String}`,
     format: "JSONEachRow",
     query_params: { dataset_name, function_name, table },
@@ -724,7 +728,7 @@ export async function getAdjacentDatapointIds(
       ) as previous_id
     FROM DatasetIds
   `;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { dataset_name, datapoint_id },

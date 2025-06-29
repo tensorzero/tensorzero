@@ -25,7 +25,7 @@ import {
   staleDatapoint,
   getDatasetCounts,
 } from "~/utils/clickhouse/datasets.server";
-import { tensorZeroClient } from "~/utils/tensorzero.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import {
   PageHeader,
   PageLayout,
@@ -34,7 +34,7 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { DatapointActions } from "./DatapointActions";
-import type { ResolvedInputMessage } from "~/utils/clickhouse/common";
+import type { DisplayInputMessage } from "~/utils/clickhouse/common";
 import { getConfig } from "~/utils/config/index.server";
 import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
 import {
@@ -128,7 +128,7 @@ export async function action({ request }: ActionFunctionArgs) {
           : {}),
         source_inference_id: parsedFormData.source_inference_id,
       };
-      const { id } = await tensorZeroClient.updateDatapoint(
+      const { id } = await getTensorZeroClient().updateDatapoint(
         parsedFormData.dataset_name,
         uuid(),
         datapoint,
@@ -220,7 +220,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setInput({ ...input, system });
   };
 
-  const handleMessagesChange = (messages: ResolvedInputMessage[]) => {
+  const handleMessagesChange = (messages: DisplayInputMessage[]) => {
     setInput({ ...input, messages });
   };
 

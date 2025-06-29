@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# Pick a ClickHouse cloud instance to use, based on the build BUILDKITE_BUILD_NUMBER
+# This distributes builds across '$CLICKHOUSE_CLOUD_COUNT' different instances.
+# The chosen 'CLICKHOUSE_ID' is used in the concurrency group key, limiting us to one
+# job per instance.
+# It's not perfect, as two jobs may get the same id even if there's an idle instance available.
+# This will cause fewer concurrent jobs to run than we could theoretically support, but this should
+# be good enough to let us run many concurrent jobs most of the time.
+export CLICKHOUSE_CLOUD_COUNT=4
+export CLICKHOUSE_ID=$(($BUILDKITE_BUILD_NUMBER%$CLICKHOUSE_CLOUD_COUNT))

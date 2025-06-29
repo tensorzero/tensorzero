@@ -58,16 +58,20 @@ pub struct Config<'c> {
     pub optimizers: HashMap<String, OptimizerInfo>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct NonStreamingTimeouts {
     #[serde(default)]
     /// The total time allowed for the non-streaming request to complete.
     pub total_ms: Option<u64>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct StreamingTimeouts {
     #[serde(default)]
     /// The time allowed for the first token to be produced.
@@ -76,7 +80,9 @@ pub struct StreamingTimeouts {
 
 /// Configures the timeouts for both streaming and non-streaming requests.
 /// This can be attached to various other configs (e.g. variants, models, model providers)
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct TimeoutsConfig {
     #[serde(default)]
@@ -86,6 +92,7 @@ pub struct TimeoutsConfig {
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     #[serde(default)]
@@ -98,10 +105,14 @@ pub struct GatewayConfig {
     pub enable_template_filesystem_access: bool,
     #[serde(default)]
     pub export: ExportConfig,
+    // If set, all of the HTTP endpoints will have this path prepended.
+    // E.g. a base path of `/custom/prefix` will cause the inference endpoint to become `/custom/prefix/inference`.
+    pub base_path: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub struct GCPProviderTypeConfig {
     #[serde(default)]
     pub batch: Option<GCPBatchConfigType>,
@@ -109,6 +120,7 @@ pub struct GCPProviderTypeConfig {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "storage_type", rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub enum GCPBatchConfigType {
     // In the future, we'll want to allow explicitly setting 'none' at the model provider level,
     // to override the global provider-types batch config.
@@ -118,6 +130,7 @@ pub enum GCPBatchConfigType {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub struct GCPBatchConfigCloudStorage {
     pub input_uri_prefix: String,
     pub output_uri_prefix: String,
@@ -267,18 +280,21 @@ pub struct ObservabilityConfig {
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct ExportConfig {
     #[serde(default)]
     pub otlp: OtlpConfig,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct OtlpConfig {
     #[serde(default)]
     pub traces: OtlpTracesConfig,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct OtlpTracesConfig {
     /// Enable OpenTelemetry traces export to the configured OTLP endpoint (configured via OTLP environment variables)
     #[serde(default)]
@@ -295,6 +311,7 @@ pub struct MetricConfig {
 
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub enum MetricConfigType {
     Boolean,
     Float,
@@ -302,6 +319,7 @@ pub enum MetricConfigType {
 
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub enum MetricConfigOptimize {
     Min,
     Max,
@@ -309,6 +327,7 @@ pub enum MetricConfigOptimize {
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub enum MetricConfigLevel {
     Inference,
     Episode,
@@ -926,6 +945,8 @@ impl UninitializedFunctionConfig {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
+// We don't use `#[serde(deny_unknown_fields)]` here - it needs to go on 'UninitializedVariantConfig',
+// since we use `#[serde(flatten)]` on the `inner` field.
 pub struct UninitializedVariantInfo {
     #[serde(flatten)]
     pub inner: UninitializedVariantConfig,
@@ -976,9 +997,11 @@ impl UninitializedVariantInfo {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UninitializedToolConfig {
     pub description: String,
     pub parameters: PathBuf,
+    pub name: Option<String>,
     #[serde(default)]
     pub strict: bool,
 }
@@ -991,7 +1014,7 @@ impl UninitializedToolConfig {
     ) -> Result<StaticToolConfig, Error> {
         let parameters = StaticJSONSchema::from_path(self.parameters, base_path.as_ref())?;
         Ok(StaticToolConfig {
-            name,
+            name: self.name.unwrap_or(name),
             description: self.description,
             parameters,
             strict: self.strict,
@@ -999,8 +1022,11 @@ impl UninitializedToolConfig {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct PathWithContents {
+    #[cfg_attr(test, ts(type = "string"))]
     pub path: PathBuf,
     pub contents: String,
 }
@@ -1268,6 +1294,17 @@ mod tests {
         assert_eq!(metric.r#type, MetricConfigType::Float);
         assert_eq!(metric.optimize, MetricConfigOptimize::Min);
         assert_eq!(metric.level, MetricConfigLevel::Inference);
+
+        // Check that there are 2 tools and both have name "get_temperature"
+        assert_eq!(config.tools.len(), 2);
+        assert_eq!(
+            config.tools.get("get_temperature").unwrap().name,
+            "get_temperature"
+        );
+        assert_eq!(
+            config.tools.get("get_temperature_with_name").unwrap().name,
+            "get_temperature"
+        );
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
@@ -2376,7 +2413,7 @@ mod tests {
         let config_str = r#"
         [functions.bash_assistant]
         type = "chat"
-        
+
         [functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219]
         type = "chat_completion"
         model = "anthropic::claude-3-7-sonnet-20250219"
@@ -2389,7 +2426,7 @@ mod tests {
             .await
             .expect_err("Config loading should fail")
             .to_string();
-        assert_eq!(err, "functions.bash_assistant: variants.anthropic_claude_3_7_sonnet_20250219: extra_body.[0]: Error deserializing extra body replacement: 'delete' must be 'true', or not set");
+        assert_eq!(err, "functions.bash_assistant: variants.anthropic_claude_3_7_sonnet_20250219: extra_body.[0]: Error deserializing replacement config: 'delete' must be 'true', or not set");
     }
 
     #[tokio::test]

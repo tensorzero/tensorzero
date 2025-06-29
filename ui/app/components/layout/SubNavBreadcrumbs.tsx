@@ -7,17 +7,17 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "~/components/ui/breadcrumb";
-import { useBreadcrumbs } from "~/hooks/useBreadcrumbs";
+import { useBreadcrumbs } from "~/hooks/use-breadcrumbs";
 
 export function SubNavBreadcrumbs() {
-  const breadcrumbs = useBreadcrumbs();
+  const { segments } = useBreadcrumbs();
 
   return (
     <Breadcrumb>
       <BreadcrumbList>
-        {breadcrumbs.map((bc, idx) => (
+        {segments.map((bc, idx) => (
           <BreadcrumbItem key={idx}>
-            {idx === breadcrumbs.length - 1 ? (
+            {idx === segments.length - 1 ? (
               <BreadcrumbPage>{bc.label}</BreadcrumbPage>
             ) : bc.href ? (
               <>

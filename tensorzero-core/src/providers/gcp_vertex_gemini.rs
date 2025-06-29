@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use axum::http;
 use futures::StreamExt;
-use google_cloud_auth::credentials::Credentials;
+use google_cloud_auth::credentials::{CacheableResource, Credentials};
 use http::{HeaderMap, HeaderValue};
 use itertools::Itertools;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
@@ -31,7 +31,10 @@ use crate::config_parser::{
     GCPBatchConfigCloudStorage, GCPBatchConfigType, GCPProviderTypeConfig, ProviderTypesConfig,
 };
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{
+    warn_discarded_thought_block, warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error,
+    ErrorDetails,
+};
 use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
@@ -192,6 +195,19 @@ async fn make_gcp_object_store(
                         message: format!("Failed to get GCP access token: {e}"),
                     })
                 })?;
+
+            let headers = match headers {
+                CacheableResource::New {
+                    entity_tag: _,
+                    data,
+                } => data,
+                // We didn't pass in any 'Extensions' when calling headers, so this should never happen
+                CacheableResource::NotModified => {
+                    return Err(Error::new(ErrorDetails::InternalError {
+                        message: "GCP SDK return CacheableResource::NotModified. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
+                    }))
+                }
+            };
 
             // The 'object_store' crate requires us to use a bearer auth token, so try to extract that from the produced headers
             // In the future, we may want to use the GCP object store sdk crate directly, so that we can support all of the
@@ -745,14 +761,26 @@ impl GCPVertexCredentials {
                     .expose_secret(),
             ),
             GCPVertexCredentials::Sdk(creds) => {
-                return creds
+                let headers = creds
                     .headers(http::Extensions::default())
                     .await
                     .map_err(|e| {
                         Error::new(ErrorDetails::GCPCredentials {
                             message: format!("Failed to get GCP access token: {e}"),
                         })
-                    })
+                    })?;
+                match headers {
+                    CacheableResource::New {
+                        entity_tag: _,
+                        data,
+                    } => return Ok(data),
+                    // We didn't pass in any 'Extensions' when calling headers, so this should never happen
+                    CacheableResource::NotModified => {
+                        return Err(Error::new(ErrorDetails::InternalError {
+                            message: "GCP SDK return CacheableResource::NotModified. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
+                        }))
+                    }
+                }
             }
             GCPVertexCredentials::None => {
                 return Err(Error::new(ErrorDetails::ApiKeyMissing {
@@ -1545,12 +1573,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGemini
                     },
                 },
             ))),
-            // We don't support thought blocks being passed in from a request.
-            // These are only possible to be passed in in the scenario where the
-            // output of a chat completion is used as an input to another model inference,
-            // i.e. a judge or something.
-            // We don't think the thoughts should be passed in in this case.
-            ContentBlock::Thought(_thought) => Ok(None),
+            ContentBlock::Thought(thought) => {
+                warn_discarded_thought_block(PROVIDER_TYPE, thought);
+                Ok(None)
+            }
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,

@@ -244,6 +244,7 @@ mod tests {
             debug: false,
             enable_template_filesystem_access: false,
             export: Default::default(),
+            base_path: None,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -295,6 +296,7 @@ mod tests {
             debug: false,
             enable_template_filesystem_access: false,
             export: Default::default(),
+            base_path: None,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -317,6 +319,7 @@ mod tests {
             debug: false,
             enable_template_filesystem_access: false,
             export: Default::default(),
+            base_path: None,
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -341,6 +344,7 @@ mod tests {
             debug: false,
             enable_template_filesystem_access: false,
             export: Default::default(),
+            base_path: None,
         };
         let config = Config {
             gateway: gateway_config,
