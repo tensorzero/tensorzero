@@ -288,7 +288,6 @@ pub fn deserialize_from_stored_sample<'a>(
     py: Python<'a>,
     obj: &Bound<'a, PyAny>,
 ) -> PyResult<StoredSampleItem> {
-    // TODO(Viraj): make an enum and deserialize into it.
     if obj.is_instance_of::<StoredInference>() {
         Ok(StoredSampleItem::StoredInference(obj.extract()?))
     } else if obj.is_instance_of::<Datapoint>() {

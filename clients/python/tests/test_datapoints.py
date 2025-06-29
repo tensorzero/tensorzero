@@ -5,6 +5,7 @@ These tests cover:
 - Bulk insertion of datapoints
 - Retrieving individual datapoints
 - Listing datapoints with filtering
+- Rendering datapoints
 - Deleting datapoints
 - Dataset operations
 
