@@ -1379,7 +1379,7 @@ mod tests {
                     chat_response.usage,
                     Usage {
                         input_tokens: 10,
-                        output_tokens: 10,
+                        output_tokens: 1,
                     }
                 );
                 assert_eq!(chat_response.model_inference_results.len(), 1);
@@ -1471,7 +1471,7 @@ mod tests {
                     chat_response.usage,
                     Usage {
                         input_tokens: 10,
-                        output_tokens: 10,
+                        output_tokens: 1,
                     }
                 );
                 assert_eq!(chat_response.model_inference_results.len(), 1);
@@ -1548,7 +1548,7 @@ mod tests {
                     json_result.usage,
                     Usage {
                         input_tokens: 10,
-                        output_tokens: 10,
+                        output_tokens: 1,
                     }
                 );
                 assert_eq!(json_result.model_inference_results.len(), 1);
@@ -1623,7 +1623,7 @@ mod tests {
                     json_result.usage,
                     Usage {
                         input_tokens: 10,
-                        output_tokens: 10,
+                        output_tokens: 1,
                     }
                 );
                 assert_eq!(json_result.model_inference_results.len(), 1);
@@ -1735,7 +1735,7 @@ mod tests {
                     json_result.usage,
                     Usage {
                         input_tokens: 10,
-                        output_tokens: 10,
+                        output_tokens: 1,
                     }
                 );
                 assert_eq!(json_result.model_inference_results.len(), 1);
@@ -1842,7 +1842,7 @@ mod tests {
                     json_result.usage,
                     Usage {
                         input_tokens: 10,
-                        output_tokens: 10,
+                        output_tokens: 1,
                     }
                 );
                 assert_eq!(json_result.model_inference_results.len(), 1);
