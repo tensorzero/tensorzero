@@ -122,6 +122,8 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
     chat_inference = rendered_samples[0]
 
     assert chat_inference.function_name == "basic_test"
+    assert chat_inference.episode_id is not None
+    assert chat_inference.inference_id is not None
     input = chat_inference.input
     # Test that templating actually happens here.
     assert input.system == "You are a helpful and friendly assistant named foo"
@@ -190,6 +192,8 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
 
     json_inference = rendered_samples[1]
     assert json_inference.function_name == "json_success"
+    assert json_inference.episode_id is not None
+    assert json_inference.inference_id is not None
     input = json_inference.input
     # templating happens here
     assert (
@@ -484,6 +488,8 @@ async def test_async_render_samples_success(
     chat_inference = rendered_samples[0]
 
     assert chat_inference.function_name == "basic_test"
+    assert chat_inference.episode_id is not None
+    assert chat_inference.inference_id is not None
     input = chat_inference.input
     # Test that templating actually happens here.
     assert input.system == "You are a helpful and friendly assistant named foo"
@@ -553,6 +559,8 @@ async def test_async_render_samples_success(
 
     json_inference = rendered_samples[1]
     assert json_inference.function_name == "json_success"
+    assert json_inference.episode_id is not None
+    assert json_inference.inference_id is not None
     input = json_inference.input
     # templating happens here
     assert (

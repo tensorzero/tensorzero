@@ -406,6 +406,8 @@ def test_sync_render_datapoints(embedded_sync_client: TensorZeroGateway):
     chat_sample = next(
         rs for rs in rendered_samples if rs.function_name == "basic_test"
     )
+    assert chat_sample.episode_id is None
+    assert chat_sample.inference_id is None
     assert (
         chat_sample.input.system
         == "You are a helpful and friendly assistant named TestBot"
@@ -413,16 +415,21 @@ def test_sync_render_datapoints(embedded_sync_client: TensorZeroGateway):
     assert len(chat_sample.input.messages) == 1
     assert chat_sample.input.messages[0].role == "user"
     assert len(chat_sample.input.messages[0].content) == 1
+    assert isinstance(chat_sample.input.messages[0].content[0], Text)
     assert chat_sample.input.messages[0].content[0].text == "Hello, world!"
 
     # Verify the json datapoint was rendered correctly
     json_sample = next(
         rs for rs in rendered_samples if rs.function_name == "json_success"
     )
+    assert json_sample.episode_id is None
+    assert json_sample.inference_id is None
+    assert json_sample.input.system is not None
     assert "JsonBot" in json_sample.input.system
     assert len(json_sample.input.messages) == 1
     assert json_sample.input.messages[0].role == "user"
     assert len(json_sample.input.messages[0].content) == 1
+    assert isinstance(json_sample.input.messages[0].content[0], Text)
     assert (
         json_sample.input.messages[0].content[0].text
         == "What is the name of the capital city of France?"
@@ -503,6 +510,8 @@ async def test_async_render_datapoints(embedded_async_client: AsyncTensorZeroGat
     chat_sample = next(
         rs for rs in rendered_samples if rs.function_name == "basic_test"
     )
+    assert chat_sample.episode_id is None
+    assert chat_sample.inference_id is None
     assert (
         chat_sample.input.system
         == "You are a helpful and friendly assistant named AsyncBot"
@@ -510,16 +519,21 @@ async def test_async_render_datapoints(embedded_async_client: AsyncTensorZeroGat
     assert len(chat_sample.input.messages) == 1
     assert chat_sample.input.messages[0].role == "user"
     assert len(chat_sample.input.messages[0].content) == 1
+    assert isinstance(chat_sample.input.messages[0].content[0], Text)
     assert chat_sample.input.messages[0].content[0].text == "What's the weather like?"
 
     # Verify the json datapoint was rendered correctly
     json_sample = next(
         rs for rs in rendered_samples if rs.function_name == "json_success"
     )
+    assert json_sample.episode_id is None
+    assert json_sample.inference_id is None
+    assert json_sample.input.system is not None
     assert "DataBot" in json_sample.input.system
     assert len(json_sample.input.messages) == 1
     assert json_sample.input.messages[0].role == "user"
     assert len(json_sample.input.messages[0].content) == 1
+    assert isinstance(json_sample.input.messages[0].content[0], Text)
     assert (
         json_sample.input.messages[0].content[0].text
         == "What is the name of the capital city of Italy?"
@@ -597,7 +611,11 @@ def test_sync_render_filtered_datapoints(embedded_sync_client: TensorZeroGateway
 
     assert len(rendered_samples) == 2
     assert all(rs.function_name == "basic_test" for rs in rendered_samples)
-    assert all("FilterBot" in rs.input.system for rs in rendered_samples)
+    assert all(rs.episode_id is None for rs in rendered_samples)
+    assert all(rs.inference_id is None for rs in rendered_samples)
+    for rs in rendered_samples:
+        assert isinstance(rs.input.system, str)
+        assert "FilterBot" in rs.input.system
 
     # Clean up
     for datapoint_id in datapoint_ids:

@@ -70,9 +70,9 @@ class StoredInference:
     @property
     def output(self) -> Any: ...
     @property
-    def episode_id(self) -> Any: ...
+    def episode_id(self) -> Optional[UUID]: ...
     @property
-    def inference_id(self) -> Any: ...
+    def inference_id(self) -> Optional[UUID]: ...
     @property
     def tool_params(self) -> Optional[Any]: ...
     @property
@@ -85,6 +85,8 @@ class RenderedSample:
     function_name: str
     input: ModelInput
     output: Optional[List[ContentBlock]]
+    episode_id: Optional[UUID]
+    inference_id: Optional[UUID]
     tool_params: Optional[ToolCallConfigDatabaseInsert]
     output_schema: Optional[Dict[str, Any]]
 

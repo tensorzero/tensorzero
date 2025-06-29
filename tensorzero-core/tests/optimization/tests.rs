@@ -129,7 +129,6 @@ fn generate_text_example() -> RenderedSample {
     let id = Uuid::now_v7().to_string();
     RenderedSample {
         function_name: "test".to_string(),
-        variant_name: Some("test_variant".to_string()),
         input: ModelInput {
             system: Some(format!(
                 "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
@@ -239,7 +238,6 @@ fn generate_tool_call_example() -> RenderedSample {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
         }),
-        variant_name: Some("test_variant".to_string()),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         output_schema: None,
@@ -281,7 +279,6 @@ fn generate_image_example() -> RenderedSample {
             text: "Orange!".to_string(),
         })]),
         tool_params: None,
-        variant_name: Some("test_variant".to_string()),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         output_schema: None,

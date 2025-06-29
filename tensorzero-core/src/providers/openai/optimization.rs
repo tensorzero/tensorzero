@@ -307,7 +307,6 @@ mod tests {
     fn test_convert_to_sft_row() {
         let inference = RenderedSample {
             function_name: "test".to_string(),
-            variant_name: Some("test_variant".to_string()),
             input: ModelInput {
                 system: Some("You are a helpful assistant named Dr. M.M. Patel.".to_string()),
                 messages: vec![RequestMessage {

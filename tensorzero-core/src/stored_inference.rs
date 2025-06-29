@@ -39,7 +39,6 @@ pub trait StoredSample {
 /// that is just copied over from the StoredSample.
 pub struct SimpleStoredSampleInfo {
     pub function_name: String,
-    pub variant_name: Option<String>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
     pub output: Option<Vec<ContentBlockChatOutput>>,
@@ -304,7 +303,6 @@ impl StoredSample for StoredInference {
         match self {
             StoredInference::Chat(example) => SimpleStoredSampleInfo {
                 function_name: example.function_name,
-                variant_name: Some(example.variant_name),
                 episode_id: Some(example.episode_id),
                 inference_id: Some(example.inference_id),
                 output: Some(example.output),
@@ -318,7 +316,6 @@ impl StoredSample for StoredInference {
                 };
                 SimpleStoredSampleInfo {
                     function_name: example.function_name,
-                    variant_name: Some(example.variant_name),
                     episode_id: Some(example.episode_id),
                     inference_id: Some(example.inference_id),
                     output: Some(output),
@@ -338,7 +335,6 @@ impl StoredSample for StoredInference {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct RenderedSample {
     pub function_name: String,
-    pub variant_name: Option<String>,
     pub input: ModelInput,
     pub output: Option<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
@@ -381,11 +377,6 @@ impl RenderedSample {
     #[getter]
     pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         serialize_to_dict(py, self.output_schema.clone()).map(|x| x.into_bound(py))
-    }
-
-    #[getter]
-    pub fn get_variant_name(&self) -> Option<&str> {
-        self.variant_name.as_deref()
     }
 
     #[getter]
@@ -506,13 +497,11 @@ pub fn render_stored_sample<T: StoredSample>(
         output,
         tool_params,
         output_schema,
-        variant_name,
         episode_id,
         inference_id,
     } = stored_sample.owned_simple_info();
     Ok(RenderedSample {
         function_name,
-        variant_name,
         episode_id,
         inference_id,
         input: model_input,

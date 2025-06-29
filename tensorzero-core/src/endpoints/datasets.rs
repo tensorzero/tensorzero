@@ -1308,7 +1308,6 @@ impl StoredSample for Datapoint {
                 output: datapoint.output,
                 tool_params: datapoint.tool_params,
                 output_schema: None,
-                variant_name: None,
                 episode_id: None,
                 inference_id: None,
             },
@@ -1322,7 +1321,6 @@ impl StoredSample for Datapoint {
                     output,
                     tool_params: None,
                     output_schema: Some(datapoint.output_schema),
-                    variant_name: None,
                     episode_id: None,
                     inference_id: None,
                 }
