@@ -673,9 +673,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     async def experimental_render_inferences(
         self,
         *,
-        stored_inferences: List[
-            StoredInference
-        ], 
+        stored_inferences: List[StoredInference],
         variants: Dict[str, str],
     ) -> List[RenderedSample]:
         """
