@@ -1,4 +1,3 @@
-import { __APP_VERSION__ } from "~/utils/version";
 import { useTensorZeroStatusFetcher } from "~/routes/api/tensorzero/status";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 

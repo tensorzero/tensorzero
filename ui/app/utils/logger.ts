@@ -1,5 +1,3 @@
-import { __APP_VERSION__ } from "./version";
-
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export const logger = {
   info: (message: string, ...args: any[]) => {
