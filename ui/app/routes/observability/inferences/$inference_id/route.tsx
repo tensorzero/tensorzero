@@ -23,7 +23,10 @@ import BasicInfo from "./InferenceBasicInfo";
 import InputSnippet from "~/components/inference/InputSnippet";
 import Output from "~/components/inference/NewOutput";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
-import { addHumanFeedback, tensorZeroClient } from "~/utils/tensorzero.server";
+import {
+  addHumanFeedback,
+  getTensorZeroClient,
+} from "~/utils/tensorzero.server";
 import { ParameterCard } from "./InferenceParameters";
 import { TagsTable } from "~/components/utils/TagsTable";
 import { ModelInferencesTable } from "./ModelInferencesTable";
@@ -173,7 +176,7 @@ export async function action({ request }: Route.ActionArgs) {
         );
       }
       try {
-        const datapoint = await tensorZeroClient.createDatapoint(
+        const datapoint = await getTensorZeroClient().createDatapoint(
           dataset.toString(),
           inference_id.toString(),
           output.toString() as "inherit" | "demonstration" | "none",

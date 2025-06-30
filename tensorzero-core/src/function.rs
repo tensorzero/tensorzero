@@ -1,3 +1,4 @@
+use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
@@ -20,7 +21,10 @@ use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoic
 use crate::variant::chat_completion::TemplateSchemaInfo;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum FunctionConfig {
     Chat(FunctionConfigChat),
     Json(FunctionConfigJson),
@@ -48,7 +52,9 @@ impl FunctionConfig {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, VariantInfo>, // variant name => variant config
     pub system_schema: Option<StaticJSONSchema>,
@@ -60,7 +66,9 @@ pub struct FunctionConfigChat {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, VariantInfo>, // variant name => variant config
     pub system_schema: Option<StaticJSONSchema>,
