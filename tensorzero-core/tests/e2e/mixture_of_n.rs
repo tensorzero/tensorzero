@@ -958,8 +958,8 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
         }
         chunk_data.push(chunk_json);
     }
-    assert_eq!(chunk_data.len(), 1);
-    // Content and usage data are in the same chunk in the fake stream
+    assert_eq!(chunk_data.len(), 2);
+    // Content and initial usage data are in the same chunk in the fake stream
     assert_eq!(
         chunk_data[0],
         serde_json::json!({
@@ -967,10 +967,23 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
             "episode_id": episode_id.to_string(),
             "variant_name":"mixture_of_n_variant_bad_fuser",
             "content":[{"type": "text", "id": "0", "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."}],
-            // Usage data includes usages from all candidates
-            "usage":{"input_tokens":30,"output_tokens":3},
+            // Usage data only includes information from the chosen candidate  
+            // The remaining usage information is added in the second chunk
+            "usage":{"input_tokens":20,"output_tokens":2},
             "finish_reason": "stop"
         })
+    );
+    // We create a new chunk with 'extra_usage' information, since we didn't have any chunks
+    // with both usage information and empty content.
+    assert_eq!(
+        chunk_data[1],
+        serde_json::json!({
+            "inference_id": first_inference_id.unwrap().to_string(),
+            "episode_id": episode_id.to_string(),
+            "variant_name":"mixture_of_n_variant_bad_fuser",
+            "content":[],
+            "usage":{"input_tokens":10,"output_tokens":1},
+        }),
     );
 
     let inference_id = first_inference_id.unwrap();
@@ -1009,7 +1022,7 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
     let results: Vec<Value> = select_model_inferences_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
-    // Both candidates should be present (but ont the fuser, since it failed)
+    // Both candidates should be present (but not the fuser, since it failed)
     println!("results: {results:#?}");
     assert_eq!(results.len(), 2);
 
@@ -1023,8 +1036,8 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
           "raw_response": "{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ]\n}",
           "model_name": "test",
           "model_provider_name": "good",
-          "input_tokens": 20,
-          "output_tokens": 2,
+          "input_tokens": 30,
+          "output_tokens": 3,
           "response_time_ms": 0,
           "ttft_ms": 0,
           "system": "You are a helpful and friendly assistant named AskJeeves",

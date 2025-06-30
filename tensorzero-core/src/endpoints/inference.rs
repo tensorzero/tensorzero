@@ -571,6 +571,9 @@ fn create_stream(
     async_stream::stream! {
         let mut buffer = vec![];
         let mut extra_usage = Some(metadata.previous_model_inference_results.iter().map(|m| m.usage_considering_cached()).sum());
+        if extra_usage == Some(Usage { input_tokens: 0, output_tokens: 0 }) {
+            extra_usage = None;
+        }
         let mut inference_ttft = None;
         while let Some(chunk) = stream.next().await {
             if inference_ttft.is_none() {
