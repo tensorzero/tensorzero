@@ -64,15 +64,22 @@ export class TensorZeroClient {
     return JSON.parse(statusString) as OptimizerStatus;
   }
 
-  async getFunctionConfig(functionName: string): Promise<FunctionConfig> {
+  listFunctions(): string[] {
+    return this.nativeClient.listFunctions();
+  }
+
+  getFunctionConfig(functionName: string): FunctionConfig {
     const functionConfigString =
-      await this.nativeClient.getFunctionConfig(functionName);
+      this.nativeClient.getFunctionConfig(functionName);
     return JSON.parse(functionConfigString) as FunctionConfig;
   }
 
-  async getMetricConfig(metricName: string): Promise<MetricConfig> {
-    const metricConfigString =
-      await this.nativeClient.getMetricConfig(metricName);
+  listMetrics(): string[] {
+    return this.nativeClient.listMetrics();
+  }
+
+  getMetricConfig(metricName: string): MetricConfig {
+    const metricConfigString = this.nativeClient.getMetricConfig(metricName);
     return JSON.parse(metricConfigString) as MetricConfig;
   }
 }

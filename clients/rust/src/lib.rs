@@ -943,6 +943,26 @@ impl Client {
         }
     }
 
+    /// List all functions in the config.
+    pub fn list_functions(&self) -> Result<Vec<&str>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => Ok(gateway
+                .state
+                .config
+                .functions
+                .keys()
+                .map(|s| s.as_str())
+                .collect()),
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
     /// Get a function config by name.
     ///
     /// This function is only available in EmbeddedGateway mode.
@@ -958,6 +978,27 @@ impl Client {
                 .config
                 .get_function(function_name)
                 .map_err(|e| TensorZeroError::Other { source: e.into() }),
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    /// List all metrics in the config.
+    /// Note: not sure whether this should return "comment" or "demonstration".
+    pub fn list_metrics(&self) -> Result<Vec<&str>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => Ok(gateway
+                .state
+                .config
+                .metrics
+                .keys()
+                .map(|s| s.as_str())
+                .collect()),
             ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
                 source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
                     mode: "Http".to_string(),

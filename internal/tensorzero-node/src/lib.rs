@@ -78,6 +78,15 @@ impl TensorZeroClient {
     }
 
     #[napi]
+    pub fn list_functions(&self) -> Result<Vec<String>, napi::Error> {
+        let functions = self
+            .client
+            .list_functions()
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(functions.into_iter().map(|s| s.to_string()).collect())
+    }
+
+    #[napi]
     pub fn get_metric_config(&self, metric_name: String) -> Result<String, napi::Error> {
         let metric_config = self
             .client
@@ -86,5 +95,14 @@ impl TensorZeroClient {
         let metric_config_str = serde_json::to_string(&metric_config)
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         Ok(metric_config_str)
+    }
+
+    #[napi]
+    pub fn list_metrics(&self) -> Result<Vec<String>, napi::Error> {
+        let metrics = self
+            .client
+            .list_metrics()
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(metrics.into_iter().map(|s| s.to_string()).collect())
     }
 }

@@ -95,7 +95,7 @@ describe("TensorZeroClient Integration Tests", () => {
 
   it("should get metric config with min optimization", async () => {
     const client = await buildClient();
-    const metricConfig = await client.getMetricConfig("elapsed_ms");
+    const metricConfig = client.getMetricConfig("elapsed_ms");
     expect(metricConfig).toBeDefined();
     expect(metricConfig.type).toBe("float");
     expect(metricConfig.level).toBe("episode");
@@ -104,16 +104,12 @@ describe("TensorZeroClient Integration Tests", () => {
 
   it("should throw error for non-existent metric", async () => {
     const client = await buildClient();
-    await expect(
-      client.getMetricConfig("non_existent_metric"),
-    ).rejects.toThrow();
+    expect(() => client.getMetricConfig("non_existent_metric")).toThrow();
   });
 
   it("should get chat function config with tools", async () => {
     const client = await buildClient();
-    const functionConfig = await client.getFunctionConfig(
-      "multi_hop_rag_agent",
-    );
+    const functionConfig = client.getFunctionConfig("multi_hop_rag_agent");
     expect(functionConfig).toBeDefined();
     expect(functionConfig.type).toBe("chat");
     if (functionConfig.type === "chat") {
@@ -130,7 +126,7 @@ describe("TensorZeroClient Integration Tests", () => {
 
   it("should get function config with system schema", async () => {
     const client = await buildClient();
-    const functionConfig = await client.getFunctionConfig("ask_question");
+    const functionConfig = client.getFunctionConfig("ask_question");
     expect(functionConfig).toBeDefined();
     expect(functionConfig.type).toBe("json");
     if (functionConfig.type === "json") {
@@ -141,7 +137,7 @@ describe("TensorZeroClient Integration Tests", () => {
 
   it("should get function config with user schema", async () => {
     const client = await buildClient();
-    const functionConfig = await client.getFunctionConfig("write_haiku");
+    const functionConfig = client.getFunctionConfig("write_haiku");
     expect(functionConfig).toBeDefined();
     expect(functionConfig.type).toBe("chat");
     if (functionConfig.type === "chat") {
@@ -151,7 +147,7 @@ describe("TensorZeroClient Integration Tests", () => {
 
   it("should get function variant with temperature setting", async () => {
     const client = await buildClient();
-    const functionConfig = await client.getFunctionConfig("generate_secret");
+    const functionConfig = client.getFunctionConfig("generate_secret");
     expect(functionConfig).toBeDefined();
     const variantNames = Object.keys(functionConfig.variants);
     expect(variantNames.length).toBeGreaterThan(0);
@@ -164,7 +160,7 @@ describe("TensorZeroClient Integration Tests", () => {
 
   it("should get function with dicl variant", async () => {
     const client = await buildClient();
-    const functionConfig = await client.getFunctionConfig("extract_entities");
+    const functionConfig = client.getFunctionConfig("extract_entities");
     expect(functionConfig).toBeDefined();
     const variants = functionConfig.variants;
     expect(variants.dicl).toBeDefined();
@@ -178,7 +174,7 @@ describe("TensorZeroClient Integration Tests", () => {
 
   it("should get function with chain of thought variant", async () => {
     const client = await buildClient();
-    const functionConfig = await client.getFunctionConfig("judge_answer");
+    const functionConfig = client.getFunctionConfig("judge_answer");
     expect(functionConfig).toBeDefined();
     const variants = functionConfig.variants;
     const variantNames = Object.keys(variants);
@@ -189,7 +185,7 @@ describe("TensorZeroClient Integration Tests", () => {
 
   it("should get function with different json_mode settings", async () => {
     const client = await buildClient();
-    const functionConfig = await client.getFunctionConfig("extract_entities");
+    const functionConfig = client.getFunctionConfig("extract_entities");
     expect(functionConfig).toBeDefined();
     const variants = functionConfig.variants;
 
@@ -203,16 +199,12 @@ describe("TensorZeroClient Integration Tests", () => {
 
   it("should throw error for non-existent function", async () => {
     const client = await buildClient();
-    await expect(
-      client.getFunctionConfig("non_existent_function"),
-    ).rejects.toThrow();
+    expect(() => client.getFunctionConfig("non_existent_function")).toThrow();
   });
 
   it("should get all function config fields for comprehensive coverage", async () => {
     const client = await buildClient();
-    const functionConfig = await client.getFunctionConfig(
-      "multi_hop_rag_agent",
-    );
+    const functionConfig = client.getFunctionConfig("multi_hop_rag_agent");
     expect(functionConfig).toBeDefined();
     expect(functionConfig.type).toBe("chat");
     expect(functionConfig.variants).toBeDefined();
@@ -227,6 +219,20 @@ describe("TensorZeroClient Integration Tests", () => {
       expect(variant!.inner).toBeDefined();
       expect(variant!.inner.type).toBeDefined();
     }
+  });
+
+  it("should be able to list functions", async () => {
+    const client = await buildClient();
+    const functions = client.listFunctions();
+    expect(functions.length).toBe(16);
+    expect(functions).toContain("extract_entities");
+  });
+
+  it("should be able to list metrics", async () => {
+    const client = await buildClient();
+    const metrics = client.listMetrics();
+    expect(metrics.length).toBe(21);
+    expect(metrics).toContain("exact_match");
   });
 });
 
