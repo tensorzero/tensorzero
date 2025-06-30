@@ -350,8 +350,8 @@ impl ClickHouseConnectionInfo {
 
     pub async fn create_database(&self) -> Result<(), Error> {
         match self {
-            Self::Disabled => Ok(()),
-            Self::Mock { .. } => Ok(()),
+            Self::Disabled => {}
+            Self::Mock { .. } => {}
             Self::Production {
                 database_url,
                 database,
@@ -396,13 +396,35 @@ impl ClickHouseConnectionInfo {
                 })?;
 
                 match status {
-                    reqwest::StatusCode::OK => Ok(()),
-                    _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
-                        message: response_body,
-                    })),
+                    reqwest::StatusCode::OK => {}
+                    _ => {
+                        return Err(Error::new(ErrorDetails::ClickHouseQuery {
+                            message: response_body,
+                        }))
+                    }
                 }
             }
         }
+        // Note - we do *not* run this as a normal migration
+        // We decided to add this table after we had already created lots of migrations.
+        // We create this table immediately after creating the database, so that
+        // we can insert rows into it when running migrations
+        self.run_query_synchronous_no_params(
+            r#"CREATE TABLE IF NOT EXISTS TensorZeroMigration (
+                migration_id UInt32,
+                migration_name String,
+                gateway_version String,
+                gateway_git_sha String,
+                applied_at DateTime64(6, 'UTC') DEFAULT now(),
+                execution_time_ms UInt64,
+                extra_data Nullable(String)
+            )
+            ENGINE = MergeTree()
+            PRIMARY KEY (migration_id)"#
+                .to_string(),
+        )
+        .await?;
+        Ok(())
     }
 
     pub async fn list_inferences(
