@@ -725,6 +725,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
+      "is_custom": true,
       "staled_at": null,
       "source_inference_id": null,
     });
@@ -804,6 +805,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
+      "is_custom": true,
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
     });
@@ -918,6 +920,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
+      "is_custom": true,
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
     });
@@ -2102,6 +2105,7 @@ async fn test_datapoint_insert_output_none_json() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
+      "is_custom": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
     });
@@ -2212,6 +2216,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
+      "is_custom": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
     });
@@ -2347,6 +2352,7 @@ async fn test_datapoint_insert_missing_output_chat() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
+      "is_custom": true,
       "staled_at": null,
       "source_inference_id": null,
     });
@@ -2431,6 +2437,7 @@ async fn test_datapoint_insert_missing_output_json() {
             "function_name": "json_success",
             "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
             "output_schema": {},
+            "is_custom": false,
             // output field is deliberately omitted
         }))
         .send()
@@ -2474,6 +2481,7 @@ async fn test_datapoint_insert_missing_output_json() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
+      "is_custom": false,
       "staled_at": null,
       "source_inference_id": null,
     });
@@ -2496,6 +2504,7 @@ async fn test_datapoint_insert_null_output_json() {
             "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
             "output": null, // explicitly null output
             "output_schema": {},
+            "is_custom": true,
         }))
         .send()
         .await
@@ -2538,6 +2547,7 @@ async fn test_datapoint_insert_null_output_json() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
+      "is_custom": true,
       "staled_at": null,
       "source_inference_id": null,
     });
