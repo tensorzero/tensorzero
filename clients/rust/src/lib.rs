@@ -370,14 +370,6 @@ impl Client {
         }
     }
 
-    #[cfg(feature = "pyo3")]
-    pub fn get_config(&self) -> Option<Arc<Config<'_>>> {
-        match &self.mode {
-            ClientMode::EmbeddedGateway { gateway, .. } => Some(gateway.state.config.clone()),
-            _ => None,
-        }
-    }
-
     /// Assigns feedback for a TensorZero inference.
     /// See https://www.tensorzero.com/docs/gateway/api-reference#post-feedback
     pub async fn feedback(
@@ -1064,6 +1056,19 @@ impl Client {
                 .config
                 .get_evaluation(evaluation_name)
                 .map_err(|e| TensorZeroError::Other { source: e.into() }),
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    pub fn get_config(&self) -> Result<Arc<Config>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => Ok(gateway.state.config.clone()),
             ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
                 source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
                     mode: "Http".to_string(),

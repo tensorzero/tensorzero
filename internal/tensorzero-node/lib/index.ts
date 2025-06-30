@@ -6,6 +6,7 @@ import {
   FunctionConfig,
   MetricConfig,
   EvaluationConfig,
+  Config,
 } from "./bindings";
 import type { TensorZeroClient as NativeTensorZeroClientType } from "../index";
 
@@ -92,6 +93,11 @@ export class TensorZeroClient {
     const evaluationConfigString =
       this.nativeClient.getEvaluationConfig(evaluationName);
     return JSON.parse(evaluationConfigString) as EvaluationConfig;
+  }
+
+  getConfig(): Config {
+    const configString = this.nativeClient.getConfig();
+    return JSON.parse(configString) as Config;
   }
 }
 
