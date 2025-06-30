@@ -117,7 +117,9 @@ impl Variant for MixtureOfNConfig {
             )
             .await?
         {
-            InferenceOrStreamResult::NonStream(inference_result) => Ok(inference_result),
+            InferenceOrStreamResult::NonStream(mut inference_result) => {
+                Ok(inference_result)
+            },
             InferenceOrStreamResult::Stream(..) => {
                 Err(ErrorDetails::InternalError { message: format!("MixtureOfNConfig.fuse_candidates returned a stream for a non-streaming request. {IMPOSSIBLE_ERROR_MESSAGE}") }.into())
             }
@@ -510,11 +512,6 @@ impl MixtureOfNConfig {
 
         match &mut inference_result {
             InferenceOrStreamResult::NonStream(inference_result) => {
-                // Safely remove the selected candidate without panicking
-                let mut total_usage: Usage = candidates.iter().map(|c| c.usage()).sum();
-                total_usage.input_tokens += inference_result.usage().input_tokens;
-                total_usage.output_tokens += inference_result.usage().output_tokens;
-                inference_result.set_usage(total_usage);
                 for candidate in candidates {
                     inference_result
                         .mut_model_inference_results()
@@ -522,7 +519,6 @@ impl MixtureOfNConfig {
                 }
             }
             InferenceOrStreamResult::Stream(_stream, model_used_info) => {
-                // Don't adjust usage here - we'll do that in `collect_chunks`
                 for candidate in candidates {
                     model_used_info
                         .previous_model_inference_results
@@ -1378,8 +1374,8 @@ mod tests {
         };
 
         let expected_usage = Usage {
-            input_tokens: 35,
-            output_tokens: 46,
+            input_tokens: 10,
+            output_tokens: 1,
         };
         let expected_content = InternalJsonInferenceOutput {
             raw: Some("{\"answer\":\"Hello\"}".to_string()),

@@ -969,7 +969,7 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
             "content":[{"type": "text", "id": "0", "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."}],
             // Usage data only includes information from the chosen candidate  
             // The remaining usage information is added in the second chunk
-            "usage":{"input_tokens":20,"output_tokens":2},
+            "usage":{"input_tokens":10,"output_tokens":1},
             "finish_reason": "stop"
         })
     );
@@ -1036,8 +1036,8 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
           "raw_response": "{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ]\n}",
           "model_name": "test",
           "model_provider_name": "good",
-          "input_tokens": 30,
-          "output_tokens": 3,
+          "input_tokens": 20,
+          "output_tokens": 2,
           "response_time_ms": 0,
           "ttft_ms": 0,
           "system": "You are a helpful and friendly assistant named AskJeeves",
