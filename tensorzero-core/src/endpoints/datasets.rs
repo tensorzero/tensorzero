@@ -1278,6 +1278,7 @@ async fn put_deduped_chat_datapoints(
     clickhouse: &ClickHouseConnectionInfo,
     datapoints: &[ChatInferenceDatapoint],
 ) -> Result<u64, Error> {
+    println!("datapoints: {:?}", datapoints);
     let serialized_datapoints = datapoints
         .iter()
         .map(|datapoint| {

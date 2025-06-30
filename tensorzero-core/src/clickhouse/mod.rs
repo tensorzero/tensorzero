@@ -313,6 +313,7 @@ impl ClickHouseConnectionInfo {
                             message: format!("Failed to parse x-clickhouse-summary header: {e}"),
                         })
                     })?;
+                    println!("summary_str: {summary_str}");
 
                     serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(
                         |e| {
