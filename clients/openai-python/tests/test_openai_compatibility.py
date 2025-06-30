@@ -1041,7 +1041,7 @@ async def test_missing_text_fields(async_client):
 
 
 @pytest.mark.asyncio
-async def test_bad_content_blocK_type(async_client):
+async def test_bad_content_block_type(async_client):
     messages = [
         {
             "role": "system",
