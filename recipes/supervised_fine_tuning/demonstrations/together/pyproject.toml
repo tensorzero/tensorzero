@@ -13,6 +13,5 @@ dependencies = [
     "pandas",
     "toml",
     "together",
-    "tensorzero",
-    "pip",
+    "tensorzero"
 ]
