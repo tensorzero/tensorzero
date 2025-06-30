@@ -704,6 +704,18 @@ impl<'c> Config<'c> {
         }
         templates
     }
+
+    pub fn get_evaluation(&self, evaluation_name: &str) -> Result<Arc<EvaluationConfig>, Error> {
+        Ok(self
+            .evaluations
+            .get(evaluation_name)
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownEvaluation {
+                    name: evaluation_name.to_string(),
+                })
+            })?
+            .clone())
+    }
 }
 
 /// A trait for loading configs with a base path

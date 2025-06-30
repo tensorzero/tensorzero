@@ -234,6 +234,98 @@ describe("TensorZeroClient Integration Tests", () => {
     expect(metrics.length).toBe(21);
     expect(metrics).toContain("exact_match");
   });
+
+  it("should be able to list evaluations", async () => {
+    const client = await buildClient();
+    const evaluations = client.listEvaluations();
+    expect(evaluations.length).toBe(3);
+    expect(evaluations).toContain("entity_extraction");
+    expect(evaluations).toContain("haiku");
+    expect(evaluations).toContain("images");
+  });
+
+  it("should be able to get evaluation config", async () => {
+    const client = await buildClient();
+    const evaluationConfig = client.getEvaluationConfig("entity_extraction");
+    expect(evaluationConfig).toBeDefined();
+    expect(evaluationConfig.type).toBe("static");
+    expect(evaluationConfig.function_name).toBe("extract_entities");
+    expect(evaluationConfig.evaluators).toBeDefined();
+    expect(evaluationConfig.evaluators.exact_match).toBeDefined();
+    expect(evaluationConfig.evaluators.count_sports).toBeDefined();
+  });
+
+  it("should get evaluation config with exact match evaluator", async () => {
+    const client = await buildClient();
+    const evaluationConfig = client.getEvaluationConfig("entity_extraction");
+    expect(evaluationConfig.evaluators.exact_match).toBeDefined();
+    const exactMatchEvaluator = evaluationConfig.evaluators.exact_match!;
+    expect(exactMatchEvaluator.type).toBe("exact_match");
+    expect(exactMatchEvaluator.cutoff).toBe(0.6);
+  });
+
+  it("should get evaluation config with llm judge evaluator", async () => {
+    const client = await buildClient();
+    const evaluationConfig = client.getEvaluationConfig("entity_extraction");
+    expect(evaluationConfig.evaluators.count_sports).toBeDefined();
+    const llmJudgeEvaluator = evaluationConfig.evaluators.count_sports!;
+    expect(llmJudgeEvaluator.type).toBe("llm_judge");
+    if (llmJudgeEvaluator.type === "llm_judge") {
+      expect(llmJudgeEvaluator.output_type).toBe("float");
+      expect(llmJudgeEvaluator.optimize).toBe("min");
+      expect(llmJudgeEvaluator.cutoff).toBe(0.5);
+      expect(llmJudgeEvaluator.include.reference_output).toBe(false);
+    }
+  });
+
+  it("should get haiku evaluation config", async () => {
+    const client = await buildClient();
+    const evaluationConfig = client.getEvaluationConfig("haiku");
+    expect(evaluationConfig).toBeDefined();
+    expect(evaluationConfig.type).toBe("static");
+    expect(evaluationConfig.function_name).toBe("write_haiku");
+    expect(evaluationConfig.evaluators.exact_match).toBeDefined();
+    expect(evaluationConfig.evaluators.topic_starts_with_f).toBeDefined();
+
+    const topicEvaluator = evaluationConfig.evaluators.topic_starts_with_f!;
+    expect(topicEvaluator.type).toBe("llm_judge");
+    if (topicEvaluator.type === "llm_judge") {
+      expect(topicEvaluator.output_type).toBe("boolean");
+      expect(topicEvaluator.optimize).toBe("min");
+      expect(topicEvaluator.include.reference_output).toBe(false);
+    }
+  });
+
+  it("should get images evaluation config with message format", async () => {
+    const client = await buildClient();
+    const evaluationConfig = client.getEvaluationConfig("images");
+    expect(evaluationConfig).toBeDefined();
+    expect(evaluationConfig.type).toBe("static");
+    expect(evaluationConfig.function_name).toBe("image_judger");
+
+    const honestAnswerEvaluator = evaluationConfig.evaluators.honest_answer!;
+    expect(honestAnswerEvaluator.type).toBe("llm_judge");
+    if (honestAnswerEvaluator.type === "llm_judge") {
+      expect(honestAnswerEvaluator.input_format).toBe("messages");
+      expect(honestAnswerEvaluator.output_type).toBe("boolean");
+      expect(honestAnswerEvaluator.optimize).toBe("max");
+      expect(honestAnswerEvaluator.cutoff).toBe(0.2);
+    }
+
+    const matchesReferenceEvaluator =
+      evaluationConfig.evaluators.matches_reference!;
+    expect(matchesReferenceEvaluator.type).toBe("llm_judge");
+    if (matchesReferenceEvaluator.type === "llm_judge") {
+      expect(matchesReferenceEvaluator.include.reference_output).toBe(true);
+    }
+  });
+
+  it("should throw error for non-existent evaluation", async () => {
+    const client = await buildClient();
+    expect(() =>
+      client.getEvaluationConfig("non_existent_evaluation"),
+    ).toThrow();
+  });
 });
 
 async function buildClient() {

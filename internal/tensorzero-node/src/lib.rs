@@ -105,4 +105,24 @@ impl TensorZeroClient {
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         Ok(metrics.into_iter().map(|s| s.to_string()).collect())
     }
+
+    #[napi]
+    pub fn list_evaluations(&self) -> Result<Vec<String>, napi::Error> {
+        let evaluations = self
+            .client
+            .list_evaluations()
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(evaluations.into_iter().map(|s| s.to_string()).collect())
+    }
+
+    #[napi]
+    pub fn get_evaluation_config(&self, evaluation_name: String) -> Result<String, napi::Error> {
+        let evaluation_config = self
+            .client
+            .get_evaluation_config(&evaluation_name)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let evaluation_config_str = serde_json::to_string(&evaluation_config)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(evaluation_config_str)
+    }
 }
