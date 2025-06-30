@@ -1,10 +1,10 @@
 import { useFetcher } from "react-router";
-import { tensorZeroClient } from "~/utils/tensorzero.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { useEffect } from "react";
 
 export async function loader() {
   try {
-    const status = await tensorZeroClient.status();
+    const status = await getTensorZeroClient().status();
     return status;
   } catch (error) {
     console.error("Failed to fetch TensorZero status:", error);
