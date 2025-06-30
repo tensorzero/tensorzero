@@ -44,7 +44,7 @@ impl TensorZeroClient {
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let job_handle_str = serde_json::to_string(&job_handle).map_err(|e| {
-            napi::Error::from_reason(format!("Failed to serialize job handle: {}", e))
+            napi::Error::from_reason(format!("Failed to serialize job handle: {e}"))
         })?;
         Ok(job_handle_str)
     }

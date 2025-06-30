@@ -1271,7 +1271,6 @@ async fn put_chat_datapoints(
     clickhouse: &ClickHouseConnectionInfo,
     datapoints: &[ChatInferenceDatapoint],
 ) -> Result<u64, Error> {
-    println!("datapoints: {:?}", datapoints);
     let serialized_datapoints = datapoints
         .iter()
         .map(|datapoint| {
@@ -1313,14 +1312,6 @@ async fn put_chat_datapoints(
             new_data.is_custom,
             new_data.source_inference_id
         FROM new_data
-        LEFT JOIN ChatInferenceDatapoint AS existing FINAL
-          ON new_data.dataset_name = existing.dataset_name
-             AND new_data.function_name = existing.function_name
-             AND new_data.source_inference_id = existing.source_inference_id
-             AND new_data.id != existing.id -- this is to allow us to update the datapoint and keep the same source_inference_id
-             AND existing.staled_at IS NULL
-             AND NOT existing.is_custom  -- if the old datapoint is custom, we don't want to use it for deduplication
-          WHERE existing.id IS NULL OR new_data.is_custom -- if the new datapoint is custom, we don't want to use the old datapoint for deduplication
         "#;
 
     let external_data = ExternalDataInfo {
@@ -1410,7 +1401,8 @@ mod test {
             "output": null,
             "tool_params": null,
             "tags": null,
-            "auxiliary": ""
+            "auxiliary": "",
+            "is_custom": false
         }"#;
 
         let datapoint: SyntheticChatInferenceDatapoint = serde_json::from_str(json_str).unwrap();
@@ -1419,6 +1411,7 @@ mod test {
         assert_eq!(datapoint.tool_params, None);
         assert_eq!(datapoint.tags, None);
         assert_eq!(datapoint.auxiliary, "");
+        assert!(!datapoint.is_custom);
     }
 
     #[test]
@@ -1429,7 +1422,8 @@ mod test {
             "output": [{"type": "text", "value": "Hello"}],
             "tool_params": {"tools_available": [], "tool_choice": "auto", "parallel_tool_calls": false},
             "tags": {"source": "test"},
-            "auxiliary": "extra data"
+            "auxiliary": "extra data",
+            "is_custom": true
         }"#;
 
         let datapoint: SyntheticChatInferenceDatapoint = serde_json::from_str(json_str).unwrap();
@@ -1441,6 +1435,7 @@ mod test {
             Some(HashMap::from([("source".to_string(), "test".to_string())]))
         );
         assert_eq!(datapoint.auxiliary, "extra data");
+        assert!(datapoint.is_custom);
     }
 
     #[test]
@@ -1452,7 +1447,7 @@ mod test {
             "output_schema": {},
             "tags": null,
             "auxiliary": "",
-            "is_custom": false,
+            "is_custom": false
         }"#;
 
         let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
@@ -1473,7 +1468,7 @@ mod test {
             "output_schema": {"type": "object", "properties": {"answer": {"type": "string"}}},
             "tags": {"source": "test"},
             "auxiliary": "extra data",
-            "is_custom": true,
+            "is_custom": true
         }"#;
 
         let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
@@ -1495,7 +1490,8 @@ mod test {
             "input": {"system": {"assistant_name": "Test"}, "messages": []},
             "output_schema": {"type": "object", "properties": {"answer": {"type": "string"}}},
             "tags": {"source": "test"},
-            "auxiliary": "extra data"
+            "auxiliary": "extra data",
+            "is_custom": true
         }"#;
 
         let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();

@@ -37,6 +37,7 @@ async fn test_datapoint_insert_synthetic_chat() {
             "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             "output": [{"type": "text", "text": "My synthetic output"}],
             "source_inference_id": source_inference_id,
+            "is_custom": true,
         }))
         .send()
         .await
@@ -93,88 +94,7 @@ async fn test_datapoint_insert_synthetic_chat() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
-      "staled_at": null,
-      "source_inference_id": source_inference_id.to_string(),
-    });
-    assert_eq!(datapoint, expected);
-
-    // Try a new insert with the same source_inference_id but a new datapoint id
-    let new_datapoint_id = Uuid::now_v7();
-    let resp = client
-        .put(get_gateway_endpoint(&format!(
-            "/internal/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
-        )))
-        .json(&json!({
-            "function_name": "basic_test",
-            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
-            "output": [{"type": "text", "text": "My synthetic output"}],
-            "source_inference_id": source_inference_id,
-        }))
-        .send()
-        .await.unwrap();
-
-    let status = resp.status();
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-
-    // Check that the datapoint was not inserted into clickhouse
-    let datapoint = select_chat_datapoint_clickhouse(&clickhouse, new_datapoint_id).await;
-    assert!(datapoint.is_none());
-
-    // Let's stale the old datapoint and try again
-    stale_datapoint_clickhouse(&clickhouse, datapoint_id).await;
-
-    // Try a new insert with the same source_inference_id but a new datapoint id
-    let new_datapoint_id = Uuid::now_v7();
-    let resp = client
-       .put(get_gateway_endpoint(&format!(
-           "/internal/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
-       )))
-       .json(&json!({
-           "function_name": "basic_test",
-           "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
-           "output": [{"type": "text", "text": "My synthetic output"}],
-           "source_inference_id": source_inference_id,
-       }))
-       .send()
-       .await.unwrap();
-
-    let status = resp.status();
-    assert_eq!(status, StatusCode::OK);
-
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, new_datapoint_id)
-        .await
-        .unwrap();
-
-    let updated_at = datapoint
-        .as_object_mut()
-        .unwrap()
-        .remove("updated_at")
-        .unwrap();
-    let updated_at = chrono::NaiveDateTime::parse_from_str(
-        updated_at.as_str().unwrap(),
-        CLICKHOUSE_DATETIME_FORMAT,
-    )
-    .unwrap()
-    .and_utc();
-    assert!(
-        chrono::Utc::now()
-            .signed_duration_since(updated_at)
-            .num_seconds()
-            < 5,
-        "Unexpected updated_at: {updated_at:?}"
-    );
-
-    let expected = json!({
-      "dataset_name": dataset_name,
-      "function_name": "basic_test",
-      "id": new_datapoint_id.to_string(),
-      "episode_id": null,
-      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"My synthetic input\"}]}]}",
-      "output": "[{\"type\":\"text\",\"text\":\"My synthetic output\"}]",
-      "tool_params": "",
-      "tags": {},
-      "auxiliary": "",
-      "is_deleted": false,
+      "is_custom": true,
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
     });
@@ -596,6 +516,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
                 {"type": "tool_call", "name": "get_humidity", "arguments": {"location": "New York", "units": "fahrenheit"}}
             ],
             "tool_params": tool_params,
+            "is_custom": true,
         }))
         .send()
         .await
@@ -635,6 +556,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
                 {"type": "tool_call", "name": "get_temperature", "arguments": {"city": "New York", "units": "fahrenheit"}}
             ],
             "tool_params": tool_params,
+            "is_custom": true,
         }))
         .send()
         .await
@@ -643,7 +565,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
     let status = resp.status();
     let resp_json = resp.json::<Value>().await.unwrap();
 
-    // This request is correct
+    // This request is incorrect
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let err_msg = resp_json.get("error").unwrap().as_str().unwrap();
     println!("Error: {err_msg}");
@@ -673,6 +595,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
             {"type": "tool_call", "name": "get_temperature", "arguments": {"location": "New York", "units": "fahrenheit"}}
         ],
         "tool_params": tool_params,
+        "is_custom": true,
     }))
     .send()
     .await
@@ -750,6 +673,7 @@ async fn test_datapoint_insert_synthetic_json() {
             "output": {"answer": "Hello"},
             "output_schema": {},
             "source_inference_id": source_inference_id,
+            "is_custom": true,
         }))
         .send()
         .await
@@ -815,7 +739,7 @@ async fn test_datapoint_insert_synthetic_json() {
     tokio::time::sleep(Duration::from_millis(1500)).await;
 
     // Now, update the existing datapoint and verify that it changes in clickhouse
-    // Test updating with a different output schema (this should fail)
+    // Test updating with a bad output schema the output won't match (this should fail)
     let new_resp = client
     .put(get_gateway_endpoint(&format!(
         "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
@@ -825,6 +749,7 @@ async fn test_datapoint_insert_synthetic_json() {
         "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
         "output": {"answer": "New answer"},
         "output_schema": {"type": "object", "properties": {"confidence": {"type": "number"}}, "required": ["confidence"]},
+        "is_custom": true,
     }))
     .send()
     .await
@@ -864,6 +789,7 @@ async fn test_datapoint_insert_synthetic_json() {
             "additionalProperties": false
         },
         "source_inference_id": source_inference_id,
+        "is_custom": true,
     }))
     .send()
     .await
@@ -927,7 +853,6 @@ async fn test_datapoint_insert_synthetic_json() {
     assert_eq!(datapoint, expected);
 
     // Try with a new datapoint_id and the same source_inference_id
-    // and verify that you get 400 and there is no write
     let new_datapoint_id = Uuid::now_v7();
     let new_resp = client
     .put(get_gateway_endpoint(&format!(
@@ -946,17 +871,23 @@ async fn test_datapoint_insert_synthetic_json() {
             "additionalProperties": false
         },
         "source_inference_id": source_inference_id,
+        "is_custom": true,
     }))
     .send()
     .await
     .unwrap();
     let status = new_resp.status();
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(status, StatusCode::OK);
 
-    // Check that the datapoint was not inserted into clickhouse
+    // Check that the datapoint was inserted into clickhouse
     let datapoint = select_json_datapoint_clickhouse(&clickhouse, new_datapoint_id).await;
-    println!("datapoint: {datapoint:?}");
-    assert!(datapoint.is_none());
+    assert!(datapoint.is_some());
+    let datapoint = datapoint.unwrap();
+    let datapoint = serde_json::from_value::<JsonInferenceDatapoint>(datapoint).unwrap();
+    assert_eq!(datapoint.source_inference_id, Some(source_inference_id));
+    assert!(datapoint.is_custom);
+    assert_eq!(datapoint.id, new_datapoint_id);
+
     // Let's stale the old datapoint and try again
     stale_datapoint_clickhouse(&clickhouse, datapoint_id).await;
 
@@ -979,6 +910,7 @@ async fn test_datapoint_insert_synthetic_json() {
                "additionalProperties": false
            },
            "source_inference_id": source_inference_id,
+           "is_custom": true,
        }))
        .send()
        .await.unwrap();
@@ -1020,6 +952,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
+      "is_custom": true,
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
     });
@@ -1329,6 +1262,7 @@ async fn test_datapoint_insert_invalid_input_synthetic_chat() {
             "function_name": "variant_failover",
             "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             "output": "Not a json object",
+            "is_custom": false,
         }))
         .send()
         .await
@@ -1364,6 +1298,7 @@ async fn test_datapoint_insert_invalid_input_synthetic_json() {
             "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             "output": "Not a json object",
             "output_schema": {},
+            "is_custom": false,
         }))
         .send()
         .await
@@ -1399,6 +1334,7 @@ async fn test_datapoint_insert_invalid_output_synthetic_json() {
             "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
             "output": "Not a json object",
             "output_schema": {"type": "object", "properties": {"answer": {"type": "string"}}, "required": ["answer"]},
+            "is_custom": false,
         }))
         .send()
         .await
@@ -1561,6 +1497,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
+      "is_custom": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
     });
@@ -1615,6 +1552,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": true,
+      "is_custom": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
     });
@@ -1708,6 +1646,7 @@ async fn test_datapoint_insert_output_none_chat() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
+      "is_custom": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
     });
@@ -1865,6 +1804,7 @@ async fn test_datapoint_insert_output_demonstration_chat() {
       "auxiliary": "",
       "is_deleted": false,
       "staled_at": null,
+      "is_custom": false,
       "source_inference_id": inference_id.to_string(),
     });
     assert_eq!(datapoint, expected);
@@ -1955,6 +1895,7 @@ async fn test_datapoint_insert_output_inherit_json() {
       "auxiliary": "",
       "is_deleted": false,
       "staled_at": null,
+      "is_custom": false,
       "source_inference_id": inference_id.to_string(),
     });
     assert_eq!(datapoint, expected);
@@ -2009,6 +1950,7 @@ async fn test_datapoint_insert_output_inherit_json() {
       "auxiliary": "",
       "is_deleted": true,
       "staled_at": null,
+      "is_custom": false,
       "source_inference_id": inference_id.to_string(),
     });
     assert_eq!(
@@ -2310,6 +2252,7 @@ async fn test_datapoint_insert_missing_output_chat() {
             "function_name": "basic_test",
             "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             // output field is deliberately omitted
+            "is_custom": true,
         }))
         .send()
         .await
@@ -2374,6 +2317,7 @@ async fn test_datapoint_insert_null_output_chat() {
             "function_name": "basic_test",
             "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             "output": null, // explicitly null output
+            "is_custom": true,
         }))
         .send()
         .await
@@ -2416,6 +2360,7 @@ async fn test_datapoint_insert_null_output_chat() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
+      "is_custom": true,
       "staled_at": null,
       "source_inference_id": null,
     });
