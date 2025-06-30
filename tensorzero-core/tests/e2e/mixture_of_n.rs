@@ -330,8 +330,15 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
         let usage = usage.as_object().unwrap();
         let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
         let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
-        assert!(input_tokens > 100);
-        assert!(output_tokens > 20);
+        // We're invoking a real judge, so we can't assert the exact number of tokens used or produced.
+        assert!(
+            input_tokens > 100,
+            "Unexpected input tokens: {input_tokens}"
+        );
+        assert!(
+            output_tokens > 20,
+            "Unexpected output tokens: {output_tokens}"
+        );
         (Some(content.to_string()), inference_id)
     };
 

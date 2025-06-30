@@ -10,6 +10,7 @@ use tokio::time::{timeout, Duration};
 use crate::config_parser::PathWithContents;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::{
@@ -118,7 +119,7 @@ impl Variant for MixtureOfNConfig {
         {
             InferenceOrStreamResult::NonStream(inference_result) => Ok(inference_result),
             InferenceOrStreamResult::Stream(..) => {
-                Err(ErrorDetails::InternalError { message: "MixtureOfNConfig.fuse_candidates returned a stream for a non-streaming request. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string() }.into())
+                Err(ErrorDetails::InternalError { message: format!("MixtureOfNConfig.fuse_candidates returned a stream for a non-streaming request. {IMPOSSIBLE_ERROR_MESSAGE}") }.into())
             }
         }
     }
@@ -152,9 +153,16 @@ impl Variant for MixtureOfNConfig {
             // We get a NonStream result if we don't have fuser result (either the fuser failed, or it wasn't run at all due to only one candidate existing)
             InferenceOrStreamResult::NonStream(inference_result) => {
                 // Use the first model inference result to construct our top-level result (since we don't have a fuser result)
-                let model_inference_result = inference_result.model_inference_results().first().ok_or_else(|| Error::new(ErrorDetails::Inference {
-                    message: "Expected one candidate but found none. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                }))?;
+                let model_inference_result = inference_result
+                    .model_inference_results()
+                    .first()
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::Inference {
+                            message: format!(
+                                "Expected one candidate but found none. {IMPOSSIBLE_ERROR_MESSAGE}"
+                            ),
+                        })
+                    })?;
                 let model_used_info = ModelUsedInfo {
                     model_name: model_inference_result.model_name.clone(),
                     model_provider_name: model_inference_result.model_provider_name.clone(),

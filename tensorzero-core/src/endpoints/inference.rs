@@ -1047,7 +1047,7 @@ impl InferenceResponseChunk {
         } else {
             let mut result_usage = inference_result.usage().copied();
             // The first time we encounter a chunk that already has usage information set,
-            // add on 'extra_usage' to it.
+            // add `extra_usage` to the chunk.
             // If we never encounter any chunks with usage, we'll append one ourselves
             // in `create_stream`
             if let Some(result_usage) = &mut result_usage {
