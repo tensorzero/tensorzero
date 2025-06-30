@@ -10,14 +10,14 @@ describe("TensorZeroClient Integration Tests", () => {
   it("client creation throws on a bad config path", async () => {
     // This should throw an error that contains "Failed to parse config: Internal TensorZero Error: Config file not found: "foo""
     expect(async () => await TensorZeroClient.build("foo")).rejects.toThrow(
-      'Failed to parse config: Internal TensorZero Error: Config file not found: "foo"'
+      'Failed to parse config: Internal TensorZero Error: Config file not found: "foo"',
     );
   });
 
   it("should have required methods and initialize without credentials", async () => {
     const client = await buildClient();
     expect(typeof client.experimentalLaunchOptimizationWorkflow).toBe(
-      "function"
+      "function",
     );
     expect(typeof client.experimentalPollOptimization).toBe("function");
   });
@@ -29,7 +29,7 @@ describe("TensorZeroClient Integration Tests", () => {
     expect(extractEntitiesConfig).toBeDefined();
     expect(extractEntitiesConfig.variants).toBeDefined();
     const extractEntitiesVariantNames = Object.keys(
-      extractEntitiesConfig.variants
+      extractEntitiesConfig.variants,
     );
     expect(extractEntitiesVariantNames.length).toBe(6);
     for (const variantName of extractEntitiesVariantNames) {
@@ -64,7 +64,7 @@ describe("TensorZeroClient Integration Tests", () => {
     }
     expect(generateSecretConfig.variants).toBeDefined();
     const generateSecretVariantNames = Object.keys(
-      generateSecretConfig.variants
+      generateSecretConfig.variants,
     );
     expect(generateSecretVariantNames.length).toBe(1);
     const generateSecretVariant =
@@ -81,11 +81,158 @@ describe("TensorZeroClient Integration Tests", () => {
     expect(metricConfig.level).toBe("inference");
     expect(metricConfig.optimize).toBe("max");
   });
+
+  it("should get float metric config with episode level", async () => {
+    const client = await buildClient();
+    const metricConfig = await client.getMetricConfig(
+      "jaccard_similarity_episode",
+    );
+    expect(metricConfig).toBeDefined();
+    expect(metricConfig.type).toBe("float");
+    expect(metricConfig.level).toBe("episode");
+    expect(metricConfig.optimize).toBe("max");
+  });
+
+  it("should get metric config with min optimization", async () => {
+    const client = await buildClient();
+    const metricConfig = await client.getMetricConfig("elapsed_ms");
+    expect(metricConfig).toBeDefined();
+    expect(metricConfig.type).toBe("float");
+    expect(metricConfig.level).toBe("episode");
+    expect(metricConfig.optimize).toBe("min");
+  });
+
+  it("should throw error for non-existent metric", async () => {
+    const client = await buildClient();
+    await expect(
+      client.getMetricConfig("non_existent_metric"),
+    ).rejects.toThrow();
+  });
+
+  it("should get chat function config with tools", async () => {
+    const client = await buildClient();
+    const functionConfig = await client.getFunctionConfig(
+      "multi_hop_rag_agent",
+    );
+    expect(functionConfig).toBeDefined();
+    expect(functionConfig.type).toBe("chat");
+    if (functionConfig.type === "chat") {
+      expect(functionConfig.tools).toEqual([
+        "think",
+        "search_wikipedia",
+        "load_wikipedia_page",
+        "answer_question",
+      ]);
+      expect(functionConfig.tool_choice).toBe("required");
+      expect(functionConfig.parallel_tool_calls).toBe(true);
+    }
+  });
+
+  it("should get function config with system schema", async () => {
+    const client = await buildClient();
+    const functionConfig = await client.getFunctionConfig("ask_question");
+    expect(functionConfig).toBeDefined();
+    expect(functionConfig.type).toBe("json");
+    if (functionConfig.type === "json") {
+      expect(functionConfig.system_schema).toBeDefined();
+      expect(functionConfig.output_schema).toBeDefined();
+    }
+  });
+
+  it("should get function config with user schema", async () => {
+    const client = await buildClient();
+    const functionConfig = await client.getFunctionConfig("write_haiku");
+    expect(functionConfig).toBeDefined();
+    expect(functionConfig.type).toBe("chat");
+    if (functionConfig.type === "chat") {
+      expect(functionConfig.user_schema).toBeDefined();
+    }
+  });
+
+  it("should get function variant with temperature setting", async () => {
+    const client = await buildClient();
+    const functionConfig = await client.getFunctionConfig("generate_secret");
+    expect(functionConfig).toBeDefined();
+    const variantNames = Object.keys(functionConfig.variants);
+    expect(variantNames.length).toBeGreaterThan(0);
+    const variant = functionConfig.variants[variantNames[0]];
+    expect(variant).toBeDefined();
+    if (variant!.inner.type === "chat_completion") {
+      expect(variant!.inner.temperature).toBe(1.5);
+    }
+  });
+
+  it("should get function with dicl variant", async () => {
+    const client = await buildClient();
+    const functionConfig = await client.getFunctionConfig("extract_entities");
+    expect(functionConfig).toBeDefined();
+    const variants = functionConfig.variants;
+    expect(variants.dicl).toBeDefined();
+    const diclVariant = variants.dicl;
+    expect(diclVariant!.inner.type).toBe("dicl");
+    if (diclVariant!.inner.type === "dicl") {
+      expect(diclVariant!.inner.k).toBe(10);
+      expect(diclVariant!.inner.embedding_model).toBe("text-embedding-3-small");
+    }
+  });
+
+  it("should get function with chain of thought variant", async () => {
+    const client = await buildClient();
+    const functionConfig = await client.getFunctionConfig("judge_answer");
+    expect(functionConfig).toBeDefined();
+    const variants = functionConfig.variants;
+    const variantNames = Object.keys(variants);
+    expect(variantNames.length).toBeGreaterThan(0);
+    const variant = variants[variantNames[0]];
+    expect(variant!.inner.type).toBe("chain_of_thought");
+  });
+
+  it("should get function with different json_mode settings", async () => {
+    const client = await buildClient();
+    const functionConfig = await client.getFunctionConfig("extract_entities");
+    expect(functionConfig).toBeDefined();
+    const variants = functionConfig.variants;
+
+    // Test strict json_mode
+    const strictVariant = variants.gpt4o_mini_initial_prompt;
+    expect(strictVariant).toBeDefined();
+    if (strictVariant!.inner.type === "chat_completion") {
+      expect(strictVariant!.inner.json_mode).toBe("strict");
+    }
+  });
+
+  it("should throw error for non-existent function", async () => {
+    const client = await buildClient();
+    await expect(
+      client.getFunctionConfig("non_existent_function"),
+    ).rejects.toThrow();
+  });
+
+  it("should get all function config fields for comprehensive coverage", async () => {
+    const client = await buildClient();
+    const functionConfig = await client.getFunctionConfig(
+      "multi_hop_rag_agent",
+    );
+    expect(functionConfig).toBeDefined();
+    expect(functionConfig.type).toBe("chat");
+    expect(functionConfig.variants).toBeDefined();
+
+    // Check variant structure
+    const variantNames = Object.keys(functionConfig.variants);
+    expect(variantNames.length).toBeGreaterThan(0);
+
+    for (const variantName of variantNames) {
+      const variant = functionConfig.variants[variantName];
+      expect(variant).toBeDefined();
+      expect(variant!.inner).toBeDefined();
+      expect(variant!.inner.type).toBeDefined();
+    }
+  });
 });
 
 async function buildClient() {
   process.env.OPENAI_API_KEY = undefined;
   return await TensorZeroClient.build(
-    "../../ui/fixtures/config/tensorzero.toml"
+    "../../ui/fixtures/config/tensorzero.toml",
   );
 }
