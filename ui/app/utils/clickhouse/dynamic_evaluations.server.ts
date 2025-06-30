@@ -1,4 +1,4 @@
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 import { CountSchema } from "./common";
 import {
   dynamicEvaluationProjectSchema,
@@ -58,7 +58,7 @@ export async function getDynamicEvaluationRuns(
     LEFT JOIN DynamicEvaluationRunsEpisodeCounts USING run_id_uint
     ORDER BY run_id_uint DESC
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -103,7 +103,7 @@ export async function getDynamicEvaluationRunsByIds(
     ORDER BY run_id_uint DESC
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { run_ids, project_name },
@@ -117,7 +117,10 @@ export async function countDynamicEvaluationRuns(): Promise<number> {
   const query = `
     SELECT toUInt32(count()) as count FROM DynamicEvaluationRun
   `;
-  const result = await clickhouseClient.query({ query, format: "JSONEachRow" });
+  const result = await getClickhouseClient().query({
+    query,
+    format: "JSONEachRow",
+  });
   const rows = await result.json<{ count: number }[]>();
   const parsedRows = rows.map((row) => CountSchema.parse(row));
   return parsedRows[0].count;
@@ -219,7 +222,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
       e.tags,
       e.task_name
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { page_size, offset, run_id },
@@ -276,7 +279,7 @@ export async function getDynamicEvaluationRunStatisticsByMetricName(
     SELECT * FROM results
     ORDER BY metric_name ASC
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { run_id, metric_name },
@@ -295,7 +298,7 @@ export async function countDynamicEvaluationRunEpisodes(
     SELECT toUInt32(count()) as count FROM DynamicEvaluationRunEpisodeByRunId
     WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { run_id },
@@ -319,7 +322,7 @@ export async function getDynamicEvaluationProjects(
     LIMIT {page_size:UInt64}
     OFFSET {offset:UInt64}
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { page_size, offset },
@@ -334,7 +337,10 @@ export async function countDynamicEvaluationProjects(): Promise<number> {
   FROM DynamicEvaluationRunByProjectName
   WHERE project_name IS NOT NULL
 `;
-  const result = await clickhouseClient.query({ query, format: "JSONEachRow" });
+  const result = await getClickhouseClient().query({
+    query,
+    format: "JSONEachRow",
+  });
   const rows = await result.json<{ count: number }[]>();
   const parsedRows = rows.map((row) => CountSchema.parse(row));
   return parsedRows[0].count;
@@ -381,7 +387,7 @@ export async function searchDynamicEvaluationRuns(
     OFFSET {offset:UInt64}
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { project_name, search_query, page_size, offset },
@@ -507,7 +513,7 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
       e.episode_id_uint
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { runIds, page_size, offset },
@@ -556,7 +562,7 @@ export async function countDynamicEvaluationRunEpisodesByTaskName(
     FROM episodes_raw
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { runIds },
