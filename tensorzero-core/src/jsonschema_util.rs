@@ -32,6 +32,8 @@ impl<'a> JsonSchemaRef<'a> {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct StaticJSONSchema {
     #[serde(skip)]
     pub compiled: Arc<Validator>,
@@ -124,6 +126,8 @@ impl StaticJSONSchema {
 /// The public API of this struct should look very normal except validation is `async`
 /// There are just `new` and `validate` methods.
 #[derive(Debug, Serialize, Clone)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct DynamicJSONSchema {
     pub value: Value,
     #[serde(skip)]

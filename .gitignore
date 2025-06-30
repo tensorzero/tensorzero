@@ -41,6 +41,7 @@ node_modules/
 
 # Claude Code
 CLAUDE.md
+.claude/
 
 ui/fixtures/s3-fixtures
 ci/provider-proxy-cache

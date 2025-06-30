@@ -301,25 +301,31 @@ pub struct OtlpTracesConfig {
     pub enabled: bool,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct MetricConfig {
     pub r#type: MetricConfigType,
     pub optimize: MetricConfigOptimize,
     pub level: MetricConfigLevel,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum MetricConfigType {
     Boolean,
     Float,
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum MetricConfigOptimize {
     Min,
     Max,
@@ -328,6 +334,8 @@ pub enum MetricConfigOptimize {
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum MetricConfigLevel {
     Inference,
     Episode,
@@ -695,6 +703,18 @@ impl<'c> Config<'c> {
             }
         }
         templates
+    }
+
+    pub fn get_evaluation(&self, evaluation_name: &str) -> Result<Arc<EvaluationConfig>, Error> {
+        Ok(self
+            .evaluations
+            .get(evaluation_name)
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownEvaluation {
+                    name: evaluation_name.to_string(),
+                })
+            })?
+            .clone())
     }
 }
 

@@ -3,6 +3,9 @@ import {
   OptimizerJobHandle,
   OptimizerStatus,
   LaunchOptimizationWorkflowParams,
+  FunctionConfig,
+  MetricConfig,
+  EvaluationConfig,
 } from "./bindings";
 import type { TensorZeroClient as NativeTensorZeroClientType } from "../index";
 
@@ -60,6 +63,35 @@ export class TensorZeroClient {
     const statusString =
       await this.nativeClient.experimentalPollOptimization(jobHandleString);
     return JSON.parse(statusString) as OptimizerStatus;
+  }
+
+  listFunctions(): string[] {
+    return this.nativeClient.listFunctions();
+  }
+
+  getFunctionConfig(functionName: string): FunctionConfig {
+    const functionConfigString =
+      this.nativeClient.getFunctionConfig(functionName);
+    return JSON.parse(functionConfigString) as FunctionConfig;
+  }
+
+  listMetrics(): string[] {
+    return this.nativeClient.listMetrics();
+  }
+
+  getMetricConfig(metricName: string): MetricConfig {
+    const metricConfigString = this.nativeClient.getMetricConfig(metricName);
+    return JSON.parse(metricConfigString) as MetricConfig;
+  }
+
+  listEvaluations(): string[] {
+    return this.nativeClient.listEvaluations();
+  }
+
+  getEvaluationConfig(evaluationName: string): EvaluationConfig {
+    const evaluationConfigString =
+      this.nativeClient.getEvaluationConfig(evaluationName);
+    return JSON.parse(evaluationConfigString) as EvaluationConfig;
   }
 }
 
