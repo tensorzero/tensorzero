@@ -1,0 +1,11 @@
+{
+    "type": "object",
+    "properties": {
+      "summary": {
+        "type": "string",
+        "description": "A concise two-sentence summary of the common failure modes."
+      }
+    },
+    "required": ["summary"],
+    "additionalProperties": false
+  }
