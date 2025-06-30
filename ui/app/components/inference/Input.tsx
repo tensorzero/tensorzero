@@ -9,6 +9,7 @@ import { SystemContent } from "./SystemContent";
 import { useEffect, useState } from "react";
 import { SkeletonImage } from "./SkeletonImage";
 import ImageBlock from "./ImageBlock";
+import { FileUploadBlock } from "./FileUploadBlock";
 
 /**
  * This component is only used for the datapoint page.
@@ -109,6 +110,28 @@ function Message({ message, isEditing, onMessageChange }: MessageProps) {
     onMessageChange?.({ ...message, content: updatedContent });
   };
 
+  const handleAddFile = () => {
+    if (!onMessageChange) return;
+    
+    const newFileBlock: DisplayInputMessageContent = {
+      type: "file",
+      file: {
+        dataUrl: "",
+        mime_type: "",
+      },
+      storage_path: {
+        kind: {
+          type: "filesystem",
+          path: "local_uploads",
+        },
+        path: "",
+      },
+    };
+    
+    const updatedContent = [...message.content, newFileBlock];
+    onMessageChange({ ...message, content: updatedContent });
+  };
+
   return (
     <div className="space-y-1">
       <div className="text-md font-medium text-slate-600 capitalize dark:text-slate-400">
@@ -119,6 +142,17 @@ function Message({ message, isEditing, onMessageChange }: MessageProps) {
         isEditing={isEditing ?? false}
         onContentChange={handleContentChange}
       />
+      {isEditing && (
+        <div className="mt-2">
+          <button
+            onClick={handleAddFile}
+            className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
+            type="button"
+          >
+            + Add File
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -151,7 +185,16 @@ function MessageContent({
     updatedBlock: DisplayInputMessageContent,
   ) => {
     const updatedContent = [...content];
-    updatedContent[index] = updatedBlock;
+    
+    // Check if this is a file block that should be removed
+    if (updatedBlock.type === "file" && (updatedBlock as any)._remove) {
+      // Remove the block entirely
+      updatedContent.splice(index, 1);
+    } else {
+      // Update the block normally
+      updatedContent[index] = updatedBlock;
+    }
+    
     onContentChange?.(updatedContent);
   };
   return (
@@ -225,7 +268,18 @@ function MessageContent({
               />
             );
           case "file":
-            if (block.file.mime_type.startsWith("image/")) {
+            if (isEditing) {
+              return (
+                <FileUploadBlock
+                  key={index}
+                  block={block}
+                  isEditing={isEditing}
+                  onContentChange={(updatedBlock) =>
+                    handleBlockChange(index, updatedBlock)
+                  }
+                />
+              );
+            } else if (block.file.mime_type.startsWith("image/")) {
               return <ImageBlock key={index} image={block} />;
             } else {
               return (
