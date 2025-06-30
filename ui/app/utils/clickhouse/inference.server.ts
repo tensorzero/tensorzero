@@ -13,7 +13,7 @@ import {
 } from "./common";
 import { data } from "react-router";
 import type { FunctionConfig } from "../config/function";
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
 import {
   episodeByIdSchema,
@@ -161,7 +161,7 @@ export async function queryInferenceTable(params: {
   }
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params,
@@ -194,7 +194,7 @@ export async function queryInferenceTableBounds(params?: {
   `;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: extraParams,
@@ -300,7 +300,7 @@ export async function queryEpisodeTable(params: {
   }
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params,
@@ -332,7 +332,7 @@ export async function queryEpisodeTableBounds(): Promise<TableBounds> {
     LIMIT 1
   `;
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
     });
@@ -442,7 +442,7 @@ export async function countInferencesForFunction(
 ): Promise<number> {
   const inference_table_name = getInferenceTableName(function_config);
   const query = `SELECT toUInt32(COUNT()) AS count FROM ${inference_table_name} WHERE function_name = {function_name:String}`;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { function_name },
@@ -459,7 +459,7 @@ export async function countInferencesForVariant(
 ): Promise<number> {
   const inference_table_name = getInferenceTableName(function_config);
   const query = `SELECT toUInt32(COUNT()) AS count FROM ${inference_table_name} WHERE function_name = {function_name:String} AND variant_name = {variant_name:String}`;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { function_name, variant_name },
@@ -473,7 +473,7 @@ export async function countInferencesForEpisode(
   episode_id: string,
 ): Promise<number> {
   const query = `SELECT toUInt32(COUNT()) AS count FROM InferenceByEpisodeId FINAL WHERE episode_id_uint = toUInt128(toUUID({episode_id:String}))`;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { episode_id },
@@ -587,7 +587,7 @@ export async function queryInferenceById(
         AND j.id = {id:UUID}
   `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { id },
@@ -620,7 +620,7 @@ export async function queryModelInferencesByInferenceId(
   const query = `
     SELECT *, formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp FROM ModelInference WHERE inference_id = {id:String}
   `;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { id },
@@ -657,7 +657,7 @@ export async function countInferencesByFunction(): Promise<
     )
     GROUP BY function_name
     ORDER BY max_timestamp DESC`;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
   });
@@ -668,7 +668,7 @@ export async function countInferencesByFunction(): Promise<
 
 export async function countEpisodes(): Promise<number> {
   const query = `SELECT toUInt32(uniqExact(episode_id_uint)) AS count FROM InferenceByEpisodeId`;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
   });
@@ -692,7 +692,7 @@ export async function getAdjacentInferenceIds(
         toUUID('00000000-0000-0000-0000-000000000000')
       ) as next_id
   `;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { current_inference_id: currentInferenceId },
@@ -716,7 +716,7 @@ export async function getAdjacentEpisodeIds(
         toUUID('00000000-0000-0000-0000-000000000000')
       ) as next_id
   `;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { current_episode_id: currentEpisodeId },

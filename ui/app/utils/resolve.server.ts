@@ -16,7 +16,7 @@ import type {
   TextInput,
 } from "./clickhouse/common";
 import type { FunctionConfig } from "./config/function";
-import { tensorZeroClient } from "./tensorzero.server";
+import { getTensorZeroClient } from "./tensorzero.server";
 
 export async function resolveInput(
   input: Input,
@@ -185,7 +185,7 @@ async function resolveModelInferenceContent(
   }
 }
 async function resolveFile(content: FileContent): Promise<ResolvedBase64File> {
-  const object = await tensorZeroClient.getObject(content.storage_path);
+  const object = await getTensorZeroClient().getObject(content.storage_path);
   const json = JSON.parse(object);
   const dataURL = `data:${content.file.mime_type};base64,${json.data}`;
   return {

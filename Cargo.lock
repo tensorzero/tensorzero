@@ -291,9 +291,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-s3"
-version = "1.93.0"
+version = "1.94.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16b9734dc8145b417a3c22eae8769a2879851690982dba718bdc52bd28ad04ce"
+checksum = "cc24d9d761bd464534d9e477a9f724c118ca2557a95444097cf6ce71f3229a72"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
@@ -1743,9 +1743,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-auth"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bd58406d918ffb345f0482c1e9a9794a5836169581ecc4dcb6c02330fefdc72"
+checksum = "a65fb515e1e726bc58b925fc876e8f02b626ab574b15c8f3fa53cb08177a7815"
 dependencies = [
  "async-trait",
  "base64",
@@ -1764,9 +1764,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-gax"
-version = "0.22.0"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2dad82102be3d1052c43950c1ded1641edd08d8ec066af306012e4f71826991"
+checksum = "d88f66b6fccca3449ad9f0366ec3d1b74a004fa1100d98353a201dabc3203bd2"
 dependencies = [
  "base64",
  "bytes",
@@ -1778,14 +1778,15 @@ dependencies = [
  "rand",
  "serde",
  "serde_json",
+ "thiserror 2.0.12",
  "tokio",
 ]
 
 [[package]]
 name = "google-cloud-rpc"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f42736ae792ea662facb2841a573e281f32a3a161a99fc342c6aef9738f2dfb0"
+checksum = "f1b4b7867ab6e94e56944116f2b1bdcdbac522eea794743a9884d84db7728470"
 dependencies = [
  "bytes",
  "google-cloud-wkt",
@@ -1796,9 +1797,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-wkt"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5dfd0127a9a4b436e7f2f72db309e8199b4eba248bc602dda9a82ae9e339742c"
+checksum = "d4b1dbeb30ab8bde2423081b76f9c302d82fea1b99f8ca750f223d32065d3c6c"
 dependencies = [
  "base64",
  "bytes",
@@ -1807,6 +1808,7 @@ dependencies = [
  "serde_with",
  "thiserror 2.0.12",
  "time",
+ "url",
 ]
 
 [[package]]
@@ -1832,7 +1834,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http 1.3.1",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -2218,9 +2220,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.9.0"
+version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cea70ddb795996207ad57735b50c5982d8844f38ba9ee5f1aedcfb708a2aa11e"
+checksum = "fe4cd85333e22411419a0bcae1297d25e58c9443848b11dc6a86fefe8c78a661"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.4",
@@ -2557,7 +2559,7 @@ dependencies = [
  "http-body-util",
  "hyper 1.6.0",
  "hyper-util",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "ipnet",
  "metrics",
  "metrics-util",
@@ -2635,9 +2637,9 @@ dependencies = [
 
 [[package]]
 name = "minijinja"
-version = "2.10.2"
+version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd72e8b4e42274540edabec853f607c015c73436159b06c39c7af85a20433155"
+checksum = "4e60ac08614cc09062820e51d5d94c2fce16b94ea4e5003bb81b99a95f84e876"
 dependencies = [
  "memo-map",
  "self_cell",
@@ -3206,9 +3208,9 @@ dependencies = [
 
 [[package]]
 name = "prettyplease"
-version = "0.2.34"
+version = "0.2.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6837b9e10d61f45f987d50808f83d1ee3d206c66acf650c3e4ae2e1f6ddedf55"
+checksum = "061c1221631e079b26479d25bbf2275bfe5917ae8419cd7e34f13bfc2aa7539a"
 dependencies = [
  "proc-macro2",
  "syn",
@@ -4003,7 +4005,7 @@ version = "1.0.140"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20068b6e96dc6c9bd23e01df8827e6c7e1f2fddd43c21810382803c136b99373"
 dependencies = [
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "itoa",
  "memchr",
  "ryu",
@@ -4051,7 +4053,7 @@ dependencies = [
  "chrono",
  "hex",
  "indexmap 1.9.3",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "schemars",
  "serde",
  "serde_derive",
@@ -4353,7 +4355,7 @@ dependencies = [
  "hex",
  "http 1.3.1",
  "http-body-util",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "init-tracing-opentelemetry",
  "itertools 0.14.0",
  "jsonschema",
@@ -4651,7 +4653,7 @@ version = "0.22.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41fe8c660ae4257887cf66394862d21dbca4a6ddd26f04a3560410406a2f819a"
 dependencies = [
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "serde",
  "serde_spanned",
  "toml_datetime",
@@ -4699,7 +4701,7 @@ checksum = "d039ad9159c98b70ecfd540b2573b97f7f52c3e8d9f8ad57a24b916a536975f9"
 dependencies = [
  "futures-core",
  "futures-util",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "pin-project-lite",
  "slab",
  "sync_wrapper",

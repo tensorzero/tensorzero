@@ -58,7 +58,7 @@ metrics = "0.24.2"
 metrics-exporter-prometheus = { version = "0.17.2", features = [
     "http-listener",
 ], default-features = false }
-minijinja = { version = "2.10.2", features = [
+minijinja = { version = "2.11.0", features = [
     "loader",
     "debug",
     "json",
@@ -112,10 +112,10 @@ tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
 tower-http = { workspace = true }
 tower-layer = "0.3.3"
 pyo3 = { workspace = true, optional = true }
-google-cloud-auth = "0.20.0"
+google-cloud-auth = "0.21.0"
 mime = { workspace = true }
 mime_guess = "2.0.5"
-indexmap = "2.9.0"
+indexmap = "2.10.0"
 
 
 [dev-dependencies]
@@ -124,7 +124,7 @@ tracing-test = { workspace = true }
 tensorzero = { path = "../clients/rust" }
 paste = "1.0.15"
 base64 = "0.22.1"
-aws-sdk-s3 = { version = "1.93.0", default-features = false, features = [
+aws-sdk-s3 = { version = "1.94.0", default-features = false, features = [
     "behavior-version-latest",
     "sigv4a",
     "rt-tokio",
