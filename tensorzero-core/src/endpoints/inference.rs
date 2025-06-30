@@ -1039,25 +1039,32 @@ impl InferenceResponseChunk {
         include_original_response: bool,
         extra_usage: &mut Option<Usage>,
     ) -> Option<Self> {
-        let result_usage = if cached {
+        let mut result_usage = if cached {
             // When our outer inference result is cached, don't
             // add `extra_usage` to it. We'll append a final usage chunk
             // in `create_stream` if needed
             Some(ZERO_USAGE)
         } else {
-            let mut result_usage = inference_result.usage().copied();
-            // The first time we encounter a chunk that already has usage information set,
-            // add `extra_usage` to the chunk.
-            // If we never encounter any chunks with usage, we'll append one ourselves
-            // in `create_stream`
-            if let Some(result_usage) = &mut result_usage {
+            inference_result.usage().copied()
+        };
+        // The first time we encounter an empty chunk that already has usage information set,
+        // add `extra_usage` to the chunk.
+        // If we never encounter any empty chunks with usage, we'll append one ourselves
+        // in `create_stream`
+        // We do this in both cached and non-cached mode, so that our decision to emit
+        // an extra usage chunk is consistent across both modes.
+        if let Some(result_usage) = &mut result_usage {
+            let is_empty = match &inference_result {
+                InferenceResultChunk::Chat(result) => result.content.is_empty(),
+                InferenceResultChunk::Json(result) => result.raw.is_none(),
+            };
+            if is_empty {
                 if let Some(extra_usage) = extra_usage.take() {
                     result_usage.input_tokens += extra_usage.input_tokens;
                     result_usage.output_tokens += extra_usage.output_tokens;
                 }
             }
-            result_usage
-        };
+        }
         Some(match inference_result {
             InferenceResultChunk::Chat(result) => {
                 InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
