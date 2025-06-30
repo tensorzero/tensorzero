@@ -3,6 +3,8 @@ import {
   OptimizerJobHandle,
   OptimizerStatus,
   LaunchOptimizationWorkflowParams,
+  FunctionConfig,
+  MetricConfig,
 } from "./bindings";
 import type { TensorZeroClient as NativeTensorZeroClientType } from "../index";
 
@@ -60,6 +62,18 @@ export class TensorZeroClient {
     const statusString =
       await this.nativeClient.experimentalPollOptimization(jobHandleString);
     return JSON.parse(statusString) as OptimizerStatus;
+  }
+
+  async getFunctionConfig(functionName: string): Promise<FunctionConfig> {
+    const functionConfigString =
+      await this.nativeClient.getFunctionConfig(functionName);
+    return JSON.parse(functionConfigString) as FunctionConfig;
+  }
+
+  async getMetricConfig(metricName: string): Promise<MetricConfig> {
+    const metricConfigString =
+      await this.nativeClient.getMetricConfig(metricName);
+    return JSON.parse(metricConfigString) as MetricConfig;
   }
 }
 

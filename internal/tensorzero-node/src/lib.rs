@@ -65,4 +65,26 @@ impl TensorZeroClient {
             serde_json::to_string(&info).map_err(|e| napi::Error::from_reason(e.to_string()))?;
         Ok(info_str)
     }
+
+    #[napi]
+    pub fn get_function_config(&self, function_name: String) -> Result<String, napi::Error> {
+        let function_config = self
+            .client
+            .get_function_config(&function_name)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let function_config_str = serde_json::to_string(&function_config)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(function_config_str)
+    }
+
+    #[napi]
+    pub fn get_metric_config(&self, metric_name: String) -> Result<String, napi::Error> {
+        let metric_config = self
+            .client
+            .get_metric_config(&metric_name)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let metric_config_str = serde_json::to_string(&metric_config)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(metric_config_str)
+    }
 }
