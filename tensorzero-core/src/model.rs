@@ -59,7 +59,9 @@ use crate::providers::{
     xai::XAIProvider,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
@@ -638,7 +640,9 @@ pub struct UninitializedModelProvider {
     pub discard_unknown_chunks: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ModelProvider {
     pub name: Arc<str>,
     pub config: ProviderConfig,
@@ -736,26 +740,39 @@ pub struct ModelProviderRequestInfo {
     pub extra_body: Option<ExtraBodyConfig>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
+    #[serde(rename = "aws_bedrock")]
     AWSBedrock(AWSBedrockProvider),
+    #[serde(rename = "aws_sagemaker")]
     AWSSagemaker(AWSSagemakerProvider),
     Azure(AzureProvider),
     DeepSeek(DeepSeekProvider),
     Fireworks(FireworksProvider),
+    #[serde(rename = "gcp_vertex_anthropic")]
     GCPVertexAnthropic(GCPVertexAnthropicProvider),
+    #[serde(rename = "gcp_vertex_gemini")]
     GCPVertexGemini(GCPVertexGeminiProvider),
+    #[serde(rename = "google_ai_studio_gemini")]
     GoogleAIStudioGemini(GoogleAIStudioGeminiProvider),
     Groq(GroqProvider),
     Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
     OpenRouter(OpenRouterProvider),
+    #[serde(rename = "sglang")]
     SGLang(SGLangProvider),
+    #[serde(rename = "tgi")]
     TGI(TGIProvider),
     Together(TogetherProvider),
+    #[serde(rename = "vllm")]
     VLLM(VLLMProvider),
+    #[serde(rename = "xai")]
     XAI(XAIProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),

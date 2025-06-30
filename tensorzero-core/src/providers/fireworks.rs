@@ -49,9 +49,12 @@ lazy_static! {
 const PROVIDER_NAME: &str = "Fireworks";
 const PROVIDER_TYPE: &str = "fireworks";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct FireworksProvider {
     model_name: String,
+    #[serde(skip)]
     credentials: FireworksCredentials,
     parse_think_blocks: bool,
 }

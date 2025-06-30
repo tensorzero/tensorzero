@@ -14,6 +14,7 @@ use aws_types::region::Region;
 use futures::StreamExt;
 use itertools::Itertools;
 use reqwest::StatusCode;
+use serde::Serialize;
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -44,10 +45,14 @@ const PROVIDER_NAME: &str = "AWS Bedrock";
 const PROVIDER_TYPE: &str = "aws_bedrock";
 
 // NB: If you add `Clone` someday, you'll need to wrap client in Arc
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct AWSBedrockProvider {
     model_id: String,
+    #[serde(skip)]
     client: aws_sdk_bedrockruntime::Client,
+    #[serde(skip)]
     base_config: aws_sdk_bedrockruntime::config::Builder,
 }
 

@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
+use serde::Serialize;
 use serde_json::{json, Value};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -31,9 +32,12 @@ use crate::tool::{ToolCall, ToolCallChunk};
 const PROVIDER_NAME: &str = "Dummy";
 const PROVIDER_TYPE: &str = "dummy";
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct DummyProvider {
     pub model_name: String,
+    #[serde(skip)]
     pub credentials: DummyCredentials,
 }
 
