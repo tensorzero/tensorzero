@@ -1013,6 +1013,96 @@ async def test_async_json_invalid_system(async_client):
 
 
 @pytest.mark.asyncio
+async def test_missing_text_fields(async_client):
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text"}],
+        },
+    ]
+    with pytest.raises(BadRequestError) as exc_info:
+        await async_client.chat.completions.create(
+            messages=messages,
+            model="tensorzero::function_name::json_success",
+        )
+    assert (
+        'Invalid request to OpenAI-compatible endpoint: Invalid content block: Either `text` or `tensorzero::arguments` must be set when using `"type": "text"`'
+        in str(exc_info.value)
+    )
+
+
+@pytest.mark.asyncio
+async def test_bad_content_block_type(async_client):
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "my_fake_type", "my": "other_field"}],
+        },
+    ]
+    with pytest.raises(BadRequestError) as exc_info:
+        await async_client.chat.completions.create(
+            messages=messages,
+            model="tensorzero::function_name::json_success",
+        )
+    assert (
+        "Invalid request to OpenAI-compatible endpoint: Invalid content block: unknown variant `my_fake_type`, expected one of `text`, `image_url`, `file`"
+        in str(exc_info.value)
+    )
+
+
+@pytest.mark.asyncio
+async def test_invalid_tensorzero_text_block(async_client):
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "My other text",
+                    "tensorzero::arguments": {"country": "Japan"},
+                }
+            ],
+        },
+    ]
+    with pytest.raises(BadRequestError) as exc_info:
+        await async_client.chat.completions.create(
+            messages=messages,
+            model="tensorzero::function_name::json_success",
+        )
+    assert (
+        'Invalid request to OpenAI-compatible endpoint: Invalid TensorZero content block: Only one of `text` or `tensorzero::arguments` can be set when using `"type": "text"`'
+        in str(exc_info.value)
+    )
+
+
+@pytest.mark.asyncio
 async def test_async_extra_headers_param(async_client):
     messages = [
         {"role": "user", "content": "Hello, world!"},
