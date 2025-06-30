@@ -5,7 +5,7 @@ import {
   type FeedbackBounds,
 } from "./common";
 import { data } from "react-router";
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 import { z } from "zod";
 
 export const booleanMetricFeedbackRowSchema = z.object({
@@ -103,7 +103,7 @@ export async function queryBooleanMetricsByTargetId(params: {
   }
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params,
@@ -127,7 +127,7 @@ export async function queryBooleanMetricFeedbackBoundsByTargetId(params: {
     `;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { target_id },
@@ -159,7 +159,7 @@ export async function countBooleanMetricFeedbackByTargetId(
   const query = `SELECT toUInt32(COUNT()) AS count FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:String}`;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { target_id },
@@ -271,7 +271,7 @@ export async function queryCommentFeedbackByTargetId(params: {
   }
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params,
@@ -297,7 +297,7 @@ export async function queryCommentFeedbackBoundsByTargetId(params: {
     `;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { target_id },
@@ -327,7 +327,7 @@ export async function countCommentFeedbackByTargetId(
   const query = `SELECT toUInt32(COUNT()) AS count FROM CommentFeedbackByTargetId WHERE target_id = {target_id:String}`;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { target_id },
@@ -436,7 +436,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
   }
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params,
@@ -462,7 +462,7 @@ export async function queryDemonstrationFeedbackBoundsByInferenceId(params: {
     `;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { inference_id },
@@ -494,7 +494,7 @@ export async function countDemonstrationFeedbackByInferenceId(
   const query = `SELECT toUInt32(COUNT()) AS count FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {inference_id:String}`;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { inference_id },
@@ -610,7 +610,7 @@ export async function queryFloatMetricsByTargetId(params: {
   }
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params,
@@ -634,7 +634,7 @@ export async function queryFloatMetricFeedbackBoundsByTargetId(params: {
     `;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { target_id },
@@ -666,7 +666,7 @@ export async function countFloatMetricFeedbackByTargetId(
   const query = `SELECT toUInt32(COUNT()) AS count FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:String}`;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { target_id },
@@ -938,7 +938,7 @@ export async function queryMetricsWithFeedback(params: {
     ORDER BY metric_type, metric_name`;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: {
@@ -1033,7 +1033,7 @@ export async function queryLatestFeedbackIdByMetric(params: {
   `;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { target_id },

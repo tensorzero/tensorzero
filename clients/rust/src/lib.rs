@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::{
     cmp::Ordering, collections::HashMap, env, fmt::Display, future::Future, path::PathBuf,
     sync::Arc, time::Duration,
@@ -8,10 +9,13 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
+use tensorzero_core::config_parser::MetricConfig;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
+use tensorzero_core::evaluations::EvaluationConfig;
+use tensorzero_core::function::FunctionConfig;
 pub use tensorzero_core::optimization::{OptimizerJobHandle, OptimizerStatus};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
@@ -889,6 +893,136 @@ impl Client {
                 })
                 .await?)
             }
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    /// List all functions in the config.
+    pub fn list_functions(&self) -> Result<Vec<&str>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => Ok(gateway
+                .state
+                .config
+                .functions
+                .keys()
+                .map(|s| s.as_str())
+                .collect()),
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    /// Get a function config by name.
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// Returns an Err if the function is not found.
+    pub fn get_function_config<'a>(
+        &'a self,
+        function_name: &str,
+    ) -> Result<Cow<'a, Arc<FunctionConfig>>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => gateway
+                .state
+                .config
+                .get_function(function_name)
+                .map_err(|e| TensorZeroError::Other { source: e.into() }),
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    /// List all metrics in the config.
+    /// Note: not sure whether this should return "comment" or "demonstration".
+    pub fn list_metrics(&self) -> Result<Vec<&str>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => Ok(gateway
+                .state
+                .config
+                .metrics
+                .keys()
+                .map(|s| s.as_str())
+                .collect()),
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    /// Get a metric config by name.
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// Returns an Err if the metric is not found.
+    pub fn get_metric_config<'a>(
+        &'a self,
+        metric_name: &str,
+    ) -> Result<&'a MetricConfig, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => gateway
+                .state
+                .config
+                .get_metric_or_err(metric_name)
+                .map_err(|e| TensorZeroError::Other { source: e.into() }),
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    pub fn list_evaluations(&self) -> Result<Vec<&str>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => Ok(gateway
+                .state
+                .config
+                .evaluations
+                .keys()
+                .map(|s| s.as_str())
+                .collect()),
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    pub fn get_evaluation_config(
+        &self,
+        evaluation_name: &str,
+    ) -> Result<Arc<EvaluationConfig>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => gateway
+                .state
+                .config
+                .get_evaluation(evaluation_name)
+                .map_err(|e| TensorZeroError::Other { source: e.into() }),
             ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
                 source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
                     mode: "Http".to_string(),

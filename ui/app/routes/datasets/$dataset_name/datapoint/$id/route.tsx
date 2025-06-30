@@ -25,7 +25,7 @@ import {
   staleDatapoint,
   getDatasetCounts,
 } from "~/utils/clickhouse/datasets.server";
-import { tensorZeroClient } from "~/utils/tensorzero.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import {
   PageHeader,
   PageLayout,
@@ -127,7 +127,7 @@ export async function action({ request }: ActionFunctionArgs) {
           : {}),
         source_inference_id: parsedFormData.source_inference_id,
       };
-      const { id } = await tensorZeroClient.updateDatapoint(
+      const { id } = await getTensorZeroClient().updateDatapoint(
         parsedFormData.dataset_name,
         uuid(),
         datapoint,
