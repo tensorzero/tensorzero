@@ -22,6 +22,7 @@ import {
   type ParsedInferenceExample,
   type ParsedJsonInferenceExample,
 } from "./curation";
+import { logger } from "~/utils/logger";
 
 export async function countFeedbacksForMetric(
   function_name: string,
@@ -424,7 +425,7 @@ export function handle_llm_judge_output(output: string) {
   try {
     parsed = JSON.parse(output);
   } catch (e) {
-    console.warn("Error parsing LLM Judge output", e);
+    logger.warn("Error parsing LLM Judge output", e);
     // Don't do anything if the output failed to parse
     return output;
   }
