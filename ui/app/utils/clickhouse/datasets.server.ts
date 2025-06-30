@@ -1,5 +1,5 @@
 import z from "zod";
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 import {
   DatasetCountInfoSchema,
   DatasetDetailRowSchema,
@@ -207,7 +207,7 @@ export async function selectRowsForDataset(
   params: DatasetQueryParams,
 ): Promise<DatapointInsert[]> {
   const { query, query_params } = buildDatasetSelectQuery(params);
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params,
@@ -236,7 +236,7 @@ export async function countRowsForDataset(
 
   const { query, query_params } = buildDatasetSelectQuery(params);
   const count_query = `SELECT toUInt32(count()) as count FROM (${query})`;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query: count_query,
     format: "JSONEachRow",
     query_params,
@@ -267,7 +267,7 @@ export async function getDatasetCounts(
   page_size?: number,
   offset: number = 0,
 ): Promise<DatasetCountInfo[]> {
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query: `
       SELECT
         dataset_name,
@@ -308,7 +308,7 @@ export async function getDatasetCounts(
 }
 
 export async function getNumberOfDatasets(): Promise<number> {
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query: `
       SELECT
         toUInt32(uniqExact(dataset_name)) as count
@@ -396,7 +396,7 @@ export async function insertRowsForDataset(
     `;
 
   // Execute the INSERT query
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query: wrappedQuery,
     query_params,
   });
@@ -445,7 +445,7 @@ export async function getDatasetRows(
       OFFSET {offset:UInt32}
     `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -508,14 +508,14 @@ export async function getDatapoint(
   }
 
   const [chatResult, jsonResult] = await Promise.all([
-    clickhouseClient
+    getClickhouseClient()
       .query({
         query: chat_query,
         format: "JSONEachRow",
         query_params: { dataset_name, id },
       })
       .then((rs) => rs.json<DatapointRow[]>()),
-    clickhouseClient
+    getClickhouseClient()
       .query({
         query: json_query,
         format: "JSONEachRow",
@@ -625,7 +625,7 @@ export async function staleDatapoint(
   `;
 
   try {
-    await clickhouseClient.query({
+    await getClickhouseClient().query({
       query,
       query_params: {
         table,
@@ -670,7 +670,7 @@ export async function insertDatapoint(
     },
   ];
 
-  await clickhouseClient.insert({
+  await getClickhouseClient().insert({
     table,
     values,
     format: "JSONEachRow",
@@ -690,7 +690,7 @@ export async function countDatapointsForDatasetFunction(
     function_type === "chat"
       ? "ChatInferenceDatapoint"
       : "JsonInferenceDatapoint";
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query: `SELECT toUInt32(count()) as count FROM {table:Identifier} WHERE dataset_name = {dataset_name:String} AND function_name = {function_name:String}`,
     format: "JSONEachRow",
     query_params: { dataset_name, function_name, table },
@@ -727,7 +727,7 @@ export async function getAdjacentDatapointIds(
       ) as previous_id
     FROM DatasetIds
   `;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { dataset_name, datapoint_id },
