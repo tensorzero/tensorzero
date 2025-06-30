@@ -684,12 +684,23 @@ async fn test_clickhouse_migration_manager() {
     // Check that we wrote out migration records for all migrations
     assert_eq!(rows.len(), expected_migrations.len());
     for (migration_record, migration) in rows.iter().zip(expected_migrations.iter()) {
+        let MigrationRecordDatabaseInsert {
+            migration_id,
+            migration_name,
+            gateway_version,
+            gateway_git_sha,
+            execution_time_ms,
+            applied_at,
+        } = migration_record;
+        assert_eq!(*migration_id, migration.migration_num().unwrap());
+        assert_eq!(*migration_name, migration.name());
+        assert_eq!(gateway_version, TENSORZERO_VERSION);
         assert_eq!(
-            migration_record.migration_id,
-            migration.migration_num().unwrap()
+            gateway_git_sha,
+            tensorzero_core::built_info::GIT_COMMIT_HASH.unwrap_or("unknown")
         );
-        assert_eq!(migration_record.migration_name, migration.name());
-        assert_eq!(migration_record.gateway_version, TENSORZERO_VERSION);
+        assert!(*execution_time_ms > 0);
+        assert!(applied_at.is_some());
     }
     run_all(&clickhouse, &migrations).await;
     let new_rows = get_all_migration_records(&clickhouse).await;

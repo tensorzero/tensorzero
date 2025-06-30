@@ -1,10 +1,13 @@
 pub mod migration_trait;
 pub mod migrations;
 
+use std::time::{Duration, Instant};
+
 use crate::clickhouse::migration_manager::migrations::migration_0031::Migration0031;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails};
+use crate::serde_util::deserialize_u64;
 use async_trait::async_trait;
 use migration_trait::Migration;
 use migrations::migration_0000::Migration0000;
@@ -112,6 +115,9 @@ pub struct MigrationRecordDatabaseInsert {
     pub migration_id: u32,
     pub migration_name: String,
     pub gateway_version: String,
+    pub gateway_git_sha: String,
+    #[serde(deserialize_with = "deserialize_u64")]
+    pub execution_time_ms: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub applied_at: Option<String>,
 }
@@ -119,6 +125,7 @@ pub struct MigrationRecordDatabaseInsert {
 async fn insert_migration_record(
     clickhouse: &ClickHouseConnectionInfo,
     migration: &(impl Migration + ?Sized),
+    execution_time: Duration,
 ) -> Result<(), Error> {
     let migration_id = migration.migration_num()?;
     let migration_name = migration.name();
@@ -128,6 +135,10 @@ async fn insert_migration_record(
                 migration_id,
                 migration_name,
                 gateway_version: TENSORZERO_VERSION.to_string(),
+                gateway_git_sha: crate::built_info::GIT_COMMIT_HASH
+                    .unwrap_or("unknown")
+                    .to_string(),
+                execution_time_ms: execution_time.as_millis() as u64,
                 applied_at: None,
             }],
             "TensorZeroMigration",
@@ -152,6 +163,7 @@ pub async fn run_migration(
 
         tracing::info!("Applying migration: {migration_name} with clean_start: {clean_start}");
 
+        let start_time = Instant::now();
         if let Err(e) = migration.apply(clean_start).await {
             tracing::error!(
                 "Failed to apply migration: {migration_name}\n\n===== Rollback Instructions =====\n\n{}",
@@ -159,11 +171,12 @@ pub async fn run_migration(
             );
             return Err(e);
         }
+        let execution_time = start_time.elapsed();
 
         match migration.has_succeeded().await {
             Ok(true) => {
                 tracing::info!("Migration succeeded: {migration_name}");
-                insert_migration_record(clickhouse, migration).await?;
+                insert_migration_record(clickhouse, migration, execution_time).await?;
                 return Ok(true);
             }
             Ok(false) => {

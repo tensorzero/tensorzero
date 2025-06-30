@@ -414,7 +414,9 @@ impl ClickHouseConnectionInfo {
                 migration_id UInt32,
                 migration_name String,
                 gateway_version String,
+                gateway_git_sha String,
                 applied_at DateTime64(6, 'UTC') DEFAULT now(),
+                execution_time_ms UInt64,
                 extra_data Nullable(String)
             )
             ENGINE = MergeTree()
