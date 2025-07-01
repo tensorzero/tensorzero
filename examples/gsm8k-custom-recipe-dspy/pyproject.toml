@@ -6,7 +6,7 @@ requires-python = ">=3.9"
 dependencies = [
     "altair",
     "aiohttp",
-    "clickhouse_connect",
+    "clickhouse-connect",
     "dspy-ai==2.4.1",
     "ipykernel",
     "notebook",

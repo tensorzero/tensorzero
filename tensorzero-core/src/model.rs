@@ -140,15 +140,9 @@ impl StreamResponse {
                         // request:
                         // The new result was 'created' now
                         created: current_timestamp(),
-                        // Only include usage in the last chunk, None for all others
-                        usage: if index == chunks_len - 1 {
-                            Some(Usage {
-                                input_tokens: cache_lookup.input_tokens,
-                                output_tokens: cache_lookup.output_tokens,
-                            })
-                        } else {
-                            None
-                        },
+                        // Use the real usage (so that the `ModelInference` row we write is accurate)
+                        // The usage returned to over HTTP is adjusted in `InferenceResponseChunk::new`
+                        usage: c.usage,
                         // We didn't make any network calls to the model provider, so the latency is 0
                         latency: Duration::from_secs(0),
                         // For all chunks but the last one, the finish reason is None

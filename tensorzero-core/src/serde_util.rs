@@ -236,6 +236,33 @@ where
     }
 }
 
+/// Like `deserialize_option_u64`, but requires a number to be present.
+pub fn deserialize_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Helper {
+        String(String),
+        Number(u64),
+    }
+
+    match Helper::deserialize(deserializer)? {
+        Helper::String(s) => {
+            if s.is_empty() {
+                Err(D::Error::custom("empty string is not a valid u64"))
+            } else {
+                s.parse::<u64>()
+                    .map_err(|_| D::Error::custom(format!("invalid u64 string: '{s}'")))
+            }
+        }
+        Helper::Number(n) => Ok(n),
+    }
+}
+
 /// In JSON, large numbers cannot be represented as numbers so we instead represent them as strings.
 /// This function deserializes them as strings and then parses them as u64s.
 /// It also handles the case where the value is null or a number as usual.
@@ -463,6 +490,12 @@ mod tests {
         inner: Option<u64>,
     }
 
+    #[derive(Debug, Deserialize)]
+    struct TestU64Outer {
+        #[serde(deserialize_with = "deserialize_u64")]
+        inner: u64,
+    }
+
     #[test]
     fn test_deserialize_option_u64_string() {
         let json = r#"{"inner": "1234567890"}"#;
@@ -486,5 +519,19 @@ mod tests {
         let json = r#"{"inner": null}"#;
         let result: TestOptionU64Outer = serde_json::from_str(json).unwrap();
         assert!(result.inner.is_none());
+    }
+
+    #[test]
+    fn test_deserialize_u64_string() {
+        let json = r#"{"inner": "1234567890"}"#;
+        let result: TestU64Outer = serde_json::from_str(json).unwrap();
+        assert_eq!(result.inner, 1234567890);
+    }
+
+    #[test]
+    fn test_deserialize_u64_number() {
+        let json = r#"{"inner": 1234567890}"#;
+        let result: TestU64Outer = serde_json::from_str(json).unwrap();
+        assert_eq!(result.inner, 1234567890);
     }
 }

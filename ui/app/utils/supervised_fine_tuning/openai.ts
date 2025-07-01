@@ -23,6 +23,7 @@ import { validateMessage, analyzeDataset } from "./validation";
 import { getEncodingForModel, getModelTokenLimit } from "./openAITokenCounter";
 import type { OpenAIMessage, OpenAIRole } from "./types";
 import type { Tiktoken } from "tiktoken";
+import { logger } from "~/utils/logger";
 
 export const client = process.env.OPENAI_API_KEY
   ? new OpenAI({
@@ -30,7 +31,7 @@ export const client = process.env.OPENAI_API_KEY
       baseURL: process.env.OPENAI_BASE_URL || undefined,
     })
   : (() => {
-      console.warn("OPENAI_API_KEY environment variable is not set");
+      logger.warn("OPENAI_API_KEY environment variable is not set");
       return undefined;
     })();
 
@@ -491,7 +492,7 @@ async function upload_examples_to_openai(samples: OpenAIMessage[][]) {
       try {
         await fs.unlink(tempFile);
       } catch (err) {
-        console.error(`Error deleting temp file ${tempFile}: ${err}`);
+        logger.error(`Error deleting temp file ${tempFile}: ${err}`);
       }
     }
   }
@@ -520,7 +521,7 @@ async function create_openai_fine_tuning_job(
     const job = await client.fineTuning.jobs.create(params);
     return job;
   } catch (error) {
-    console.error("Error creating fine-tuning job:", error);
+    logger.error("Error creating fine-tuning job:", error);
     throw error;
   }
 }

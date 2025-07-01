@@ -8,6 +8,7 @@ import {
   type StoragePath,
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
+import { logger } from "~/utils/logger";
 
 /**
  * JSON types.
@@ -261,6 +262,7 @@ const BaseDatapointSchema = z.object({
   output: JSONValueSchema,
   tags: z.record(z.string()).optional(),
   auxiliary: z.string().optional(),
+  is_custom: z.boolean(),
   source_inference_id: z.string().uuid().nullable(),
 });
 
@@ -400,7 +402,7 @@ export class TensorZeroClient {
             const parsed = JSON.parse(dataStr);
             yield parsed as InferenceResponse;
           } catch (err) {
-            console.error("Failed to parse SSE data:", err);
+            logger.error("Failed to parse SSE data:", err);
           }
         }
       }

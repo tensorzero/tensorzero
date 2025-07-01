@@ -21,11 +21,12 @@ use crate::inference::types::Thought;
 ///
 /// WARNING: Setting this to true will expose potentially sensitive request/response
 /// data in logs and error responses. Use with caution.
-static DEBUG: OnceCell<bool> = if cfg!(feature = "e2e_tests") {
-    OnceCell::const_new_with(true)
-} else {
-    OnceCell::const_new()
-};
+static DEBUG: OnceCell<bool> =
+    if cfg!(feature = "e2e_tests") || cfg!(feature = "optimization_tests") {
+        OnceCell::const_new_with(true)
+    } else {
+        OnceCell::const_new()
+    };
 
 pub fn set_debug(debug: bool) -> Result<(), Error> {
     // We already initialized `DEBUG`, so do nothing
@@ -392,6 +393,9 @@ pub enum ErrorDetails {
     UnknownCandidate {
         name: String,
     },
+    UnknownEvaluation {
+        name: String,
+    },
     UnknownFunction {
         name: String,
     },
@@ -524,6 +528,7 @@ impl ErrorDetails {
             ErrorDetails::TypeConversion { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownCandidate { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownFunction { .. } => tracing::Level::WARN,
+            ErrorDetails::UnknownEvaluation { .. } => tracing::Level::WARN,
             ErrorDetails::UnknownModel { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownTool { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownVariant { .. } => tracing::Level::WARN,
@@ -624,6 +629,7 @@ impl ErrorDetails {
             ErrorDetails::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownFunction { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::UnknownEvaluation { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::UnknownModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownVariant { .. } => StatusCode::NOT_FOUND,
@@ -727,7 +733,7 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Error fetching image from {url}: {message}")
             }
             ErrorDetails::ObjectStoreUnconfigured { block_type } => {
-                write!(f, "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block")
+                write!(f, "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block. If you don't want to use object storage, you can explicitly set `object_storage.type = \"disabled\"` in your configuration.")
             }
             ErrorDetails::UnsupportedContentBlockType {
                 content_block_type,
@@ -1061,6 +1067,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::UnknownCandidate { name } => {
                 write!(f, "Unknown candidate variant: {name}")
             }
+            ErrorDetails::UnknownEvaluation { name } => write!(f, "Unknown evaluation: {name}"),
             ErrorDetails::UnknownFunction { name } => write!(f, "Unknown function: {name}"),
             ErrorDetails::UnknownModel { name } => write!(f, "Unknown model: {name}"),
             ErrorDetails::UnknownTool { name } => write!(f, "Unknown tool: {name}"),

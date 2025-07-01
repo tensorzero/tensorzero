@@ -1,9 +1,15 @@
-import { describe, expect, test } from "vitest";
-import { tensorZeroClient } from "~/utils/tensorzero.server";
+import { describe, expect, test, beforeAll } from "vitest";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 import { type JsonInferenceDatapoint } from "~/utils/tensorzero";
 
+let tensorZeroClient: ReturnType<typeof getTensorZeroClient>;
+
 describe("update datapoints", () => {
+  beforeAll(() => {
+    tensorZeroClient = getTensorZeroClient();
+  });
+
   test("should preserve original source_inference_id and set is_custom when updating datapoint", async () => {
     const datapoint: JsonInferenceDatapoint = {
       function_name: "extract_entities",
@@ -61,6 +67,7 @@ describe("update datapoints", () => {
         additionalProperties: false,
       },
       source_inference_id: null,
+      is_custom: true,
     };
 
     await tensorZeroClient.updateDatapoint(

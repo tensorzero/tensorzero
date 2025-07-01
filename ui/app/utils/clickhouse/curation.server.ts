@@ -10,7 +10,7 @@ import {
   jsonInferenceOutputSchema,
 } from "./common";
 import type { JsonInferenceOutput } from "./common";
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 import type { FunctionConfig } from "../config/function";
 import { getComparisonOperator } from "../config/metric";
 import {
@@ -22,6 +22,7 @@ import {
   type ParsedInferenceExample,
   type ParsedJsonInferenceExample,
 } from "./curation";
+import { logger } from "~/utils/logger";
 
 export async function countFeedbacksForMetric(
   function_name: string,
@@ -165,7 +166,7 @@ async function queryAllInferencesForFunction(
 ): Promise<ParsedInferenceExample[]> {
   const limitClause = max_samples ? `LIMIT ${max_samples}` : "";
   const query = `SELECT variant_name, input, output, episode_id  FROM ${inference_table_name} WHERE function_name = {function_name:String} ${limitClause}`;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { function_name },
@@ -233,7 +234,7 @@ async function queryCuratedMetricData(
       ${limitClause}
     `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -294,7 +295,7 @@ async function countMetricData(
         i.function_name = {function_name:String}
     `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -336,7 +337,7 @@ async function queryDemonstrationDataForFunction(
       ${limitClause}
     `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -368,7 +369,7 @@ export async function countDemonstrationDataForFunction(
         i.function_name = {function_name:String}
     `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -424,7 +425,7 @@ export function handle_llm_judge_output(output: string) {
   try {
     parsed = JSON.parse(output);
   } catch (e) {
-    console.warn("Error parsing LLM Judge output", e);
+    logger.warn("Error parsing LLM Judge output", e);
     // Don't do anything if the output failed to parse
     return output;
   }

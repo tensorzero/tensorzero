@@ -17,6 +17,7 @@ import InputSnippet from "~/components/inference/InputSnippet";
 import {
   data,
   isRouteErrorResponse,
+  Link,
   redirect,
   type RouteHandle,
 } from "react-router";
@@ -54,6 +55,7 @@ import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
+import { logger } from "~/utils/logger";
 
 export const handle: RouteHandle = {
   crumb: (match) => ["Datapoints", match.params.datapoint_id!],
@@ -158,12 +160,12 @@ export async function action({ request }: Route.ActionArgs) {
           response.judgeDemonstrationResponse.feedback_id,
         );
       } else {
-        console.warn("No judge demonstration response");
+        logger.warn("No judge demonstration response");
       }
       return redirect(url.toString());
     }
     default:
-      console.error(`Unknown action: ${_action}`);
+      logger.error(`Unknown action: ${_action}`);
       return null;
   }
 }
@@ -262,7 +264,7 @@ const MetricsDisplay = ({
   variantName: string;
 }) => {
   return (
-    <div className="mt-3 border-t border-gray-200 pt-2">
+    <div className="pt-2">
       <div className="space-y-1">
         {metrics.map((metricObj) => {
           const evaluatorConfig = evaluatorsConfig[metricObj.evaluator_name];
@@ -323,7 +325,7 @@ const MetricRow = ({
     return null;
   }
   if (inferenceId === null) {
-    console.warn(
+    logger.warn(
       `Inference ID is null for metric ${metric_name} in datapoint ${datapointId}, this should not happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports`,
     );
   }
@@ -393,7 +395,7 @@ const MetricRow = ({
 };
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (
@@ -444,20 +446,20 @@ function OutputsSection({
   return (
     <SectionLayout>
       <SectionHeader heading="Output" />
-      <div className="flex flex-row gap-4 overflow-x-auto">
+      <div className="grid grid-flow-col grid-rows-[min-content_min-content_min-content] gap-x-4 gap-y-2 overflow-x-auto">
         {outputsToDisplay.map((result) => (
-          <div key={result.id} className="flex w-1/2 min-w-4/9 flex-col">
-            <div>
-              <div className="mb-2 flex">
-                {result.id === "Reference" ? (
-                  <EvaluationRunBadge
-                    runInfo={{
-                      evaluation_run_id: "",
-                      variant_name: result.variant_name,
-                    }}
-                    getColor={() => "bg-gray-100 text-gray-700"}
-                  />
-                ) : (
+          <section className="contents" key={result.id}>
+            <div className="row-start-1 flex flex-col gap-1">
+              {result.id === "Reference" ? (
+                <EvaluationRunBadge
+                  runInfo={{
+                    evaluation_run_id: "",
+                    variant_name: result.variant_name,
+                  }}
+                  getColor={() => "bg-gray-100 text-gray-700"}
+                />
+              ) : (
+                <>
                   <EvaluationRunBadge
                     runInfo={{
                       evaluation_run_id: result.id,
@@ -466,10 +468,26 @@ function OutputsSection({
                     // Use the getColor obtained from the correct context
                     getColor={getColor}
                   />
-                )}
-              </div>
-              <Output output={result.output} />
+
+                  {result.inferenceId && (
+                    <div className="text-xs text-gray-500">
+                      Inference:{" "}
+                      <Link
+                        to={`/observability/inferences/${result.inferenceId}`}
+                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        {result.inferenceId}
+                      </Link>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
+
+            <section className="row-start-2">
+              <Output output={result.output} />
+            </section>
+
             {result.id !== "Reference" &&
               result.metrics &&
               result.metrics.length > 0 && (
@@ -483,7 +501,7 @@ function OutputsSection({
                   variantName={result.variant_name}
                 />
               )}
-          </div>
+          </section>
         ))}
       </div>
     </SectionLayout>

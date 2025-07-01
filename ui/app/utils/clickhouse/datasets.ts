@@ -73,6 +73,7 @@ export const ParsedChatInferenceDatapointRowSchema =
     input: displayInputSchema,
     output: z.array(contentBlockOutputSchema).optional(),
     tool_params: z.record(z.string(), z.unknown()).optional(),
+    is_custom: z.boolean(),
     tags: z.record(z.string(), z.string()),
   });
 export type ParsedChatInferenceDatapointRow = z.infer<
@@ -88,6 +89,7 @@ export const ParsedJsonInferenceDatapointRowSchema =
     input: displayInputSchema,
     output: jsonInferenceOutputSchema.optional(),
     output_schema: z.record(z.string(), z.unknown()),
+    is_custom: z.boolean(),
   });
 export type ParsedJsonInferenceDatapointRow = z.infer<
   typeof ParsedJsonInferenceDatapointRowSchema
@@ -162,6 +164,7 @@ export const DatasetQueryParamsSchema = z.object({
   output_source: z.enum(["none", "inference", "demonstration"]),
   limit: z.number().optional(),
   offset: z.number().optional(),
+  is_custom: z.boolean().optional(),
 });
 export type DatasetQueryParams = z.infer<typeof DatasetQueryParamsSchema>;
 
