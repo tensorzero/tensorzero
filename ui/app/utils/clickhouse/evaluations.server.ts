@@ -1,6 +1,7 @@
+import { logger } from "~/utils/logger";
 import { getConfig } from "../config/index.server";
 import { resolveInput } from "../resolve.server";
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 import { CountSchema, inputSchema } from "./common";
 import {
   EvaluationRunInfoSchema,
@@ -45,7 +46,7 @@ export async function getEvaluationRunInfos(
       toUInt128(toUUID(evaluation_run_id)) DESC
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -83,7 +84,7 @@ export async function getEvaluationRunInfosForDatapoint(
     GROUP BY
       tags['tensorzero::evaluation_run_id']
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -146,7 +147,7 @@ async function parseEvaluationResultWithVariant(
       parsedResultWithVariant,
     );
   } catch (error) {
-    console.warn(
+    logger.warn(
       "Failed to parse evaluation result with variant using structure-based detection:",
       error,
     );
@@ -257,7 +258,7 @@ export async function getEvaluationResults(
 
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -338,7 +339,7 @@ export async function getEvaluationStatistics(
     toUInt128(toUUID(filtered_inference.tags['tensorzero::evaluation_run_id'])) DESC
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -371,7 +372,7 @@ export async function countDatapointsForEvaluation(
       FROM all_datapoint_ids
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -390,7 +391,7 @@ export async function countTotalEvaluationRuns() {
   const query = `
     SELECT toUInt32(uniqExact(value)) as count FROM TagInference WHERE key = 'tensorzero::evaluation_run_id'
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
   });
@@ -429,7 +430,7 @@ export async function getEvaluationRunInfo(
     LIMIT {limit:UInt32}
     OFFSET {offset:UInt32}
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -467,7 +468,7 @@ export async function searchEvaluationRuns(
     OFFSET {offset:UInt32}
     `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -568,7 +569,7 @@ export async function getEvaluationsForDatapoint(
 
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -630,7 +631,7 @@ export async function pollForEvaluations(
   }
 
   if (!found) {
-    console.warn(
+    logger.warn(
       `Evaluation with feedback ${new_feedback_id} for datapoint ${datapoint_id} not found after ${max_retries} retries.`,
     );
   }
@@ -689,7 +690,7 @@ export async function pollForEvaluationResults(
   }
 
   if (!found) {
-    console.warn(
+    logger.warn(
       `Evaluation result with feedback ${new_feedback_id} not found after ${max_retries} retries.`,
     );
   }

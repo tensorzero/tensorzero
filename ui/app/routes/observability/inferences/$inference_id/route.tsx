@@ -7,6 +7,7 @@ import {
   queryDemonstrationFeedbackByInferenceId,
   queryFeedbackBoundsByTargetId,
   queryFeedbackByTargetId,
+  queryLatestFeedbackIdByMetric,
 } from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
 import {
@@ -22,7 +23,10 @@ import BasicInfo from "./InferenceBasicInfo";
 import InputSnippet from "~/components/inference/InputSnippet";
 import Output from "~/components/inference/NewOutput";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
-import { addHumanFeedback, tensorZeroClient } from "~/utils/tensorzero.server";
+import {
+  addHumanFeedback,
+  getTensorZeroClient,
+} from "~/utils/tensorzero.server";
 import { ParameterCard } from "./InferenceParameters";
 import { TagsTable } from "~/components/utils/TagsTable";
 import { ModelInferencesTable } from "./ModelInferencesTable";
@@ -51,9 +55,11 @@ import { AddToDatasetButton } from "./AddToDatasetButton";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
-import { isServerRequestError, JSONParseError } from "~/utils/common";
-import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
+import { logger } from "~/utils/logger";
+import { JSONParseError } from "~/utils/common";
 import { processJson } from "~/utils/syntax-highlighting.server";
+import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
+import { isTensorZeroServerError } from "~/utils/tensorzero";
 
 export const handle: RouteHandle = {
   crumb: (match) => [match.params.inference_id!],
@@ -106,6 +112,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     demonstration_feedback,
     feedback_bounds,
     feedback,
+    latestFeedbackByMetric,
   ] = await Promise.all([
     inferencePromise,
     modelInferencesPromise,
@@ -113,6 +120,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     demonstrationFeedbackPromise,
     feedbackBoundsPromise,
     feedbackDataPromise,
+    queryLatestFeedbackIdByMetric({ target_id: inference_id }),
   ]);
 
   // --- Process results ---
@@ -146,6 +154,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     dataset_counts,
     hasDemonstration: demonstration_feedback.length > 0,
     newFeedbackId,
+    latestFeedbackByMetric,
   };
 }
 
@@ -168,7 +177,7 @@ export async function action({ request }: Route.ActionArgs) {
         );
       }
       try {
-        const datapoint = await tensorZeroClient.createDatapoint(
+        const datapoint = await getTensorZeroClient().createDatapoint(
           dataset.toString(),
           inference_id.toString(),
           output.toString() as "inherit" | "demonstration" | "none",
@@ -177,7 +186,7 @@ export async function action({ request }: Route.ActionArgs) {
           redirectTo: `/datasets/${dataset.toString()}/datapoint/${datapoint.id}`,
         });
       } catch (error) {
-        console.error(error);
+        logger.error(error);
         return data<ActionData>(
           {
             error:
@@ -196,10 +205,10 @@ export async function action({ request }: Route.ActionArgs) {
         url.searchParams.set("newFeedbackId", response.feedback_id);
         return data<ActionData>({ redirectTo: url.pathname + url.search });
       } catch (error) {
-        if (isServerRequestError(error)) {
+        if (isTensorZeroServerError(error)) {
           return data<ActionData>(
             { error: error.message },
-            { status: error.statusCode },
+            { status: error.status },
           );
         }
         return data<ActionData>(
@@ -209,7 +218,7 @@ export async function action({ request }: Route.ActionArgs) {
       }
     }
     default:
-      console.error(`Unknown action: ${_action}`);
+      logger.error(`Unknown action: ${_action}`);
       return data<ActionData>(
         { error: "Unknown server action" },
         { status: 400 },
@@ -230,6 +239,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     dataset_counts,
     hasDemonstration,
     newFeedbackId,
+    latestFeedbackByMetric,
   } = loaderData;
   const navigate = useNavigate();
   const [openModal, setOpenModal] = useState<ModalType | null>(null);
@@ -423,7 +433,14 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
                 "This table only includes inference-level feedback. To see episode-level feedback, open the detail page for that episode.",
             }}
           />
-          <FeedbackTable feedback={feedback} />
+          <FeedbackTable
+            feedback={feedback}
+            latestCommentId={feedback_bounds.by_type.comment.last_id!}
+            latestDemonstrationId={
+              feedback_bounds.by_type.demonstration.last_id!
+            }
+            latestFeedbackIdByMetric={latestFeedbackByMetric}
+          />
           <PageButtons
             onNextPage={handleNextFeedbackPage}
             onPreviousPage={handlePreviousFeedbackPage}
@@ -528,7 +545,7 @@ function getUserFacingError(error: unknown): {
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   useEffect(() => {
-    console.error(error);
+    logger.error(error);
   }, [error]);
   const { heading, message } = getUserFacingError(error);
   return (

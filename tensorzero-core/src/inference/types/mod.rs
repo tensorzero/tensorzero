@@ -246,7 +246,9 @@ impl<'de> Deserialize<'de> for TextKind {
     }
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum Role {
@@ -280,7 +282,9 @@ impl Role {
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct Text {
     pub text: String,
@@ -301,7 +305,9 @@ impl Text {
 }
 
 /// Struct that represents Chain of Thought reasoning
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct Thought {
     pub text: String,
@@ -326,7 +332,9 @@ impl Thought {
 }
 
 /// Core representation of the types of content that could go into a model provider
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
     Text(Text),
@@ -392,7 +400,9 @@ pub enum ContentBlockOutput {
 }
 
 /// Defines the types of content block that can come from a `chat` function
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockChatOutput {
     Text(Text),
@@ -405,7 +415,9 @@ pub enum ContentBlockChatOutput {
 }
 
 /// A RequestMessage is a message sent to a model
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct RequestMessage {
     pub role: Role,
@@ -497,7 +509,9 @@ impl<'a> ModelInferenceRequest<'a> {
 }
 
 /// For use in rendering for optimization purposes
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ModelInput {
     pub system: Option<String>,
@@ -612,7 +626,7 @@ impl ModelInferenceResponseWithMetadata {
     /// in the HTTP response.
     /// However, we store the number of tokens that would have been used in the database.
     /// So we need this function to compute the actual usage in order to send it in the HTTP response.
-    pub fn actual_usage(&self) -> Usage {
+    pub fn usage_considering_cached(&self) -> Usage {
         if self.cached {
             Usage {
                 input_tokens: 0,
@@ -643,7 +657,6 @@ pub struct ChatInferenceResult {
     pub inference_id: Uuid,
     pub created: u64,
     pub content: Vec<ContentBlockChatOutput>,
-    pub usage: Usage,
     pub model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub inference_params: InferenceParams,
     pub original_response: Option<String>,
@@ -655,7 +668,6 @@ pub struct JsonInferenceResult {
     pub inference_id: Uuid,
     pub created: u64,
     pub output: InternalJsonInferenceOutput,
-    pub usage: Usage,
     pub model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub output_schema: Value,
     pub inference_params: InferenceParams,
@@ -1088,18 +1100,11 @@ impl InferenceResult {
             .collect()
     }
 
-    pub fn usage(&self) -> &Usage {
-        match self {
-            InferenceResult::Chat(chat_result) => &chat_result.usage,
-            InferenceResult::Json(json_result) => &json_result.usage,
-        }
-    }
-
-    pub fn set_usage(&mut self, usage: Usage) {
-        match self {
-            InferenceResult::Chat(chat_result) => chat_result.usage = usage,
-            InferenceResult::Json(json_result) => json_result.usage = usage,
-        }
+    pub fn usage_considering_cached(&self) -> Usage {
+        self.model_inference_results()
+            .iter()
+            .map(|r| r.usage_considering_cached())
+            .sum()
     }
 
     pub fn set_original_response(&mut self, original_response: Option<String>) {
@@ -1132,7 +1137,6 @@ impl JsonInferenceResult {
         parsed: Option<Value>,
         json_block_index: Option<usize>,
         auxiliary_content: Vec<ContentBlockOutput>,
-        usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         output_schema: Value,
         inference_params: InferenceParams,
@@ -1149,7 +1153,6 @@ impl JsonInferenceResult {
             inference_id,
             created: current_timestamp(),
             output,
-            usage,
             model_inference_results,
             output_schema,
             inference_params,
@@ -1163,7 +1166,6 @@ impl ChatInferenceResult {
     pub async fn new(
         inference_id: Uuid,
         raw_content: Vec<ContentBlockOutput>,
-        usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         tool_config: Option<&ToolCallConfig>,
         inference_params: InferenceParams,
@@ -1176,7 +1178,6 @@ impl ChatInferenceResult {
             inference_id,
             created,
             content,
-            usage,
             model_inference_results,
             inference_params,
             original_response,
@@ -1755,7 +1756,6 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         .prepare_response(
             inference_id,
             content_blocks,
-            usage,
             vec![model_inference_result],
             &inference_config,
             inference_params,
@@ -1819,8 +1819,8 @@ impl From<JsonMode> for ModelInferenceRequestJsonMode {
     }
 }
 
-impl<'a> std::iter::Sum<&'a Usage> for Usage {
-    fn sum<I: Iterator<Item = &'a Usage>>(iter: I) -> Self {
+impl std::iter::Sum<Usage> for Usage {
+    fn sum<I: Iterator<Item = Usage>>(iter: I) -> Self {
         iter.fold(Usage::default(), |mut acc, u| {
             acc.input_tokens = acc.input_tokens.saturating_add(u.input_tokens);
             acc.output_tokens = acc.output_tokens.saturating_add(u.output_tokens);
@@ -1953,7 +1953,6 @@ mod tests {
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content.clone(),
-            usage.clone(),
             model_inference_responses,
             None,
             InferenceParams::default(),
@@ -1962,7 +1961,6 @@ mod tests {
         .await;
         let output_content = ["Hello, world!".to_string().into()];
         assert_eq!(chat_inference_response.content, output_content);
-        assert_eq!(chat_inference_response.usage, usage);
         assert_eq!(chat_inference_response.model_inference_results.len(), 1);
         assert_eq!(chat_inference_response.finish_reason, None);
         let model_inference_result = chat_inference_response
@@ -2005,7 +2003,6 @@ mod tests {
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
-            usage.clone(),
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
@@ -2056,7 +2053,6 @@ mod tests {
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
-            usage.clone(),
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
@@ -2104,7 +2100,6 @@ mod tests {
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
-            usage.clone(),
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
@@ -2172,7 +2167,6 @@ mod tests {
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
-            usage.clone(),
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
@@ -2258,7 +2252,6 @@ mod tests {
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
-            usage.clone(),
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
@@ -2351,7 +2344,6 @@ mod tests {
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
-            usage.clone(),
             model_inference_responses,
             Some(&additional_tool_config),
             InferenceParams::default(),
@@ -2402,7 +2394,6 @@ mod tests {
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
-            usage.clone(),
             model_inference_responses,
             Some(&additional_tool_config),
             InferenceParams::default(),
@@ -2475,7 +2466,6 @@ mod tests {
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
-            usage.clone(),
             model_inference_responses,
             Some(&restricted_tool_config),
             InferenceParams::default(),
@@ -2532,7 +2522,6 @@ mod tests {
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
-            usage.clone(),
             model_inference_responses,
             Some(&restricted_tool_config),
             InferenceParams::default(),
@@ -2662,13 +2651,6 @@ mod tests {
             chat_result.content,
             vec!["Hello, world!".to_string().into()]
         );
-        assert_eq!(
-            chat_result.usage,
-            Usage {
-                input_tokens: 2,
-                output_tokens: 4,
-            }
-        );
         assert_eq!(chat_result.model_inference_results.len(), 1);
         let model_inference_result = chat_result.model_inference_results.first().unwrap();
         assert_eq!(&*model_inference_result.model_name, model_name);
@@ -2748,6 +2730,13 @@ mod tests {
             extra_headers: Default::default(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
+        assert_eq!(
+            response.usage_considering_cached(),
+            Usage {
+                input_tokens: 15,
+                output_tokens: 15,
+            }
+        );
         match response {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
@@ -2758,13 +2747,6 @@ mod tests {
                 assert_eq!(
                     json_result.output.raw,
                     Some("{\"name\":\"John\",\"age\":30}".to_string())
-                );
-                assert_eq!(
-                    json_result.usage,
-                    Usage {
-                        input_tokens: 15,
-                        output_tokens: 15,
-                    }
                 );
                 assert_eq!(json_result.finish_reason, Some(FinishReason::Stop));
                 assert_eq!(json_result.model_inference_results.len(), 1);
@@ -2827,13 +2809,12 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
         };
-        let result = collect_chunks(collect_chunks_args).await;
-        assert!(result.is_ok());
+        let result = collect_chunks(collect_chunks_args).await.unwrap();
+        assert_eq!(result.usage_considering_cached(), usage);
         match result {
-            Ok(InferenceResult::Json(json_result)) => {
+            InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
                 assert_eq!(json_result.created, created);
-                assert_eq!(json_result.usage, usage);
                 assert_eq!(json_result.output.parsed, None);
                 assert_eq!(
                     json_result.output.raw,
@@ -2909,38 +2890,39 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
         };
-        let result = collect_chunks(collect_chunks_args).await;
-        if let Ok(InferenceResult::Chat(chat_response)) = result {
-            assert_eq!(chat_response.inference_id, inference_id);
-            assert_eq!(chat_response.created, created);
-            assert_eq!(
-                chat_response.content,
-                vec![
-                    ContentBlockChatOutput::Text(Text {
-                        text: "{\"name\":\"John\",\"age\":30}".to_string()
-                    }),
-                    ContentBlockChatOutput::Thought(Thought {
-                        text: "Thought 2".to_string(),
-                        signature: None,
-                    }),
-                ]
-            );
-            assert_eq!(chat_response.usage, usage);
-            assert_eq!(chat_response.model_inference_results.len(), 1);
-            let model_inference_result = chat_response.model_inference_results.first().unwrap();
-            assert_eq!(&*model_inference_result.model_name, model_name);
-            assert_eq!(chat_response.finish_reason, Some(FinishReason::Stop));
-            assert_eq!(
-                model_inference_result.finish_reason,
-                Some(FinishReason::Stop)
-            );
-            assert_eq!(
-                &*model_inference_result.model_provider_name,
-                model_provider_name
-            );
-            assert_eq!(model_inference_result.raw_request, raw_request);
-        } else {
-            panic!("Expected Ok(InferenceResult::Chat), got {result:?}");
+        let result = collect_chunks(collect_chunks_args).await.unwrap();
+        assert_eq!(result.usage_considering_cached(), usage);
+        match result {
+            InferenceResult::Chat(chat_response) => {
+                assert_eq!(chat_response.inference_id, inference_id);
+                assert_eq!(chat_response.created, created);
+                assert_eq!(
+                    chat_response.content,
+                    vec![
+                        ContentBlockChatOutput::Text(Text {
+                            text: "{\"name\":\"John\",\"age\":30}".to_string()
+                        }),
+                        ContentBlockChatOutput::Thought(Thought {
+                            text: "Thought 2".to_string(),
+                            signature: None,
+                        }),
+                    ]
+                );
+                assert_eq!(chat_response.model_inference_results.len(), 1);
+                let model_inference_result = chat_response.model_inference_results.first().unwrap();
+                assert_eq!(&*model_inference_result.model_name, model_name);
+                assert_eq!(chat_response.finish_reason, Some(FinishReason::Stop));
+                assert_eq!(
+                    model_inference_result.finish_reason,
+                    Some(FinishReason::Stop)
+                );
+                assert_eq!(
+                    &*model_inference_result.model_provider_name,
+                    model_provider_name
+                );
+                assert_eq!(model_inference_result.raw_request, raw_request);
+            }
+            _ => panic!("Expected Chat inference response"),
         }
 
         // Test Case 6: a JSON function with implicit tool call config
@@ -3015,6 +2997,13 @@ mod tests {
             extra_headers: Default::default(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
+        assert_eq!(
+            response.usage_considering_cached(),
+            Usage {
+                input_tokens: 15,
+                output_tokens: 15,
+            }
+        );
         match response {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
@@ -3025,13 +3014,6 @@ mod tests {
                 assert_eq!(
                     json_result.output.raw,
                     Some("{\"name\":\"John\",\"age\":30}".to_string())
-                );
-                assert_eq!(
-                    json_result.usage,
-                    Usage {
-                        input_tokens: 15,
-                        output_tokens: 15,
-                    }
                 );
                 assert_eq!(json_result.finish_reason, Some(FinishReason::Stop));
                 assert_eq!(json_result.model_inference_results.len(), 1);
@@ -3124,6 +3106,13 @@ mod tests {
             extra_headers: Default::default(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
+        assert_eq!(
+            response.usage_considering_cached(),
+            Usage {
+                input_tokens: 15,
+                output_tokens: 15,
+            }
+        );
         match response {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
@@ -3134,13 +3123,6 @@ mod tests {
                 assert_eq!(
                     json_result.output.raw,
                     Some("{\"name\":\"John\",\"age\":30}".to_string())
-                );
-                assert_eq!(
-                    json_result.usage,
-                    Usage {
-                        input_tokens: 15,
-                        output_tokens: 15,
-                    }
                 );
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 let model_inference_result = json_result.model_inference_results.first().unwrap();
@@ -3257,6 +3239,13 @@ mod tests {
             extra_headers: Default::default(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
+        assert_eq!(
+            result.usage_considering_cached(),
+            Usage {
+                input_tokens: 2,
+                output_tokens: 4,
+            }
+        );
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
             _ => panic!("Expected Chat inference response"),
@@ -3264,13 +3253,6 @@ mod tests {
         assert_eq!(chat_result.inference_id, inference_id);
         assert_eq!(chat_result.created, created);
         assert_eq!(chat_result.finish_reason, Some(FinishReason::Stop));
-        assert_eq!(
-            chat_result.usage,
-            Usage {
-                input_tokens: 2,
-                output_tokens: 4,
-            }
-        );
 
         let expected_content = vec![
             ContentBlockChatOutput::Text(Text {

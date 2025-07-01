@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::config_parser::PathWithContents;
@@ -23,8 +23,11 @@ use crate::{
 
 use super::{InferenceConfig, ModelUsedInfo, Variant};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ChainOfThoughtConfig {
+    #[serde(flatten)]
     pub inner: ChatCompletionConfig,
 }
 
@@ -102,7 +105,6 @@ impl Variant for ChainOfThoughtConfig {
             inference_id: json_result.inference_id,
             created: json_result.created,
             output,
-            usage: json_result.usage,
             model_inference_results: json_result.model_inference_results,
             output_schema: original_output_schema.clone(),
             inference_params: json_result.inference_params,

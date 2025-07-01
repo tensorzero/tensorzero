@@ -2,7 +2,7 @@ use std::path::Path;
 
 use futures::future::join_all;
 use rand::Rng;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
@@ -13,7 +13,7 @@ use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
+    batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::model::ModelTable;
 use crate::{
@@ -33,7 +33,9 @@ use super::{
     ModelUsedInfo, Variant,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct MixtureOfNConfig {
     pub weight: Option<f64>,
     pub timeout_s: f64,
@@ -56,8 +58,11 @@ fn default_timeout() -> f64 {
     300.0
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct FuserConfig {
+    #[serde(flatten)]
     pub inner: ChatCompletionConfig,
 }
 
@@ -330,11 +335,6 @@ impl MixtureOfNConfig {
             }
         };
 
-        // Safely remove the selected candidate without panicking
-        let mut total_usage: Usage = candidates.iter().map(|c| c.usage()).sum();
-        total_usage.input_tokens += inference_result.usage().input_tokens;
-        total_usage.output_tokens += inference_result.usage().output_tokens;
-        inference_result.set_usage(total_usage);
         for candidate in candidates {
             inference_result
                 .mut_model_inference_results()
@@ -596,7 +596,7 @@ mod tests {
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
             ChatInferenceResult, FinishReason, InternalJsonInferenceOutput, JsonInferenceResult,
-            Latency, ModelInferenceResponseWithMetadata,
+            Latency, ModelInferenceResponseWithMetadata, Usage,
         },
         jsonschema_util::StaticJSONSchema,
         minijinja_util::tests::get_test_template_config,
@@ -794,10 +794,6 @@ mod tests {
             ChatInferenceResult::new(
                 Uuid::now_v7(),
                 vec!["Candidate answer 1".to_string().into()],
-                Usage {
-                    input_tokens: 10,
-                    output_tokens: 20,
-                },
                 vec![model_inference_response],
                 None,
                 InferenceParams::default(),
@@ -831,10 +827,6 @@ mod tests {
             ChatInferenceResult::new(
                 Uuid::now_v7(),
                 vec!["Candidate answer 2".to_string().into()],
-                Usage {
-                    input_tokens: 15,
-                    output_tokens: 25,
-                },
                 vec![model_inference_response2],
                 None,
                 InferenceParams::default(),
@@ -880,8 +872,8 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Valid JSON response\"}".to_string(),
             usage: Usage {
-                input_tokens: 50,
-                output_tokens: 100,
+                input_tokens: 10,
+                output_tokens: 20,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
@@ -898,10 +890,6 @@ mod tests {
             Some(json!({"response": "Valid JSON response"})),
             Some(0),
             vec![],
-            Usage {
-                input_tokens: 10,
-                output_tokens: 20,
-            },
             vec![model_inference_response_valid],
             json!({"type": "object", "properties": {"response": {"type": "string"}}}),
             InferenceParams::default(),
@@ -937,10 +925,6 @@ mod tests {
             None, // malformed
             Some(0),
             vec![],
-            Usage {
-                input_tokens: 15,
-                output_tokens: 25,
-            },
             vec![model_inference_response_malformed],
             json!({"type": "object", "properties": {"response": {"type": "string"}}}),
             InferenceParams::default(),
@@ -1000,8 +984,8 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
-                input_tokens: 50,
-                output_tokens: 100,
+                input_tokens: 10,
+                output_tokens: 20,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
@@ -1016,10 +1000,6 @@ mod tests {
             ChatInferenceResult::new(
                 inference_id0,
                 vec!["Candidate answer 0".to_string().into()],
-                Usage {
-                    input_tokens: 10,
-                    output_tokens: 20,
-                },
                 vec![model_inference_response0],
                 None,
                 InferenceParams::default(),
@@ -1053,10 +1033,6 @@ mod tests {
             ChatInferenceResult::new(
                 inference_id1,
                 vec!["Candidate answer 1".to_string().into()],
-                Usage {
-                    input_tokens: 15,
-                    output_tokens: 25,
-                },
                 vec![model_inference_response1],
                 None,
                 InferenceParams::default(),
@@ -1140,9 +1116,9 @@ mod tests {
             auxiliary_content: vec![],
             json_block_index: Some(0),
         };
+        assert_eq!(fused.usage_considering_cached(), expected_usage);
         match fused {
             InferenceResult::Json(fused) => {
-                assert_eq!(fused.usage, expected_usage);
                 assert_eq!(fused.output, expected_content);
                 assert_eq!(fused.model_inference_results.len(), 3);
             }

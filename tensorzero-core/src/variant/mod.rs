@@ -45,13 +45,18 @@ pub mod mixture_of_n;
 
 /// Holds a particular variant implementation, plus additional top-level configuration
 /// that is applicable to any variant type.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct VariantInfo {
     pub inner: VariantConfig,
     pub timeouts: TimeoutsConfig,
 }
 
-#[derive(Debug)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, ts(export))]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum VariantConfig {
     ChatCompletion(chat_completion::ChatCompletionConfig),
     BestOfNSampling(best_of_n_sampling::BestOfNSamplingConfig),
@@ -66,6 +71,8 @@ pub enum VariantConfig {
 /// This is represented as a tool config in the
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum JsonMode {
     Off,
     On,
@@ -303,10 +310,10 @@ impl Variant for VariantInfo {
         fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or(""), otel.name="variant_inference", stream=true),
         skip_all
     )]
-    async fn infer_stream<'a, 'request>(
+    async fn infer_stream<'request>(
         &self,
         input: &ResolvedInput,
-        models: &'request InferenceModels<'a>,
+        models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
@@ -616,8 +623,8 @@ struct InferModelRequestArgs<'a, 'request> {
 
 /// Refactored `infer_model_request` function accepting a single struct argument
 #[instrument(fields(model_name = %args.model_name), skip_all)]
-async fn infer_model_request<'a, 'request>(
-    args: InferModelRequestArgs<'a, 'request>,
+async fn infer_model_request(
+    args: InferModelRequestArgs<'_, '_>,
 ) -> Result<InferenceResult, Error> {
     let model_inference_response = (|| async {
         args.model_config
@@ -631,14 +638,12 @@ async fn infer_model_request<'a, 'request>(
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, args.model_name);
     let raw_content = model_inference_result.output.clone();
-    let usage = model_inference_result.actual_usage();
     let model_inference_results = vec![model_inference_result];
 
     args.function
         .prepare_response(
             args.inference_config.ids.inference_id,
             raw_content,
-            usage,
             model_inference_results,
             args.inference_config,
             args.inference_params,
@@ -691,7 +696,9 @@ async fn infer_model_request_stream<'request>(
     Ok((Box::pin(stream), model_used_info))
 }
 
-#[derive(Debug, Deserialize, Copy, Clone)]
+#[derive(Debug, Deserialize, Copy, Clone, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct RetryConfig {
     pub num_retries: usize,
     pub max_delay_s: f32,
@@ -1097,12 +1104,15 @@ mod tests {
         let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
+        assert_eq!(
+            inference_result.usage_considering_cached(),
+            DUMMY_INFER_USAGE.clone()
+        );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 // The DummyProvider returns DUMMY_INFER_RESPONSE_CONTENT by default
                 let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
                 assert_eq!(chat_result.content, expected_content);
-                assert_eq!(chat_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(chat_result.model_inference_results.len(), 1);
                 assert_eq!(
                     &*chat_result.model_inference_results[0].model_name,
@@ -1206,6 +1216,10 @@ mod tests {
         let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
+        assert_eq!(
+            inference_result.usage_considering_cached(),
+            DUMMY_INFER_USAGE.clone()
+        );
         match inference_result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(
@@ -1213,7 +1227,6 @@ mod tests {
                     Some(DUMMY_JSON_RESPONSE_RAW.to_string())
                 );
                 assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
-                assert_eq!(json_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
                     &*json_result.model_inference_results[0].model_name,
@@ -1403,12 +1416,15 @@ mod tests {
         let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
+        assert_eq!(
+            inference_result.usage_considering_cached(),
+            DUMMY_INFER_USAGE.clone()
+        );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 // The DummyProvider returns DUMMY_INFER_RESPONSE_CONTENT by default
                 let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
                 assert_eq!(chat_result.content, expected_content);
-                assert_eq!(chat_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(chat_result.model_inference_results.len(), 1);
                 assert_eq!(
                     &*chat_result.model_inference_results[0].model_name,

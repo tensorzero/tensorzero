@@ -25,7 +25,7 @@ import {
   staleDatapoint,
   getDatasetCounts,
 } from "~/utils/clickhouse/datasets.server";
-import { tensorZeroClient } from "~/utils/tensorzero.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import {
   PageHeader,
   PageLayout,
@@ -41,6 +41,7 @@ import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
 } from "~/routes/api/tensorzero/inference.utils";
+import { logger } from "~/utils/logger";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -127,7 +128,7 @@ export async function action({ request }: ActionFunctionArgs) {
           : {}),
         source_inference_id: parsedFormData.source_inference_id,
       };
-      const { id } = await tensorZeroClient.updateDatapoint(
+      const { id } = await getTensorZeroClient().updateDatapoint(
         parsedFormData.dataset_name,
         uuid(),
         datapoint,
@@ -143,7 +144,7 @@ export async function action({ request }: ActionFunctionArgs) {
         `/datasets/${parsedFormData.dataset_name}/datapoint/${id}`,
       );
     } catch (error) {
-      console.error("Error updating datapoint:", error);
+      logger.error("Error updating datapoint:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
@@ -419,7 +420,7 @@ function getUserFacingError(error: unknown): {
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   useEffect(() => {
-    console.error(error);
+    logger.error(error);
   }, [error]);
   const { heading, message } = getUserFacingError(error);
   const { dataset_name: datasetName } = useParams<{

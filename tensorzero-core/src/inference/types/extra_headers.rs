@@ -3,11 +3,15 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ExtraHeadersConfig {
     pub data: Vec<ExtraHeader>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ExtraHeader {
     pub name: String,
     #[serde(flatten)]
@@ -16,6 +20,8 @@ pub struct ExtraHeader {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum ExtraHeaderKind {
     Value(String),
     // We only allow `"delete": true` to be set - deserializing `"delete": false` will error
