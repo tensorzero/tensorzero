@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { get_fine_tuned_model_config, dump_model_config } from "./models";
+import { get_fine_tuned_provider_config, dump_provider_config } from "./models";
 
 describe("get_fine_tuned_model_config", () => {
   it("should create correct config for anthropic model", async () => {
-    const result = get_fine_tuned_model_config("claude-2", "anthropic");
+    const result = get_fine_tuned_provider_config("claude-2", "anthropic");
     expect(result).toEqual({
       models: {
         "claude-2": {
@@ -20,7 +20,7 @@ describe("get_fine_tuned_model_config", () => {
   });
 
   it("should create correct config for aws bedrock model", async () => {
-    const result = get_fine_tuned_model_config(
+    const result = get_fine_tuned_provider_config(
       "anthropic.claude-v2",
       "aws_bedrock",
     );
@@ -42,12 +42,12 @@ describe("get_fine_tuned_model_config", () => {
 
 describe("dump_model_config", () => {
   it("should correctly stringify model config", () => {
-    const fullyQualifiedModelConfig = get_fine_tuned_model_config(
+    const fullyQualifiedModelConfig = get_fine_tuned_provider_config(
       "test",
       "dummy",
     );
 
-    const result = dump_model_config(fullyQualifiedModelConfig);
+    const result = dump_provider_config("test", fullyQualifiedModelConfig);
     const expected_result =
       '[models.test]\nrouting = [ "test" ]\n\n[models.test.providers.test]\ntype = "dummy"\nmodel_name = "test"';
     expect(result).toBe(expected_result);

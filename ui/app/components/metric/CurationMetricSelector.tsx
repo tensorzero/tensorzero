@@ -5,7 +5,7 @@ import {
   type Path,
   type PathValue,
 } from "react-hook-form";
-import { Config } from "~/utils/config";
+import type { Config } from "tensorzero-node";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import {
   Select,
@@ -16,7 +16,7 @@ import {
 } from "~/components/ui/select";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Input } from "~/components/ui/input";
-import MetricBadges from "~/components/metric/MetricBadges";
+import FeedbackBadges from "~/components/feedback/FeedbackBadges";
 import { useEffect, useMemo } from "react";
 import { useFetcher } from "react-router";
 import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
@@ -150,7 +150,7 @@ export default function CurationMetricSelector<
                                 ? metricFeedback.feedback_count
                                 : 0}
                             </Badge>
-                            <MetricBadges metric={metric} />
+                            {metric && <FeedbackBadges metric={metric} />}
                           </div>
                         </div>
                       </SelectItem>

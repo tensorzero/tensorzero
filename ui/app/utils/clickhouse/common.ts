@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { FunctionConfig } from "../config/function";
+import type { FunctionConfig } from "tensorzero-node";
 
 export const roleSchema = z.enum(["user", "assistant"]);
 export type Role = z.infer<typeof roleSchema>;

@@ -15,7 +15,7 @@ import type {
   Role,
   TextInput,
 } from "./clickhouse/common";
-import type { FunctionConfig } from "./config/function";
+import type { FunctionConfig } from "tensorzero-node";
 import { getTensorZeroClient } from "./tensorzero.server";
 
 export async function resolveInput(
