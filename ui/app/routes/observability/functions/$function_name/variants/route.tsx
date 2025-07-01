@@ -34,6 +34,7 @@ import {
   SectionsGroup,
   SectionHeader,
 } from "~/components/layout/PageLayout";
+import { logger } from "~/utils/logger";
 
 export const handle: RouteHandle = {
   crumb: (match) => ["Variants", match.params.variant_name!],
@@ -259,7 +260,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

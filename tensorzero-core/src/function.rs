@@ -12,7 +12,7 @@ use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
     ChatInferenceResult, ContentBlockOutput, InferenceResult, Input, InputMessageContent,
-    JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, TextKind, Usage,
+    JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, TextKind,
 };
 use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
@@ -178,12 +178,10 @@ impl FunctionConfig {
     }
 
     #[instrument(skip_all, fields(inference_id))]
-    #[expect(clippy::too_many_arguments)]
     pub async fn prepare_response<'request>(
         &self,
         inference_id: Uuid,
         content_blocks: Vec<ContentBlockOutput>,
-        usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         inference_config: &'request InferenceConfig<'_, 'request>,
         inference_params: InferenceParams,
@@ -194,7 +192,6 @@ impl FunctionConfig {
                 ChatInferenceResult::new(
                     inference_id,
                     content_blocks,
-                    usage,
                     model_inference_results,
                     inference_config.tool_config,
                     inference_params,
@@ -242,7 +239,6 @@ impl FunctionConfig {
                     parsed_output,
                     json_block_index,
                     auxiliary_content,
-                    usage,
                     model_inference_results,
                     output_schema.value().clone(),
                     inference_params,
@@ -544,6 +540,7 @@ mod tests {
     use crate::inference::types::Latency;
     use crate::inference::types::Text;
     use crate::inference::types::Thought;
+    use crate::inference::types::Usage;
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
@@ -1638,7 +1635,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage,
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -1649,12 +1645,12 @@ mod tests {
         assert!(logs_contain(
             "Failed to parse output from JSON function response"
         ));
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
                 assert_eq!(result.output.raw, Some("Hello, world!".to_string()));
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.finish_reason, Some(FinishReason::Stop));
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
@@ -1690,7 +1686,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage,
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -1698,6 +1693,7 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -1709,7 +1705,6 @@ mod tests {
                     result.output.raw,
                     Some("{\"name\": \"Jerry\", \"age\": 30}".to_string())
                 );
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
@@ -1744,7 +1739,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage,
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -1752,6 +1746,7 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -1760,7 +1755,6 @@ mod tests {
                     result.output.raw,
                     Some("{\"name\": \"Jerry\", \"age\": \"thirty\"}".to_string())
                 );
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
             }
@@ -1800,7 +1794,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage,
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -1809,12 +1802,12 @@ mod tests {
             .await
             .unwrap();
         assert!(logs_contain("JSON Schema validation failed"));
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
                 assert_eq!(result.output.raw, Some("tool_call_arguments".to_string()));
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
             }
@@ -1854,7 +1847,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage,
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -1862,6 +1854,7 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -1873,7 +1866,6 @@ mod tests {
                     result.output.raw,
                     Some(r#"{"name": "Jerry", "age": 30}"#.to_string())
                 );
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ContentFilter));
             }
@@ -1908,7 +1900,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage,
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -1916,12 +1907,12 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
                 assert!(result.output.raw.is_none());
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.finish_reason, model_response.finish_reason);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
@@ -1980,7 +1971,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage,
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -1988,12 +1978,12 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
                 assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
@@ -2028,7 +2018,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage,
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -2036,6 +2025,7 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -2044,7 +2034,6 @@ mod tests {
                     result.output.raw,
                     Some(r#"{"response": "forty-two"}"#.to_string())
                 );
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
@@ -2083,7 +2072,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage,
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -2092,12 +2080,12 @@ mod tests {
             .await
             .unwrap();
         assert!(logs_contain("JSON Schema validation failed"));
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
                 assert_eq!(result.output.raw, Some("tool_call_arguments".to_string()));
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
@@ -2136,7 +2124,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage,
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -2144,12 +2131,12 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
                 assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
@@ -2196,7 +2183,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage,
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -2204,12 +2190,12 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
                 assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::Stop));
             }

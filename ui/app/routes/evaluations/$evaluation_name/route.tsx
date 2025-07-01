@@ -30,6 +30,7 @@ import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -201,12 +202,12 @@ export async function action({ request }: Route.ActionArgs) {
           response.judgeDemonstrationResponse.feedback_id,
         );
       } else {
-        console.warn("No judge demonstration response");
+        logger.warn("No judge demonstration response");
       }
       return redirect(url.toString());
     }
     default:
-      console.error(`Unknown action: ${_action}`);
+      logger.error(`Unknown action: ${_action}`);
       return null;
   }
 }

@@ -15,6 +15,7 @@ import {
 } from "~/utils/clickhouse/dynamic_evaluations.server";
 import DynamicEvaluationRunsTable from "./DynamicEvaluationRunsTable";
 import DynamicEvaluationProjectsTable from "./DynamicEvaluationProjectsTable";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -116,7 +117,7 @@ export default function EvaluationSummaryPage({
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

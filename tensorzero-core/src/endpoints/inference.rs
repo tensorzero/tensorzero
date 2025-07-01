@@ -917,13 +917,14 @@ pub struct JsonInferenceResponse {
 
 impl InferenceResponse {
     pub fn new(inference_result: InferenceResult, episode_id: Uuid, variant_name: String) -> Self {
+        let usage = inference_result.usage_considering_cached();
         match inference_result {
             InferenceResult::Chat(result) => InferenceResponse::Chat(ChatInferenceResponse {
                 inference_id: result.inference_id,
                 episode_id,
                 variant_name,
                 content: result.content,
-                usage: result.usage,
+                usage,
                 original_response: result.original_response,
                 finish_reason: result.finish_reason,
             }),
@@ -935,7 +936,7 @@ impl InferenceResponse {
                     episode_id,
                     variant_name,
                     output,
-                    usage: result.usage,
+                    usage,
                     original_response: result.original_response,
                     finish_reason: result.finish_reason,
                 })

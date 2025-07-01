@@ -639,14 +639,12 @@ async fn infer_model_request(
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, args.model_name);
     let raw_content = model_inference_result.output.clone();
-    let usage = model_inference_result.usage_considering_cached();
     let model_inference_results = vec![model_inference_result];
 
     args.function
         .prepare_response(
             args.inference_config.ids.inference_id,
             raw_content,
-            usage,
             model_inference_results,
             args.inference_config,
             args.inference_params,
@@ -1107,18 +1105,15 @@ mod tests {
         let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
+        assert_eq!(
+            inference_result.usage_considering_cached(),
+            DUMMY_INFER_USAGE.clone()
+        );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 // The DummyProvider returns DUMMY_INFER_RESPONSE_CONTENT by default
                 let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
                 assert_eq!(chat_result.content, expected_content);
-                assert_eq!(
-                    chat_result.usage,
-                    Usage {
-                        input_tokens: 10,
-                        output_tokens: 1,
-                    }
-                );
                 assert_eq!(chat_result.model_inference_results.len(), 1);
                 assert_eq!(
                     &*chat_result.model_inference_results[0].model_name,
@@ -1222,6 +1217,10 @@ mod tests {
         let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
+        assert_eq!(
+            inference_result.usage_considering_cached(),
+            DUMMY_INFER_USAGE.clone()
+        );
         match inference_result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(
@@ -1229,13 +1228,6 @@ mod tests {
                     Some(DUMMY_JSON_RESPONSE_RAW.to_string())
                 );
                 assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
-                assert_eq!(
-                    json_result.usage,
-                    Usage {
-                        input_tokens: 10,
-                        output_tokens: 1,
-                    }
-                );
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
                     &*json_result.model_inference_results[0].model_name,
@@ -1425,18 +1417,15 @@ mod tests {
         let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
+        assert_eq!(
+            inference_result.usage_considering_cached(),
+            DUMMY_INFER_USAGE.clone()
+        );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 // The DummyProvider returns DUMMY_INFER_RESPONSE_CONTENT by default
                 let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
                 assert_eq!(chat_result.content, expected_content);
-                assert_eq!(
-                    chat_result.usage,
-                    Usage {
-                        input_tokens: 10,
-                        output_tokens: 1,
-                    }
-                );
                 assert_eq!(chat_result.model_inference_results.len(), 1);
                 assert_eq!(
                     &*chat_result.model_inference_results[0].model_name,
