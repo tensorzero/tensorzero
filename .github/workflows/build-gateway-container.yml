@@ -10,7 +10,9 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
-        
+        with:
+          fetch-depth: 0
+          
       - name: Build `gateway` container
         run: |
           docker build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f gateway/Dockerfile . -t tensorzero/gateway:sha-${{ github.sha }}
