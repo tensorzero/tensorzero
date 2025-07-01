@@ -1107,7 +1107,10 @@ mod tests {
         let inference_result = result.unwrap();
         assert_eq!(
             inference_result.usage_considering_cached(),
-            DUMMY_INFER_USAGE.clone()
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
         );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
@@ -1219,7 +1222,10 @@ mod tests {
         let inference_result = result.unwrap();
         assert_eq!(
             inference_result.usage_considering_cached(),
-            DUMMY_INFER_USAGE.clone()
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
         );
         match inference_result {
             InferenceResult::Json(json_result) => {
@@ -1419,7 +1425,10 @@ mod tests {
         let inference_result = result.unwrap();
         assert_eq!(
             inference_result.usage_considering_cached(),
-            DUMMY_INFER_USAGE.clone()
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
         );
         match inference_result {
             InferenceResult::Chat(chat_result) => {

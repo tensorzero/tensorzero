@@ -18,7 +18,7 @@ use crate::inference::types::{
 };
 use crate::inference::types::{
     ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
-    JsonInferenceResultChunk, ResolvedInput, TextChunk, ThoughtChunk,
+    JsonInferenceResultChunk, ResolvedInput, TextChunk, ThoughtChunk, Usage,
 };
 use crate::model::ModelTable;
 use crate::tool::ToolCallChunk;
@@ -117,7 +117,7 @@ impl Variant for MixtureOfNConfig {
             )
             .await?
         {
-            InferenceOrStreamResult::NonStream(mut inference_result) => {
+            InferenceOrStreamResult::NonStream(inference_result) => {
                 Ok(inference_result)
             },
             InferenceOrStreamResult::Stream(..) => {
@@ -165,6 +165,10 @@ impl Variant for MixtureOfNConfig {
                             ),
                         })
                     })?;
+                // Copy the actual usage from the model inference result (without considering cached)
+                // We set the 'cached' flag on the 'ModelUsedInfo, which will adjust the usage as needed when producing
+                // the HTTP response stream.
+                let usage = model_inference_result.usage;
                 let model_used_info = ModelUsedInfo {
                     model_name: model_inference_result.model_name.clone(),
                     model_provider_name: model_inference_result.model_provider_name.clone(),
@@ -182,7 +186,7 @@ impl Variant for MixtureOfNConfig {
                     input_messages: model_inference_result.input_messages.clone(),
                     cached: model_inference_result.cached,
                 };
-                let stream = make_stream_from_non_stream(inference_result)?;
+                let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
                 Ok((stream, model_used_info))
             }
             InferenceOrStreamResult::Stream(stream, model_used_info) => {
@@ -275,6 +279,7 @@ enum InferenceOrStreamResult {
 
 fn make_stream_from_non_stream(
     inference_result: InferenceResult,
+    usage: Option<Usage>,
 ) -> Result<InferenceResultStream, Error> {
     let mut id = 0;
     let chunk = match inference_result {
@@ -316,11 +321,10 @@ fn make_stream_from_non_stream(
                 }
             }
         }).collect::<Result<Vec<_>, Error>>()?;
-
             Ok(InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: content_blocks,
                 created: chat.created,
-                usage: Some(chat.usage),
+                usage,
                 latency: Duration::from_secs(0),
                 raw_response: chat.original_response.unwrap_or_default(),
                 finish_reason: chat.finish_reason,
@@ -330,7 +334,7 @@ fn make_stream_from_non_stream(
             raw: json.output.raw,
             thought: None,
             created: json.created,
-            usage: Some(json.usage),
+            usage,
             latency: Duration::from_secs(0),
             raw_response: json.original_response.unwrap_or_default(),
             finish_reason: json.finish_reason,
@@ -1350,8 +1354,8 @@ mod tests {
         };
 
         let expected_usage = Usage {
-            input_tokens: 10,
-            output_tokens: 1,
+            input_tokens: 35,
+            output_tokens: 46,
         };
         let expected_content = InternalJsonInferenceOutput {
             raw: Some("{\"answer\":\"Hello\"}".to_string()),
@@ -1548,48 +1552,54 @@ mod tests {
 
     #[tokio::test]
     async fn test_make_stream_from_non_stream_chat() {
-        let stream = make_stream_from_non_stream(InferenceResult::Chat(ChatInferenceResult {
-            inference_id: Uuid::now_v7(),
-            content: vec![
-                ContentBlockChatOutput::Text(Text {
-                    text: "First text message".to_string(),
-                }),
-                ContentBlockChatOutput::ToolCall(ToolCallOutput {
-                    id: "123".into(),
-                    name: Some("first_tool".into()),
-                    raw_name: "first_tool".into(),
-                    arguments: Some(serde_json::json!({
-                        "my": "first_arg"
-                    })),
-                    raw_arguments: r#"{"my"  :  "first_arg"}"#.to_string(),
-                }),
-                ContentBlockChatOutput::Thought(Thought {
-                    text: "My first thought".into(),
-                    signature: Some("my_first_signature".into()),
-                }),
-                ContentBlockChatOutput::Thought(Thought {
-                    text: "My second thought".into(),
-                    signature: Some("my_second_signature".into()),
-                }),
-                ContentBlockChatOutput::ToolCall(ToolCallOutput {
-                    id: "456".into(),
-                    name: Some("second_tool".into()),
-                    raw_name: "second_tool".into(),
-                    arguments: Some(serde_json::json!({
-                        "my": "second_arg"
-                    })),
-                    raw_arguments: r#"{"my"  :  "second_arg"}"#.to_string(),
-                }),
-                ContentBlockChatOutput::Text(Text {
-                    text: "Second text message".to_string(),
-                }),
-            ],
-            created: 123456,
-            model_inference_results: vec![],
-            inference_params: InferenceParams::default(),
-            original_response: Some("My raw response".to_string()),
-            finish_reason: Some(FinishReason::Length),
-        }))
+        let stream = make_stream_from_non_stream(
+            InferenceResult::Chat(ChatInferenceResult {
+                inference_id: Uuid::now_v7(),
+                content: vec![
+                    ContentBlockChatOutput::Text(Text {
+                        text: "First text message".to_string(),
+                    }),
+                    ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                        id: "123".into(),
+                        name: Some("first_tool".into()),
+                        raw_name: "first_tool".into(),
+                        arguments: Some(serde_json::json!({
+                            "my": "first_arg"
+                        })),
+                        raw_arguments: r#"{"my"  :  "first_arg"}"#.to_string(),
+                    }),
+                    ContentBlockChatOutput::Thought(Thought {
+                        text: "My first thought".into(),
+                        signature: Some("my_first_signature".into()),
+                    }),
+                    ContentBlockChatOutput::Thought(Thought {
+                        text: "My second thought".into(),
+                        signature: Some("my_second_signature".into()),
+                    }),
+                    ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                        id: "456".into(),
+                        name: Some("second_tool".into()),
+                        raw_name: "second_tool".into(),
+                        arguments: Some(serde_json::json!({
+                            "my": "second_arg"
+                        })),
+                        raw_arguments: r#"{"my"  :  "second_arg"}"#.to_string(),
+                    }),
+                    ContentBlockChatOutput::Text(Text {
+                        text: "Second text message".to_string(),
+                    }),
+                ],
+                created: 123456,
+                model_inference_results: vec![],
+                inference_params: InferenceParams::default(),
+                original_response: Some("My raw response".to_string()),
+                finish_reason: Some(FinishReason::Length),
+            }),
+            Some(Usage {
+                input_tokens: 10,
+                output_tokens: 20,
+            }),
+        )
         .unwrap();
 
         let stream_chunks = stream.collect::<Vec<_>>().await;
