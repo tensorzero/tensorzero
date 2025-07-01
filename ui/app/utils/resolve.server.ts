@@ -215,8 +215,8 @@ function prepareDisplayText(
   // True if the function has a schema for the role (user or assistant)
   const hasSchemaForRole =
     role === "user"
-      ? functionConfig.user_schema !== undefined
-      : functionConfig.assistant_schema !== undefined;
+      ? functionConfig.user_schema !== null
+      : functionConfig.assistant_schema !== null;
   if (hasSchemaForRole) {
     return {
       type: "structured_text",
