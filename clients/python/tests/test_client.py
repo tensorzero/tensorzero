@@ -3080,6 +3080,7 @@ def test_sync_json_function_null_response(sync_client: TensorZeroGateway):
 
 
 def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
+    dataset_name = f"test_{uuid7()}"
     datapoints = [
         ChatDatapointInsert(
             function_name="basic_test",
@@ -3180,7 +3181,7 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
         ),
     ]
     datapoint_ids = sync_client.bulk_insert_datapoints(
-        dataset_name="test", datapoints=datapoints
+        dataset_name=dataset_name, datapoints=datapoints
     )
     assert len(datapoint_ids) == 4
     assert isinstance(datapoint_ids[0], UUID)
@@ -3190,17 +3191,25 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
 
     # List datapoints filtering by function name
     listed_datapoints = sync_client.list_datapoints(
-        dataset_name="test",
+        dataset_name=dataset_name,
         function_name="basic_test",
     )
     assert len(listed_datapoints) == 2
     assert all(isinstance(dp, ChatDatapoint) for dp in listed_datapoints)
     assert all(dp.function_name == "basic_test" for dp in listed_datapoints)
 
-    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[0])
-    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[1])
-    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[2])
-    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[3])
+    sync_client.delete_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
+    )
+    sync_client.delete_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[1]
+    )
+    sync_client.delete_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[2]
+    )
+    sync_client.delete_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[3]
+    )
 
 
 @pytest.mark.asyncio

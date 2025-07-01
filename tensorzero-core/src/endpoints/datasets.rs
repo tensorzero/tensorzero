@@ -1108,7 +1108,7 @@ impl Datapoint {
     }
 }
 
-/// These input datapoints are used as input typesby the `insert_datapoint` endpoint
+/// These input datapoints are used as input types by the `insert_datapoint` endpoint
 /// The distinction here is that they do not include the `dataset_name` field,
 /// which is instead specified as a path parameter.
 /// We also use Input rather than ResolvedInput because the input is not resolved

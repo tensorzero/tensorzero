@@ -490,6 +490,7 @@ class ChatDatapoint:
     tags: Optional[Dict[str, str]] = None
     # `auxiliary` is not serialized yet
     source_inference_id: Optional[UUID] = None
+    is_custom: bool = False
     staled_at: Optional[str] = None
     is_deleted: bool = False
 
@@ -506,6 +507,7 @@ class JsonDatapoint:
     tags: Optional[Dict[str, str]] = None
     # `auxiliary` is not serialized yet
     source_inference_id: Optional[UUID] = None
+    is_custom: bool = False
     staled_at: Optional[str] = None
     is_deleted: bool = False
 
