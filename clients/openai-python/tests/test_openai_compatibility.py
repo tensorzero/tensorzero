@@ -671,7 +671,10 @@ async def test_async_json_streaming(async_client):
         },
     ]
     stream = await async_client.chat.completions.create(
-        extra_body={"tensorzero::episode_id": str(uuid7()), "tensorzero::variant_name": "test-diff-schema"},
+        extra_body={
+            "tensorzero::episode_id": str(uuid7()),
+            "tensorzero::variant_name": "test-diff-schema",
+        },
         messages=messages,
         model="tensorzero::function_name::json_success",
         stream=True,
@@ -705,7 +708,8 @@ async def test_async_json_streaming(async_client):
         previous_inference_id = chunk.id
         previous_episode_id = chunk.episode_id
         assert (
-            chunk.model == "tensorzero::function_name::json_success::variant_name::test-diff-schema"
+            chunk.model
+            == "tensorzero::function_name::json_success::variant_name::test-diff-schema"
         )
         if i + 1 < len(chunks):
             assert chunk.choices[0].delta.content == expected_text[i]
