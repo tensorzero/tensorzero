@@ -14,12 +14,13 @@ import type { FunctionConfig } from "./function";
 import type { EvaluationConfig } from "./evaluations";
 import { RawEvaluationConfigSchema } from "./evaluations.server";
 import { logger } from "~/utils/logger";
+import { getEnv } from "../env.server";
 
 const DEFAULT_CONFIG_PATH = "config/tensorzero.toml";
-const ENV_CONFIG_PATH = process.env.TENSORZERO_UI_CONFIG_PATH;
 const CACHE_TTL_MS = 1000 * 60; // 1 minute
 
 export function getConfigPath() {
+  const ENV_CONFIG_PATH = getEnv().TENSORZERO_UI_CONFIG_PATH;
   if (ENV_CONFIG_PATH) {
     return ENV_CONFIG_PATH;
   }
@@ -144,7 +145,7 @@ export async function getConfig() {
   }
 
   // Cache is invalid or doesn't exist, reload it
-  const freshConfig = await loadConfig(ENV_CONFIG_PATH);
+  const freshConfig = await loadConfig(getConfigPath());
 
   configCache = { data: freshConfig, timestamp: now };
   return freshConfig;
