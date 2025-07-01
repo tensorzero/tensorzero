@@ -11,6 +11,7 @@ import {
   FileAudio,
 } from "lucide-react";
 import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
+import { CodeEditor, JsonEditor } from "../ui/code-editor";
 
 // Empty message component
 interface EmptyMessageProps {
@@ -161,9 +162,15 @@ export function ToolCallMessage({
         </div>
         <div className="flex flex-row items-start gap-1">
           <span className="text-fg-secondary w-16 min-w-16">Args:</span>
-          <pre className="max-w-full font-mono break-words whitespace-pre-wrap">
+          {/* <pre className="max-w-full font-mono break-words whitespace-pre-wrap">
             {toolArguments}
-          </pre>
+          </pre> */}
+          <CodeEditor
+            value={toolArguments}
+            allowedLanguages={["json"]}
+            className="max-w-full min-w-80"
+            readOnly
+          />
         </div>
       </div>
     </div>
@@ -202,9 +209,19 @@ export function ToolResultMessage({
         <div className="flex flex-row items-start gap-1">
           <span className="text-fg-secondary w-16 min-w-16">Result:</span>
           <div className="w-full overflow-x-auto">
-            <pre className="max-w-full font-mono break-words whitespace-pre-wrap">
+            {/* <pre className="max-w-full font-mono break-words whitespace-pre-wrap">
               {toolResult}
-            </pre>
+            </pre> */}
+
+            <JsonEditor
+              value={toolResult}
+              className="max-w-full min-w-80"
+              // value={toolResult}
+              // allowedLanguages={["json"]}
+              // className="max-w-full min-w-80"
+              // showLineNumbers={false}
+              // readOnly
+            />
           </div>
         </div>
       </div>

@@ -17,6 +17,9 @@ export default defineConfig(({ mode }) => ({
     shouldLoadReactRouter ? reactRouter() : react(),
     tsconfigPaths(),
   ],
+  optimizeDeps: {
+    needsInterop: ["@lobehub/icons"],
+  },
   // IMPORTANT:
   // If we don't set the target to es2022, we need `vite-plugin-top-level-await`
   // for "vite-plugin-wasm".

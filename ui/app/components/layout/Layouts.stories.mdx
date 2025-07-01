@@ -1,0 +1,201 @@
+import { Meta, Story, Canvas } from '@storybook/blocks';
+
+<Meta title="Layouts/Overview" />
+
+# Layout Components
+
+The TensorZero UI uses a consistent set of layout components to create well-structured, responsive pages. These components provide standardized spacing, alignment, and visual hierarchy across the application.
+
+## Component Hierarchy
+
+```
+PageLayout
+├── PageHeader
+└── SectionsGroup
+    └── SectionLayout
+        ├── SectionHeader
+        └── [Content]
+```
+
+## Components
+
+### PageLayout
+The top-level container for all pages. Provides consistent margins, padding, and responsive behavior.
+
+**Props:**
+- `className?: string` - Additional CSS classes
+- `children?: ReactNode` - Page content
+
+**Usage:**
+```tsx
+<PageLayout>
+  <PageHeader heading="My Page" />
+  {/* Page content */}
+</PageLayout>
+```
+
+### PageHeader
+The main header for a page, typically containing the page title, optional metadata, and actions.
+
+**Props:**
+- `label?: string` - Optional label above the heading
+- `heading?: string` - Main page title
+- `name?: string` - Displayed in monospace font (for IDs, etc.)
+- `count?: number` - Numeric count (automatically formatted)
+- `lateral?: string` - Additional text next to name/heading
+- `icon?: ReactNode` - Icon to display next to label
+- `iconBg?: string` - Background color class for icon
+- `children?: ReactNode` - Additional content (usually action buttons)
+
+**Usage:**
+```tsx
+<PageHeader
+  label="Observability"
+  heading="Inferences"
+  count={1234}
+  icon={<InferencesIcon />}
+  iconBg="bg-blue-100"
+>
+  <Button>Create New</Button>
+</PageHeader>
+```
+
+### SectionsGroup
+Container for multiple related sections. Provides consistent spacing between sections.
+
+**Props:**
+- `children: ReactNode` - Section content
+
+**Usage:**
+```tsx
+<SectionsGroup>
+  <SectionLayout>
+    {/* Section 1 content */}
+  </SectionLayout>
+  <SectionLayout>
+    {/* Section 2 content */}
+  </SectionLayout>
+</SectionsGroup>
+```
+
+### SectionLayout
+Container for a single section within a page. Provides vertical spacing between section elements.
+
+**Props:**
+- `children: ReactNode` - Section content
+
+**Usage:**
+```tsx
+<SectionLayout>
+  <SectionHeader heading="Section Title" />
+  <Card>Section content here</Card>
+  <div>Additional elements</div>
+</SectionLayout>
+```
+
+### SectionHeader
+Header for a section, typically containing a title and optional metadata.
+
+**Props:**
+- `heading: string` - Section title
+- `count?: number` - Optional count (automatically formatted)
+- `badge?: { name: string; tooltip: string }` - Optional badge with tooltip
+- `children?: ReactNode` - Additional content (usually action buttons)
+
+**Usage:**
+```tsx
+<SectionHeader
+  heading="Results"
+  count={156}
+  badge={{
+    name: "Live",
+    tooltip: "Updates in real-time"
+  }}
+>
+  <Button size="sm">Refresh</Button>
+</SectionHeader>
+```
+
+## Typical Page Structure
+
+Most pages in the TensorZero UI follow this structure:
+
+```tsx
+export default function MyPage() {
+  return (
+    <PageLayout>
+      <PageHeader
+        label="Category"
+        heading="Page Title"
+        count={totalItems}
+        icon={<MyIcon />}
+        iconBg="bg-blue-100"
+      >
+        <Button>Primary Action</Button>
+      </PageHeader>
+
+      <SectionsGroup>
+        <SectionLayout>
+          <SectionHeader heading="First Section" />
+          <Card>Section content</Card>
+        </SectionLayout>
+
+        <SectionLayout>
+          <SectionHeader heading="Second Section" count={items.length} />
+          <Table data={items} />
+          <Pagination />
+        </SectionLayout>
+      </SectionsGroup>
+    </PageLayout>
+  );
+}
+```
+
+## Design Principles
+
+### Consistent Spacing
+- **Page Level**: 48px gap between major page sections
+- **Section Level**: 16px gap between section elements
+- **Container**: 32px horizontal padding, responsive margins
+
+### Visual Hierarchy
+- **Page Header**: Largest text, primary color
+- **Section Headers**: Medium text, secondary styling
+- **Content**: Body text with appropriate contrast
+
+### Responsive Behavior
+- All layout components are mobile-responsive
+- Grid layouts adapt to smaller screens
+- Action buttons stack vertically on mobile
+
+### Accessibility
+- Semantic HTML structure with proper heading hierarchy
+- ARIA labels and descriptions where appropriate
+- Keyboard navigation support
+- High contrast color choices
+
+## Best Practices
+
+### Do's
+- ✅ Use consistent component hierarchy
+- ✅ Include counts for data sections when relevant
+- ✅ Provide tooltips for badges and complex features
+- ✅ Group related sections together
+- ✅ Use appropriate icons for different data types
+
+### Don'ts
+- ❌ Skip intermediate layout components
+- ❌ Mix layout patterns within the same page
+- ❌ Use custom spacing that breaks consistency
+- ❌ Forget to handle empty states
+- ❌ Overcomplicate the layout hierarchy
+
+## Examples
+
+Explore the individual component stories to see detailed examples and variations:
+
+- **[PageLayout](/story/layouts-pagelayout--basic)** - Page containers and responsive behavior
+- **[PageHeader](/story/layouts-pageheader--basic)** - Page titles, metadata, and actions
+- **[SectionHeader](/story/layouts-sectionheader--basic)** - Section titles, counts, and badges
+- **[SectionLayout](/story/layouts-sectionlayout--basic)** - Section containers and content organization
+- **[SectionsGroup](/story/layouts-sectionsgroup--basic)** - Multi-section page layouts

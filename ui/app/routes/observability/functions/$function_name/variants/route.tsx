@@ -6,7 +6,7 @@ import {
   useSearchParams,
 } from "react-router";
 import type { LoaderFunctionArgs, RouteHandle } from "react-router";
-import BasicInfo from "./VariantBasicInfo";
+import VariantBasicInfo from "./VariantBasicInfo";
 import VariantTemplate from "./VariantTemplate";
 import { useConfig } from "~/context/config";
 import PageButtons from "~/components/utils/PageButtons";
@@ -206,7 +206,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
 
       <SectionsGroup>
         <SectionLayout>
-          <BasicInfo
+          <VariantBasicInfo
             variantConfig={variant_config}
             function_name={function_name}
             function_type={function_type}

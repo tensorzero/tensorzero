@@ -31,6 +31,7 @@ import {
   SidebarGroupContent,
 } from "~/components/ui/sidebar";
 import TensorZeroStatusIndicator from "./TensorZeroStatusIndicator";
+import { FlaskConical } from "lucide-react";
 
 interface NavigationItem {
   title: string;
@@ -39,11 +40,20 @@ interface NavigationItem {
 }
 
 interface NavigationSection {
-  title: string;
+  title?: string;
   items: NavigationItem[];
 }
 
 const navigation: NavigationSection[] = [
+  {
+    items: [
+      {
+        title: "Playground",
+        icon: FlaskConical,
+        url: "/playground",
+      },
+    ],
+  },
   {
     title: "Observability",
     items: [
@@ -137,7 +147,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarGroupContent>
         </SidebarGroup>
         {navigation.map((section) => (
-          <SidebarGroup key={section.title}>
+          <SidebarGroup key={section.title ?? section.items[0].title}>
             {state === "expanded" && (
               <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
             )}

@@ -1,0 +1,1185 @@
+openapi: 3.0.3
+info:
+  title: TensorZero API
+  description: |
+    TensorZero is a comprehensive ML inference platform that provides both native and OpenAI-compatible APIs.
+    
+    ## Authentication
+    All endpoints require an API key provided via the `Authorization` header:
+    ```
+    Authorization: Bearer your-api-key
+    ```
+    
+    ## Streaming
+    Many endpoints support streaming responses using Server-Sent Events (SSE).
+    Set `stream: true` in the request body and use `Accept: text/event-stream` header.
+  version: 1.0.0
+  contact:
+    name: TensorZero
+    url: https://tensorzero.com
+servers:
+  - url: https://api.tensorzero.com
+    description: Production server
+  - url: http://localhost:3000
+    description: Local development server
+
+security:
+  - bearerAuth: []
+
+paths:
+  # Status Endpoint
+  /status:
+    get:
+      tags: [System]
+      summary: Health check
+      description: Check if the API is running and healthy
+      operationId: getStatus
+      security: []
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+
+  # Inference Endpoints
+  /v1/inference:
+    post:
+      tags: [Inference]
+      summary: Create inference
+      description: |
+        Execute inference using a configured function. Supports both streaming and non-streaming modes.
+        
+        For streaming, set `stream: true` and use `Accept: text/event-stream` header.
+      operationId: createInference
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InferenceRequest'
+      responses:
+        '200':
+          description: Inference completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InferenceResponse'
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-sent events for streaming inference
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # Batch Inference Endpoints
+  /v1/batch_inference:
+    post:
+      tags: [Batch Inference]
+      summary: Create batch inference
+      description: Submit a batch of inference requests for processing
+      operationId: createBatchInference
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchInferenceRequest'
+      responses:
+        '200':
+          description: Batch inference created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchInferenceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/batch_inference/{batch_id}:
+    get:
+      tags: [Batch Inference]
+      summary: Get batch inference status
+      description: Retrieve the status and results of a batch inference job
+      operationId: getBatchInference
+      parameters:
+        - name: batch_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The batch inference ID
+      responses:
+        '200':
+          description: Batch inference status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchInferenceStatusResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/batch_inference/{batch_id}/cancel:
+    post:
+      tags: [Batch Inference]
+      summary: Cancel batch inference
+      description: Cancel a running batch inference job
+      operationId: cancelBatchInference
+      parameters:
+        - name: batch_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The batch inference ID to cancel
+      responses:
+        '200':
+          description: Batch inference cancelled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cancelled:
+                    type: boolean
+                    example: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # OpenAI Compatible Endpoints
+  /v1/chat/completions:
+    post:
+      tags: [OpenAI Compatible]
+      summary: Create chat completion
+      description: |
+        OpenAI-compatible chat completions endpoint. Supports streaming and tool calling.
+        
+        For streaming, set `stream: true` and use `Accept: text/event-stream` header.
+      operationId: createChatCompletion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+      responses:
+        '200':
+          description: Chat completion created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCompletionResponse'
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-sent events for streaming chat completion
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/embeddings:
+    post:
+      tags: [OpenAI Compatible]
+      summary: Create embeddings
+      description: OpenAI-compatible embeddings endpoint
+      operationId: createEmbeddings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmbeddingRequest'
+      responses:
+        '200':
+          description: Embeddings created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmbeddingResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/models:
+    get:
+      tags: [OpenAI Compatible]
+      summary: List models
+      description: List available models (OpenAI-compatible)
+      operationId: listModels
+      responses:
+        '200':
+          description: Models listed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # Dataset Endpoints
+  /v1/datasets:
+    get:
+      tags: [Datasets]
+      summary: List datasets
+      description: Retrieve a list of all datasets
+      operationId: listDatasets
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+          description: Maximum number of datasets to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of datasets to skip
+      responses:
+        '200':
+          description: Datasets listed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags: [Datasets]
+      summary: Create dataset
+      description: Create a new dataset
+      operationId: createDataset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDatasetRequest'
+      responses:
+        '201':
+          description: Dataset created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dataset'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Dataset already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/datasets/{name}:
+    get:
+      tags: [Datasets]
+      summary: Get dataset
+      description: Retrieve details of a specific dataset
+      operationId: getDataset
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The dataset name
+      responses:
+        '200':
+          description: Dataset retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dataset'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Datasets]
+      summary: Delete dataset
+      description: Delete a dataset and all its datapoints
+      operationId: deleteDataset
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The dataset name
+      responses:
+        '204':
+          description: Dataset deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/datasets/{name}/datapoints:
+    post:
+      tags: [Datasets]
+      summary: Add datapoints
+      description: Add one or more datapoints to a dataset
+      operationId: addDatapoints
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The dataset name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddDatapointsRequest'
+      responses:
+        '201':
+          description: Datapoints added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddDatapointsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags: [Datasets]
+      summary: Query datapoints
+      description: Query datapoints from a dataset with filtering and pagination
+      operationId: queryDatapoints
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The dataset name
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+          description: Maximum number of datapoints to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of datapoints to skip
+        - name: filters
+          in: query
+          schema:
+            type: string
+          description: JSON-encoded filter conditions
+      responses:
+        '200':
+          description: Datapoints queried successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryDatapointsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/datasets/{name}/datapoints/{id}:
+    get:
+      tags: [Datasets]
+      summary: Get datapoint
+      description: Retrieve a specific datapoint by ID
+      operationId: getDatapoint
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The dataset name
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The datapoint ID
+      responses:
+        '200':
+          description: Datapoint retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Datapoint'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # Feedback Endpoint
+  /v1/feedback:
+    post:
+      tags: [Feedback]
+      summary: Submit feedback
+      description: Submit feedback for an inference request
+      operationId: submitFeedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+      responses:
+        '200':
+          description: Feedback submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # Dynamic Evaluation Endpoint
+  /v1/dynamic_evaluation_run:
+    post:
+      tags: [Evaluation]
+      summary: Run dynamic evaluation
+      description: Execute a dynamic evaluation run on a dataset
+      operationId: runDynamicEvaluation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DynamicEvaluationRequest'
+      responses:
+        '200':
+          description: Dynamic evaluation started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DynamicEvaluationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+
+  # Fallback Endpoint
+  /v1/fallback:
+    post:
+      tags: [System]
+      summary: Fallback request
+      description: Handle fallback requests when primary inference fails
+      operationId: handleFallback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FallbackRequest'
+      responses:
+        '200':
+          description: Fallback handled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FallbackResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Error message
+        details:
+          type: object
+          description: Additional error details
+
+    # Inference Schemas
+    InferenceRequest:
+      type: object
+      required: [function_name]
+      properties:
+        function_name:
+          type: string
+          description: Name of the configured function to execute
+        variant_name:
+          type: string
+          description: Optional variant name to use
+        input:
+          type: object
+          description: Input data for the function
+        stream:
+          type: boolean
+          default: false
+          description: Whether to stream the response
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+          description: Optional tags for tracking
+        tool_choice:
+          oneOf:
+            - type: string
+              enum: [none, auto]
+            - type: object
+              properties:
+                type:
+                  type: string
+                  enum: [function]
+                function:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+          description: Tool choice configuration
+
+    InferenceResponse:
+      type: object
+      required: [inference_id, output]
+      properties:
+        inference_id:
+          type: string
+          format: uuid
+          description: Unique ID for this inference
+        output:
+          type: object
+          description: The inference output
+        usage:
+          $ref: '#/components/schemas/Usage'
+        model_name:
+          type: string
+          description: Name of the model used
+        model_provider_name:
+          type: string
+          description: Name of the model provider
+        latency_ms:
+          type: integer
+          description: Total latency in milliseconds
+
+    Usage:
+      type: object
+      properties:
+        input_tokens:
+          type: integer
+          description: Number of input tokens
+        output_tokens:
+          type: integer
+          description: Number of output tokens
+        total_tokens:
+          type: integer
+          description: Total number of tokens
+
+    # Batch Inference Schemas
+    BatchInferenceRequest:
+      type: object
+      required: [function_name, requests]
+      properties:
+        function_name:
+          type: string
+          description: Name of the configured function to execute
+        variant_name:
+          type: string
+          description: Optional variant name to use
+        requests:
+          type: array
+          items:
+            type: object
+            required: [custom_id, input]
+            properties:
+              custom_id:
+                type: string
+                description: Custom ID for this request
+              input:
+                type: object
+                description: Input data for the function
+              tags:
+                type: object
+                additionalProperties:
+                  type: string
+                description: Optional tags for tracking
+
+    BatchInferenceResponse:
+      type: object
+      required: [batch_id]
+      properties:
+        batch_id:
+          type: string
+          format: uuid
+          description: Unique ID for this batch
+
+    BatchInferenceStatusResponse:
+      type: object
+      required: [batch_id, status]
+      properties:
+        batch_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              custom_id:
+                type: string
+              output:
+                type: object
+              error:
+                type: string
+
+    # OpenAI Compatible Schemas
+    ChatCompletionRequest:
+      type: object
+      required: [model, messages]
+      properties:
+        model:
+          type: string
+          description: Model name to use
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+        stream:
+          type: boolean
+          default: false
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+        max_tokens:
+          type: integer
+          minimum: 1
+        top_p:
+          type: number
+          minimum: 0
+          maximum: 1
+        frequency_penalty:
+          type: number
+          minimum: -2
+          maximum: 2
+        presence_penalty:
+          type: number
+          minimum: -2
+          maximum: 2
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatTool'
+        tool_choice:
+          oneOf:
+            - type: string
+              enum: [none, auto]
+            - type: object
+              properties:
+                type:
+                  type: string
+                  enum: [function]
+                function:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+        user:
+          type: string
+          description: User identifier
+
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant, tool]
+        content:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                oneOf:
+                  - type: object
+                    properties:
+                      type:
+                        type: string
+                        enum: [text]
+                      text:
+                        type: string
+                  - type: object
+                    properties:
+                      type:
+                        type: string
+                        enum: [image_url]
+                      image_url:
+                        type: object
+                        properties:
+                          url:
+                            type: string
+                          detail:
+                            type: string
+                            enum: [low, high, auto]
+        name:
+          type: string
+        tool_calls:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolCall'
+        tool_call_id:
+          type: string
+
+    ToolCall:
+      type: object
+      required: [id, type, function]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [function]
+        function:
+          type: object
+          required: [name, arguments]
+          properties:
+            name:
+              type: string
+            arguments:
+              type: string
+              description: JSON string of function arguments
+
+    ChatTool:
+      type: object
+      required: [type, function]
+      properties:
+        type:
+          type: string
+          enum: [function]
+        function:
+          type: object
+          required: [name, description]
+          properties:
+            name:
+              type: string
+            description:
+              type: string
+            parameters:
+              type: object
+              description: JSON Schema for function parameters
+
+    ChatCompletionResponse:
+      type: object
+      required: [id, object, created, model, choices]
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          enum: [chat.completion]
+        created:
+          type: integer
+          format: int64
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            required: [index, message, finish_reason]
+            properties:
+              index:
+                type: integer
+              message:
+                $ref: '#/components/schemas/ChatMessage'
+              finish_reason:
+                type: string
+                enum: [stop, length, tool_calls, content_filter]
+        usage:
+          $ref: '#/components/schemas/Usage'
+
+    EmbeddingRequest:
+      type: object
+      required: [model, input]
+      properties:
+        model:
+          type: string
+        input:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        encoding_format:
+          type: string
+          enum: [float, base64]
+          default: float
+        dimensions:
+          type: integer
+          minimum: 1
+        user:
+          type: string
+
+    EmbeddingResponse:
+      type: object
+      required: [object, data, model, usage]
+      properties:
+        object:
+          type: string
+          enum: [list]
+        data:
+          type: array
+          items:
+            type: object
+            required: [object, embedding, index]
+            properties:
+              object:
+                type: string
+                enum: [embedding]
+              embedding:
+                type: array
+                items:
+                  type: number
+              index:
+                type: integer
+        model:
+          type: string
+        usage:
+          $ref: '#/components/schemas/Usage'
+
+    ModelsResponse:
+      type: object
+      required: [object, data]
+      properties:
+        object:
+          type: string
+          enum: [list]
+        data:
+          type: array
+          items:
+            type: object
+            required: [id, object, created, owned_by]
+            properties:
+              id:
+                type: string
+              object:
+                type: string
+                enum: [model]
+              created:
+                type: integer
+                format: int64
+              owned_by:
+                type: string
+
+    # Dataset Schemas
+    Dataset:
+      type: object
+      required: [name, created_at]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        datapoint_count:
+          type: integer
+
+    CreateDatasetRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        description:
+          type: string
+
+    DatasetsResponse:
+      type: object
+      required: [datasets, total_count]
+      properties:
+        datasets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Dataset'
+        total_count:
+          type: integer
+
+    Datapoint:
+      type: object
+      required: [id, input, target]
+      properties:
+        id:
+          type: string
+          format: uuid
+        input:
+          type: object
+          description: Input data for the datapoint
+        target:
+          type: object
+          description: Expected output for the datapoint
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+
+    AddDatapointsRequest:
+      type: object
+      required: [datapoints]
+      properties:
+        datapoints:
+          type: array
+          items:
+            type: object
+            required: [input, target]
+            properties:
+              input:
+                type: object
+              target:
+                type: object
+              tags:
+                type: object
+                additionalProperties:
+                  type: string
+
+    AddDatapointsResponse:
+      type: object
+      required: [datapoint_ids]
+      properties:
+        datapoint_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    QueryDatapointsResponse:
+      type: object
+      required: [datapoints, total_count]
+      properties:
+        datapoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/Datapoint'
+        total_count:
+          type: integer
+
+    # Feedback Schemas
+    FeedbackRequest:
+      type: object
+      required: [inference_id, rating]
+      properties:
+        inference_id:
+          type: string
+          format: uuid
+        rating:
+          oneOf:
+            - type: boolean
+            - type: number
+            - type: string
+        comment:
+          type: string
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+
+    FeedbackResponse:
+      type: object
+      required: [feedback_id]
+      properties:
+        feedback_id:
+          type: string
+          format: uuid
+
+    # Dynamic Evaluation Schemas
+    DynamicEvaluationRequest:
+      type: object
+      required: [dataset_name, evaluators]
+      properties:
+        dataset_name:
+          type: string
+        evaluators:
+          type: array
+          items:
+            type: string
+        sample_size:
+          type: integer
+          minimum: 1
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+
+    DynamicEvaluationResponse:
+      type: object
+      required: [evaluation_id]
+      properties:
+        evaluation_id:
+          type: string
+          format: uuid
+
+
+    # Fallback Schemas
+    FallbackRequest:
+      type: object
+      required: [original_request, error]
+      properties:
+        original_request:
+          type: object
+          description: The original request that failed
+        error:
+          type: string
+          description: Error message from the original request
+
+    FallbackResponse:
+      type: object
+      required: [handled]
+      properties:
+        handled:
+          type: boolean
+        response:
+          type: object
+          description: Response from fallback handler
+
+tags:
+  - name: System
+    description: System health and utility endpoints
+  - name: Inference
+    description: Core inference endpoints
+  - name: Batch Inference
+    description: Batch processing endpoints
+  - name: OpenAI Compatible
+    description: OpenAI-compatible API endpoints
+  - name: Datasets
+    description: Dataset management endpoints
+  - name: Feedback
+    description: Feedback collection endpoints
+  - name: Evaluation
+    description: Evaluation and testing endpoints

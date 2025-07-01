@@ -67,9 +67,10 @@ export default function App({ loaderData: config }: Route.ComponentProps) {
         <SidebarProvider>
           <div className="fixed inset-0 flex">
             <AppSidebar />
-            <ContentLayout>
-              <Outlet />
-            </ContentLayout>
+            {/* TODO ContentLayout should be optional? */}
+            {/* <ContentLayout> */}
+            <Outlet />
+            {/* </ContentLayout> */}
           </div>
         </SidebarProvider>
       </ConfigProvider>

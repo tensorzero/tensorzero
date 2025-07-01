@@ -8,7 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { Skeleton } from "~/components/ui/skeleton";
 import { FunctionBadges } from "~/components/function/FunctionBadges";
 
 type FunctionSelectorProps<T extends Record<string, unknown>> = {
@@ -22,7 +21,6 @@ type FunctionSelectorProps<T extends Record<string, unknown>> = {
 export function FunctionSelector<T extends Record<string, unknown>>({
   control,
   name,
-  inferenceCount,
   config,
   hide_default_function = false,
 }: FunctionSelectorProps<T>) {
@@ -32,8 +30,8 @@ export function FunctionSelector<T extends Record<string, unknown>>({
       name={name}
       render={({ field }) => (
         <FormItem>
-          <FormLabel>Function</FormLabel>
-          <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
+          <FormLabel hidden>Function</FormLabel>
+          <div className="grid gap-x-8 gap-y-2">
             <Select
               onValueChange={(value: string) => {
                 field.onChange(value);
@@ -61,18 +59,6 @@ export function FunctionSelector<T extends Record<string, unknown>>({
                 })}
               </SelectContent>
             </Select>
-            <div className="text-muted-foreground text-sm">
-              Inferences:{" "}
-              {field.value ? (
-                <span className="font-medium">
-                  {inferenceCount ?? (
-                    <Skeleton className="inline-block h-4 w-16 align-middle" />
-                  )}
-                </span>
-              ) : (
-                <Skeleton className="inline-block h-4 w-16 align-middle" />
-              )}
-            </div>
           </div>
         </FormItem>
       )}

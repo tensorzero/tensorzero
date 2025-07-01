@@ -20,7 +20,7 @@ interface BasicInfoProps {
   function_type: FunctionType;
 }
 
-export default function BasicInfo({
+export default function VariantBasicInfo({
   variantConfig,
   function_name,
   function_type,
