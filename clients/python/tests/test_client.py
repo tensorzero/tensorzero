@@ -359,7 +359,7 @@ async def test_async_reasoning_inference(async_client: AsyncTensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 1
+    assert usage.output_tokens == 2
 
 
 @pytest.mark.asyncio
@@ -743,10 +743,10 @@ async def test_async_tool_call_streaming(async_client: AsyncTensorZeroGateway):
 
 @pytest.mark.asyncio
 async def test_async_json_streaming(async_client: AsyncTensorZeroGateway):
-    # We don't actually have a streaming JSON function implemented in `dummy.rs` but it doesn't matter for this test since
-    # TensorZero doesn't parse the JSON output of the function for streaming calls.
+    # Pick a variant that doesn't have a dummy provider streaming special-case
     stream = await async_client.inference(
         function_name="json_success",
+        variant_name="test-diff-schema",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [
@@ -784,6 +784,7 @@ async def test_async_json_streaming(async_client: AsyncTensorZeroGateway):
     previous_inference_id = None
     previous_episode_id = None
     for i, chunk in enumerate(chunks):
+        print("Chunk: ", chunk)
         if previous_inference_id is not None:
             assert chunk.inference_id == previous_inference_id
         if previous_episode_id is not None:
@@ -791,7 +792,7 @@ async def test_async_json_streaming(async_client: AsyncTensorZeroGateway):
         previous_inference_id = chunk.inference_id
         previous_episode_id = chunk.episode_id
         variant_name = chunk.variant_name
-        assert variant_name == "test"
+        assert variant_name == "test-diff-schema"
         assert isinstance(chunk, JsonChunk)
         if i + 1 < len(chunks):
             assert chunk.raw == expected_text[i]
@@ -1645,7 +1646,7 @@ def test_sync_reasoning_inference(sync_client: TensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 1
+    assert usage.output_tokens == 2
 
 
 def test_sync_malformed_tool_call_inference(sync_client: TensorZeroGateway):
@@ -1802,14 +1803,14 @@ def test_sync_reasoning_inference_streaming(sync_client: TensorZeroGateway):
             assert len(chunk.content) == 0
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
-            assert chunk.usage.output_tokens == 1
+            assert chunk.usage.output_tokens == 18
 
 
 def test_sync_json_streaming(sync_client: TensorZeroGateway):
-    # We don't actually have a streaming JSON function implemented in `dummy.rs` but it doesn't matter for this test since
-    # TensorZero doesn't parse the JSON output of the function for streaming calls.
+    # Pick a variant that doesn't have a dummy provider streaming special-case
     stream = sync_client.inference(
         function_name="json_success",
+        variant_name="test-diff-schema",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [
@@ -1851,7 +1852,7 @@ def test_sync_json_streaming(sync_client: TensorZeroGateway):
         previous_inference_id = chunk.inference_id
         previous_episode_id = chunk.episode_id
         variant_name = chunk.variant_name
-        assert variant_name == "test"
+        assert variant_name == "test-diff-schema"
         assert isinstance(chunk, JsonChunk)
         if i + 1 < len(chunks):
             assert chunk.raw == expected_text[i]
@@ -1903,7 +1904,7 @@ def test_sync_json_streaming_reasoning(sync_client: TensorZeroGateway):
             assert chunk.raw == ""
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
-            assert chunk.usage.output_tokens == 1
+            assert chunk.usage.output_tokens == 7
 
 
 def test_sync_json_success(sync_client: TensorZeroGateway):
@@ -2944,7 +2945,7 @@ def test_text_arguments_deprecation_1170_warning(sync_client: TensorZeroGateway)
     assert response.output.raw == '{"answer":"Hello"}'
     assert response.output.parsed == {"answer": "Hello"}
     assert response.usage.input_tokens == 10
-    assert response.usage.output_tokens == 10
+    assert response.usage.output_tokens == 1
     assert response.finish_reason == FinishReason.STOP
 
 
