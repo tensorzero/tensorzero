@@ -1831,9 +1831,7 @@ impl Add for Usage {
 }
 impl std::iter::Sum<Usage> for Usage {
     fn sum<I: Iterator<Item = Usage>>(iter: I) -> Self {
-        iter.fold(Usage::default(), |acc, u| {
-            acc + u
-        })
+        iter.fold(Usage::default(), |acc, u| acc + u)
     }
 }
 

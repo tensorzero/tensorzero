@@ -967,7 +967,7 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
             "episode_id": episode_id.to_string(),
             "variant_name":"mixture_of_n_variant_bad_fuser",
             "content":[{"type": "text", "id": "0", "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."}],
-            // Usage data only includes information from the chosen candidate  
+            // Usage data only includes information from the chosen candidate
             // The remaining usage information is added in the second chunk
             "usage":{"input_tokens":10,"output_tokens":1},
             "finish_reason": "stop"
