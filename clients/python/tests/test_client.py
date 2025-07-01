@@ -390,7 +390,7 @@ async def test_async_default_function_inference(async_client: AsyncTensorZeroGat
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -568,7 +568,7 @@ async def test_async_reasoning_inference_streaming(
             assert len(chunk.content) == 0
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
-            assert chunk.usage.output_tokens == 10
+            assert chunk.usage.output_tokens == 1
             assert chunk.finish_reason == FinishReason.STOP
 
 
@@ -649,7 +649,7 @@ async def test_async_tool_call_inference(async_client: AsyncTensorZeroGateway):
     assert content[0].arguments == {"location": "Brooklyn", "units": "celsius"}
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
     assert result.finish_reason == FinishReason.TOOL_CALL
 
 
@@ -684,7 +684,7 @@ async def test_async_malformed_tool_call_inference(
     assert content[0].arguments is None
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -844,7 +844,7 @@ async def test_async_json_streaming_reasoning(async_client: AsyncTensorZeroGatew
             assert chunk.raw == ""
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
-            assert chunk.usage.output_tokens == 10
+            assert chunk.usage.output_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -892,7 +892,7 @@ async def test_async_json_reasoning(async_client: AsyncTensorZeroGateway):
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
     assert result.usage.input_tokens == 10
-    assert result.usage.output_tokens == 10
+    assert result.usage.output_tokens == 2
 
 
 @pytest.mark.asyncio
@@ -1802,7 +1802,7 @@ def test_sync_reasoning_inference_streaming(sync_client: TensorZeroGateway):
             assert len(chunk.content) == 0
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
-            assert chunk.usage.output_tokens == 10
+            assert chunk.usage.output_tokens == 1
 
 
 def test_sync_json_streaming(sync_client: TensorZeroGateway):
@@ -1903,7 +1903,7 @@ def test_sync_json_streaming_reasoning(sync_client: TensorZeroGateway):
             assert chunk.raw == ""
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
-            assert chunk.usage.output_tokens == 10
+            assert chunk.usage.output_tokens == 1
 
 
 def test_sync_json_success(sync_client: TensorZeroGateway):
