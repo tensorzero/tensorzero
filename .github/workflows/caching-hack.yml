@@ -31,4 +31,4 @@ jobs:
           cache-provider: "buildjet"
           # We use this cache key from other jobs that need to build the gateway
           shared-key: "build-gateway-cache"
-      - run: cargo build-e2e
+      - run: cargo build --features e2e_tests --tests

@@ -26,6 +26,7 @@ import {
 } from "./common";
 import { getConfig } from "../config/index.server";
 import { resolveInput } from "../resolve.server";
+import { logger } from "~/utils/logger";
 
 /**
  * Constructs a SELECT query for either the Chat or JSON dataset table.
@@ -634,7 +635,7 @@ export async function staleDatapoint(
       },
     });
   } catch (error) {
-    console.error(`Error staling datapoint ${datapoint_id}:`, error);
+    logger.error(`Error staling datapoint ${datapoint_id}:`, error);
     throw error;
   }
 }

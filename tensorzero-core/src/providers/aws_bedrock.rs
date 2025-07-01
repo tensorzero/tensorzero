@@ -127,8 +127,11 @@ impl InferenceProvider for AWSBedrockProvider {
             .inference_config(inference_config.build());
 
         if let Some(system) = &request.system {
-            let system_block = SystemContentBlock::Text(system.clone());
-            bedrock_request = bedrock_request.system(system_block);
+            // AWS Bedrock does not support system message "" so we remove it
+            if !system.is_empty() {
+                let system_block = SystemContentBlock::Text(system.clone());
+                bedrock_request = bedrock_request.system(system_block);
+            }
         }
 
         if let Some(tool_config) = &request.tool_config {
@@ -263,8 +266,11 @@ impl InferenceProvider for AWSBedrockProvider {
             .inference_config(inference_config.build());
 
         if let Some(system) = &request.system {
-            let system_block = SystemContentBlock::Text(system.clone());
-            bedrock_request = bedrock_request.system(system_block);
+            // AWS Bedrock does not support system message "" so we remove it
+            if !system.is_empty() {
+                let system_block = SystemContentBlock::Text(system.clone());
+                bedrock_request = bedrock_request.system(system_block);
+            }
         }
 
         if let Some(tool_config) = &request.tool_config {
