@@ -874,7 +874,6 @@ pub async fn write_completed_batch_inference<'a>(
             .prepare_response(
                 inference_id,
                 output,
-                usage,
                 vec![model_inference_response],
                 &inference_config,
                 inference_params.into_owned(),
