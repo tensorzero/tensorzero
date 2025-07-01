@@ -227,7 +227,7 @@ async def test_async_basic_inference(async_client: AsyncTensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
     assert result.finish_reason == FinishReason.STOP
     time.sleep(1)
 
@@ -288,7 +288,7 @@ async def test_async_client_build_http_sync():
         )
         usage = result.usage
         assert usage.input_tokens == 10
-        assert usage.output_tokens == 10
+        assert usage.output_tokens == 1
         assert result.finish_reason == FinishReason.STOP
 
 
@@ -328,7 +328,7 @@ async def test_async_client_build_embedded_sync():
         )
         usage = result.usage
         assert usage.input_tokens == 10
-        assert usage.output_tokens == 10
+        assert usage.output_tokens == 1
         assert result.finish_reason == FinishReason.STOP
 
 
@@ -359,7 +359,7 @@ async def test_async_reasoning_inference(async_client: AsyncTensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -424,7 +424,7 @@ async def test_async_default_function_inference_plain_dict(
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -568,7 +568,7 @@ async def test_async_reasoning_inference_streaming(
             assert len(chunk.content) == 0
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
-            assert chunk.usage.output_tokens == 1
+            assert chunk.usage.output_tokens == 18
             assert chunk.finish_reason == FinishReason.STOP
 
 
@@ -844,7 +844,7 @@ async def test_async_json_streaming_reasoning(async_client: AsyncTensorZeroGatew
             assert chunk.raw == ""
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
-            assert chunk.usage.output_tokens == 1
+            assert chunk.usage.output_tokens == 7
 
 
 @pytest.mark.asyncio
@@ -868,7 +868,7 @@ async def test_async_json_success(async_client: AsyncTensorZeroGateway):
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
     assert result.usage.input_tokens == 10
-    assert result.usage.output_tokens == 10
+    assert result.usage.output_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -913,7 +913,7 @@ async def test_async_json_failure(async_client: AsyncTensorZeroGateway):
     )
     assert result.output.parsed is None
     assert result.usage.input_tokens == 10
-    assert result.usage.output_tokens == 10
+    assert result.usage.output_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -1000,7 +1000,7 @@ async def test_async_dynamic_credentials(async_client: AsyncTensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 def test_sync_error():
@@ -1059,7 +1059,7 @@ def test_sync_inference_caching(sync_client: TensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
     # Test caching
     result = sync_client.inference(
@@ -1190,7 +1190,7 @@ def test_default_function_inference(sync_client: TensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 def test_image_inference_base64(sync_client: TensorZeroGateway):
@@ -1616,7 +1616,7 @@ def test_sync_tool_call_inference(sync_client: TensorZeroGateway):
     assert content[0].arguments == {"location": "Brooklyn", "units": "celsius"}
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 def test_sync_reasoning_inference(sync_client: TensorZeroGateway):
@@ -1645,7 +1645,7 @@ def test_sync_reasoning_inference(sync_client: TensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 def test_sync_malformed_tool_call_inference(sync_client: TensorZeroGateway):
@@ -1676,7 +1676,7 @@ def test_sync_malformed_tool_call_inference(sync_client: TensorZeroGateway):
     assert content[0].arguments is None
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 def test_sync_tool_call_streaming(sync_client: TensorZeroGateway):
@@ -1926,7 +1926,7 @@ def test_sync_json_success(sync_client: TensorZeroGateway):
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
     assert result.usage.input_tokens == 10
-    assert result.usage.output_tokens == 10
+    assert result.usage.output_tokens == 1
 
 
 def test_sync_json_reasoning(sync_client: TensorZeroGateway):
@@ -1949,7 +1949,7 @@ def test_sync_json_reasoning(sync_client: TensorZeroGateway):
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
     assert result.usage.input_tokens == 10
-    assert result.usage.output_tokens == 10
+    assert result.usage.output_tokens == 2
 
 
 def test_sync_json_failure(sync_client: TensorZeroGateway):
@@ -1969,7 +1969,7 @@ def test_sync_json_failure(sync_client: TensorZeroGateway):
     )
     assert result.output.parsed is None
     assert result.usage.input_tokens == 10
-    assert result.usage.output_tokens == 10
+    assert result.usage.output_tokens == 1
 
 
 def test_sync_feedback(sync_client: TensorZeroGateway):
@@ -2066,7 +2066,7 @@ def test_sync_basic_inference_with_content_block(sync_client: TensorZeroGateway)
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 def test_sync_basic_inference_with_content_block_plain_dict(
@@ -2110,7 +2110,7 @@ def test_sync_basic_inference_with_content_block_plain_dict(
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 def test_prepare_inference_request(sync_client: TensorZeroGateway):
@@ -2330,7 +2330,7 @@ def test_sync_dynamic_credentials(sync_client: TensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 def test_sync_err_in_stream(sync_client: TensorZeroGateway):
