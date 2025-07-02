@@ -450,9 +450,27 @@ impl Optimizer for FireworksSFTConfig {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
+
+        // Fireworks job names look like 'accounts/{account_id}/supervisedFineTuningJobs/{job_id}'
+        // Extract the job name to construct a dashboard URL
+        let job_id = job.name.split("/").last().ok_or_else(|| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!("No job ID in job path: {}", job.name),
+                raw_request: None,
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+
         Ok(FireworksSFTJobHandle {
             api_base: self.api_base.clone(),
             account_id: self.account_id.clone(),
+            job_url: format!(
+                "https://app.fireworks.ai/dashboard/fine-tuning/supervised/{}",
+                job_id
+            )
+            .parse()
+            .unwrap(),
             job_path: job.name,
             credential_location: self.credential_location.clone(),
         })
@@ -462,10 +480,10 @@ impl Optimizer for FireworksSFTConfig {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
-#[serde(rename_all = "camelCase")]
 pub struct FireworksSFTJobHandle {
     pub api_base: Url,
     pub account_id: String,
+    pub job_url: Url,
     pub job_path: String,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocation>,

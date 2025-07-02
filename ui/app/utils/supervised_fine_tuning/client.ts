@@ -50,6 +50,7 @@ function launch_sft_job_ts(data: SFTFormValues): Promise<SFTJob> {
 
 class NativeSFTJob extends SFTJob {
   private jobStatus: OptimizerStatus | "created";
+  private provider: "openai" | "fireworks" | "mistral";
   constructor(
     public jobHandle: OptimizerJobHandle,
     public formData: SFTFormValues,
@@ -58,6 +59,7 @@ class NativeSFTJob extends SFTJob {
     this.jobHandle = jobHandle;
     this.formData = formData;
     this.jobStatus = "created";
+    this.provider = formData.model.provider;
   }
 
   static from_job_handle_with_form_data(
@@ -77,8 +79,8 @@ class NativeSFTJob extends SFTJob {
       case "pending":
         return {
           status: "running",
-          modelProvider: "openai",
-          jobUrl: (this.jobHandle as OpenAISFTJobHandle).job_url,
+          modelProvider: this.provider,
+          jobUrl: this.jobHandle.job_url,
           formData: this.formData,
           rawData: {
             status: "ok",
@@ -88,9 +90,9 @@ class NativeSFTJob extends SFTJob {
       case "failed":
         return {
           status: "error",
-          modelProvider: "openai",
+          modelProvider: this.provider,
           formData: this.formData,
-          jobUrl: (this.jobHandle as OpenAISFTJobHandle).job_url,
+          jobUrl: this.jobHandle.job_url,
           rawData: {
             status: "error",
             message: "Job failed",
@@ -108,9 +110,9 @@ class NativeSFTJob extends SFTJob {
         }
         return {
           status: "completed",
-          modelProvider: "openai",
+          modelProvider: this.provider,
           formData: this.formData,
-          jobUrl: (this.jobHandle as OpenAISFTJobHandle).job_url,
+          jobUrl: this.jobHandle.job_url,
           rawData: {
             status: "ok",
             info: this.jobStatus,
