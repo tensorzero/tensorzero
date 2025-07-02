@@ -1,11 +1,11 @@
-///! Fireworks SFT implementation. The overall flow is:
-/// 1. `FireworksSFTConfig.launch` creates and uploads training/validation datasets to Fireworks
-/// 2. We kick off a SFT job in Fireworks, and produce a `FireworksSFTJobHandle` with the job ID
-/// 3. `FireworksSFTJobHandle.poll` performs the following checks (without maintaining any additional state):
-///    - If the job is still running, we return a `Pending` status
-///    - If the job has failed, we return a `Failed` status
-///    - If the job has completed, we look for an existing 'default' deployment for the model.
-///      If it exists, we return its status - otherwise, we start a new serverless deployment.
+//! Fireworks SFT implementation. The overall flow is:
+//! 1. `FireworksSFTConfig.launch` creates and uploads training/validation datasets to Fireworks
+//! 2. We kick off a SFT job in Fireworks, and produce a `FireworksSFTJobHandle` with the job ID
+//! 3. `FireworksSFTJobHandle.poll` performs the following checks (without maintaining any additional state):
+//!    - If the job is still running, we return a `Pending` status
+//!    - If the job has failed, we return a `Failed` status
+//!    - If the job has completed, we look for an existing 'default' deployment for the model.
+//!      If it exists, we return its status - otherwise, we start a new serverless deployment.
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
