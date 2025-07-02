@@ -412,6 +412,7 @@ pub fn generate_list_inferences_sql(
         }
         InferenceOutputSource::Demonstration => {
             select_clauses.insert("demo_f.value AS output".to_string());
+            select_clauses.insert("i.output as dispreferred_output".to_string());
 
             // NOTE: we may want to pre-filter this via subqueries or CTEs prior to the join for performance reasons
             joins.insert_unchecked(
@@ -766,6 +767,7 @@ SELECT
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
+    i.output as dispreferred_output,
     i.output_schema as output_schema,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
@@ -1459,6 +1461,7 @@ SELECT
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
+    i.output as dispreferred_output,
     i.output_schema as output_schema,
     i.timestamp as timestamp,
     i.variant_name as variant_name,

@@ -10,7 +10,10 @@ use crate::{
     config_parser::Config,
     error::{Error, ErrorDetails},
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ModelInput, ResolvedInput},
-    serde_util::{deserialize_defaulted_string_or_parsed_json, deserialize_string_or_parsed_json},
+    serde_util::{
+        deserialize_defaulted_string_or_parsed_json, deserialize_optional_string_or_parsed_json,
+        deserialize_string_or_parsed_json,
+    },
     tool::ToolCallConfigDatabaseInsert,
     variant::{chat_completion::prepare_model_input, VariantConfig},
 };
@@ -78,6 +81,7 @@ impl StoredInference {
         variant_name: String,
         input: Bound<'py, PyAny>,
         output: Bound<'py, PyAny>,
+        dispreferred_output: Option<Bound<'py, PyAny>>,
         episode_id: Bound<'py, PyAny>,
         inference_id: Bound<'py, PyAny>,
         tool_params: Option<Bound<'py, PyAny>>,
@@ -89,6 +93,9 @@ impl StoredInference {
         match r#type.as_str() {
             "chat" => {
                 let output: Vec<ContentBlockChatOutput> = deserialize_from_pyobj(py, &output)?;
+                let dispreferred_output: Option<Vec<ContentBlockChatOutput>> = dispreferred_output
+                    .map(|x| deserialize_from_pyobj(py, &x))
+                    .transpose()?;
                 let Some(tool_params) = tool_params.map(|x| deserialize_from_pyobj(py, &x)) else {
                     return Err(PyValueError::new_err(
                         "tool_params is required for chat inferences",
@@ -100,6 +107,7 @@ impl StoredInference {
                     variant_name,
                     input,
                     output,
+                    dispreferred_output,
                     episode_id,
                     inference_id,
                     tool_params,
@@ -107,6 +115,9 @@ impl StoredInference {
             }
             "json" => {
                 let output: JsonInferenceOutput = deserialize_from_pyobj(py, &output)?;
+                let dispreferred_output: Option<JsonInferenceOutput> = dispreferred_output
+                    .map(|x| deserialize_from_pyobj(py, &x))
+                    .transpose()?;
                 let Some(output_schema) = output_schema.map(|x| deserialize_from_pyobj(py, &x))
                 else {
                     return Err(PyValueError::new_err(
@@ -119,6 +130,7 @@ impl StoredInference {
                     variant_name,
                     input,
                     output,
+                    dispreferred_output,
                     episode_id,
                     inference_id,
                     output_schema,
@@ -227,6 +239,8 @@ pub struct StoredChatInference {
     pub input: ResolvedInput,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output: Vec<ContentBlockChatOutput>,
+    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    pub dispreferred_output: Option<Vec<ContentBlockChatOutput>>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
     #[serde(deserialize_with = "deserialize_defaulted_string_or_parsed_json")]
@@ -257,6 +271,8 @@ pub struct StoredJsonInference {
     pub input: ResolvedInput,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output: JsonInferenceOutput,
+    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    pub dispreferred_output: Option<JsonInferenceOutput>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
