@@ -770,7 +770,9 @@ impl JobHandle for FireworksSFTJobHandle {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-            let model_id = model_path.split("/").last().ok_or_else(|| {
+            // TODO - start using this as the TensorZero model name
+            // once the UI has been refactored to allow separate model names and provider model names
+            let _model_id = model_path.split("/").last().ok_or_else(|| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("No model ID in model path: {model_path}"),
                     raw_request: None,
@@ -805,8 +807,8 @@ impl JobHandle for FireworksSFTJobHandle {
                     };
                     Ok(OptimizerStatus::Completed {
                         output: OptimizerOutput::Model(UninitializedModelConfig {
-                            routing: vec![model_id.into()],
-                            providers: HashMap::from([(model_id.into(), model_provider)]),
+                            routing: vec![model_path.clone().into()],
+                            providers: HashMap::from([(model_path.into(), model_provider)]),
                             timeouts: TimeoutsConfig::default(),
                         }),
                     })
