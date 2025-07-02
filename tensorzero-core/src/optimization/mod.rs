@@ -5,12 +5,16 @@ use serde_json::Value;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::model::UninitializedModelConfig;
+use crate::optimization::fireworks_sft::{
+    FireworksSFTConfig, FireworksSFTJobHandle, UninitializedFireworksSFTConfig,
+};
 use crate::optimization::openai_sft::{
     OpenAISFTConfig, OpenAISFTJobHandle, UninitializedOpenAISFTConfig,
 };
 use crate::stored_inference::RenderedSample;
 use crate::variant::VariantConfig;
 
+pub mod fireworks_sft;
 pub mod openai_sft;
 
 #[derive(Clone, Debug, Serialize)]
@@ -33,6 +37,7 @@ impl OptimizerInfo {
 #[cfg_attr(test, ts(export))]
 enum OptimizerConfig {
     OpenAISFT(OpenAISFTConfig),
+    FireworksSFT(FireworksSFTConfig),
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -42,6 +47,8 @@ enum OptimizerConfig {
 pub enum OptimizerJobHandle {
     #[serde(rename = "openai_sft")]
     OpenAISFT(OpenAISFTJobHandle),
+    #[serde(rename = "fireworks_sft")]
+    FireworksSFT(FireworksSFTJobHandle),
 }
 
 impl JobHandle for OptimizerJobHandle {
@@ -52,6 +59,9 @@ impl JobHandle for OptimizerJobHandle {
     ) -> Result<OptimizerStatus, Error> {
         match self {
             OptimizerJobHandle::OpenAISFT(job_handle) => job_handle.poll(client, credentials).await,
+            OptimizerJobHandle::FireworksSFT(job_handle) => {
+                job_handle.poll(client, credentials).await
+            }
         }
     }
 }
@@ -80,7 +90,10 @@ pub enum OptimizerStatus {
     Completed {
         output: OptimizerOutput,
     },
-    Failed,
+    Failed {
+        message: String,
+        error: Option<Value>,
+    },
 }
 
 pub trait JobHandle {
@@ -117,6 +130,10 @@ impl Optimizer for OptimizerInfo {
                 .launch(client, train_examples, val_examples, credentials)
                 .await
                 .map(OptimizerJobHandle::OpenAISFT),
+            OptimizerConfig::FireworksSFT(config) => config
+                .launch(client, train_examples, val_examples, credentials)
+                .await
+                .map(OptimizerJobHandle::FireworksSFT),
         }
     }
 }
@@ -144,6 +161,8 @@ impl UninitializedOptimizerInfo {
 pub enum UninitializedOptimizerConfig {
     #[serde(rename = "openai_sft")]
     OpenAISFT(UninitializedOpenAISFTConfig),
+    #[serde(rename = "fireworks_sft")]
+    FireworksSFT(UninitializedFireworksSFTConfig),
 }
 
 impl UninitializedOptimizerConfig {
@@ -152,6 +171,9 @@ impl UninitializedOptimizerConfig {
         Ok(match self {
             UninitializedOptimizerConfig::OpenAISFT(config) => {
                 OptimizerConfig::OpenAISFT(config.load()?)
+            }
+            UninitializedOptimizerConfig::FireworksSFT(config) => {
+                OptimizerConfig::FireworksSFT(config.load()?)
             }
         })
     }

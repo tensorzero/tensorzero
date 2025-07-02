@@ -34,7 +34,7 @@ jobs:
           tool: cargo-nextest
 
       - name: Run optimization tests
-        run: cargo test-optimization --nocapture
+        run: cargo test-optimization --nocapture --no-fail-fast
 
       - name: Log test completion
         if: always()
