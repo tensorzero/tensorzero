@@ -181,6 +181,8 @@ jobs:
         id: e2e_tests
         env:
           TENSORZERO_CI: 1
+          PLAYWRIGHT_HTML_REPORT: ui/playwright-report-ui
+          PLAYWRIGHT_TEST_RESULTS_DIR: ui/test-results-ui
         continue-on-error: true
         run: pnpm ui:test:e2e --grep-invert "fine-tune on image"
 
@@ -194,6 +196,8 @@ jobs:
         id: rust_e2e_tests
         env:
           TENSORZERO_CI: 1
+          PLAYWRIGHT_HTML_REPORT: ui/playwright-report-rust
+          PLAYWRIGHT_TEST_RESULTS_DIR: ui/test-results-rust
         continue-on-error: true
         # TODO: remove the filtering once we support native SFT for Fireworks
         run: pnpm ui:test:e2e --grep "tuning" --grep "openai"
@@ -217,8 +221,10 @@ jobs:
         with:
           name: playwright-report
           path: |
-            ui/playwright-report/
-            ui/test-results/
+            ui/playwright-report-ui/
+            ui/test-results-ui/
+            ui/playwright-report-rust/
+            ui/test-results-rust/
           retention-days: 7
 
       - name: Exit if tests failed
