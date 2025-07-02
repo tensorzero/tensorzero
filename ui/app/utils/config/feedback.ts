@@ -1,4 +1,5 @@
 import type {
+  Config,
   MetricConfig,
   MetricConfigLevel,
   MetricConfigOptimize,
@@ -17,6 +18,22 @@ export type FeedbackConfig =
   | MetricConfig
   | { type: "comment" }
   | { type: "demonstration"; level: "inference" };
+
+export function getFeedbackConfig(
+  metricName: string,
+  config: Config,
+): FeedbackConfig {
+  if (metricName === "comment") {
+    return { type: "comment" };
+  } else if (metricName === "demonstration") {
+    return { type: "demonstration", level: "inference" };
+  }
+  const metric = config.metrics[metricName];
+  if (!metric) {
+    throw new Error(`Metric ${metricName} not found`);
+  }
+  return metric;
+}
 
 /**
  * Returns the appropriate comparison operator based on the optimization direction
