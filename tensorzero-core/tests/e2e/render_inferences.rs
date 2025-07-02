@@ -55,6 +55,7 @@ pub async fn test_render_samples_no_function() {
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
         tool_params: ToolCallConfigDatabaseInsert::default(),
+        dispreferred_outputs: vec![],
     })];
 
     let rendered_inferences = client
@@ -88,6 +89,7 @@ pub async fn test_render_samples_no_variant() {
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
         tool_params: ToolCallConfigDatabaseInsert::default(),
+        dispreferred_outputs: vec![],
     })];
 
     let error = client
@@ -129,6 +131,7 @@ pub async fn test_render_samples_missing_variable() {
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
         tool_params: ToolCallConfigDatabaseInsert::default(),
+        dispreferred_outputs: vec![],
     })];
 
     let rendered_inferences = client
@@ -165,6 +168,7 @@ pub async fn test_render_samples_normal() {
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
             tool_params: ToolCallConfigDatabaseInsert::default(),
+            dispreferred_outputs: vec![],
         }),
         StoredInference::Json(StoredJsonInference {
             function_name: "json_success".to_string(),
@@ -185,6 +189,7 @@ pub async fn test_render_samples_normal() {
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
             output_schema: json!({}), // This should be taken as-is
+            dispreferred_outputs: vec![],
         }),
         StoredInference::Chat(StoredChatInference {
             function_name: "weather_helper".to_string(),
@@ -217,6 +222,7 @@ pub async fn test_render_samples_normal() {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
             },
+            dispreferred_outputs: vec![],
         }),
         StoredInference::Chat(StoredChatInference {
             function_name: "basic_test".to_string(),
@@ -253,6 +259,7 @@ pub async fn test_render_samples_normal() {
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
             tool_params: ToolCallConfigDatabaseInsert::default(),
+            dispreferred_outputs: vec![],
         }),
     ];
 
@@ -437,6 +444,7 @@ pub async fn test_render_samples_template_no_schema() {
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
         tool_params: ToolCallConfigDatabaseInsert::default(),
+        dispreferred_outputs: vec![],
     })];
 
     let rendered_inferences = client

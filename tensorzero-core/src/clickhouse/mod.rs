@@ -442,11 +442,13 @@ impl ClickHouseConnectionInfo {
             .trim()
             .lines()
             .map(|line| {
-                serde_json::from_str::<StoredInference>(line).map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to deserialize response: {e:?}"),
+                serde_json::from_str::<query_builder::ClickHouseStoredInference>(line)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseQuery {
+                            message: format!("Failed to deserialize response: {e:?}"),
+                        })
                     })
-                })
+                    .and_then(|inference| inference.try_into())
             })
             .collect::<Result<Vec<StoredInference>, Error>>()?;
         Ok(inferences)
