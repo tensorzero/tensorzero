@@ -86,7 +86,7 @@ const TruncatedContent = ({
           <pre className="w-full text-xs whitespace-pre-wrap">{content}</pre>
         </div>
       ) : type === "input" ? (
-        <InputSnippet input={content} />
+        <InputSnippet {...content} />
       ) : (
         <OutputComponent output={content} />
       )}

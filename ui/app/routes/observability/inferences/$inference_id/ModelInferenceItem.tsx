@@ -123,10 +123,8 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
         <SectionLayout>
           <SectionHeader heading="Input" />
           <InputSnippet
-            input={{
-              system: inference.system,
-              messages: inference.input_messages,
-            }}
+            system={inference.system}
+            messages={inference.input_messages}
           />
         </SectionLayout>
 
