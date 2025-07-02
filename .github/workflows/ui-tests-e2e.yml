@@ -182,7 +182,7 @@ jobs:
         env:
           TENSORZERO_CI: 1
         continue-on-error: true
-        run: pnpm ui:test:e2e --grep-invert "fine-tune on image" --grep-invert "fine-tune with a mocked Fireworks server"
+        run: pnpm ui:test:e2e --grep-invert "fine-tune on image|fine-tune with a mocked Fireworks server"
 
       - name: Restart UI container with native SFT flag
         working-directory: ui

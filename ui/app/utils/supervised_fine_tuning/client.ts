@@ -6,7 +6,6 @@ import { TensorZeroClient } from "tensorzero-node";
 import type {
   InferenceFilterTreeNode,
   InferenceOutputSource,
-  OpenAISFTJobHandle,
   OptimizerJobHandle,
   OptimizerStatus,
   UninitializedOptimizerInfo,
