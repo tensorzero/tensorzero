@@ -56,8 +56,10 @@ import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { logger } from "~/utils/logger";
-import { JSONParseError } from "~/utils/common";
-import { processJson } from "~/utils/syntax-highlighting.server";
+import {
+  handleJsonProcessingError,
+  processJson,
+} from "~/utils/syntax-highlighting.server";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
 
@@ -562,13 +564,4 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </div>
     </div>
   );
-}
-
-function handleJsonProcessingError(error: unknown): never {
-  if (error instanceof JSONParseError) {
-    throw data(error.message, { status: 400 });
-  }
-  throw data(`Server error while processing JSON. Please contact support.`, {
-    status: 500,
-  });
 }
