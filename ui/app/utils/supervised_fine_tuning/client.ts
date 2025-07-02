@@ -130,9 +130,6 @@ class NativeSFTJob extends SFTJob {
 
 async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
   const openAINativeSFTBase = getEnv().OPENAI_BASE_URL;
-  if (data.model.provider !== "openai") {
-    throw new Error("Native SFT is only supported for OpenAI");
-  }
   let filters: InferenceFilterTreeNode | null = null;
   let output_source: InferenceOutputSource = "Inference";
   if (data.metric === "demonstration") {
