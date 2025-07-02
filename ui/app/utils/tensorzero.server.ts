@@ -28,7 +28,13 @@ export async function addHumanFeedback(formData: FormData) {
     );
   }
   const config = await getConfig();
-  const metricType = getFeedbackConfig(metricName, config).type;
+  const metricConfig = getFeedbackConfig(metricName, config);
+  if (!metricConfig) {
+    throw new TensorZeroServerError.UnknownMetric(
+      `Metric ${metricName} not found`,
+    );
+  }
+  const metricType = metricConfig.type;
   // Metrics can be of type boolean, float, comment, or demonstration.
   // In this case we need to handle the value differently depending on the metric type.
   const formValue = formData.get("value");

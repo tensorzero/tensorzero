@@ -5,6 +5,7 @@ import {
   countFeedbacksForMetric,
 } from "~/utils/clickhouse/curation.server";
 import { countInferencesForFunction } from "~/utils/clickhouse/inference.server";
+import { getFeedbackConfig } from "~/utils/config/feedback";
 import { getConfig } from "~/utils/config/index.server";
 
 /// Count the number of inferences, feedbacks, and curated inferences for a given function and metric
@@ -26,7 +27,7 @@ export async function loader({
   if (functionName && !functionConfig) {
     throw data(`Function ${functionName} not found in config`, { status: 404 });
   }
-  const metricConfig = config.metrics[metricName || ""];
+  const metricConfig = getFeedbackConfig(metricName || "", config);
   if (metricName && !metricConfig) {
     throw data(`Metric ${metricName} not found in config`, { status: 404 });
   }

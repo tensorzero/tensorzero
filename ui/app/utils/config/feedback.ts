@@ -22,7 +22,7 @@ export type FeedbackConfig =
 export function getFeedbackConfig(
   metricName: string,
   config: Config,
-): FeedbackConfig {
+): FeedbackConfig | undefined {
   if (metricName === "comment") {
     return { type: "comment" };
   } else if (metricName === "demonstration") {
@@ -30,7 +30,7 @@ export function getFeedbackConfig(
   }
   const metric = config.metrics[metricName];
   if (!metric) {
-    throw new Error(`Metric ${metricName} not found`);
+    return undefined;
   }
   return metric;
 }

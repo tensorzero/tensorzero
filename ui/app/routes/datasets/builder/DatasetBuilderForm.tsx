@@ -143,7 +143,7 @@ export function DatasetBuilderForm({
             feedbackCount={counts.feedbackCount}
             curatedInferenceCount={counts.curatedInferenceCount}
             config={config}
-            removeDemonstrations={true}
+            addDemonstrations={false}
           />
           <OutputSourceSelector control={form.control} />
         </div>
