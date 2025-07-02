@@ -32,6 +32,7 @@ use crate::optimization::OptimizerStatus;
 use crate::providers::fireworks::prepare_fireworks_messages;
 use crate::providers::fireworks::FIREWORKS_API_BASE;
 use crate::providers::openai::tensorzero_to_openai_assistant_message;
+use crate::stored_inference::RenderedSample;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
@@ -44,7 +45,6 @@ use crate::{
         },
         openai::OpenAIRequestMessage,
     },
-    stored_inference::RenderedStoredInference,
 };
 use std::io::Write;
 
@@ -63,9 +63,9 @@ pub struct FireworksSupervisedRow<'a> {
     tools: Vec<FireworksTool<'a>>,
 }
 
-impl<'a> TryFrom<&'a RenderedStoredInference> for FireworksSupervisedRow<'a> {
+impl<'a> TryFrom<&'a RenderedSample> for FireworksSupervisedRow<'a> {
     type Error = Error;
-    fn try_from(inference: &'a RenderedStoredInference) -> Result<Self, Self::Error> {
+    fn try_from(inference: &'a RenderedSample) -> Result<Self, Self::Error> {
         let tools = match &inference.tool_params {
             Some(tool_params) => {
                 if tool_params.parallel_tool_calls.unwrap_or_default() {
@@ -85,16 +85,19 @@ impl<'a> TryFrom<&'a RenderedStoredInference> for FireworksSupervisedRow<'a> {
             inference.input.system.as_deref(),
             &inference.input.messages,
         )?;
-        if inference.output.is_empty() {
+
+        let Some(output) = &inference.output else {
+            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+                message: "No output in inference".to_string(),
+            }));
+        };
+        if output.is_empty() {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
                 message: "No output in inference".to_string(),
             }));
         }
-        let output_content_blocks: Vec<ContentBlock> = inference
-            .output
-            .iter()
-            .map(|c| c.clone().into())
-            .collect::<Vec<_>>();
+        let output_content_blocks: Vec<ContentBlock> =
+            output.iter().map(|c| c.clone().into()).collect::<Vec<_>>();
         let final_assistant_message = tensorzero_to_openai_assistant_message(
             Cow::Owned(output_content_blocks),
             PROVIDER_TYPE,
@@ -356,8 +359,8 @@ impl Optimizer for FireworksSFTConfig {
     async fn launch(
         &self,
         client: &reqwest::Client,
-        train_examples: Vec<RenderedStoredInference>,
-        val_examples: Option<Vec<RenderedStoredInference>>,
+        train_examples: Vec<RenderedSample>,
+        val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
     ) -> Result<Self::Handle, Error> {
         let train_rows: Vec<FireworksSupervisedRow<'_>> = train_examples
