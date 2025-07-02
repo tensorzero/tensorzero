@@ -20,6 +20,7 @@ import {
   EmptyMessage,
 } from "~/components/layout/SnippetContent";
 import type { JsonObject } from "type-fest";
+import { CodeBlock } from "../ui/code-block";
 
 interface InputSnippetProps {
   messages: DisplayInputMessage[];
@@ -33,21 +34,18 @@ function renderContentBlock(block: DisplayInputMessageContent, index: number) {
         <TextMessage
           key={index}
           label="Text (Arguments)"
-          content={JSON.stringify(block.arguments, null, 2)}
-          type="structured"
+          content={
+            <CodeBlock
+              padded={false}
+              raw={JSON.stringify(block.arguments, null, 2)}
+            />
+          }
         />
       );
     }
 
     case "unstructured_text": {
-      return (
-        <TextMessage
-          key={index}
-          label="Text"
-          content={block.text}
-          type="default"
-        />
-      );
+      return <TextMessage key={index} label="Text" content={block.text} />;
     }
 
     case "missing_function_text": {
@@ -56,7 +54,6 @@ function renderContentBlock(block: DisplayInputMessageContent, index: number) {
           key={index}
           label="Text (Missing Function Config)"
           content={block.value}
-          type="default"
         />
       );
     }
@@ -66,8 +63,7 @@ function renderContentBlock(block: DisplayInputMessageContent, index: number) {
         <TextMessage
           key={index}
           label="Text (Raw)"
-          content={block.value}
-          type="structured"
+          content={<CodeBlock padded={false} raw={block.value} />}
         />
       );
 
@@ -141,9 +137,9 @@ function renderContentBlock(block: DisplayInputMessageContent, index: number) {
   }
 }
 
-function renderMessage(message: DisplayInputMessage, messageIndex: number) {
+function renderMessage(message: DisplayInputMessage) {
   return (
-    <SnippetMessage variant="input" key={messageIndex} role={message.role}>
+    <SnippetMessage variant="input" role={message.role}>
       {message.content.map(
         (block: DisplayInputMessageContent, blockIndex: number) =>
           renderContentBlock(block, blockIndex),
@@ -173,7 +169,11 @@ export default function InputSnippet({ system, messages }: InputSnippetProps) {
                     );
                   }
                   return (
-                    <TextMessage content={serializedSystem} type="structured" />
+                    <TextMessage
+                      content={
+                        <CodeBlock padded={false} raw={serializedSystem} />
+                      }
+                    />
                   );
                 })()
               ) : (
@@ -195,9 +195,7 @@ export default function InputSnippet({ system, messages }: InputSnippetProps) {
             <SnippetHeading heading="Messages" />
             <SnippetContent>
               {messages.map((message, messageIndex) => (
-                <div key={messageIndex}>
-                  {renderMessage(message, messageIndex)}
-                </div>
+                <div key={messageIndex}>{renderMessage(message)}</div>
               ))}
             </SnippetContent>
           </>
