@@ -465,12 +465,9 @@ impl Optimizer for FireworksSFTConfig {
         Ok(FireworksSFTJobHandle {
             api_base: self.api_base.clone(),
             account_id: self.account_id.clone(),
-            job_url: format!(
-                "https://app.fireworks.ai/dashboard/fine-tuning/supervised/{}",
-                job_id
-            )
-            .parse()
-            .unwrap(),
+            job_url: format!("https://app.fireworks.ai/dashboard/fine-tuning/supervised/{job_id}")
+                .parse()
+                .convert_parse_error()?,
             job_path: job.name,
             credential_location: self.credential_location.clone(),
         })
