@@ -53,6 +53,10 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
 
+      - name: Install dependencies
+        working-directory: internal/tensorzero-node
+        run: pnpm install --frozen-lockfile
+
       - name: Build Node.js bindings
         working-directory: internal/tensorzero-node
         run: pnpm build-bindings
