@@ -11,7 +11,7 @@ use crate::optimization::fireworks_sft::{
 use crate::optimization::openai_sft::{
     OpenAISFTConfig, OpenAISFTJobHandle, UninitializedOpenAISFTConfig,
 };
-use crate::stored_inference::RenderedStoredInference;
+use crate::stored_inference::RenderedSample;
 use crate::variant::VariantConfig;
 
 pub mod fireworks_sft;
@@ -110,8 +110,8 @@ pub trait Optimizer {
     async fn launch(
         &self,
         client: &reqwest::Client,
-        train_examples: Vec<RenderedStoredInference>,
-        val_examples: Option<Vec<RenderedStoredInference>>,
+        train_examples: Vec<RenderedSample>,
+        val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
     ) -> Result<Self::Handle, Error>;
 }
@@ -121,8 +121,8 @@ impl Optimizer for OptimizerInfo {
     async fn launch(
         &self,
         client: &reqwest::Client,
-        train_examples: Vec<RenderedStoredInference>,
-        val_examples: Option<Vec<RenderedStoredInference>>,
+        train_examples: Vec<RenderedSample>,
+        val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
     ) -> Result<Self::Handle, Error> {
         match &self.inner {

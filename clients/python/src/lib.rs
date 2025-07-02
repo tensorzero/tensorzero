@@ -20,15 +20,15 @@ use pyo3::{
     IntoPyObjectExt,
 };
 use python_helpers::{
-    parse_datapoint, parse_dynamic_evaluation_run_episode_response,
-    parse_dynamic_evaluation_run_response, parse_feedback_response, parse_inference_chunk,
-    parse_inference_response, parse_tool, python_uuid_to_uuid,
+    parse_dynamic_evaluation_run_episode_response, parse_dynamic_evaluation_run_response,
+    parse_feedback_response, parse_inference_chunk, parse_inference_response, parse_tool,
+    python_uuid_to_uuid,
 };
 use tensorzero_core::{
     clickhouse::ClickhouseFormat,
     inference::types::{
         pyo3_helpers::{
-            deserialize_from_pyobj, deserialize_from_stored_inference, serialize_to_dict,
+            deserialize_from_pyobj, deserialize_from_stored_sample, serialize_to_dict,
             tensorzero_core_error, tensorzero_core_error_class, tensorzero_error_class, JSON_DUMPS,
             JSON_LOADS,
         },
@@ -46,10 +46,10 @@ use tensorzero_core::{
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
-    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString,
+    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, Datapoint,
     DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, ListInferencesParams, RenderedStoredInference,
-    StoredInference, TensorZeroError, Tool,
+    InferenceParams, InferenceStream, ListInferencesParams, RenderedSample, StoredInference,
+    TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -75,8 +75,9 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<AsyncTensorZeroGateway>()?;
     m.add_class::<TensorZeroGateway>()?;
     m.add_class::<LocalHttpGateway>()?;
-    m.add_class::<RenderedStoredInference>()?;
+    m.add_class::<RenderedSample>()?;
     m.add_class::<StoredInference>()?;
+    m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
 
@@ -863,19 +864,17 @@ impl TensorZeroGateway {
     /// :param datapoint_id: The ID of the datapoint to get.
     /// :return: A `Datapoint` object.
     #[pyo3(signature = (*, dataset_name, datapoint_id))]
-    fn get_datapoint(
-        this: PyRef<'_, Self>,
+    fn get_datapoint<'py>(
+        this: PyRef<'py, Self>,
         dataset_name: String,
-        datapoint_id: Bound<'_, PyAny>,
-    ) -> PyResult<Py<PyAny>> {
+        datapoint_id: Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Datapoint>> {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         let fut = client.get_datapoint(dataset_name, datapoint_id);
-        let resp = tokio_block_on_without_gil(this.py(), fut);
-        match resp {
-            Ok(resp) => parse_datapoint(this.py(), resp),
-            Err(e) => Err(convert_error(this.py(), e)),
-        }
+        tokio_block_on_without_gil(this.py(), fut)
+            .map(|x| x.into_pyobject(this.py()))
+            .map_err(|e| convert_error(this.py(), e))?
     }
 
     /// Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
@@ -897,7 +896,7 @@ impl TensorZeroGateway {
             Ok(resp) => {
                 let datapoints = resp
                     .into_iter()
-                    .map(|x| parse_datapoint(this.py(), x))
+                    .map(|x| x.into_pyobject(this.py()))
                     .collect::<Result<Vec<_>, _>>()?;
                 PyList::new(this.py(), datapoints)
             }
@@ -964,6 +963,7 @@ impl TensorZeroGateway {
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
 
+    /// DEPRECATED: use `experimental_render_samples` instead.
     /// Render a list of stored inferences into a list of rendered stored inferences.
     /// There are two things that need to happen in this function:
     /// 1. We need to resolve all network resources (e.g. images) in the stored inferences.
@@ -982,13 +982,42 @@ impl TensorZeroGateway {
         this: PyRef<'_, Self>,
         stored_inferences: Vec<Bound<'_, PyAny>>,
         variants: HashMap<String, String>,
-    ) -> PyResult<Vec<RenderedStoredInference>> {
+    ) -> PyResult<Vec<RenderedSample>> {
+        tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
         let client = this.as_super().client.clone();
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_stored_inference(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x))
             .collect::<Result<Vec<_>, _>>()?;
-        let fut = client.experimental_render_inferences(stored_inferences, variants);
+        let fut = client.experimental_render_samples(stored_inferences, variants);
+        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+    }
+
+    /// Render a list of stored samples (datapoints or inferences) into a list of rendered stored samples.
+    /// There are two things that need to happen in this function:
+    /// 1. We need to resolve all network resources (e.g. images) in the stored samples.
+    /// 2. We need to prepare all messages into "simple" messages that have been templated for a particular variant.
+    ///    To do this, we need to know what variant to use for each function that might appear in the data.
+    ///
+    /// IMPORTANT: For now, this function drops datapoints which are bad, e.g. ones where templating fails, the function
+    ///            has no variant specified, or where the process of downloading resources fails.
+    ///            In future we will make this behavior configurable by the caller.
+    ///
+    /// :param stored_samples: A list of stored samples to render.
+    /// :param variants: A map from function name to variant name.
+    /// :return: A list of rendered samples.
+    #[pyo3(signature = (*, stored_samples, variants))]
+    fn experimental_render_samples(
+        this: PyRef<'_, Self>,
+        stored_samples: Vec<Bound<'_, PyAny>>,
+        variants: HashMap<String, String>,
+    ) -> PyResult<Vec<RenderedSample>> {
+        let client = this.as_super().client.clone();
+        let stored_samples = stored_samples
+            .iter()
+            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .collect::<Result<Vec<_>, _>>()?;
+        let fut = client.experimental_render_samples(stored_samples, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
 }
@@ -1459,14 +1488,14 @@ impl AsyncTensorZeroGateway {
     fn get_datapoint<'a>(
         this: PyRef<'a, Self>,
         dataset_name: String,
-        datapoint_id: Bound<'a, PyAny>,
+        datapoint_id: Bound<'_, PyAny>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.get_datapoint(dataset_name, datapoint_id).await;
             Python::with_gil(|py| match res {
-                Ok(resp) => parse_datapoint(py, resp),
+                Ok(resp) => Ok(resp.into_py_any(py)?),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -1490,13 +1519,7 @@ impl AsyncTensorZeroGateway {
                 .list_datapoints(dataset_name, function_name, limit, offset)
                 .await;
             Python::with_gil(|py| match res {
-                Ok(resp) => {
-                    let datapoints = resp
-                        .into_iter()
-                        .map(|x| parse_datapoint(py, x))
-                        .collect::<Result<Vec<_>, _>>()?;
-                    Ok(PyList::new(py, datapoints)?.unbind())
-                }
+                Ok(datapoints) => Ok(PyList::new(py, datapoints)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -1579,23 +1602,72 @@ impl AsyncTensorZeroGateway {
     /// :param stored_inferences: A list of stored inferences to render.
     /// :param variants: A map from function name to variant name.
     /// :return: A list of rendered stored inferences.
+    /// DEPRECATED: use `experimental_render_samples` instead.
+    ///
+    /// Renders stored inferences using the templates of the specified variants.
+    ///
+    /// Warning: This API is experimental and may change without notice. For now
+    ///          we discard inferences where the input references a static tool that
+    ///          has no variant specified, or where the process of downloading resources fails.
+    ///          In future we will make this behavior configurable by the caller.
+    ///
+    /// :param stored_inferences: A list of stored inferences to render.
+    /// :param variants: A map from function name to variant name.
+    /// :return: A list of rendered stored inferences.
     #[pyo3(signature = (*, stored_inferences, variants))]
     fn experimental_render_inferences<'a>(
         this: PyRef<'a, Self>,
         stored_inferences: Vec<Bound<'a, PyAny>>,
         variants: HashMap<String, String>,
     ) -> PyResult<Bound<'a, PyAny>> {
+        tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
         let client = this.as_super().client.clone();
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_stored_inference(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
-                .experimental_render_inferences(stored_inferences, variants)
+                .experimental_render_samples(stored_inferences, variants)
                 .await;
             Python::with_gil(|py| match res {
                 Ok(inferences) => Ok(PyList::new(py, inferences)?.unbind()),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// Render a list of stored samples into a list of rendered stored samples.
+    ///
+    /// This function performs two main tasks:
+    /// 1. Resolves all network resources (e.g., images) in the stored samples.
+    /// 2. Prepares all messages into "simple" messages that have been templated for a particular variant.
+    ///    To do this, the function needs to know which variant to use for each function that might appear in the data.
+    ///
+    /// IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
+    /// the function has no variant specified, or the process of downloading resources fails.
+    /// In the future, this behavior may be made configurable by the caller.
+    ///
+    /// :param stored_samples: A list of stored samples to render.
+    /// :param variants: A mapping from function name to variant name.
+    /// :return: A list of rendered samples.
+    #[pyo3(signature = (*, stored_samples, variants))]
+    fn experimental_render_samples<'a>(
+        this: PyRef<'a, Self>,
+        stored_samples: Vec<Bound<'a, PyAny>>,
+        variants: HashMap<String, String>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let stored_samples = stored_samples
+            .iter()
+            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .collect::<Result<Vec<_>, _>>()?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client
+                .experimental_render_samples(stored_samples, variants)
+                .await;
+            Python::with_gil(|py| match res {
+                Ok(samples) => Ok(PyList::new(py, samples)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
