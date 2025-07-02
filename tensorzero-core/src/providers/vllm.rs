@@ -32,10 +32,13 @@ use crate::providers::openai::check_api_base_suffix;
 const PROVIDER_NAME: &str = "vLLM";
 const PROVIDER_TYPE: &str = "vllm";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct VLLMProvider {
     model_name: String,
     api_base: Url,
+    #[serde(skip)]
     credentials: VLLMCredentials,
 }
 

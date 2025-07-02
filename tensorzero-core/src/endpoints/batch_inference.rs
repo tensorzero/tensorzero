@@ -840,7 +840,7 @@ pub async fn write_completed_batch_inference<'a>(
             input_messages,
             raw_request: raw_request.into_owned(),
             raw_response,
-            usage: usage.clone(),
+            usage,
             latency: Latency::Batch,
             model_name: batch_request.model_name.clone(),
             model_provider_name: batch_request.model_provider_name.clone().into(),
@@ -874,7 +874,6 @@ pub async fn write_completed_batch_inference<'a>(
             .prepare_response(
                 inference_id,
                 output,
-                usage,
                 vec![model_inference_response],
                 &inference_config,
                 inference_params.into_owned(),

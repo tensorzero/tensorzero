@@ -9,7 +9,9 @@ describe("TensorZeroClient Integration Tests", () => {
 
   it("client creation throws on a bad config path", async () => {
     // This should throw an error that contains "Failed to parse config: Internal TensorZero Error: Config file not found: "foo""
-    expect(async () => await TensorZeroClient.build("foo")).rejects.toThrow(
+    await expect(
+      async () => await TensorZeroClient.build("foo"),
+    ).rejects.toThrow(
       'Failed to parse config: Internal TensorZero Error: Config file not found: "foo"',
     );
   });
@@ -41,6 +43,16 @@ describe("TensorZeroClient Integration Tests", () => {
         expect(variant!.inner.system_template).toBeDefined();
         expect(variant!.inner.json_mode).toBeDefined();
         expect(variant!.inner.json_mode).toBe("strict");
+      }
+      // Assert on variant templates
+      if (
+        variant!.inner.type === "chat_completion" &&
+        variant!.inner.system_template
+      ) {
+        expect(typeof variant!.inner.system_template).toBe("object");
+        expect(variant!.inner.system_template.path).toBeDefined();
+        expect(variant!.inner.system_template.contents).toBeDefined();
+        expect(variant!.inner.system_template.path).toContain("template");
       }
     }
     const generateSecretConfig =
@@ -155,6 +167,13 @@ describe("TensorZeroClient Integration Tests", () => {
     expect(variant).toBeDefined();
     if (variant!.inner.type === "chat_completion") {
       expect(variant!.inner.temperature).toBe(1.5);
+      expect(variant!.inner.system_template).toBeDefined();
+      if (variant!.inner.system_template) {
+        expect(typeof variant!.inner.system_template).toBe("object");
+        expect(variant!.inner.system_template.path).toBeDefined();
+        expect(variant!.inner.system_template.contents).toBeDefined();
+        expect(variant!.inner.system_template.path).toContain("template");
+      }
     }
   });
 
@@ -181,6 +200,24 @@ describe("TensorZeroClient Integration Tests", () => {
     expect(variantNames.length).toBeGreaterThan(0);
     const variant = variants[variantNames[0]];
     expect(variant!.inner.type).toBe("chain_of_thought");
+
+    // Assert on variant templates
+    if (variant!.inner.type === "chain_of_thought") {
+      expect(variant!.inner.system_template).toBeDefined();
+      expect(variant!.inner.user_template).toBeDefined();
+      if (variant!.inner.system_template) {
+        expect(typeof variant!.inner.system_template).toBe("object");
+        expect(variant!.inner.system_template.path).toBeDefined();
+        expect(variant!.inner.system_template.contents).toBeDefined();
+        expect(variant!.inner.system_template.path).toContain("template");
+      }
+      if (variant!.inner.user_template) {
+        expect(typeof variant!.inner.user_template).toBe("object");
+        expect(variant!.inner.user_template.path).toBeDefined();
+        expect(variant!.inner.user_template.contents).toBeDefined();
+        expect(variant!.inner.user_template.path).toContain("template");
+      }
+    }
   });
 
   it("should get function with different json_mode settings", async () => {
@@ -325,6 +362,139 @@ describe("TensorZeroClient Integration Tests", () => {
     expect(() =>
       client.getEvaluationConfig("non_existent_evaluation"),
     ).toThrow();
+  });
+
+  it("should get full config structure", async () => {
+    const client = await buildClient();
+    const config = client.getConfig();
+    expect(config).toBeDefined();
+    expect(config.gateway).toBeDefined();
+    expect(config.models).toBeDefined();
+    expect(config.embedding_models).toBeDefined();
+    expect(config.functions).toBeDefined();
+    expect(config.tools).toBeDefined();
+    expect(config.metrics).toBeDefined();
+    expect(config.evaluations).toBeDefined();
+  });
+
+  it("should get config with gateway settings", async () => {
+    const client = await buildClient();
+    const config = client.getConfig();
+    expect(config.gateway.debug).toBe(true);
+  });
+
+  it("should get config with models including shorthand", async () => {
+    const client = await buildClient();
+    const config = client.getConfig();
+
+    // Check shorthand model exists
+    expect(config.models["gpt-4o-mini-2024-07-18"]).toBeDefined();
+    expect(config.models["llama-3.1-8b-instruct"]).toBeDefined();
+    expect(
+      config.models["ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"],
+    ).toBeDefined();
+
+    // Check routing arrays
+    expect(config.models["gpt-4o-mini-2024-07-18"]!.routing).toEqual([
+      "openai",
+    ]);
+    expect(config.models["llama-3.1-8b-instruct"]!.routing).toEqual([
+      "fireworks",
+    ]);
+    expect(
+      config.models["ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"]!.routing,
+    ).toEqual(["openai"]);
+  });
+
+  it("should get config with embedding models", async () => {
+    const client = await buildClient();
+    const config = client.getConfig();
+
+    expect(config.embedding_models["text-embedding-3-small"]).toBeDefined();
+    expect(config.embedding_models["text-embedding-3-small"]!.routing).toEqual([
+      "openai",
+    ]);
+  });
+
+  it("should get config with comprehensive function coverage", async () => {
+    const client = await buildClient();
+    const config = client.getConfig();
+
+    // Test functions exist
+    expect(config.functions.extract_entities).toBeDefined();
+    expect(config.functions.write_haiku).toBeDefined();
+    expect(config.functions.generate_secret).toBeDefined();
+    expect(config.functions.judge_answer).toBeDefined();
+    expect(config.functions.multi_hop_rag_agent).toBeDefined();
+
+    // Test function types
+    expect(config.functions.extract_entities!.type).toBe("json");
+    expect(config.functions.write_haiku!.type).toBe("chat");
+    expect(config.functions.generate_secret!.type).toBe("json");
+    expect(config.functions.judge_answer!.type).toBe("json");
+    expect(config.functions.multi_hop_rag_agent!.type).toBe("chat");
+
+    // Test variant counts
+    expect(
+      Object.keys(config.functions.extract_entities!.variants).length,
+    ).toBe(6);
+    expect(Object.keys(config.functions.write_haiku!.variants).length).toBe(3);
+    expect(Object.keys(config.functions.generate_secret!.variants).length).toBe(
+      1,
+    );
+    expect(Object.keys(config.functions.judge_answer!.variants).length).toBe(1);
+    expect(
+      Object.keys(config.functions.multi_hop_rag_agent!.variants).length,
+    ).toBe(4);
+  });
+
+  it("should get config with tools", async () => {
+    const client = await buildClient();
+    const config = client.getConfig();
+
+    expect(config.tools.think).toBeDefined();
+    expect(config.tools.search_wikipedia).toBeDefined();
+    expect(config.tools.load_wikipedia_page).toBeDefined();
+    expect(config.tools.answer_question).toBeDefined();
+
+    expect(config.tools.think!.strict).toBe(true);
+    expect(config.tools.search_wikipedia!.strict).toBe(true);
+    expect(config.tools.load_wikipedia_page!.strict).toBe(true);
+    expect(config.tools.answer_question!.strict).toBe(true);
+  });
+
+  it("should get config with metrics", async () => {
+    const client = await buildClient();
+    const config = client.getConfig();
+
+    expect(config.metrics.exact_match).toBeDefined();
+    expect(config.metrics.elapsed_ms).toBeDefined();
+    expect(config.metrics.jaccard_similarity).toBeDefined();
+    expect(config.metrics.haiku_score).toBeDefined();
+
+    expect(config.metrics.exact_match!.type).toBe("boolean");
+    expect(config.metrics.elapsed_ms!.type).toBe("float");
+    expect(config.metrics.exact_match!.optimize).toBe("max");
+    expect(config.metrics.elapsed_ms!.optimize).toBe("min");
+  });
+
+  it("should get config with evaluations", async () => {
+    const client = await buildClient();
+    const config = client.getConfig();
+
+    expect(config.evaluations.entity_extraction).toBeDefined();
+    expect(config.evaluations.haiku).toBeDefined();
+    expect(config.evaluations.images).toBeDefined();
+
+    expect(config.evaluations.entity_extraction!.type).toBe("static");
+    expect(config.evaluations.haiku!.type).toBe("static");
+    expect(config.evaluations.images!.type).toBe("static");
+
+    expect(config.evaluations.entity_extraction!.function_name).toBe(
+      "extract_entities",
+    );
+    expect(config.evaluations.haiku!.function_name).toBe("write_haiku");
+    expect(config.evaluations.images!.function_name).toBe("image_judger");
   });
 });
 

@@ -5,6 +5,7 @@ import {
   queryMetricsWithFeedback,
   type MetricsWithFeedbackData,
 } from "~/utils/clickhouse/feedback";
+import { logger } from "~/utils/logger";
 
 export async function loader({
   params,
@@ -26,7 +27,7 @@ export async function loader({
     });
     return Response.json(result);
   } catch (error) {
-    console.error("Error fetching metrics with feedback:", error);
+    logger.error("Error fetching metrics with feedback:", error);
     throw new Response("Error fetching metrics with feedback", {
       status: 500,
       statusText: "Failed to fetch metrics with feedback",

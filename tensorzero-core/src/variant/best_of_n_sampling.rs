@@ -17,7 +17,7 @@ use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
-    ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
+    ModelInferenceResponseWithMetadata, RequestMessage, Role,
 };
 use crate::inference::types::{ContentBlockOutput, ResolvedInput};
 use crate::jsonschema_util::StaticJSONSchema;
@@ -356,7 +356,6 @@ impl BestOfNSamplingConfig {
         };
 
         // Safely remove the selected candidate without panicking
-        let mut total_usage: Usage = candidates.iter().map(|c| c.usage()).sum();
         let mut candidates = candidates;
         let mut selected_candidate = if selection_idx < candidates.len() {
             candidates.swap_remove(selection_idx)
@@ -368,15 +367,12 @@ impl BestOfNSamplingConfig {
             .into());
         };
         if let Some(inference_result) = &inference_result {
-            total_usage.input_tokens += inference_result.usage.input_tokens;
-            total_usage.output_tokens += inference_result.usage.output_tokens;
             // Pass the evaluator response back to the user as 'original_response'
             selected_candidate.set_original_response(Some(inference_result.raw_response.clone()));
         } else {
             // If the evaluator failed, don't provide an 'original_response' to the uesr
             selected_candidate.set_original_response(None);
         }
-        selected_candidate.set_usage(total_usage);
         for candidate in candidates {
             selected_candidate
                 .mut_model_inference_results()
@@ -762,7 +758,9 @@ mod tests {
         clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::FunctionConfigChat,
-        inference::types::{ChatInferenceResult, FinishReason, JsonInferenceResult, Latency},
+        inference::types::{
+            ChatInferenceResult, FinishReason, JsonInferenceResult, Latency, Usage,
+        },
         minijinja_util::tests::get_test_template_config,
         model::{ModelConfig, ModelProvider, ProviderConfig},
         providers::dummy::DummyProvider,
@@ -973,10 +971,6 @@ mod tests {
             ChatInferenceResult::new(
                 Uuid::now_v7(),
                 vec!["Candidate answer 1".to_string().into()],
-                Usage {
-                    input_tokens: 10,
-                    output_tokens: 20,
-                },
                 vec![model_inference_response],
                 None,
                 InferenceParams::default(),
@@ -1013,10 +1007,6 @@ mod tests {
             ChatInferenceResult::new(
                 Uuid::now_v7(),
                 vec!["Candidate answer 2".to_string().into()],
-                Usage {
-                    input_tokens: 15,
-                    output_tokens: 25,
-                },
                 vec![model_inference_response2],
                 None,
                 InferenceParams::default(),
@@ -1083,10 +1073,6 @@ mod tests {
             Some(json!({"response": "Valid JSON response"})),
             Some(0),
             vec![],
-            Usage {
-                input_tokens: 10,
-                output_tokens: 20,
-            },
             vec![model_inference_response_valid],
             json!({"type": "object", "properties": {"response": {"type": "string"}}}),
             InferenceParams::default(),
@@ -1125,10 +1111,6 @@ mod tests {
             None, // malformed
             Some(0),
             vec![],
-            Usage {
-                input_tokens: 15,
-                output_tokens: 25,
-            },
             vec![model_inference_response_malformed],
             json!({"type": "object", "properties": {"response": {"type": "string"}}}),
             InferenceParams::default(),
@@ -1198,10 +1180,6 @@ mod tests {
             ChatInferenceResult::new(
                 inference_id0,
                 vec!["Candidate answer 0".to_string().into()],
-                Usage {
-                    input_tokens: 10,
-                    output_tokens: 20,
-                },
                 vec![model_inference_response0],
                 None,
                 InferenceParams::default(),
@@ -1238,10 +1216,6 @@ mod tests {
             ChatInferenceResult::new(
                 inference_id1,
                 vec!["Candidate answer 1".to_string().into()],
-                Usage {
-                    input_tokens: 15,
-                    output_tokens: 25,
-                },
                 vec![model_inference_response1],
                 None,
                 InferenceParams::default(),
@@ -1336,14 +1310,14 @@ mod tests {
         // based on "answer": 1 in best_of_n_1
         let expected_id = inference_id1;
         let expected_usage = Usage {
-            input_tokens: 35,
-            output_tokens: 55,
+            input_tokens: 75,
+            output_tokens: 126,
         };
         let expected_content = vec!["Candidate answer 1".to_string().into()];
+        assert_eq!(selected.usage_considering_cached(), expected_usage);
         match selected {
             InferenceResult::Chat(selected) => {
                 assert_eq!(selected.inference_id, expected_id);
-                assert_eq!(selected.usage, expected_usage);
                 assert_eq!(selected.content, expected_content);
                 assert_eq!(selected.model_inference_results.len(), 3);
                 assert_eq!(selected.finish_reason, Some(FinishReason::Stop));

@@ -13,7 +13,9 @@ use crate::variant::VariantConfig;
 
 pub mod openai_sft;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct OptimizerInfo {
     inner: OptimizerConfig,
 }
@@ -26,7 +28,9 @@ impl OptimizerInfo {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 enum OptimizerConfig {
     OpenAISFT(OpenAISFTConfig),
 }

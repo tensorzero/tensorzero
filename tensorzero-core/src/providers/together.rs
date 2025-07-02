@@ -50,9 +50,12 @@ lazy_static! {
 const PROVIDER_NAME: &str = "Together";
 const PROVIDER_TYPE: &str = "together";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct TogetherProvider {
     model_name: String,
+    #[serde(skip)]
     credentials: TogetherCredentials,
     parse_think_blocks: bool,
 }

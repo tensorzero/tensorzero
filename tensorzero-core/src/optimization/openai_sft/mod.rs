@@ -22,13 +22,17 @@ use crate::{
 
 const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct OpenAISFTConfig {
     pub model: String,
     pub batch_size: Option<usize>,
     pub learning_rate_multiplier: Option<f64>,
     pub n_epochs: Option<usize>,
+    #[serde(skip)]
     pub credentials: OpenAICredentials,
+    #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocation>,
     pub seed: Option<u64>,
     pub suffix: Option<String>,

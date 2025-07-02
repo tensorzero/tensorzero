@@ -5,6 +5,7 @@ import { encoding_for_model, get_encoding } from "tiktoken";
 import type { Tiktoken, TiktokenModel } from "tiktoken";
 import { MODEL_TOKEN_LIMITS, CURRENT_MODEL_VERSIONS } from "./constants";
 import type { OpenAIMessage, ToolFunction } from "./types";
+import { logger } from "~/utils/logger";
 
 /**
  * Converts model name to tiktoken model name
@@ -74,7 +75,7 @@ export function getModelTokenLimit(model: string): number {
 export function getEncodingForModel(model: string) {
   const tiktokenModel = convertToTiktokenModel(model);
   if (!tiktokenModel) {
-    console.warn(`Unknown model: ${model}, using o200k_base`);
+    logger.warn(`Unknown model: ${model}, using o200k_base`);
     return get_encoding("o200k_base");
   }
   return encoding_for_model(tiktokenModel);
@@ -100,7 +101,7 @@ export function getTokensFromMessages(
       model as (typeof CURRENT_MODEL_VERSIONS)[number],
     )
   ) {
-    console.warn(
+    logger.warn(
       `Warning: ${model} is not a current version. Using default token counts.`,
     );
   }

@@ -62,8 +62,8 @@ describe("OpenAI Compatibility", () => {
 
     const usage = result.usage;
     expect(usage?.prompt_tokens).toBe(10);
-    expect(usage?.completion_tokens).toBe(10);
-    expect(usage?.total_tokens).toBe(20);
+    expect(usage?.completion_tokens).toBe(1);
+    expect(usage?.total_tokens).toBe(11);
     expect(result.choices[0].finish_reason).toBe("stop");
   });
 
@@ -105,8 +105,8 @@ describe("OpenAI Compatibility", () => {
 
     const usage = result.usage;
     expect(usage?.prompt_tokens).toBe(10);
-    expect(usage?.completion_tokens).toBe(10);
-    expect(usage?.total_tokens).toBe(20);
+    expect(usage?.completion_tokens).toBe(1);
+    expect(usage?.total_tokens).toBe(11);
     expect(result.choices[0].finish_reason).toBe("stop");
   });
 
@@ -430,7 +430,7 @@ describe("OpenAI Compatibility", () => {
 
     const usage = result.usage;
     expect(usage?.prompt_tokens).toBe(10);
-    expect(usage?.completion_tokens).toBe(10);
+    expect(usage?.completion_tokens).toBe(1);
     expect(result.choices[0].finish_reason).toBe("tool_calls");
   });
 
@@ -482,7 +482,7 @@ describe("OpenAI Compatibility", () => {
 
     const usage = result.usage;
     expect(usage?.prompt_tokens).toBe(10);
-    expect(usage?.completion_tokens).toBe(10);
+    expect(usage?.completion_tokens).toBe(1);
   });
 
   it("should handle tool call streaming", async () => {
@@ -608,6 +608,7 @@ describe("OpenAI Compatibility", () => {
       model: "tensorzero::function_name::json_success",
       stream: true,
       "tensorzero::episode_id": episodeId,
+      "tensorzero::variant_name": "test-diff-schema",
     });
 
     const chunks = [];
@@ -651,7 +652,7 @@ describe("OpenAI Compatibility", () => {
       previousEpisodeId = chunk.episode_id;
 
       expect(chunk.model).toBe(
-        "tensorzero::function_name::json_success::variant_name::test"
+        "tensorzero::function_name::json_success::variant_name::test-diff-schema"
       );
 
       if (i + 1 < chunks.length) {
@@ -706,7 +707,7 @@ describe("OpenAI Compatibility", () => {
     expect(result.choices[0].message.content).toBe('{"answer":"Hello"}');
     expect(result.choices[0].message.tool_calls).toBeNull();
     expect(result.usage?.prompt_tokens).toBe(10);
-    expect(result.usage?.completion_tokens).toBe(10);
+    expect(result.usage?.completion_tokens).toBe(1);
   });
 
   it("should handle json success", async () => {
@@ -752,7 +753,7 @@ describe("OpenAI Compatibility", () => {
     expect(result.choices[0].message.content).toBe('{"answer":"Hello"}');
     expect(result.choices[0].message.tool_calls).toBeNull();
     expect(result.usage?.prompt_tokens).toBe(10);
-    expect(result.usage?.completion_tokens).toBe(10);
+    expect(result.usage?.completion_tokens).toBe(1);
   });
 
   it("should handle json invalid system", async () => {
@@ -825,7 +826,7 @@ describe("OpenAI Compatibility", () => {
     );
     expect(result.choices[0].message.tool_calls).toBeNull();
     expect(result.usage?.prompt_tokens).toBe(10);
-    expect(result.usage?.completion_tokens).toBe(10);
+    expect(result.usage?.completion_tokens).toBe(1);
   });
 
   it("should handle caching", async () => {
@@ -857,8 +858,8 @@ describe("OpenAI Compatibility", () => {
 
     const usage = result.usage;
     expect(usage?.prompt_tokens).toBe(10);
-    expect(usage?.completion_tokens).toBe(10);
-    expect(usage?.total_tokens).toBe(20);
+    expect(usage?.completion_tokens).toBe(1);
+    expect(usage?.total_tokens).toBe(11);
 
     // Test caching
     const cachedResult = await client.chat.completions.create({
