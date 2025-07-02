@@ -397,7 +397,7 @@ export default function BasicInfo({
         })()}
 
       {/* Weight */}
-      {variantConfig.weight && (
+      {variantConfig.weight !== null && (
         <BasicInfoItem>
           <BasicInfoItemTitle>Weight</BasicInfoItemTitle>
           <BasicInfoItemContent>
