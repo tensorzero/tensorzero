@@ -68,7 +68,6 @@ export async function action({ request }: Route.ActionArgs) {
   }
   const jsonData = JSON.parse(serializedFormData);
   const validatedData = SFTFormValuesSchema.parse(jsonData);
-
   let job;
   try {
     job = await launch_sft_job(validatedData);

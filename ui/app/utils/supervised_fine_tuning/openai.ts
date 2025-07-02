@@ -24,6 +24,7 @@ import { getEncodingForModel, getModelTokenLimit } from "./openAITokenCounter";
 import type { OpenAIMessage, OpenAIRole } from "./types";
 import type { Tiktoken } from "tiktoken";
 import { logger } from "~/utils/logger";
+import { getFeedbackConfig } from "../config/feedback";
 
 export const client = process.env.OPENAI_API_KEY
   ? new OpenAI({
@@ -90,7 +91,7 @@ export class OpenAISFTJob extends SFTJob {
     }
     let metricConfig = null;
     if (data.metric) {
-      metricConfig = config.metrics[data.metric];
+      metricConfig = getFeedbackConfig(data.metric, config);
       if (!metricConfig) {
         throw new Error(`Metric ${data.metric} not found in config`);
       }
