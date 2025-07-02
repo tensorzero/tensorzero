@@ -6,7 +6,10 @@ import { DummyCheckbox } from "./checkbox";
 
 interface CodeBlockSharedProps {
   showLineNumbers?: boolean;
+  /** @default true */
   showWrapToggle?: boolean;
+  /** @default true */
+  padded?: boolean;
 }
 
 interface CodeBlockRawProps extends CodeBlockSharedProps {
@@ -75,6 +78,7 @@ export function CodeBlock({
   html,
   raw,
   showLineNumbers = false,
+  padded = true,
   showWrapToggle = true,
 }: CodeBlockProps) {
   const [wrapLinesState, setWrapLines] = React.useState(false);
@@ -93,13 +97,13 @@ export function CodeBlock({
 
   return (
     <div
-      className={clsx(
-        "CodeBlock relative isolate",
-        showLineNumbers && "CodeBlock--with-line-numbers",
-      )}
+      data-show-line-numbers={showLineNumbers || undefined}
+      data-padded={padded || undefined}
+      data-wrap-lines={wrapLines || undefined}
+      className={clsx("CodeBlock", "group relative isolate")}
     >
       {showWrapToggle && (
-        <div className="pointer-events-none absolute top-0 right-0 z-10 flex justify-end p-2">
+        <div className="pointer-events-none absolute top-0 right-0 z-10 flex justify-end p-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
           <ToggleButton
             type="button"
             toggled={wrapLines}
@@ -118,9 +122,12 @@ export function CodeBlock({
           "font-mono text-sm",
           // <pre> styles
           "**:[pre]:!bg-bg-primary **:[pre]:max-w-none **:[pre]:shrink-0 **:[pre]:grow **:[pre]:overflow-auto **:[pre]:rounded-lg **:[pre]:outline-offset-1",
-          // line numbers have their own left padding so that they stick to
-          // the left border when scrolled
-          showLineNumbers ? "*:p-5 *:pl-0" : "*:p-5",
+          padded &&
+            (showLineNumbers
+              ? // line numbers have their own left padding so that they stick to
+                // the left border when scrolled
+                "*:p-5 *:pl-0"
+              : "*:p-5"),
           // <code> styles
           "**:[code]:text-fg-primary **:[code]:relative **:[code]:flex **:[code]:min-w-min **:[code]:flex-col **:[code]:gap-1.5",
           wrapLines
