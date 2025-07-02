@@ -304,7 +304,7 @@ impl FireworksSFTConfig {
             "file",
             Part::bytes(jsonl_data)
                 .file_name("dataset.jsonl")
-                .mime_str("application/json")
+                .mime_str("application/jsonl")
                 .map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: format!(

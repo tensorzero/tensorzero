@@ -196,7 +196,7 @@ jobs:
           TENSORZERO_CI: 1
         continue-on-error: true
         # TODO: remove the filtering once we support native SFT for Fireworks
-        run: pnpm ui:test:e2e --grep "tuning" --grep "openai"
+        run: pnpm ui:test:e2e --grep "tuning"
 
       - name: Print Docker Compose logs
         if: always()
