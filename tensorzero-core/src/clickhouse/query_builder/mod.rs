@@ -673,6 +673,8 @@ mod tests {
     use serde_json::json;
     use std::path::Path;
 
+    use crate::{inference::types::Text, tool::ToolChoice};
+
     use super::*;
 
     async fn get_e2e_config() -> Config<'static> {
@@ -1661,7 +1663,7 @@ FORMAT JSONEachRow"#;
                 "output": "[{\"type\": \"text\", \"text\": \"Hello! How can I help you today?\"}]",
                 "episode_id": "123e4567-e89b-12d3-a456-426614174000",
                 "inference_id": "123e4567-e89b-12d3-a456-426614174000",
-                "tool_params": ""
+                "tool_params": "{\"tools_available\": [], \"tool_choice\": \"none\", \"parallel_tool_calls\": false}"
             }
         "#;
         let inference: ClickHouseStoredInference = serde_json::from_str(json).unwrap();
@@ -1684,7 +1686,11 @@ FORMAT JSONEachRow"#;
         assert!(chat_inference.dispreferred_outputs.is_empty());
         assert_eq!(
             chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert::default()
+            ToolCallConfigDatabaseInsert {
+                tools_available: vec![],
+                tool_choice: ToolChoice::None,
+                parallel_tool_calls: Some(false),
+            }
         );
 
         // Test the Python version (singly serialized)
@@ -1696,7 +1702,8 @@ FORMAT JSONEachRow"#;
             "input": {"system": "you are a helpful assistant", "messages": []},
             "output": [{"type": "text", "text": "Hello! How can I help you today?"}],
             "episode_id": "123e4567-e89b-12d3-a456-426614174000",
-            "inference_id": "123e4567-e89b-12d3-a456-426614174000"
+            "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+            "tool_params": {"tools_available": [], "tool_choice": "none", "parallel_tool_calls": false}
         }
     "#;
         let inference: StoredInference = serde_json::from_str(json).unwrap();
@@ -1718,9 +1725,71 @@ FORMAT JSONEachRow"#;
         );
         assert_eq!(
             chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert::default()
+            ToolCallConfigDatabaseInsert {
+                tools_available: vec![],
+                tool_choice: ToolChoice::None,
+                parallel_tool_calls: Some(false),
+            }
         );
         assert!(chat_inference.dispreferred_outputs.is_empty());
+    }
+
+    #[test]
+    fn test_stored_inference_deserialization_chat_with_dispreferred_outputs() {
+        // Test the ClickHouse version (doubly serialized)
+        let json = r#"
+            {
+                "type": "chat",
+                "function_name": "test_function",
+                "variant_name": "test_variant",
+                "input": "{\"system\": \"you are a helpful assistant\", \"messages\": []}",
+                "output": "[{\"type\": \"text\", \"text\": \"Hello! How can I help you today?\"}]",
+                "episode_id": "123e4567-e89b-12d3-a456-426614174000",
+                "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+                "tool_params": "",
+                "dispreferred_outputs": ["[{\"type\": \"text\", \"text\": \"Goodbye!\"}]"]
+            }
+        "#;
+        let inference: ClickHouseStoredInference = serde_json::from_str(json).unwrap();
+        let StoredInference::Chat(chat_inference) = inference.try_into().unwrap() else {
+            panic!("Expected a chat inference");
+        };
+        assert_eq!(
+            chat_inference.tool_params,
+            ToolCallConfigDatabaseInsert::default()
+        );
+        assert_eq!(
+            chat_inference.dispreferred_outputs,
+            vec![vec![ContentBlockChatOutput::Text(Text {
+                text: "Goodbye!".to_string(),
+            })]]
+        );
+
+        // Test the Python version (singly serialized)
+        let json = r#"
+        {
+            "type": "chat",
+            "function_name": "test_function",
+            "variant_name": "test_variant",
+            "input": {"system": "you are a helpful assistant", "messages": []},
+            "output": [{"type": "text", "text": "Hello! How can I help you today?"}],
+            "episode_id": "123e4567-e89b-12d3-a456-426614174000",
+            "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+            "dispreferred_outputs": [
+                [{"type": "text", "text": "Goodbye!"}]
+            ]
+        }
+    "#;
+        let inference: StoredInference = serde_json::from_str(json).unwrap();
+        let StoredInference::Chat(chat_inference) = inference else {
+            panic!("Expected a chat inference");
+        };
+        assert_eq!(
+            chat_inference.dispreferred_outputs,
+            vec![vec![ContentBlockChatOutput::Text(Text {
+                text: "Goodbye!".to_string(),
+            })]]
+        );
     }
 
     #[test]
@@ -1818,5 +1887,63 @@ FORMAT JSONEachRow"#;
             json!({"type": "object", "properties": {"output": {"type": "string"}}})
         );
         assert!(json_inference.dispreferred_outputs.is_empty());
+    }
+
+    #[test]
+    fn test_stored_inference_deserialization_json_with_dispreferred_outputs() {
+        // Test the ClickHouse version (doubly serialized)
+        let json = r#"
+            {
+                "type": "json",
+                "function_name": "test_function",
+                "variant_name": "test_variant",
+                "input": "{\"system\": \"you are a helpful assistant\", \"messages\": []}",
+                "dispreferred_outputs": ["{\"raw\":\"{\\\"answer\\\":\\\"Goodbye\\\"}\",\"parsed\":{\"answer\":\"Goodbye\"}}"],
+                "output": "{\"raw\":\"{\\\"answer\\\":\\\"Goodbye\\\"}\",\"parsed\":{\"answer\":\"Goodbye\"}}",
+                "episode_id": "123e4567-e89b-12d3-a456-426614174000",
+                "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+                "output_schema": "{\"type\": \"object\", \"properties\": {\"output\": {\"type\": \"string\"}}}"
+            }
+        "#;
+        let inference: ClickHouseStoredInference = serde_json::from_str(json).unwrap();
+        let StoredInference::Json(json_inference) = inference.try_into().unwrap() else {
+            panic!("Expected a json inference");
+        };
+        assert_eq!(
+            json_inference.dispreferred_outputs,
+            vec![JsonInferenceOutput {
+                raw: Some("{\"answer\":\"Goodbye\"}".to_string()),
+                parsed: Some(json!({"answer":"Goodbye"})),
+            }]
+        );
+
+        // Test the Python version (singly serialized)
+        let json = r#"
+         {
+             "type": "json",
+             "function_name": "test_function",
+             "variant_name": "test_variant",
+             "dispreferred_outputs": [
+                {"raw":"{\"answer\":\"Goodbye\"}","parsed":{"answer":"Goodbye"}}
+             ],
+             "input": {"system": "you are a helpful assistant", "messages": []},
+             "output": {"raw":"{\"answer\":\"Goodbye\"}","parsed":{"answer":"Goodbye"}},
+             "episode_id": "123e4567-e89b-12d3-a456-426614174000",
+             "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+             "output_schema": {"type": "object", "properties": {"output": {"type": "string"}}}
+         }
+     "#;
+        let inference: StoredInference = serde_json::from_str(json).unwrap();
+        let StoredInference::Json(json_inference) = inference else {
+            panic!("Expected a json inference");
+        };
+
+        assert_eq!(
+            json_inference.dispreferred_outputs,
+            vec![JsonInferenceOutput {
+                raw: Some("{\"answer\":\"Goodbye\"}".to_string()),
+                parsed: Some(json!({"answer":"Goodbye"})),
+            }]
+        );
     }
 }
