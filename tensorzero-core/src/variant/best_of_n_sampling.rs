@@ -24,6 +24,7 @@ use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
 use crate::variant::chat_completion::TemplateSchemaInfo;
+use crate::variant::mixture_of_n::stream_inference_from_non_stream;
 use crate::{
     endpoints::inference::InferenceParams,
     error::Error,
@@ -138,17 +139,31 @@ impl Variant for BestOfNSamplingConfig {
 
     async fn infer_stream<'request>(
         &self,
-        _input: &ResolvedInput,
-        _models: &'request InferenceModels<'_>,
-        _function: &FunctionConfig,
-        _inference_config: &'request InferenceConfig<'static, 'request>,
-        _clients: &'request InferenceClients<'request>,
-        _inference_params: InferenceParams,
+        input: &ResolvedInput,
+        models: &'request InferenceModels<'_>,
+        function: &FunctionConfig,
+        inference_config: &'request InferenceConfig<'static, 'request>,
+        clients: &'request InferenceClients<'request>,
+        inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-        Err(ErrorDetails::InvalidRequest {
-            message: "Best of n variants do not support streaming inference.".to_string(),
-        }
-        .into())
+        let candidate_inference_results = self
+            .infer_candidates(input, models, function, inference_config, clients)
+            .await?;
+        let inference_result = self
+            .select_best_candidate(
+                input,
+                models.models,
+                inference_config,
+                clients,
+                candidate_inference_results,
+                function,
+            )
+            .await?;
+
+        // We always invoke our candidates in non-streaming mode (since we need to concatenate their responses
+        // to produce the judge input)
+        // Take the judge's chosen candidate, and convert the candidate response to a stream
+        stream_inference_from_non_stream(inference_result, inference_params)
     }
 
     async fn validate(
