@@ -245,7 +245,7 @@ enum InferenceOrStreamResult {
 }
 
 /// Constructs an `infer_stream` response `(InferenceResultStream, ModelUsedInfo)`,
-/// building bot from the information contained in the `InferenceResult`.
+/// built from the information contained in the `InferenceResult`.
 /// Each content block in the `InferenceResult` is converted into a chunk in the `InferenceResultStream`.
 /// This is used by `best_of_n` and `mixture_of_n` when the user requests a stream response,
 /// but our candidate/judge has a non-streaming response.
