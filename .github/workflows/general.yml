@@ -40,6 +40,26 @@ jobs:
   check-python-client-build:
     uses: ./.github/workflows/python-client-build.yml
 
+  check-node-bindings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version: "22.9.0"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+
+      - name: Build Node.js bindings
+        working-directory: internal/tensorzero-node
+        run: pnpm build-bindings
+
+      - name: Check for git diff after building bindings
+        run: git diff --exit-code
+
   build-windows:
     runs-on: windows-latest
     steps:
@@ -395,6 +415,7 @@ jobs:
       [
         check-docker-compose,
         check-python-client-build,
+        check-node-bindings,
         build-windows,
         validate,
         clickhouse-tests,
