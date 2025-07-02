@@ -409,7 +409,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <InputSnippet input={inference.input} />
+          <InputSnippet {...inference.input} />
         </SectionLayout>
 
         <SectionLayout>

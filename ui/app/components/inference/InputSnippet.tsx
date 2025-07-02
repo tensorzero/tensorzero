@@ -1,5 +1,4 @@
 import type {
-  DisplayInput,
   DisplayInputMessageContent,
   DisplayInputMessage,
 } from "~/utils/clickhouse/common";
@@ -20,9 +19,11 @@ import {
   TextMessage,
   EmptyMessage,
 } from "~/components/layout/SnippetContent";
+import type { JsonObject } from "type-fest";
 
 interface InputSnippetProps {
-  input: DisplayInput;
+  messages: DisplayInputMessage[];
+  system?: string | JsonObject | null;
 }
 
 function renderContentBlock(block: DisplayInputMessageContent, index: number) {
@@ -151,19 +152,19 @@ function renderMessage(message: DisplayInputMessage, messageIndex: number) {
   );
 }
 
-export default function InputSnippet({ input }: InputSnippetProps) {
+export default function InputSnippet({ system, messages }: InputSnippetProps) {
   return (
     <SnippetLayout>
-      {input.system && (
+      {system && (
         <>
           <SnippetHeading heading="System" />
           <SnippetContent>
             <SnippetMessage>
-              {typeof input.system === "object" ? (
+              {typeof system === "object" ? (
                 (() => {
                   let serializedSystem;
                   try {
-                    serializedSystem = JSON.stringify(input.system, null, 2);
+                    serializedSystem = JSON.stringify(system, null, 2);
                   } catch (e) {
                     return (
                       <div style={{ color: "red" }}>
@@ -176,7 +177,7 @@ export default function InputSnippet({ input }: InputSnippetProps) {
                   );
                 })()
               ) : (
-                <TextMessage content={input.system} />
+                <TextMessage content={system} />
               )}
             </SnippetMessage>
           </SnippetContent>
@@ -185,7 +186,7 @@ export default function InputSnippet({ input }: InputSnippetProps) {
       )}
 
       <div>
-        {input.messages.length === 0 ? (
+        {messages.length === 0 ? (
           <SnippetContent>
             <EmptyMessage message="No input messages found" />
           </SnippetContent>
@@ -193,7 +194,7 @@ export default function InputSnippet({ input }: InputSnippetProps) {
           <>
             <SnippetHeading heading="Messages" />
             <SnippetContent>
-              {input.messages.map((message, messageIndex) => (
+              {messages.map((message, messageIndex) => (
                 <div key={messageIndex}>
                   {renderMessage(message, messageIndex)}
                 </div>
