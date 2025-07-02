@@ -63,20 +63,18 @@ jobs:
 
       - name: Check for git diff after building bindings
         id: git_diff_check
-        continue-on-error: true
         run: git diff --exit-code
 
       - name: Upload bindings artifact on diff failure
-        if: steps.git_diff_check.outcome == 'failure'
+        if: failure()
         uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
         with:
           name: node-bindings
           path: internal/tensorzero-node/lib/bindings
           retention-days: 7
 
-      - name: Exit if diff check failed
-        if: steps.git_diff_check.outcome == 'failure'
-        run: exit 1
+      - name: Check tensorzero-node bindings are properly exported
+        run: pnpm --filter=tensorzero-node run check-exports
 
   build-windows:
     runs-on: windows-latest
@@ -295,9 +293,6 @@ jobs:
 
       - name: Build npm workspace
         run: pnpm -r build
-
-      - name: Check tensorzero-node bindings are properly exported
-        run: pnpm --filter=tensorzero-node run check-exports
 
       - name: Format tensorzero-node package
         run: pnpm --filter=tensorzero-node run format:check

@@ -10,7 +10,7 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const BINDINGS_DIR = __dirname;
+const BINDINGS_DIR = __dirname + "/bindings";
 const INDEX_FILE = path.join(BINDINGS_DIR, "index.ts");
 
 function getGeneratedFiles() {
