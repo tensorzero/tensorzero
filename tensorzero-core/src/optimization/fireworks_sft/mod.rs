@@ -1,3 +1,11 @@
+///! Fireworks SFT implementation. The overall flow is:
+/// 1. `FireworksSFTConfig.launch` creates and uploads training/validation datasets to Fireworks
+/// 2. We kick off a SFT job in Fireworks, and produce a `FireworksSFTJobHandle` with the job ID
+/// 3. `FireworksSFTJobHandle.poll` performs the following checks (without maintaining any additional state):
+///    - If the job is still running, we return a `Pending` status
+///    - If the job has failed, we return a `Failed` status
+///    - If the job has completed, we look for an existing 'default' deployment for the model.
+///      If it exists, we return its status - otherwise, we start a new serverless deployment.
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -161,6 +169,8 @@ impl<T> UrlParseErrExt<T> for Result<T, url::ParseError> {
 }
 
 impl FireworksSFTConfig {
+    /// Polls the status of an existing dataset.
+    /// Returns `true` if the dataset is in the `READY` state.
     async fn poll_dataset_read(
         &self,
         client: &reqwest::Client,
@@ -218,6 +228,8 @@ impl FireworksSFTConfig {
         Ok(response.state == "READY")
     }
 
+    /// Produces a new dataset with a randomly-generated id, with the provided 'items' uploaded to it.
+    /// Returns the Fireworks path to the dataset (e.g. `account/{account_id}/datasets/{dataset_id}`)
     async fn create_and_upload_dataset(
         &self,
         client: &reqwest::Client,
