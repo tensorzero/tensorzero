@@ -5,6 +5,7 @@ export * from "./AzureProvider";
 export * from "./Base64File";
 export * from "./BaseModelTable";
 export * from "./BatchConfig";
+export * from "./BestOfNEvaluatorConfig";
 export * from "./BestOfNSamplingConfig";
 export * from "./BooleanMetricNode";
 export * from "./ChainOfThoughtConfig";
