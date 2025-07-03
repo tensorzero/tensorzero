@@ -31,7 +31,7 @@ test("should show the datapoint detail page", async ({ page }) => {
 
 test("should be able to add, edit and save a datapoint", async ({ page }) => {
   await page.goto(
-    "/observability/inferences/0197177a-7c00-70a2-82a6-741f60a03b2e",
+    "/observability/inferences/0196368f-1ae8-7551-b5df-9a61593eb307",
   );
   await page.waitForLoadState("networkidle");
 
