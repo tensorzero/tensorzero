@@ -189,7 +189,10 @@ pub async fn test_render_samples_normal() {
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
             output_schema: json!({}), // This should be taken as-is
-            dispreferred_outputs: vec![],
+            dispreferred_outputs: vec![JsonInferenceOutput {
+                parsed: Some(json!({})),
+                raw: Some("{}".to_string()), // This should not be validated
+            }],
         }),
         StoredInference::Chat(StoredChatInference {
             function_name: "weather_helper".to_string(),
@@ -222,7 +225,9 @@ pub async fn test_render_samples_normal() {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
             },
-            dispreferred_outputs: vec![],
+            dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
+                text: "Hello, world!".to_string(),
+            })]],
         }),
         StoredInference::Chat(StoredChatInference {
             function_name: "basic_test".to_string(),
@@ -327,6 +332,13 @@ pub async fn test_render_samples_normal() {
     };
     assert_eq!(output_text.text, "{}");
 
+    // Check the dispreferred outputs
+    assert_eq!(second_inference.dispreferred_outputs.len(), 1);
+    let ContentBlockChatOutput::Text(output_text) = &second_inference.dispreferred_outputs[0][0]
+    else {
+        panic!("Expected text output");
+    };
+    assert_eq!(output_text.text, "{}");
     // Check other fields
     assert!(second_inference.tool_params.is_none());
     assert!(second_inference.output_schema.is_some());
@@ -362,6 +374,13 @@ pub async fn test_render_samples_normal() {
     assert_eq!(tool_call.name, Some("get_temperature".to_string()));
     assert_eq!(tool_call.arguments, Some(json!({"location": "Tokyo"})));
 
+    // Check the dispreferred outputs
+    assert_eq!(third_inference.dispreferred_outputs.len(), 1);
+    let ContentBlockChatOutput::Text(output_text) = &third_inference.dispreferred_outputs[0][0]
+    else {
+        panic!("Expected text output");
+    };
+    assert_eq!(output_text.text, "Hello, world!");
     // Check other fields
     assert!(third_inference.tool_params.is_some());
     assert!(third_inference.output_schema.is_none());

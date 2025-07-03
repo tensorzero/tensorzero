@@ -31,6 +31,7 @@ from tensorzero import (
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
     InferenceFilterTreeNode,
+    JsonInferenceOutput,
 )
 
 @final
@@ -59,6 +60,7 @@ class StoredInference:
         inference_id: Any,
         tool_params: Optional[Any] = None,
         output_schema: Optional[Any] = None,
+        dispreferred_outputs: List[List[Any]] = [],
     ) -> None: ...
     def __repr__(self) -> str: ...
     @property
@@ -79,6 +81,10 @@ class StoredInference:
     def output_schema(self) -> Optional[Any]: ...
     @property
     def type(self) -> str: ...
+    @property
+    def dispreferred_outputs(
+        self,
+    ) -> Union[List[List[ContentBlock]], List[List[JsonInferenceOutput]]]: ...
 
 @final
 class RenderedSample:
@@ -89,6 +95,7 @@ class RenderedSample:
     inference_id: Optional[UUID]
     tool_params: Optional[ToolCallConfigDatabaseInsert]
     output_schema: Optional[Dict[str, Any]]
+    dispreferred_outputs: List[List[ContentBlock]] = []
 
 @final
 class Datapoint:
