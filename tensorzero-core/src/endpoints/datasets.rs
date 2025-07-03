@@ -162,7 +162,6 @@ FORMAT JSONEachRow;"#
             message: format!("Inference `{inference_id}` not found"),
         }));
     }
-
     let inference_data: TaggedInferenceDatabaseInsert =
         serde_json::from_str(&result).map_err(|e| {
             Error::new(ErrorDetails::Serialization {

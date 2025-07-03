@@ -336,3 +336,27 @@ test("should be able to add chat demonstration feedback via the inference page",
   // Assert that the feedback value is visible in its table cell
   await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
 });
+
+test("should be able to add a datapoint from the inference page", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0196368f-1ae8-7551-b5df-9a61593eb307",
+  );
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+  // Click on the Add to dataset button
+  await page.getByText("Add to dataset").click();
+
+  // Select the `test` dataset
+  await page.getByRole("option", { name: "baz" }).click();
+  // Wait 2 seconds
+  await page.waitForTimeout(2000);
+
+  // Click on the "Inference Output" button
+  await page.getByText("Inference Output").click();
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+  // Assert that the page URL starts with /datasets/test_json_dataset/datapoint/
+  await expect(page).toHaveURL("/datasets/baz/datapoint/.*");
+});
