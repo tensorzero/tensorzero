@@ -56,11 +56,13 @@ class StoredInference:
         variant_name: str,
         input: Any,
         output: Any,
-        episode_id: Any,
-        inference_id: Any,
+        episode_id: UUID,
+        inference_id: UUID,
         tool_params: Optional[Any] = None,
         output_schema: Optional[Any] = None,
-        dispreferred_outputs: List[List[Any]] = [],
+        dispreferred_outputs: Union[
+            List[List[ContentBlock]], List[JsonInferenceOutput]
+        ] = [],
     ) -> None: ...
     def __repr__(self) -> str: ...
     @property
