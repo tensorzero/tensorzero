@@ -13,6 +13,7 @@ export type RenderedSample = {
   function_name: string;
   input: ModelInput;
   output: Array<ContentBlockChatOutput> | null;
+  dispreferred_outputs: Array<Array<ContentBlockChatOutput>>;
   episode_id: string | null;
   inference_id: string | null;
   tool_params: ToolCallConfigDatabaseInsert | null;

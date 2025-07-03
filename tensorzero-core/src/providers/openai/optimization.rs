@@ -329,6 +329,7 @@ mod tests {
             inference_id: Some(uuid::Uuid::now_v7()),
             tool_params: None,
             output_schema: None,
+            dispreferred_outputs: vec![],
         };
         let row = OpenAISupervisedRow::try_from(&inference).unwrap();
         assert_eq!(row.messages.len(), 3);
