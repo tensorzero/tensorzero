@@ -260,12 +260,6 @@ where
 /// assert_eq!(outer.inner.bar, "baz");
 /// ```
 ///
-/// You might also need to deserialize a normal version of the struct:
-/// ```ignore
-/// let outer = serde_json::from_str::<Outer>("{\"inner\": {\"foo\": 1, \"bar\": \"baz\"}}")?;
-/// assert_eq!(outer.inner.foo, 1);
-/// assert_eq!(outer.inner.bar, "baz");
-/// ```
 ///
 /// In ClickHouse we also run into case where the data is the empty string as an indicator of null.
 /// ```ignore
