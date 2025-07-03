@@ -3,6 +3,7 @@ import tseslint from "typescript-eslint";
 import pluginReact from "eslint-plugin-react";
 import pluginReactHooks from "eslint-plugin-react-hooks";
 
+/** @type {import('@typescript-eslint/utils').TSESLint.FlatConfig.ConfigFile} */
 export default [
   {
     ignores: [
@@ -14,6 +15,7 @@ export default [
       "**/playwright-report/**",
       "**/test-results/**",
       "eslint.config.js",
+      "**/.storybook/**",
     ],
   },
   {
@@ -32,6 +34,8 @@ export default [
         console: true,
       },
       parserOptions: {
+        project: "./tsconfig.json",
+        tsconfigRootDir: import.meta.dirname,
         ecmaFeatures: {
           jsx: true,
         },
@@ -59,4 +63,13 @@ export default [
   pluginReactHooks.configs["recommended-latest"],
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    rules: {
+      "@typescript-eslint/switch-exhaustiveness-check": "warn", // TODO Change to error after incremental refactoring
+    },
+  },
+
+  // TODO… Add stricter linting
+  // ...tseslint.configs.recommendedTypeChecked,
+  // ...tseslint.configs.stylisticTypeChecked,
 ];
