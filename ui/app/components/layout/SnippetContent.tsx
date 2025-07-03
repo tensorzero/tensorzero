@@ -1,3 +1,4 @@
+import * as React from "react";
 import { Link } from "react-router";
 import {
   AlignLeft,
@@ -98,15 +99,13 @@ export function CodeMessage({
 // Text content component
 interface TextMessageProps {
   label?: string;
-  content?: string;
-  type?: "default" | "structured";
+  content?: React.ReactNode;
   emptyMessage?: string;
 }
 
 export function TextMessage({
   label,
   content,
-  type = "default",
   emptyMessage,
 }: TextMessageProps) {
   if (!content) {
@@ -119,10 +118,8 @@ export function TextMessage({
         text={label}
         icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
       />
-      {type === "structured" ? (
-        <pre className="w-full font-mono text-sm break-words whitespace-pre-wrap">
-          {content}
-        </pre>
+      {React.isValidElement(content) ? (
+        content
       ) : (
         <span className="text-fg-primary w-full text-sm">{content}</span>
       )}
