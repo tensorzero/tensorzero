@@ -277,8 +277,14 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizer
                 }),
             }
         }
-        OpenAIFineTuningJobStatus::Failed => OptimizerStatus::Failed,
-        OpenAIFineTuningJobStatus::Cancelled => OptimizerStatus::Failed,
+        OpenAIFineTuningJobStatus::Failed => OptimizerStatus::Failed {
+            message: "Failed".to_string(),
+            error: job.error,
+        },
+        OpenAIFineTuningJobStatus::Cancelled => OptimizerStatus::Failed {
+            message: "Cancelled".to_string(),
+            error: job.error,
+        },
     })
 }
 
@@ -410,7 +416,7 @@ mod tests {
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(failed).unwrap();
         let status = convert_to_optimizer_status(job).unwrap();
-        assert!(matches!(status, OptimizerStatus::Failed));
+        assert!(matches!(status, OptimizerStatus::Failed { .. }));
 
         // Test for "validating_files" status
         let validating = json!({

@@ -43,7 +43,7 @@ pub struct BestOfNSamplingConfig {
     pub weight: Option<f64>,
     pub timeout_s: f64,
     pub candidates: Vec<String>,
-    pub evaluator: EvaluatorConfig,
+    pub evaluator: BestOfNEvaluatorConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -54,7 +54,7 @@ pub struct UninitializedBestOfNSamplingConfig {
     #[serde(default = "default_timeout")]
     pub timeout_s: f64,
     pub candidates: Vec<String>,
-    pub evaluator: UninitializedEvaluatorConfig,
+    pub evaluator: UninitializedBestOfNEvaluatorConfig,
 }
 
 fn default_timeout() -> f64 {
@@ -64,14 +64,14 @@ fn default_timeout() -> f64 {
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub struct EvaluatorConfig {
+pub struct BestOfNEvaluatorConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct UninitializedEvaluatorConfig {
+pub struct UninitializedBestOfNEvaluatorConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,
 }
@@ -82,7 +82,7 @@ impl LoadableConfig<BestOfNSamplingConfig> for UninitializedBestOfNSamplingConfi
             weight: self.weight,
             timeout_s: self.timeout_s,
             candidates: self.candidates,
-            evaluator: EvaluatorConfig {
+            evaluator: BestOfNEvaluatorConfig {
                 inner: self.evaluator.inner.load(base_path)?,
             },
         })
@@ -402,7 +402,7 @@ impl BestOfNSamplingConfig {
 ///  * Check if the index is out of bounds.
 ///  * Return the index and the model inference result.
 async fn inner_select_best_candidate<'a, 'request>(
-    evaluator: &'a EvaluatorConfig,
+    evaluator: &'a BestOfNEvaluatorConfig,
     input: &'request ResolvedInput,
     models: &'a ModelTable,
     inference_config: &'request InferenceConfig<'a, 'request>,
@@ -513,7 +513,7 @@ async fn inner_select_best_candidate<'a, 'request>(
     Ok((Some(answer_choice as usize), Some(model_inference_result)))
 }
 
-impl EvaluatorConfig {
+impl BestOfNEvaluatorConfig {
     /// Prepares the system message for the evaluator variant.
     /// We use the system_template of the evaluator variant to generate a system message as if we
     /// were using the evaluator variant directly to solve the problem.
@@ -790,7 +790,7 @@ mod tests {
         };
 
         // Test without templates, string message
-        let evaluator_config = EvaluatorConfig {
+        let evaluator_config = BestOfNEvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
@@ -815,7 +815,7 @@ mod tests {
         assert_eq!(prepared_message, expected_message);
 
         // Test without templates, object message
-        let evaluator_config = EvaluatorConfig {
+        let evaluator_config = BestOfNEvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
@@ -838,7 +838,7 @@ mod tests {
         );
 
         // Test without templates, no message
-        let evaluator_config = EvaluatorConfig {
+        let evaluator_config = BestOfNEvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
@@ -861,7 +861,7 @@ mod tests {
         // Test with templates that need new info
         let system_template_name = "system";
 
-        let evaluator_config = EvaluatorConfig {
+        let evaluator_config = BestOfNEvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
@@ -900,7 +900,7 @@ mod tests {
         // Test with template that is complete as is (string)
         let system_template_name = "system_filled";
 
-        let evaluator_config = EvaluatorConfig {
+        let evaluator_config = BestOfNEvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
@@ -934,7 +934,7 @@ mod tests {
         let templates = get_test_template_config();
 
         // Create an EvaluatorConfig
-        let evaluator_config = EvaluatorConfig {
+        let evaluator_config = BestOfNEvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
@@ -1034,7 +1034,7 @@ mod tests {
         let templates = get_test_template_config();
 
         // Create an EvaluatorConfig
-        let evaluator_config = EvaluatorConfig {
+        let evaluator_config = BestOfNEvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy_json".into(),
                 weight: Some(1.0),
@@ -1137,7 +1137,7 @@ mod tests {
     #[tokio::test]
     async fn test_select_best_candidate() {
         // Set up evaluator with a provider that returns a valid answer_choice
-        let evaluator_config = EvaluatorConfig {
+        let evaluator_config = BestOfNEvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "best_of_n_1".into(),
                 ..Default::default()
@@ -1254,7 +1254,7 @@ mod tests {
                         candidates: vec![],
                         weight: None,
                         timeout_s: 0.0,
-                        evaluator: EvaluatorConfig {
+                        evaluator: BestOfNEvaluatorConfig {
                             inner: Default::default(),
                         },
                     }),
@@ -1327,7 +1327,7 @@ mod tests {
             }
         }
         // Set up evaluator with a provider that fails
-        let evaluator_config = EvaluatorConfig {
+        let evaluator_config = BestOfNEvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "error".into(),
                 ..Default::default()
@@ -1395,7 +1395,7 @@ mod tests {
         // Depending on implementation, you might check which candidate was selected
 
         // Set up evaluator with a provider that returns invalid JSON
-        let evaluator_config = EvaluatorConfig {
+        let evaluator_config = BestOfNEvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "regular".into(),
                 ..Default::default()
@@ -1486,7 +1486,7 @@ mod tests {
             weight: Some(1.0),
             timeout_s: 10.0,
             candidates: vec![],
-            evaluator: EvaluatorConfig {
+            evaluator: BestOfNEvaluatorConfig {
                 inner: ChatCompletionConfig {
                     model: "best_of_n_big".into(),
                     weight: Some(1.0),

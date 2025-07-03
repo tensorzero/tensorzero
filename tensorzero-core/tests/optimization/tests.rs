@@ -27,6 +27,7 @@ use tensorzero_core::{
     variant::JsonMode,
 };
 
+mod fireworks_sft;
 mod openai_sft;
 
 static FERRIS_PNG: &[u8] = include_bytes!("../e2e/providers/ferris.png");
@@ -47,15 +48,17 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .launch(&client, test_examples, val_examples, &credentials)
         .await
         .unwrap();
-    let mut status = job_handle.poll(&client, &credentials).await.unwrap();
-    while !matches!(status, OptimizerStatus::Completed { .. }) {
+    let mut status;
+    loop {
         status = job_handle.poll(&client, &credentials).await.unwrap();
         println!("Status: {status:?}");
-        // Sleep for a minute
-        sleep(Duration::from_secs(60)).await;
-        if matches!(status, OptimizerStatus::Failed) {
-            panic!("Optimization failed");
+        if matches!(status, OptimizerStatus::Completed { .. }) {
+            break;
         }
+        if matches!(status, OptimizerStatus::Failed { .. }) {
+            panic!("Optimization failed: {status:?}");
+        }
+        sleep(Duration::from_secs(60)).await;
     }
     assert!(matches!(status, OptimizerStatus::Completed { .. }));
     let OptimizerStatus::Completed {
