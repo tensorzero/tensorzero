@@ -89,7 +89,6 @@ export * from "./PathWithContents";
 export * from "./ProviderConfig";
 export * from "./ProviderTypesConfig";
 export * from "./RenderedSample";
-export * from "./RenderedStoredInference";
 export * from "./RequestMessage";
 export * from "./RetryConfig";
 export * from "./Role";
