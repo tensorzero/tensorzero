@@ -34,14 +34,36 @@ test("should be able to add, edit and save a datapoint", async ({ page }) => {
     "/observability/inferences/0196368f-1ae8-7551-b5df-9a61593eb307",
   );
   await page.waitForLoadState("networkidle");
+  const datasetName =
+    "test_json_dataset_" + Math.random().toString(36).substring(2, 15);
 
-  await page.getByRole("button", { name: "Add to dataset" }).click();
-  await page.getByRole("option", { name: "test_json_dataset" }).click();
-  await page.getByRole("button", { name: "Inference Output" }).click();
+  // Click on the Add to dataset button
+  await page.getByText("Add to dataset").click();
 
-  await page.waitForTimeout(5000);
-  // Should then navigate to the datapoint page
-  await expect(page.url()).toContain("/datasets/test_json_dataset/datapoint/");
+  // Wait for the dropdown to appear
+  await page.waitForTimeout(500);
+
+  // Find the CommandInput by its placeholder text
+  const commandInput = page.getByPlaceholder("Create or find dataset...");
+  await commandInput.waitFor({ state: "visible" });
+  await commandInput.fill(datasetName);
+  // Wait a moment for the filtered results to appear
+  await page.waitForTimeout(500);
+
+  // Click on the CommandItem that contains the dataset name
+  // Using a more flexible selector that looks for text containing "Create"
+  const createOption = page
+    .locator("[cmdk-item]")
+    .filter({ hasText: "Create" });
+  await createOption.click();
+
+  // Click on the "Inference Output" button
+  await page.getByText("Inference Output").click();
+
+  // Wait for navigation to the new page
+  await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
+    timeout: 10000,
+  });
 
   await expect(page.getByText("Custom")).not.toBeVisible();
 
