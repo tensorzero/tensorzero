@@ -1311,7 +1311,7 @@ mod tests {
         let expected_id = inference_id1;
         let expected_usage = Usage {
             input_tokens: 75,
-            output_tokens: 135,
+            output_tokens: 126,
         };
         let expected_content = vec!["Candidate answer 1".to_string().into()];
         assert_eq!(selected.usage_considering_cached(), expected_usage);

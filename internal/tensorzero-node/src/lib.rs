@@ -125,4 +125,15 @@ impl TensorZeroClient {
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         Ok(evaluation_config_str)
     }
+
+    #[napi]
+    pub fn get_config(&self) -> Result<String, napi::Error> {
+        let config = self
+            .client
+            .get_config()
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let config_str =
+            serde_json::to_string(&config).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(config_str)
+    }
 }

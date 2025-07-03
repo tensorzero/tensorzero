@@ -65,10 +65,13 @@ pub fn default_api_key_location() -> CredentialLocation {
 const PROVIDER_NAME: &str = "OpenAI";
 pub const PROVIDER_TYPE: &str = "openai";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct OpenAIProvider {
     model_name: String,
     api_base: Option<Url>,
+    #[serde(skip)]
     credentials: OpenAICredentials,
 }
 
@@ -1317,7 +1320,7 @@ fn tensorzero_to_openai_user_messages<'a>(
     Ok(messages)
 }
 
-fn tensorzero_to_openai_assistant_message<'a>(
+pub fn tensorzero_to_openai_assistant_message<'a>(
     content_blocks: Cow<'a, [ContentBlock]>,
     provider_type: &str,
 ) -> Result<OpenAIRequestMessage<'a>, Error> {

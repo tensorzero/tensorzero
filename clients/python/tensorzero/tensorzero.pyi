@@ -7,6 +7,7 @@ from typing import (
     List,
     Literal,
     Optional,
+    Sequence,
     Type,
     Union,
     final,
@@ -18,7 +19,6 @@ import uuid_utils
 from tensorzero import (
     ChatDatapointInsert,
     ContentBlock,
-    Datapoint,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
     ExtraBody,
@@ -70,9 +70,9 @@ class StoredInference:
     @property
     def output(self) -> Any: ...
     @property
-    def episode_id(self) -> Any: ...
+    def episode_id(self) -> Optional[UUID]: ...
     @property
-    def inference_id(self) -> Any: ...
+    def inference_id(self) -> Optional[UUID]: ...
     @property
     def tool_params(self) -> Optional[Any]: ...
     @property
@@ -81,15 +81,36 @@ class StoredInference:
     def type(self) -> str: ...
 
 @final
-class RenderedStoredInference:
+class RenderedSample:
     function_name: str
-    variant_name: str
     input: ModelInput
-    output: List[ContentBlock]
-    episode_id: UUID
-    inference_id: UUID
+    output: Optional[List[ContentBlock]]
+    episode_id: Optional[UUID]
+    inference_id: Optional[UUID]
     tool_params: Optional[ToolCallConfigDatabaseInsert]
     output_schema: Optional[Dict[str, Any]]
+
+@final
+class Datapoint:
+    Chat: Type["Datapoint"]
+    Json: Type["Datapoint"]
+
+    @property
+    def id(self) -> UUID: ...
+    @property
+    def input(self) -> ResolvedInput: ...
+    @property
+    def output(self) -> Any: ...
+    @property
+    def dataset_name(self) -> str: ...
+    @property
+    def function_name(self) -> str: ...
+    @property
+    def tool_params(self) -> Optional[Any]: ...
+    @property
+    def output_schema(self) -> Optional[Any]: ...
+    @property
+    def is_custom(self) -> bool: ...
 
 class BaseTensorZeroGateway:
     pass
@@ -345,12 +366,13 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         *,
         stored_inferences: List[StoredInference],
         variants: Dict[str, str],
-    ) -> List[RenderedStoredInference]:
+    ) -> List[RenderedSample]:
         """
-        Render a list of stored inferences into a list of rendered stored inferences.
+        DEPRECATED: use `experimental_render_samples` instead.
+        Render a list of stored samples into a list of rendered stored samples.
 
         This function performs two main tasks:
-        1. Resolves all network resources (e.g., images) in the stored inference.
+        1. Resolves all network resources (e.g., images) in the stored samples.
         2. Prepares all messages into "simple" messages that have been templated for a particular variant.
            To do this, the function needs to know which variant to use for each function that might appear in the data.
 
@@ -358,10 +380,34 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         the function has no variant specified, or the process of downloading resources fails.
         In the future, this behavior may be made configurable by the caller.
 
-        :param stored_inferences: A list of stored inferences to render.
+        :param stored_inferences: A list of stored samples to render.
         :param variants: A mapping from function name to variant name.
-        :return: A list of rendered stored inferences.
+        :return: A list of rendered samples.
         """
+
+    def experimental_render_samples(
+        self,
+        *,
+        stored_samples: Sequence[Union[StoredInference, Datapoint]],
+        variants: Dict[str, str],
+    ) -> List[RenderedSample]:
+        """
+        Render a list of stored samples (datapoints or inferences) into a list of rendered stored samples.
+
+        This function performs two main tasks:
+        1. Resolves all network resources (e.g., images) in the stored samples.
+        2. Prepares all messages into "simple" messages that have been templated for a particular variant.
+            To do this, the function needs to know which variant to use for each function that might appear in the data.
+
+        IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
+        the function has no variant specified, or the process of downloading resources fails.
+        In the future, this behavior may be made configurable by the caller.
+
+        :param stored_samples: A list of stored samples (datapoints or inferences) to render.
+        :param variants: A mapping from function name to variant name.
+        :return: A list of rendered samples.
+        """
+        ...
 
     def close(self) -> None:
         """
@@ -631,12 +677,14 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         *,
         stored_inferences: List[StoredInference],
         variants: Dict[str, str],
-    ) -> List[RenderedStoredInference]:
+    ) -> List[RenderedSample]:
         """
-        Render a list of stored inferences into a list of rendered stored inferences.
+        DEPRECATED: use `experimental_render_samples` instead.
+
+        Render a list of stored samples into a list of rendered stored samples.
 
         This function performs two main tasks:
-        1. Resolves all network resources (e.g., images) in the stored inferences.
+        1. Resolves all network resources (e.g., images) in the stored samples.
         2. Prepares all messages into "simple" messages that have been templated for a particular variant.
            To do this, the function needs to know which variant to use for each function that might appear in the data.
 
@@ -644,9 +692,32 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         the function has no variant specified, or the process of downloading resources fails.
         In the future, this behavior may be made configurable by the caller.
 
-        :param stored_inferences: A list of stored inferences to render.
+        :param stored_inferences: A list of stored samples to render.
         :param variants: A mapping from function name to variant name.
-        :return: A list of rendered stored inferences.
+        :return: A list of rendered samples.
+        """
+
+    async def experimental_render_samples(
+        self,
+        *,
+        stored_samples: Sequence[Union[StoredInference, Datapoint]],
+        variants: Dict[str, str],
+    ) -> List[RenderedSample]:
+        """
+        Render a list of stored samples into a list of rendered stored samples.
+
+        This function performs two main tasks:
+        1. Resolves all network resources (e.g., images) in the stored samples.
+        2. Prepares all messages into "simple" messages that have been templated for a particular variant.
+           To do this, the function needs to know which variant to use for each function that might appear in the data.
+
+        IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
+        the function has no variant specified, or the process of downloading resources fails.
+        In the future, this behavior may be made configurable by the caller.
+
+        :param stored_samples: A list of stored samples to render.
+        :param variants: A mapping from function name to variant name.
+        :return: A list of rendered samples.
         """
 
     async def close(self) -> None:
@@ -678,10 +749,11 @@ class LocalHttpGateway(object):
 __all__ = [
     "AsyncTensorZeroGateway",
     "BaseTensorZeroGateway",
+    "Datapoint",
     "TensorZeroGateway",
     "LocalHttpGateway",
     "_start_http_gateway",
-    "RenderedStoredInference",
+    "RenderedSample",
     "StoredInference",
     "ResolvedInput",
     "ResolvedInputMessage",

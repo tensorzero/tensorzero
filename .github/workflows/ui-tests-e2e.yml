@@ -28,15 +28,11 @@ jobs:
       - name: Setup Playwright
         run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
 
-      - name: Download `gateway` container
+      - name: Download container images
         uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
         with:
-          name: build-gateway-container
-
-      - name: Download `ui` container
-        uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
-        with:
-          name: build-ui-container
+          pattern: build-*-container
+          merge-multiple: true
 
       - name: Load `gateway` and `ui` containers
         run: |
@@ -139,15 +135,11 @@ jobs:
           path: |
             ./ui/fixtures/s3-fixtures
 
-      - name: Download `gateway` container
+      - name: Download container images
         uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
         with:
-          name: build-gateway-container
-
-      - name: Download `ui` container
-        uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
-        with:
-          name: build-ui-container
+          pattern: build-*-container
+          merge-multiple: true
 
       - name: Load `gateway` and `ui` containers
         run: |
@@ -202,6 +194,16 @@ jobs:
         if: always()
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs -t
+
+      - name: Make sure the current commit short hash is in the Docker Compose gateway logs
+        if: always()
+        working-directory: ui
+        run: |
+          SHORT_HASH=$(echo "${{ github.sha }}" | cut -c1-7)
+          docker compose -f fixtures/docker-compose.e2e.yml logs gateway | grep "(commit: ${SHORT_HASH})" || {
+            echo "ERROR: Commit hash ${SHORT_HASH} not found in gateway logs"
+            exit 1
+          }
 
       - name: Print ClickHouse error logs
         if: always()

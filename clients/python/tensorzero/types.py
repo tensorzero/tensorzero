@@ -478,53 +478,6 @@ class ToolParams:
     parallel_tool_calls: Optional[bool] = None
 
 
-@dataclass
-class ChatDatapoint:
-    dataset_name: str
-    function_name: str
-    id: UUID
-    input: InferenceInput
-    episode_id: Optional[UUID] = None
-    output: Optional[List[ContentBlock]] = None
-    tool_params: Optional[ToolParams] = None
-    tags: Optional[Dict[str, str]] = None
-    # `auxiliary` is not serialized yet
-    source_inference_id: Optional[UUID] = None
-    is_custom: bool = False
-    staled_at: Optional[str] = None
-    is_deleted: bool = False
-
-
-@dataclass
-class JsonDatapoint:
-    dataset_name: str
-    function_name: str
-    id: UUID
-    input: InferenceInput
-    episode_id: Optional[UUID] = None
-    output: Optional[JsonInferenceOutput] = None
-    output_schema: Optional[Any] = None
-    tags: Optional[Dict[str, str]] = None
-    # `auxiliary` is not serialized yet
-    source_inference_id: Optional[UUID] = None
-    is_custom: bool = False
-    staled_at: Optional[str] = None
-    is_deleted: bool = False
-
-
-Datapoint = Union[ChatDatapoint, JsonDatapoint]
-
-
-def parse_datapoint(data: Dict[str, Any]) -> Datapoint:
-    datapoint_type = data.pop("type")
-    if datapoint_type == "json":
-        return JsonDatapoint(**data)
-    elif datapoint_type == "chat":
-        return ChatDatapoint(**data)
-    else:
-        raise ValueError(f"Unknown datapoint type: {datapoint_type}")
-
-
 # Helper used to serialize Python objects to JSON, which may contain dataclasses like `Text`
 # Used by the Rust native module
 class TensorZeroTypeEncoder(JSONEncoder):

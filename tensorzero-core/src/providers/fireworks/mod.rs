@@ -1,5 +1,6 @@
 use std::{borrow::Cow, sync::OnceLock};
 
+use crate::tool::Tool;
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_eventsource::{Event, EventSource};
@@ -17,14 +18,19 @@ use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
-    inference::types::{
-        batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
-        ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
-        ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-        ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-        ProviderInferenceResponseStreamInner, Text, TextChunk, Thought, ThoughtChunk,
+    inference::{
+        types::{
+            batch::{
+                BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
+            },
+            ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
+            ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+            ProviderInferenceResponse, ProviderInferenceResponseArgs,
+            ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
+            Text, TextChunk, Thought, ThoughtChunk,
+        },
+        InferenceProvider,
     },
-    inference::InferenceProvider,
     model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
     tool::{ToolCall, ToolCallChunk},
 };
@@ -39,24 +45,31 @@ use super::{
 };
 
 lazy_static! {
-    static ref FIREWORKS_API_BASE: Url = {
+    pub static ref FIREWORKS_API_BASE: Url = {
+        #[expect(clippy::expect_used)]
+        Url::parse("https://api.fireworks.ai/").expect("Failed to parse FIREWORKS_API_BASE")
+    };
+    pub static ref FIREWORKS_API_INFERENCE_BASE: Url = {
         #[expect(clippy::expect_used)]
         Url::parse("https://api.fireworks.ai/inference/v1/")
-            .expect("Failed to parse FIREWORKS_API_BASE")
+            .expect("Failed to parse FIREWORKS_API_INFERENCE_BASE")
     };
 }
 
-const PROVIDER_NAME: &str = "Fireworks";
-const PROVIDER_TYPE: &str = "fireworks";
+pub const PROVIDER_NAME: &str = "Fireworks";
+pub const PROVIDER_TYPE: &str = "fireworks";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct FireworksProvider {
     model_name: String,
+    #[serde(skip)]
     credentials: FireworksCredentials,
     parse_think_blocks: bool,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<FireworksCredentials> = OnceLock::new();
+pub static DEFAULT_CREDENTIALS: OnceLock<FireworksCredentials> = OnceLock::new();
 
 impl FireworksProvider {
     pub fn new(
@@ -109,7 +122,7 @@ impl TryFrom<Credential> for FireworksCredentials {
 }
 
 impl FireworksCredentials {
-    fn get_api_key<'a>(
+    pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<&'a SecretString, Error> {
@@ -131,7 +144,7 @@ impl FireworksCredentials {
     }
 }
 
-fn default_api_key_location() -> CredentialLocation {
+pub fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("FIREWORKS_API_KEY".to_string())
 }
 
@@ -161,7 +174,7 @@ impl InferenceProvider for FireworksProvider {
                     ),
                 })
             })?;
-        let request_url = get_chat_url(&FIREWORKS_API_BASE)?;
+        let request_url = get_chat_url(&FIREWORKS_API_INFERENCE_BASE)?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key)?;
         let builder = http_client
@@ -251,7 +264,7 @@ impl InferenceProvider for FireworksProvider {
                     ),
                 })
             })?;
-        let request_url = get_chat_url(&FIREWORKS_API_BASE)?;
+        let request_url = get_chat_url(&FIREWORKS_API_INFERENCE_BASE)?;
         let api_key = self.credentials.get_api_key(api_key)?;
         let start_time = Instant::now();
         let builder = http_client
@@ -356,7 +369,7 @@ impl<'a> FireworksRequest<'a> {
             }
             ModelInferenceRequestJsonMode::Off => None,
         };
-        let messages = prepare_fireworks_messages(request)?;
+        let messages = prepare_fireworks_messages(request.system.as_deref(), &request.messages)?;
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         let tools = tools.map(|t| t.into_iter().map(|tool| tool.into()).collect());
 
@@ -377,17 +390,18 @@ impl<'a> FireworksRequest<'a> {
     }
 }
 
-fn prepare_fireworks_messages<'a>(
-    request: &'a ModelInferenceRequest<'_>,
+pub fn prepare_fireworks_messages<'a>(
+    system: Option<&'a str>,
+    messages: &'a [RequestMessage],
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
-    let mut messages = Vec::with_capacity(request.messages.len());
-    for message in request.messages.iter() {
-        messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
+    let mut output_messages = Vec::with_capacity(messages.len());
+    for message in messages.iter() {
+        output_messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
     }
-    if let Some(system_msg) = tensorzero_to_fireworks_system_message(request.system.as_deref()) {
-        messages.insert(0, system_msg);
+    if let Some(system_msg) = tensorzero_to_fireworks_system_message(system) {
+        output_messages.insert(0, system_msg);
     }
-    Ok(messages)
+    Ok(output_messages)
 }
 
 fn tensorzero_to_fireworks_system_message(
@@ -401,9 +415,22 @@ fn tensorzero_to_fireworks_system_message(
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-struct FireworksTool<'a> {
+pub struct FireworksTool<'a> {
     r#type: OpenAIToolType,
     function: OpenAIFunction<'a>,
+}
+
+impl<'a> From<&'a Tool> for FireworksTool<'a> {
+    fn from(tool: &'a Tool) -> Self {
+        FireworksTool {
+            r#type: OpenAIToolType::Function,
+            function: OpenAIFunction {
+                name: &tool.name,
+                description: Some(&tool.description),
+                parameters: &tool.parameters,
+            },
+        }
+    }
 }
 
 impl<'a> From<OpenAITool<'a>> for FireworksTool<'a> {
@@ -940,7 +967,7 @@ mod tests {
     #[test]
     fn test_fireworks_api_base() {
         assert_eq!(
-            FIREWORKS_API_BASE.as_str(),
+            FIREWORKS_API_INFERENCE_BASE.as_str(),
             "https://api.fireworks.ai/inference/v1/"
         );
     }

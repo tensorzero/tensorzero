@@ -17,18 +17,22 @@ use crate::{
         upload_openai_file, OpenAICredentials, DEFAULT_CREDENTIALS, OPENAI_DEFAULT_BASE_URL,
         PROVIDER_TYPE,
     },
-    stored_inference::RenderedStoredInference,
+    stored_inference::RenderedSample,
 };
 
 const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct OpenAISFTConfig {
     pub model: String,
     pub batch_size: Option<usize>,
     pub learning_rate_multiplier: Option<f64>,
     pub n_epochs: Option<usize>,
+    #[serde(skip)]
     pub credentials: OpenAICredentials,
+    #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocation>,
     pub seed: Option<u64>,
     pub suffix: Option<String>,
@@ -87,10 +91,11 @@ impl Optimizer for OpenAISFTConfig {
     async fn launch(
         &self,
         client: &reqwest::Client,
-        train_examples: Vec<RenderedStoredInference>,
-        val_examples: Option<Vec<RenderedStoredInference>>,
+        train_examples: Vec<RenderedSample>,
+        val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
     ) -> Result<Self::Handle, Error> {
+        // TODO(#2642): improve error handling here so we know what index of example failed
         let train_rows: Vec<OpenAISupervisedRow> = train_examples
             .iter()
             .map(OpenAISupervisedRow::try_from)

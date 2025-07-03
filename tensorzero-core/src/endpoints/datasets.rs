@@ -1,6 +1,14 @@
+#[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::{
+    content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
+};
 use axum::extract::{Path, Query, State};
 use axum::Json;
 use futures::future;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::IntoPyObjectExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -8,6 +16,8 @@ use std::{collections::HashMap, future::Future, pin::Pin};
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::inference::types::Text;
+use crate::stored_inference::{SimpleStoredSampleInfo, StoredSample};
 use crate::{
     clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     config_parser::Config,
@@ -1064,8 +1074,9 @@ pub struct InsertDatapointResponse {
     id: Uuid,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub enum Datapoint {
     Chat(ChatInferenceDatapoint),
     Json(JsonInferenceDatapoint),
@@ -1109,6 +1120,81 @@ impl Datapoint {
 }
 
 /// These input datapoints are used as input types by the `insert_datapoint` endpoint
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Datapoint {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+
+    #[getter]
+    pub fn get_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        uuid_to_python(py, self.id())
+    }
+
+    #[getter]
+    pub fn get_input<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.input().clone().into_bound_py_any(py)
+    }
+
+    #[getter]
+    pub fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(match self {
+            Datapoint::Chat(datapoint) => match &datapoint.output {
+                Some(output) => output
+                    .iter()
+                    .map(|x| content_block_chat_output_to_python(py, x.clone()))
+                    .collect::<PyResult<Vec<_>>>()?
+                    .into_bound_py_any(py)?,
+                None => py.None().into_bound(py),
+            },
+            Datapoint::Json(datapoint) => datapoint.output.clone().into_bound_py_any(py)?,
+        })
+    }
+
+    #[getter]
+    pub fn get_dataset_name(&self) -> String {
+        self.dataset_name().to_string()
+    }
+
+    #[getter]
+    pub fn get_function_name(&self) -> String {
+        self.function_name().to_string()
+    }
+
+    #[getter]
+    pub fn get_tool_params<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self.tool_call_config() {
+            Some(tool_params) => tool_params.clone().into_bound_py_any(py),
+            None => Ok(py.None().into_bound(py)),
+        }
+    }
+
+    #[getter]
+    pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(match self.output_schema() {
+            Some(output_schema) => serialize_to_dict(py, output_schema)?.into_bound(py),
+            None => py.None().into_bound(py),
+        })
+    }
+
+    #[getter]
+    pub fn get_is_custom(&self) -> bool {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.is_custom,
+            Datapoint::Json(datapoint) => datapoint.is_custom,
+        }
+    }
+}
+
+impl std::fmt::Display for Datapoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+/// These input datapoints are used as input typesby the `insert_datapoint` endpoint
 /// The distinction here is that they do not include the `dataset_name` field,
 /// which is instead specified as a path parameter.
 /// We also use Input rather than ResolvedInput because the input is not resolved
@@ -1137,7 +1223,8 @@ pub struct JsonDatapointInsert {
     pub tags: Option<HashMap<String, String>>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -1169,7 +1256,15 @@ pub struct ChatInferenceDatapoint {
     pub staled_at: Option<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+impl std::fmt::Display for ChatInferenceDatapoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -1197,6 +1292,63 @@ pub struct JsonInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub staled_at: Option<String>,
+}
+
+impl std::fmt::Display for JsonInferenceDatapoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+impl StoredSample for Datapoint {
+    fn function_name(&self) -> &str {
+        match self {
+            Datapoint::Chat(datapoint) => &datapoint.function_name,
+            Datapoint::Json(datapoint) => &datapoint.function_name,
+        }
+    }
+
+    fn input(&self) -> &ResolvedInput {
+        match self {
+            Datapoint::Chat(datapoint) => &datapoint.input,
+            Datapoint::Json(datapoint) => &datapoint.input,
+        }
+    }
+
+    fn input_mut(&mut self) -> &mut ResolvedInput {
+        match self {
+            Datapoint::Chat(datapoint) => &mut datapoint.input,
+            Datapoint::Json(datapoint) => &mut datapoint.input,
+        }
+    }
+
+    fn owned_simple_info(self) -> SimpleStoredSampleInfo {
+        match self {
+            Datapoint::Chat(datapoint) => SimpleStoredSampleInfo {
+                function_name: datapoint.function_name,
+                output: datapoint.output,
+                tool_params: datapoint.tool_params,
+                output_schema: None,
+                episode_id: None,
+                inference_id: None,
+            },
+            Datapoint::Json(datapoint) => {
+                let output = datapoint.output.map(|output| match output.raw {
+                    Some(raw) => vec![ContentBlockChatOutput::Text(Text { text: raw })],
+                    None => vec![],
+                });
+                SimpleStoredSampleInfo {
+                    function_name: datapoint.function_name,
+                    output,
+                    tool_params: None,
+                    output_schema: Some(datapoint.output_schema),
+                    episode_id: None,
+                    inference_id: None,
+                }
+            }
+        }
+    }
 }
 
 /// If the input is None then we should return None
