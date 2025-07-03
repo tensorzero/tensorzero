@@ -349,7 +349,7 @@ test("should be able to add a datapoint from the inference page", async ({
   await page.getByText("Add to dataset").click();
 
   // Select the `test` dataset
-  await page.getByRole("option", { name: "baz" }).click();
+  await page.getByRole("option", { name: "test_json_dataset" }).click();
   // Wait 2 seconds
   await page.waitForTimeout(2000);
 
@@ -358,5 +358,5 @@ test("should be able to add a datapoint from the inference page", async ({
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
   // Assert that the page URL starts with /datasets/test_json_dataset/datapoint/
-  await expect(page).toHaveURL("/datasets/baz/datapoint/.*");
+  await expect(page).toHaveURL("/datasets/test_json_dataset/datapoint/.*");
 });
