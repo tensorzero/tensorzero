@@ -29,11 +29,19 @@ test("should show the datapoint detail page", async ({ page }) => {
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
-test("should be able to edit and save a datapoint", async ({ page }) => {
+test("should be able to add, edit and save a datapoint", async ({ page }) => {
   await page.goto(
-    "/datasets/foo/datapoint/0196374b-d575-77b3-ac22-91806c67745c",
+    "/observability/inferences/0197177a-7c00-70a2-82a6-741f60a03b2e",
   );
   await page.waitForLoadState("networkidle");
+
+  await page.getByRole("button", { name: "Add to dataset" }).click();
+  await page.getByRole("option", { name: "test_json_dataset" }).click();
+  await page.getByRole("button", { name: "Inference Output" }).click();
+
+  await page.waitForTimeout(5000);
+  // Should then navigate to the datapoint page
+  await expect(page.url()).toContain("/datasets/test_json_dataset/datapoint/");
 
   await expect(page.getByText("Custom")).not.toBeVisible();
 
