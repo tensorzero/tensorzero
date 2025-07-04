@@ -7,9 +7,11 @@ on:
 
 env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
 permissions:
-  pull-requests: write  # For doing the emoji reaction on a PR comment
+  pull-requests: write # For doing the emoji reaction on a PR comment
   contents: write
 
 jobs:
