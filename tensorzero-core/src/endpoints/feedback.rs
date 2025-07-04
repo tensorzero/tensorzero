@@ -461,6 +461,7 @@ async fn get_function_name(
     let function_name = connection_info
         .run_query_synchronous_no_params(query)
         .await?
+        .response
         .trim()
         .to_string();
     if function_name.is_empty() {
@@ -643,8 +644,8 @@ async fn get_dynamic_demonstration_info(
                 )
                 .await?;
 
-            let tool_params_result =
-                serde_json::from_str::<ToolParamsResult>(&result).map_err(|e| {
+            let tool_params_result = serde_json::from_str::<ToolParamsResult>(&result.response)
+                .map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
                         message: format!("Failed to parse demonstration result: {e}"),
                     })
@@ -670,7 +671,7 @@ async fn get_dynamic_demonstration_info(
                     ]),
                 )
                 .await?;
-            let result_value = serde_json::from_str::<Value>(&result).map_err(|e| {
+            let result_value = serde_json::from_str::<Value>(&result.response).map_err(|e| {
                 Error::new(ErrorDetails::ClickHouseQuery {
                     message: format!("Failed to parse demonstration result: {e}"),
                 })

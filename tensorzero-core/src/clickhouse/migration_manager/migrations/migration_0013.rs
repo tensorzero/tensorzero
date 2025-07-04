@@ -82,7 +82,7 @@ impl Migration for Migration0013<'_> {
             .clickhouse
             .run_query_synchronous_no_params(query)
             .await?;
-        if !result.contains("UInt128") {
+        if !result.response.contains("UInt128") {
             return Err(ErrorDetails::ClickHouseMigration {
                 id: "0013".to_string(),
                 message:
@@ -96,7 +96,7 @@ impl Migration for Migration0013<'_> {
             .clickhouse
             .run_query_synchronous_no_params(query)
             .await?;
-        if !result.contains("UInt128") {
+        if !result.response.contains("UInt128") {
             return Err(ErrorDetails::ClickHouseMigration {
                 id: "0013".to_string(),
                 message:
@@ -110,7 +110,7 @@ impl Migration for Migration0013<'_> {
             .clickhouse
             .run_query_synchronous_no_params(query)
             .await?;
-        if !result.contains("1") {
+        if !result.response.contains("1") {
             return Ok(true);
         }
         Ok(false)
@@ -134,6 +134,7 @@ impl Migration for Migration0013<'_> {
             .clickhouse
             .run_query_synchronous_no_params(query)
             .await?
+            .response
             .trim()
             .parse()
             .map_err(|e| {
@@ -147,6 +148,7 @@ impl Migration for Migration0013<'_> {
             .clickhouse
             .run_query_synchronous_no_params(query)
             .await?
+            .response
             .trim()
             .parse()
             .map_err(|e| {

@@ -105,7 +105,7 @@ impl Migration for Migration0020<'_> {
             .clickhouse
             .run_query_synchronous_no_params(query)
             .await?;
-        if !result.contains("UInt128") {
+        if !result.response.contains("UInt128") {
             // Table was created by an older migration. We should drop and recreate
             return Ok(true);
         }
@@ -114,7 +114,7 @@ impl Migration for Migration0020<'_> {
             .clickhouse
             .run_query_synchronous_no_params(query)
             .await?;
-        if !result.contains("UInt128") {
+        if !result.response.contains("UInt128") {
             // Table was created by an older migration. We should drop and recreate
             return Ok(true);
         }
@@ -123,7 +123,7 @@ impl Migration for Migration0020<'_> {
             .clickhouse
             .run_query_synchronous_no_params(query)
             .await?;
-        if !result.contains("1") {
+        if !result.response.contains("1") {
             return Ok(true);
         }
         Ok(false)
