@@ -202,10 +202,22 @@ impl ClickHouseConnectionInfo {
         &self,
         query: String,
         parameters: &HashMap<&str, &str>,
-    ) -> Result<String, Error> {
+    ) -> Result<ClickHouseResponse, Error> {
         match self {
-            Self::Disabled => Ok("".to_string()),
-            Self::Mock { .. } => Ok("".to_string()),
+            Self::Disabled => Ok(ClickHouseResponse {
+                response: "".to_string(),
+                metadata: ClickHouseResponseMetadata {
+                    read_rows: 0,
+                    written_rows: 0,
+                },
+            }),
+            Self::Mock { .. } => Ok(ClickHouseResponse {
+                response: "".to_string(),
+                metadata: ClickHouseResponseMetadata {
+                    read_rows: 0,
+                    written_rows: 0,
+                },
+            }),
             Self::Production {
                 database_url,
                 client,
@@ -225,7 +237,7 @@ impl ClickHouseConnectionInfo {
                 database_url
                     .query_pairs_mut()
                     .append_pair("alter_sync", "2");
-                let response = client
+                let res = client
                     .post(database_url)
                     .body(query)
                     .send()
@@ -235,16 +247,42 @@ impl ClickHouseConnectionInfo {
                             message: DisplayOrDebugGateway::new(e).to_string(),
                         })
                     })?;
-                let status = response.status();
+                let status = res.status();
 
-                let response_body = response.text().await.map_err(|e| {
+                // Get the ClickHouse summary info from the headers
+                let metadata = if let Some(summary) = res.headers().get("x-clickhouse-summary") {
+                    let summary_str = summary.to_str().map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseQuery {
+                            message: format!("Failed to parse x-clickhouse-summary header: {e}"),
+                        })
+                    })?;
+
+                    serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(
+                        |e| {
+                            Error::new(ErrorDetails::ClickHouseQuery {
+                                message: format!("Failed to deserialize x-clickhouse-summary: {e}"),
+                            })
+                        },
+                    )?
+                } else {
+                    tracing::warn!("No x-clickhouse-summary header found in ClickHouse response");
+                    ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    }
+                };
+
+                let response_body = res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
                         message: DisplayOrDebugGateway::new(e).to_string(),
                     })
                 })?;
 
                 match status {
-                    reqwest::StatusCode::OK => Ok(response_body),
+                    reqwest::StatusCode::OK => Ok(ClickHouseResponse {
+                        response: response_body,
+                        metadata,
+                    }),
                     _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
                         message: response_body,
                     })),
@@ -253,7 +291,10 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn run_query_synchronous_no_params(&self, query: String) -> Result<String, Error> {
+    pub async fn run_query_synchronous_no_params(
+        &self,
+        query: String,
+    ) -> Result<ClickHouseResponse, Error> {
         self.run_query_synchronous(query, &HashMap::default()).await
     }
 
@@ -423,7 +464,8 @@ impl ClickHouseConnectionInfo {
             PRIMARY KEY (migration_id)"#
                 .to_string(),
         )
-        .await?;
+        .await
+        .map(|_| ())?;
         Ok(())
     }
 
@@ -439,6 +481,7 @@ impl ClickHouseConnectionInfo {
             .collect();
         let response = self.run_query_synchronous(sql, &params_map).await?;
         let inferences = response
+            .response
             .trim()
             .lines()
             .map(|line| {

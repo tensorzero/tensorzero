@@ -116,11 +116,14 @@ pub async fn check_static_eval_human_feedback(
             ]),
         )
         .await?;
-    debug!(result_length = result.len(), "Query executed successfully");
-    if result.is_empty() {
+    debug!(
+        result_length = result.response.len(),
+        "Query executed successfully"
+    );
+    if result.response.is_empty() {
         return Ok(None);
     }
-    let human_feedback_result: HumanFeedbackResult = serde_json::from_str(&result)
+    let human_feedback_result: HumanFeedbackResult = serde_json::from_str(&result.response)
         .map_err(|e| anyhow!("Failed to parse human feedback result: {}", e))?;
     Ok(Some(human_feedback_result))
 }
