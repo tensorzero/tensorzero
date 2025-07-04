@@ -644,8 +644,10 @@ pub struct ClickHouseResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct ClickHouseResponseMetadata {
+    #[serde(default)]
     #[serde(deserialize_with = "deserialize_u64_from_str")]
     pub read_rows: u64,
+    #[serde(default)]
     #[serde(deserialize_with = "deserialize_u64_from_str")]
     pub written_rows: u64,
 }
