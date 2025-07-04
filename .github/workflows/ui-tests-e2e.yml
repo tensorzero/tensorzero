@@ -169,9 +169,6 @@ jobs:
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --no-build -d
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml wait fixtures
 
-      - name: Debugging with ssh
-        uses: lhotari/action-upterm@v1
-
       - name: Run UI E2E tests
         id: e2e_tests
         env:
