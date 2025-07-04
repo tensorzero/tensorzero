@@ -24,13 +24,13 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: "22.9.0"          
+          node-version: "22.9.0"
       - name: Setup `pnpm`
-        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda   
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile
       - name: Setup Playwright
-        run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium              
+        run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
       - name: Regenerate fixtures
         id: e2e_tests
         run: |
@@ -77,7 +77,7 @@ jobs:
         run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
 
       - name: Upload Playwright artifacts
-        if: steps.e2e_tests.outcome == 'failure'
+        if: always()
         uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
         with:
           name: playwright-report
