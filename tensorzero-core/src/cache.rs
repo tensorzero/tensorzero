@@ -248,9 +248,6 @@ pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     let short_cache_key = cache_key.get_short_key()?;
     let long_cache_key = cache_key.get_long_key();
     let raw_request = raw_request.to_string();
-    if raw_request.contains("It's a crab") {
-        panic!("It's a crab");
-    }
     let raw_response = raw_response.to_string();
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
