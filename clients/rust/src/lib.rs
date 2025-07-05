@@ -769,7 +769,7 @@ impl Client {
                 .into(),
             });
         };
-        Ok(with_embedded_timeout(*timeout, async {
+        with_embedded_timeout(*timeout, async {
             tensorzero_core::endpoints::datasets::stale_dataset(
                 &gateway.state.clickhouse_connection_info,
                 &dataset_name,
@@ -777,7 +777,7 @@ impl Client {
             .await
             .map_err(err_to_http)
         })
-        .await?)
+        .await
     }
 
     /// Query the Clickhouse database for inferences.

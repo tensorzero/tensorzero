@@ -1539,9 +1539,10 @@ pub async fn stale_dataset(
     clickhouse: &ClickHouseConnectionInfo,
     dataset_name: &str,
 ) -> Result<StaleDatasetResponse, Error> {
+    // NOTE: in the two queries below, we don't alias to staled_at because then we won't select any rows.
     let chat_query = r#"
     INSERT INTO ChatInferenceDatapoint
-    SELECT 
+    SELECT
         dataset_name,
         function_name,
         id,
@@ -1552,19 +1553,18 @@ pub async fn stale_dataset(
         tags,
         auxiliary,
         is_deleted,
-        updated_at,
-        now() as staled_at,
+        now64(), -- updated_at
+        now64(), -- staled_at
         source_inference_id
-    FROM ChatInferenceDatapoint
+    FROM ChatInferenceDatapoint FINAL
     WHERE dataset_name = {dataset_name:String}
     AND staled_at IS NULL
     "#
     .to_string();
 
     let json_query = r#"
-   let json_query = r#"
     INSERT INTO JsonInferenceDatapoint
-    SELECT 
+    SELECT
         dataset_name,
         function_name,
         id,
@@ -1575,10 +1575,10 @@ pub async fn stale_dataset(
         tags,
         auxiliary,
         is_deleted,
-        updated_at,
-        now() as staled_at,
-        source_inference_id,
-    FROM JsonInferenceDatapoint
+        now64(), -- updated_at
+        now64(), -- staled_at
+        source_inference_id
+    FROM JsonInferenceDatapoint FINAL
     WHERE dataset_name = {dataset_name:String}
     AND staled_at IS NULL
     "#
