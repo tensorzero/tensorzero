@@ -1524,6 +1524,48 @@ async fn put_deduped_json_datapoints(
     Ok(result.metadata.written_rows)
 }
 
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct StaleDatasetResponse {
+    pub num_staled_datapoints: u64,
+}
+
+/// Stales all datapoints in a dataset that have not been staled yet.
+/// This is a soft deletion, so evaluation runs will still refer to it.
+pub async fn stale_dataset_datapoints(
+    clickhouse: &ClickHouseConnectionInfo,
+    dataset_name: &str,
+) -> Result<StaleDatasetResponse, Error> {
+    let chat_query = r#"
+    INSERT INTO ChatInferenceDatapoint
+    SELECT * EXCEPT(staled_at), now() as staled_at FROM ChatInferenceDatapoint
+    WHERE dataset_name = {dataset_name:String}
+    AND staled_at IS NULL
+    "#
+    .to_string();
+
+    let json_query = r#"
+    INSERT INTO JsonInferenceDatapoint
+    SELECT * EXCEPT(staled_at), now() as staled_at FROM JsonInferenceDatapoint
+    WHERE dataset_name = {dataset_name:String}
+    AND staled_at IS NULL
+    "#
+    .to_string();
+    let query_params = HashMap::from([("dataset_name", dataset_name)]);
+
+    let chat_result = clickhouse
+        .run_query_synchronous(chat_query, &query_params)
+        .await?;
+    let json_result = clickhouse
+        .run_query_synchronous(json_query, &query_params)
+        .await?;
+    Ok(StaleDatasetResponse {
+        num_staled_datapoints: chat_result.metadata.written_rows
+            + json_result.metadata.written_rows,
+    })
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
