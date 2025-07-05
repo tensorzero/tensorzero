@@ -5,6 +5,7 @@ use crate::inference::types::pyo3_helpers::{
 use axum::extract::{Path, Query, State};
 use axum::Json;
 use futures::future;
+use futures::try_join;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
@@ -1533,33 +1534,61 @@ pub struct StaleDatasetResponse {
 
 /// Stales all datapoints in a dataset that have not been staled yet.
 /// This is a soft deletion, so evaluation runs will still refer to it.
-pub async fn stale_dataset_datapoints(
+/// Returns the number of datapoints that were staled.
+pub async fn stale_dataset(
     clickhouse: &ClickHouseConnectionInfo,
     dataset_name: &str,
 ) -> Result<StaleDatasetResponse, Error> {
     let chat_query = r#"
     INSERT INTO ChatInferenceDatapoint
-    SELECT * EXCEPT(staled_at), now() as staled_at FROM ChatInferenceDatapoint
+    SELECT 
+        dataset_name,
+        function_name,
+        id,
+        episode_id,
+        input,
+        output,
+        tool_params,
+        tags,
+        auxiliary,
+        is_deleted,
+        updated_at,
+        now() as staled_at,
+        source_inference_id
+    FROM ChatInferenceDatapoint
     WHERE dataset_name = {dataset_name:String}
     AND staled_at IS NULL
     "#
     .to_string();
 
     let json_query = r#"
+   let json_query = r#"
     INSERT INTO JsonInferenceDatapoint
-    SELECT * EXCEPT(staled_at), now() as staled_at FROM JsonInferenceDatapoint
+    SELECT 
+        dataset_name,
+        function_name,
+        id,
+        episode_id,
+        input,
+        output,
+        output_schema,
+        tags,
+        auxiliary,
+        is_deleted,
+        updated_at,
+        now() as staled_at,
+        source_inference_id,
+    FROM JsonInferenceDatapoint
     WHERE dataset_name = {dataset_name:String}
     AND staled_at IS NULL
     "#
     .to_string();
     let query_params = HashMap::from([("dataset_name", dataset_name)]);
 
-    let chat_result = clickhouse
-        .run_query_synchronous(chat_query, &query_params)
-        .await?;
-    let json_result = clickhouse
-        .run_query_synchronous(json_query, &query_params)
-        .await?;
+    let (chat_result, json_result) = try_join!(
+        clickhouse.run_query_synchronous(chat_query, &query_params),
+        clickhouse.run_query_synchronous(json_query, &query_params)
+    )?;
     Ok(StaleDatasetResponse {
         num_staled_datapoints: chat_result.metadata.written_rows
             + json_result.metadata.written_rows,

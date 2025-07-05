@@ -2698,3 +2698,233 @@ async fn test_list_datapoints_function_name_filter() {
     let empty_datapoints: Vec<Value> = resp.json().await.unwrap();
     assert_eq!(empty_datapoints.len(), 0);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stale_dataset_with_datapoints() {
+    use crate::providers::common::make_embedded_gateway;
+    
+    let clickhouse = get_clickhouse().await;
+    let client = make_embedded_gateway().await;
+    let dataset_name = format!("test-stale-dataset-{}", Uuid::now_v7());
+    
+    // First, insert some chat datapoints
+    let chat_datapoint_id1 = Uuid::now_v7();
+    let chat_datapoint_id2 = Uuid::now_v7();
+    
+    let http_client = Client::new();
+    let resp = http_client
+        .put(get_gateway_endpoint(&format!(
+            "/internal/datasets/{dataset_name}/datapoints/{chat_datapoint_id1}",
+        )))
+        .json(&json!({
+            "function_name": "basic_test",
+            "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "Chat message 1"}]}]},
+            "output": [{"type": "text", "text": "Response 1"}],
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    
+    let resp = http_client
+        .put(get_gateway_endpoint(&format!(
+            "/internal/datasets/{dataset_name}/datapoints/{chat_datapoint_id2}",
+        )))
+        .json(&json!({
+            "function_name": "basic_test",
+            "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "Chat message 2"}]}]},
+            "output": [{"type": "text", "text": "Response 2"}],
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    
+    // Insert some JSON datapoints
+    let json_datapoint_id1 = Uuid::now_v7();
+    let json_datapoint_id2 = Uuid::now_v7();
+    
+    let resp = http_client
+        .put(get_gateway_endpoint(&format!(
+            "/internal/datasets/{dataset_name}/datapoints/{json_datapoint_id1}",
+        )))
+        .json(&json!({
+            "function_name": "json_success",
+            "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"query": "test1"}}]}]},
+            "output": {"answer": "Result 1"},
+            "output_schema": {},
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    
+    let resp = http_client
+        .put(get_gateway_endpoint(&format!(
+            "/internal/datasets/{dataset_name}/datapoints/{json_datapoint_id2}",
+        )))
+        .json(&json!({
+            "function_name": "json_success",
+            "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"query": "test2"}}]}]},
+            "output": {"answer": "Result 2"},
+            "output_schema": {},
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    
+    // Verify datapoints exist before staling
+    let resp = http_client
+        .get(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints",
+        )))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    let datapoints: Vec<Value> = resp.json().await.unwrap();
+    assert_eq!(datapoints.len(), 4);
+    
+    // Now stale the entire dataset using the Rust client
+    let stale_result = client.stale_dataset(dataset_name.clone()).await.unwrap();
+    assert_eq!(stale_result.num_staled_datapoints, 4);
+    
+    // Verify datapoints are no longer returned after staling
+    let resp = http_client
+        .get(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints",
+        )))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    let datapoints_after: Vec<Value> = resp.json().await.unwrap();
+    assert_eq!(datapoints_after.len(), 0);
+    
+    // Verify the datapoints still exist in the database but are marked as staled
+    let chat_datapoint1 = select_chat_datapoint_clickhouse(&clickhouse, chat_datapoint_id1)
+        .await
+        .unwrap();
+    assert!(chat_datapoint1["staled_at"].as_str().is_some());
+    assert_ne!(chat_datapoint1["staled_at"].as_str().unwrap(), "");
+    
+    let json_datapoint1 = select_json_datapoint_clickhouse(&clickhouse, json_datapoint_id1)
+        .await
+        .unwrap();
+    assert!(json_datapoint1["staled_at"].as_str().is_some());
+    assert_ne!(json_datapoint1["staled_at"].as_str().unwrap(), "");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stale_dataset_empty() {
+    use crate::providers::common::make_embedded_gateway;
+    
+    let client = make_embedded_gateway().await;
+    let dataset_name = format!("test-empty-stale-dataset-{}", Uuid::now_v7());
+    
+    // Stale an empty dataset (no datapoints exist)
+    let stale_result = client.stale_dataset(dataset_name.clone()).await.unwrap();
+    assert_eq!(stale_result.num_staled_datapoints, 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stale_dataset_already_staled() {
+    use crate::providers::common::make_embedded_gateway;
+    
+    let client = make_embedded_gateway().await;
+    let http_client = Client::new();
+    let dataset_name = format!("test-already-staled-{}", Uuid::now_v7());
+    
+    // Insert a datapoint
+    let datapoint_id = Uuid::now_v7();
+    let resp = http_client
+        .put(get_gateway_endpoint(&format!(
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&json!({
+            "function_name": "basic_test",
+            "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "Test message"}]}]},
+            "output": [{"type": "text", "text": "Test response"}],
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    
+    // Stale the dataset once
+    let stale_result1 = client.stale_dataset(dataset_name.clone()).await.unwrap();
+    assert_eq!(stale_result1.num_staled_datapoints, 1);
+    
+    // Try to stale it again - should return 0 since datapoints are already staled
+    let stale_result2 = client.stale_dataset(dataset_name.clone()).await.unwrap();
+    assert_eq!(stale_result2.num_staled_datapoints, 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stale_dataset_mixed_staled_fresh() {
+    use crate::providers::common::make_embedded_gateway;
+    
+    let client = make_embedded_gateway().await;
+    let http_client = Client::new();
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test-mixed-stale-{}", Uuid::now_v7());
+    
+    // Insert first datapoint
+    let datapoint_id1 = Uuid::now_v7();
+    let resp = http_client
+        .put(get_gateway_endpoint(&format!(
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id1}",
+        )))
+        .json(&json!({
+            "function_name": "basic_test",
+            "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "Message 1"}]}]},
+            "output": [{"type": "text", "text": "Response 1"}],
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    
+    // Delete (stale) the first datapoint individually
+    let resp = http_client
+        .delete(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id1}",
+        )))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    
+    // Verify it's staled
+    let datapoint1 = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id1)
+        .await
+        .unwrap();
+    assert!(datapoint1["staled_at"].as_str().is_some());
+    
+    // Insert second datapoint after the first was staled
+    let datapoint_id2 = Uuid::now_v7();
+    let resp = http_client
+        .put(get_gateway_endpoint(&format!(
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id2}",
+        )))
+        .json(&json!({
+            "function_name": "basic_test",
+            "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "Message 2"}]}]},
+            "output": [{"type": "text", "text": "Response 2"}],
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    
+    // Now stale the entire dataset - should only stale the fresh datapoint
+    let stale_result = client.stale_dataset(dataset_name.clone()).await.unwrap();
+    assert_eq!(stale_result.num_staled_datapoints, 1);
+    
+    // Verify both datapoints are staled
+    let datapoint2 = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id2)
+        .await
+        .unwrap();
+    assert!(datapoint2["staled_at"].as_str().is_some());
+}
