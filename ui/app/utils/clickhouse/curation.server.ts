@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { MetricConfig, MetricConfigOptimize } from "../config/metric";
+import type { MetricConfigOptimize } from "tensorzero-node";
 import {
   contentBlockOutputSchema,
   CountSchema,
@@ -11,8 +11,8 @@ import {
 } from "./common";
 import type { JsonInferenceOutput } from "./common";
 import { getClickhouseClient } from "./client.server";
-import type { FunctionConfig } from "../config/function";
-import { getComparisonOperator } from "../config/metric";
+import type { FunctionConfig } from "tensorzero-node";
+import { getComparisonOperator, type FeedbackConfig } from "../config/feedback";
 import {
   getInferenceJoinKey,
   parsedChatExampleSchema,
@@ -28,7 +28,7 @@ export async function countFeedbacksForMetric(
   function_name: string,
   function_config: FunctionConfig,
   metric_name: string,
-  metric_config: MetricConfig,
+  metric_config: FeedbackConfig,
 ): Promise<number | null> {
   const inference_table_name = getInferenceTableName(function_config);
   switch (metric_config.type) {
@@ -66,7 +66,7 @@ export async function countCuratedInferences(
   function_name: string,
   function_config: FunctionConfig,
   metric_name: string,
-  metric_config: MetricConfig,
+  metric_config: FeedbackConfig,
   threshold: number,
 ) {
   const inference_table_name = getInferenceTableName(function_config);
@@ -107,7 +107,7 @@ export async function getCuratedInferences(
   function_name: string,
   function_config: FunctionConfig,
   metric_name: string | null,
-  metric_config: MetricConfig | null,
+  metric_config: FeedbackConfig | null,
   threshold: number,
   max_samples?: number,
 ) {

@@ -1,4 +1,4 @@
-import type { FunctionConfig, JSONSchema } from "~/utils/config/function";
+import type { FunctionConfig, JsonValue } from "tensorzero-node";
 import {
   SnippetLayout,
   SnippetContent,
@@ -16,7 +16,7 @@ interface FunctionSchemaProps {
 function createSchemaTab(
   id: string,
   label: string,
-  schema?: JSONSchema,
+  schema?: JsonValue,
   emptyMessage?: string,
 ): SnippetTab & { emptyMessage?: string } {
   return {
@@ -31,11 +31,11 @@ export default function FunctionSchema({
   functionConfig,
 }: FunctionSchemaProps) {
   const schemas = {
-    system: functionConfig.system_schema?.content,
-    user: functionConfig.user_schema?.content,
-    assistant: functionConfig.assistant_schema?.content,
+    system: functionConfig.system_schema?.value,
+    user: functionConfig.user_schema?.value,
+    assistant: functionConfig.assistant_schema?.value,
     ...(functionConfig.type === "json"
-      ? { output: functionConfig.output_schema?.content }
+      ? { output: functionConfig.output_schema?.value }
       : {}),
   };
 

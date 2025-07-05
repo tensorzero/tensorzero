@@ -1,12 +1,12 @@
 import { Code } from "~/components/ui/code";
 import { useConfig } from "~/context/config";
 import { AlertDialog } from "~/components/ui/AlertDialog";
-import type { FunctionType } from "~/utils/config/function";
+import type { FunctionConfig } from "tensorzero-node";
 import { FunctionLink } from "./FunctionLink";
 
 type FunctionInfoProps = {
   functionName: string;
-  functionType: FunctionType;
+  functionType: FunctionConfig["type"];
 };
 
 export function FunctionInfo({

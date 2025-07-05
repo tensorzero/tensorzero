@@ -31,6 +31,16 @@ test("countInferencesForFunction returns correct counts", async () => {
   const jsonCount = await countInferencesForFunction("extract_entities", {
     type: "json",
     variants: {},
+    system_schema: null,
+    user_schema: null,
+    assistant_schema: null,
+    description: "",
+    output_schema: { value: {} },
+    implicit_tool_call_config: {
+      tools_available: [],
+      tool_choice: "none",
+      parallel_tool_calls: false,
+    },
   });
   expect(jsonCount).toBe(604);
 
@@ -40,6 +50,10 @@ test("countInferencesForFunction returns correct counts", async () => {
     tools: [],
     tool_choice: "none",
     parallel_tool_calls: false,
+    system_schema: null,
+    user_schema: null,
+    assistant_schema: null,
+    description: "",
   });
   expect(chatCount).toBe(804);
 });
@@ -48,7 +62,20 @@ test("countInferencesForFunction returns correct counts", async () => {
 test("countInferencesForVariant returns correct counts", async () => {
   const jsonCount = await countInferencesForVariant(
     "extract_entities",
-    { type: "json", variants: {} },
+    {
+      type: "json",
+      variants: {},
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
+      output_schema: { value: {} },
+      implicit_tool_call_config: {
+        tools_available: [],
+        tool_choice: "none",
+        parallel_tool_calls: false,
+      },
+    },
     "gpt4o_initial_prompt",
   );
   expect(jsonCount).toBe(132);
@@ -61,6 +88,10 @@ test("countInferencesForVariant returns correct counts", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
     },
     "initial_prompt_gpt4o_mini",
   );

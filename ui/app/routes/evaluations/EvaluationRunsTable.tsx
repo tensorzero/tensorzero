@@ -79,7 +79,7 @@ export default function EvaluationRunsTable({
                   <TableCell>
                     <TableItemFunction
                       functionName={evaluationRun.function_name}
-                      functionType={functionType}
+                      functionType={functionType ?? ""}
                       link={`/functions/${evaluationRun.function_name}`}
                     />
                   </TableCell>

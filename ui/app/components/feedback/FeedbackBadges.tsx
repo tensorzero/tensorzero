@@ -1,6 +1,6 @@
 import { Badge } from "~/components/ui/badge";
 import type { FeedbackRow } from "~/utils/clickhouse/feedback";
-import type { MetricConfig } from "~/utils/config/metric";
+import type { FeedbackConfig } from "~/utils/config/feedback";
 
 // Move the getBadgeStyle function from MetricSelector
 const getBadgeStyle = (
@@ -36,17 +36,17 @@ const getBadgeStyle = (
   }
 };
 
-type MetricBadgesProps = {
-  metric: MetricConfig;
+type FeedbackBadgesProps = {
+  metric: FeedbackConfig;
   row?: FeedbackRow;
   showLevel?: boolean;
 };
 
-export default function MetricBadges({
+export default function FeedbackBadges({
   metric,
   row,
   showLevel = true,
-}: MetricBadgesProps) {
+}: FeedbackBadgesProps) {
   if (!metric) return null;
   return (
     <div className="flex gap-1.5">

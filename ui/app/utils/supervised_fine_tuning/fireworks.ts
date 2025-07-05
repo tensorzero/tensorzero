@@ -25,7 +25,8 @@ import type { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
 import { v7 } from "uuid";
 import { render_message } from "./rendering";
 import { getConfig } from "../config/index.server";
-import { get_template_env, type ChatCompletionConfig } from "../config/variant";
+import { get_template_env } from "../config/variant";
+import type { VariantConfig } from "tensorzero-node";
 import { z } from "zod";
 import { SFTJob, type SFTJobStatus } from "./common";
 import { getCuratedInferences } from "../clickhouse/curation.server";
@@ -104,19 +105,29 @@ export class FireworksSFTJob extends SFTJob {
 
   static async from_form_data(data: SFTFormValues): Promise<FireworksSFTJob> {
     const config = await getConfig();
-    const currentVariant = config.functions[data.function].variants[
-      data.variant
-    ] as ChatCompletionConfig;
-    if (currentVariant.type != "chat_completion") {
+    const functionConfig = config.functions[data.function];
+    if (!functionConfig) {
+      throw new Error(`Function ${data.function} not found in config`);
+    }
+    const currentVariant = functionConfig.variants[data.variant]
+      ?.inner as VariantConfig;
+    if (currentVariant?.type != "chat_completion") {
       throw new Error(
         "Supervised fine-tuning is only supported for chat completion variants",
       );
     }
+    let metricConfig = null;
+    if (data.metric) {
+      metricConfig = config.metrics[data.metric];
+      if (!metricConfig) {
+        throw new Error(`Metric ${data.metric} not found in config`);
+      }
+    }
     const curatedInferences = await getCuratedInferences(
       data.function,
-      config.functions[data.function],
+      functionConfig,
       data.metric,
-      data.metric ? config.metrics[data.metric] : null,
+      metricConfig,
       data.threshold,
       data.maxSamples,
     );

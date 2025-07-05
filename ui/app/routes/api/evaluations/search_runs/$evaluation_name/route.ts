@@ -11,10 +11,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
   const query = url.searchParams.get("q") || "";
   const config = await getConfig();
-  const function_name = config.evaluations[evaluationName].function_name;
+  const function_name = config.evaluations[evaluationName]?.function_name;
 
   if (!evaluationName) {
     return new Response("Missing evaluation_name parameter", { status: 400 });
+  }
+
+  if (!function_name) {
+    return new Response(
+      `Failed to find config for evaluation ${evaluationName}`,
+      { status: 400 },
+    );
   }
 
   const runs = await searchEvaluationRuns(

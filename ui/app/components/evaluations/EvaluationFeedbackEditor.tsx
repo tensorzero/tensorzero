@@ -13,6 +13,7 @@ import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import { useConfig } from "~/context/config";
 import FloatFeedbackInput from "../feedback/FloatFeedbackInput";
 import { Button } from "../ui/button";
+import { logger } from "~/utils/logger";
 
 interface EvaluationFeedbackEditorProps {
   inferenceId: string;
@@ -39,10 +40,11 @@ export default function EvaluationFeedbackEditor({
   const { getColor } = useColorAssigner();
   const config = useConfig();
   const metricConfig = config.metrics[metricName];
-  const metricType = metricConfig.type;
-  if (metricType === "comment" || metricType === "demonstration") {
+  if (!metricConfig) {
+    logger.warn(`Metric ${metricName} not found`);
     return null;
   }
+  const metricType = metricConfig.type;
   return (
     <>
       <EditButton onClick={() => setIsOpen(true)} />

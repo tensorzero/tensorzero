@@ -1,5 +1,5 @@
 import type { Control, Path } from "react-hook-form";
-import { Config } from "~/utils/config";
+import type { Config } from "tensorzero-node";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import {
   Select,
@@ -46,6 +46,9 @@ export function FunctionSelector<T extends Record<string, unknown>>({
               <SelectContent>
                 {Object.entries(config.functions).map(([name, fn]) => {
                   if (hide_default_function && name === "tensorzero::default") {
+                    return null;
+                  }
+                  if (!fn) {
                     return null;
                   }
                   return (

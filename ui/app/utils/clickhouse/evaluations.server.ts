@@ -64,7 +64,10 @@ export async function getEvaluationRunInfosForDatapoint(
   function_name: string,
 ): Promise<EvaluationRunInfo[]> {
   const config = await getConfig();
-  const function_type = config.functions[function_name].type;
+  const function_type = config.functions[function_name]?.type;
+  if (!function_type) {
+    throw new Error(`Function ${function_name} not found in config`);
+  }
   const inference_table_name =
     function_type === "chat" ? "ChatInference" : "JsonInference";
 
@@ -104,7 +107,7 @@ async function parseEvaluationResult(
   // Parse the input field
   const parsedInput = inputSchema.parse(JSON.parse(result.input));
   const config = await getConfig();
-  const functionConfig = config.functions[function_name];
+  const functionConfig = config.functions[function_name] || null;
   const resolvedInput = await resolveInput(parsedInput, functionConfig);
 
   // Parse the outputs
@@ -489,11 +492,18 @@ export async function getEvaluationsForDatapoint(
   evaluation_run_ids: string[],
 ): Promise<ParsedEvaluationResultWithVariant[]> {
   const config = await getConfig();
-  const function_name = config.evaluations[evaluation_name].function_name;
+  const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw new Error(`Evaluation ${evaluation_name} not found in config`);
+  }
+  const function_name = evaluation_config.function_name;
   if (!function_name) {
     throw new Error(`evaluation ${evaluation_name} not found in config`);
   }
   const function_config = config.functions[function_name];
+  if (!function_config) {
+    throw new Error(`Function ${function_name} not found in config`);
+  }
   const function_type = function_config.type;
   const inference_table_name =
     function_type === "chat" ? "ChatInference" : "JsonInference";
@@ -502,7 +512,7 @@ export async function getEvaluationsForDatapoint(
       ? "ChatInferenceDatapoint"
       : "JsonInferenceDatapoint";
 
-  const evaluators = config.evaluations[evaluation_name].evaluators;
+  const evaluators = evaluation_config.evaluators;
   const metric_names = Object.keys(evaluators).map((evaluatorName) =>
     getEvaluatorMetricName(evaluation_name, evaluatorName),
   );

@@ -1,4 +1,4 @@
-import type { VariantConfig, DiclConfig } from "~/utils/config/variant";
+import type { VariantConfig } from "tensorzero-node";
 import {
   SnippetLayout,
   SnippetContent,
@@ -33,7 +33,7 @@ export default function VariantTemplate({
   // Only render if we have templates to show
   if (
     variantConfig.type !== "chat_completion" &&
-    variantConfig.type !== "experimental_dynamic_in_context_learning"
+    variantConfig.type !== "dicl"
   ) {
     return null;
   }
@@ -41,15 +41,15 @@ export default function VariantTemplate({
   if (variantConfig.type === "chat_completion") {
     const templates = {
       system:
-        variantConfig.system_template?.content ??
+        variantConfig.system_template?.contents ??
         variantConfig.system_template?.path ??
         "",
       user:
-        variantConfig.user_template?.content ??
+        variantConfig.user_template?.contents ??
         variantConfig.user_template?.path ??
         "",
       assistant:
-        variantConfig.assistant_template?.content ??
+        variantConfig.assistant_template?.contents ??
         variantConfig.assistant_template?.path ??
         "",
     };
@@ -102,11 +102,8 @@ export default function VariantTemplate({
     );
   }
 
-  if (variantConfig.type === "experimental_dynamic_in_context_learning") {
-    const content =
-      (variantConfig as DiclConfig).system_instructions?.content ??
-      (variantConfig as DiclConfig).system_instructions?.path ??
-      "";
+  if (variantConfig.type === "dicl") {
+    const content = variantConfig.system_instructions;
 
     const tabs = [
       createTemplateTab(

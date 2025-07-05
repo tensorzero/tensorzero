@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import FeedbackTable from "./FeedbackTable";
 import { ConfigProvider } from "~/context/config";
-import type { Config } from "~/utils/config";
+import type { Config } from "tensorzero-node";
 
 // Helper function to generate a UUID-like string from a number that sorts correctly
 // Higher numbers produce lexicographically larger UUIDs (for descending sort)
@@ -25,7 +25,14 @@ const config: Config = {
     },
     debug: false,
     enable_template_filesystem_access: false,
+    bind_address: "localhost:8080",
+    base_path: "/",
   },
+  object_store_info: { kind: { type: "disabled" } },
+  provider_types: {
+    gcp_vertex_gemini: null,
+  },
+  optimizers: {},
   models: {},
   embedding_models: {},
   functions: {},
@@ -44,13 +51,6 @@ const config: Config = {
       type: "boolean" as const,
       optimize: "min" as const,
       level: "inference" as const,
-    },
-    demonstration: {
-      type: "demonstration" as const,
-      level: "inference" as const,
-    },
-    comment: {
-      type: "comment" as const,
     },
   },
   tools: {},
