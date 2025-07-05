@@ -496,6 +496,15 @@ describe("TensorZeroClient Integration Tests", () => {
     expect(config.evaluations.haiku!.function_name).toBe("write_haiku");
     expect(config.evaluations.images!.function_name).toBe("image_judger");
   });
+
+  it("should be able to stale dataset", async () => {
+    const client = await buildClient();
+    // In the future once we have full dataset lifecycle support here we can do a better test
+    const staleDatasetResponse =
+      await client.staleDataset("nonexistentdataset");
+    expect(staleDatasetResponse).toBeDefined();
+    expect(staleDatasetResponse.num_staled_datapoints).toBe(0);
+  });
 });
 
 async function buildClient() {

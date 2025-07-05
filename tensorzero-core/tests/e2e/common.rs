@@ -35,11 +35,11 @@ pub async fn delete_datapoint(
             ("id", datapoint_id.to_string().as_str())
         ])).await.unwrap();
 
-    if datapoint.is_empty() {
+    if datapoint.response.is_empty() {
         panic!("Datapoint not found with params {datapoint_kind:?}, {function_name}, {dataset_name}, {datapoint_id}");
     }
 
-    let mut datapoint_json: serde_json::Value = serde_json::from_str(&datapoint).unwrap();
+    let mut datapoint_json: serde_json::Value = serde_json::from_str(&datapoint.response).unwrap();
 
     // We delete datapoints by writing a new row (which ClickHouse will merge)
     // with the 'is_deleted' and 'updated_at' fields modified.

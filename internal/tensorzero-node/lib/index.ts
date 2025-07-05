@@ -7,6 +7,7 @@ import {
   MetricConfig,
   EvaluationConfig,
   Config,
+  StaleDatasetResponse,
 } from "./bindings";
 import type { TensorZeroClient as NativeTensorZeroClientType } from "../index";
 
@@ -98,6 +99,12 @@ export class TensorZeroClient {
   getConfig(): Config {
     const configString = this.nativeClient.getConfig();
     return JSON.parse(configString) as Config;
+  }
+
+  async staleDataset(datasetName: string): Promise<StaleDatasetResponse> {
+    const staleDatasetString =
+      await this.nativeClient.staleDataset(datasetName);
+    return JSON.parse(staleDatasetString) as StaleDatasetResponse;
   }
 }
 

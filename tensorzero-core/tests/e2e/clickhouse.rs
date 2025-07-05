@@ -162,6 +162,7 @@ async fn count_table_rows(clickhouse: &ClickHouseConnectionInfo, table: &str) ->
         .run_query_synchronous_no_params(format!("SELECT count(*) FROM {table}"))
         .await
         .unwrap()
+        .response
         .trim()
         .parse()
         .unwrap()
@@ -355,7 +356,8 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .await
         .unwrap();
 
-    let sample_chat_row_json = serde_json::from_str::<serde_json::Value>(&sample_chat_row).unwrap();
+    let sample_chat_row_json =
+        serde_json::from_str::<serde_json::Value>(&sample_chat_row.response).unwrap();
     let sample_chat_id = sample_chat_row_json["id_uint"].as_str().unwrap();
     let sample_chat_episode_id = sample_chat_row_json["episode_id_uint"].as_str().unwrap();
 
@@ -368,10 +370,10 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .await
         .unwrap();
 
-    println!("Matching chat by id: `{matching_chat_by_id}`");
+    println!("Matching chat by id: `{}`", matching_chat_by_id.response);
 
     let matching_chat_by_id_json =
-        serde_json::from_str::<serde_json::Value>(&matching_chat_by_id).unwrap();
+        serde_json::from_str::<serde_json::Value>(&matching_chat_by_id.response).unwrap();
     assert_eq!(
         matching_chat_by_id_json["episode_id_uint"]
             .as_str()
@@ -387,7 +389,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .unwrap();
 
     let matching_chat_by_episode_id_json =
-        serde_json::from_str::<serde_json::Value>(&matching_chat_by_episode_id).unwrap();
+        serde_json::from_str::<serde_json::Value>(&matching_chat_by_episode_id.response).unwrap();
     assert_eq!(
         matching_chat_by_episode_id_json["id_uint"]
             .as_str()
@@ -402,7 +404,8 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .await
         .unwrap();
 
-    let sample_json_row_json = serde_json::from_str::<serde_json::Value>(&sample_json_row).unwrap();
+    let sample_json_row_json =
+        serde_json::from_str::<serde_json::Value>(&sample_json_row.response).unwrap();
     let sample_json_id = sample_json_row_json["id_uint"].as_str().unwrap();
     let sample_json_episode_id = sample_json_row_json["episode_id_uint"].as_str().unwrap();
 
@@ -414,7 +417,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .unwrap();
 
     let matching_json_by_id_json =
-        serde_json::from_str::<serde_json::Value>(&matching_json_by_id).unwrap();
+        serde_json::from_str::<serde_json::Value>(&matching_json_by_id.response).unwrap();
     assert_eq!(
         matching_json_by_id_json["episode_id_uint"]
             .as_str()
@@ -430,7 +433,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .unwrap();
 
     let matching_json_by_episode_id_json =
-        serde_json::from_str::<serde_json::Value>(&matching_json_by_episode_id).unwrap();
+        serde_json::from_str::<serde_json::Value>(&matching_json_by_episode_id.response).unwrap();
     assert_eq!(
         matching_json_by_episode_id_json["id_uint"]
             .as_str()
@@ -720,6 +723,7 @@ async fn get_all_migration_records(
         )
         .await
         .unwrap()
+        .response
         .lines()
     {
         rows.push(serde_json::from_str::<MigrationRecordDatabaseInsert>(row).unwrap());

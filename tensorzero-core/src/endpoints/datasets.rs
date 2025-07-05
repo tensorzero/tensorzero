@@ -5,6 +5,7 @@ use crate::inference::types::pyo3_helpers::{
 use axum::extract::{Path, Query, State};
 use axum::Json;
 use futures::future;
+use futures::try_join;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
@@ -85,12 +86,12 @@ async fn query_demonstration(
             ]),
         )
         .await?;
-    if result.is_empty() {
+    if result.response.is_empty() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
             message: format!("No demonstration found for inference `{inference_id}`"),
         }));
     }
-    let demonstration: Demonstration = serde_json::from_str(&result).map_err(|e| {
+    let demonstration: Demonstration = serde_json::from_str(&result.response).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
             message: format!("Failed to deserialize demonstration ClickHouse response: {e}"),
         })
@@ -109,7 +110,7 @@ async fn query_inference_for_datapoint(
     clickhouse: &ClickHouseConnectionInfo,
     inference_id: Uuid,
 ) -> Result<TaggedInferenceDatabaseInsert, Error> {
-    let result: String = clickhouse
+    let result = clickhouse
         .run_query_synchronous(
             r#"
             SELECT
@@ -157,14 +158,14 @@ FORMAT JSONEachRow;"#
         )
         .await?;
 
-    if result.is_empty() {
+    if result.response.is_empty() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
             message: format!("Inference `{inference_id}` not found"),
         }));
     }
 
-    let inference_data: TaggedInferenceDatabaseInsert =
-        serde_json::from_str(&result).map_err(|e| {
+    let inference_data: TaggedInferenceDatabaseInsert = serde_json::from_str(&result.response)
+        .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to deserialize inference data: {e}"),
             })
@@ -872,10 +873,10 @@ pub async fn list_datapoints(
     let result = clickhouse
         .run_query_synchronous(query.to_string(), &params)
         .await?;
-    if result.is_empty() {
+    if result.response.is_empty() {
         return Ok(vec![]);
     }
-    let result_lines = result.trim().split("\n").collect::<Vec<&str>>();
+    let result_lines = result.response.trim().split("\n").collect::<Vec<&str>>();
 
     let datapoints: Result<Vec<Datapoint>, _> = result_lines
         .iter()
@@ -1004,13 +1005,13 @@ pub async fn get_datapoint(
     let result = clickhouse
         .run_query_synchronous(query.to_string(), &params)
         .await?;
-    if result.is_empty() {
+    if result.response.is_empty() {
         return Err(Error::new(ErrorDetails::DatapointNotFound {
             dataset_name,
             datapoint_id,
         }));
     }
-    let datapoint: Datapoint = serde_json::from_str(&result).map_err(|e| {
+    let datapoint: Datapoint = serde_json::from_str(&result.response).map_err(|e| {
         Error::new(ErrorDetails::ClickHouseDeserialization {
             message: format!("Failed to deserialize datapoint: {e}"),
         })
@@ -1522,6 +1523,76 @@ async fn put_deduped_json_datapoints(
         .run_query_with_external_data(external_data, query.to_string())
         .await?;
     Ok(result.metadata.written_rows)
+}
+
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct StaleDatasetResponse {
+    pub num_staled_datapoints: u64,
+}
+
+/// Stales all datapoints in a dataset that have not been staled yet.
+/// This is a soft deletion, so evaluation runs will still refer to it.
+/// Returns the number of datapoints that were staled.
+pub async fn stale_dataset(
+    clickhouse: &ClickHouseConnectionInfo,
+    dataset_name: &str,
+) -> Result<StaleDatasetResponse, Error> {
+    // NOTE: in the two queries below, we don't alias to staled_at because then we won't select any rows.
+    let chat_query = r#"
+    INSERT INTO ChatInferenceDatapoint
+    SELECT
+        dataset_name,
+        function_name,
+        id,
+        episode_id,
+        input,
+        output,
+        tool_params,
+        tags,
+        auxiliary,
+        is_deleted,
+        now64(), -- updated_at
+        now64(), -- staled_at
+        source_inference_id
+    FROM ChatInferenceDatapoint FINAL
+    WHERE dataset_name = {dataset_name:String}
+    AND staled_at IS NULL
+    "#
+    .to_string();
+
+    let json_query = r#"
+    INSERT INTO JsonInferenceDatapoint
+    SELECT
+        dataset_name,
+        function_name,
+        id,
+        episode_id,
+        input,
+        output,
+        output_schema,
+        tags,
+        auxiliary,
+        is_deleted,
+        now64(), -- updated_at
+        now64(), -- staled_at
+        source_inference_id
+    FROM JsonInferenceDatapoint FINAL
+    WHERE dataset_name = {dataset_name:String}
+    AND staled_at IS NULL
+    "#
+    .to_string();
+    let query_params = HashMap::from([("dataset_name", dataset_name)]);
+
+    let (chat_result, json_result) = try_join!(
+        clickhouse.run_query_synchronous(chat_query, &query_params),
+        clickhouse.run_query_synchronous(json_query, &query_params)
+    )?;
+    Ok(StaleDatasetResponse {
+        num_staled_datapoints: chat_result.metadata.written_rows
+            + json_result.metadata.written_rows,
+    })
 }
 
 #[cfg(test)]

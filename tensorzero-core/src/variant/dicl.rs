@@ -374,6 +374,7 @@ impl DiclConfig {
 
         // Parse each line into RawExample (since we will have some serialized JSON strings inside it)
         let raw_examples: Vec<RawExample> = result
+            .response
             .lines()
             .map(serde_json::from_str::<RawExample>)
             .collect::<Result<Vec<_>, _>>()
