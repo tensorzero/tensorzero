@@ -248,6 +248,11 @@ pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     let short_cache_key = cache_key.get_short_key()?;
     let long_cache_key = cache_key.get_long_key();
     let raw_request = raw_request.to_string();
+    if raw_request.contains("TENSORZERO_FILE") {
+        println!(
+            "writing to cache for raw_request: {raw_request} with short key: {short_cache_key}"
+        );
+    }
     let raw_response = raw_response.to_string();
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
