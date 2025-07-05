@@ -94,6 +94,7 @@ export * from "./RequestMessage";
 export * from "./RetryConfig";
 export * from "./Role";
 export * from "./SGLangProvider";
+export * from "./StaleDatasetResponse";
 export * from "./StaticEvaluationConfig";
 export * from "./StaticJSONSchema";
 export * from "./StaticToolConfig";
