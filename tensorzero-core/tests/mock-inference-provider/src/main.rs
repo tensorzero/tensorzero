@@ -141,11 +141,11 @@ fn make_router() -> axum::Router {
             axum::routing::get(fireworks::get_dataset),
         )
         .route(
-            "/fireworks/v1/accounts/{account_id}/fineTuningJobs",
+            "/fireworks/v1/accounts/{account_id}/supervisedFineTuningJobs",
             axum::routing::post(fireworks::create_fine_tuning_job),
         )
         .route(
-            "/fireworks/v1/accounts/{account_id}/fineTuningJobs/{job_id}",
+            "/fireworks/v1/accounts/{account_id}/supervisedFineTuningJobs/{job_id}",
             axum::routing::get(fireworks::get_fine_tuning_job),
         )
         .route(
