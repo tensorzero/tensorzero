@@ -541,6 +541,7 @@ pub async fn test_render_datapoints_no_function() {
         is_deleted: false,
         source_inference_id: None,
         staled_at: None,
+        is_custom: false,
     })];
 
     let rendered_samples = client
@@ -579,6 +580,7 @@ pub async fn test_render_datapoints_no_variant() {
         is_deleted: false,
         source_inference_id: None,
         staled_at: None,
+        is_custom: false,
     })];
 
     let error = client
@@ -625,6 +627,7 @@ pub async fn test_render_datapoints_missing_variable() {
         is_deleted: false,
         source_inference_id: None,
         staled_at: None,
+        is_custom: false,
     })];
 
     let rendered_samples = client
@@ -666,6 +669,7 @@ pub async fn test_render_datapoints_normal() {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: false,
         }),
         Datapoint::Json(JsonInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
@@ -691,6 +695,7 @@ pub async fn test_render_datapoints_normal() {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: false,
         }),
         Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
@@ -728,6 +733,7 @@ pub async fn test_render_datapoints_normal() {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: false,
         }),
         Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
@@ -769,6 +775,7 @@ pub async fn test_render_datapoints_normal() {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: false,
         }),
     ];
 
@@ -958,6 +965,7 @@ pub async fn test_render_datapoints_template_no_schema() {
         is_deleted: false,
         source_inference_id: None,
         staled_at: None,
+        is_custom: false,
     })];
 
     let rendered_samples = client

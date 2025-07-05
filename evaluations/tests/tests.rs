@@ -1267,6 +1267,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         tool_params: None,
         source_inference_id: None,
         staled_at: None,
+        is_custom: true,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1369,6 +1370,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         tool_params: None,
         source_inference_id: None,
         staled_at: None,
+        is_custom: true,
     });
 
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
@@ -1434,6 +1436,7 @@ async fn test_run_llm_judge_evaluator_json() {
         tags: None,
         source_inference_id: None,
         staled_at: None,
+        is_custom: true,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1536,6 +1539,7 @@ async fn test_run_llm_judge_evaluator_json() {
         tool_params: None,
         source_inference_id: None,
         staled_at: None,
+        is_custom: true,
     });
 
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {

@@ -162,7 +162,6 @@ FORMAT JSONEachRow;"#
             message: format!("Inference `{inference_id}` not found"),
         }));
     }
-
     let inference_data: TaggedInferenceDatabaseInsert =
         serde_json::from_str(&result).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -172,12 +171,19 @@ FORMAT JSONEachRow;"#
     Ok(inference_data)
 }
 
+/// This function inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
+/// based on an existing inference (specified by `inference_id`).
+///
+/// The inference is mostly copied as-is, except for the 'output' field.
+/// Based on the 'output' parameter, the output is copied, ignored, or fetched from a demonstration.
+/// Datapoints that are created this way are not marked as custom datapoints.
 async fn insert_from_existing(
     clickhouse: &ClickHouseConnectionInfo,
     path_params: InsertPathParams,
     existing: &ExistingInferenceInfo,
 ) -> Result<Uuid, Error> {
-    let inference_data = query_inference_for_datapoint(clickhouse, existing.inference_id).await?;
+    let inference_data: TaggedInferenceDatabaseInsert =
+        query_inference_for_datapoint(clickhouse, existing.inference_id).await?;
     let datapoint_id = Uuid::now_v7();
 
     match inference_data {
@@ -208,10 +214,11 @@ async fn insert_from_existing(
                 tags: Some(inference.tags),
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
+                is_custom: false,
                 source_inference_id: Some(existing.inference_id),
                 staled_at: None,
             };
-            let rows_written = put_deduped_json_datapoints(clickhouse, &[datapoint]).await?;
+            let rows_written = put_json_datapoints(clickhouse, &[datapoint]).await?;
             if rows_written == 0 {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Datapoint with this source_inference_id already exists".to_string(),
@@ -245,10 +252,11 @@ async fn insert_from_existing(
                 tags: Some(inference.tags),
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
+                is_custom: false,
                 source_inference_id: Some(existing.inference_id),
                 staled_at: None,
             };
-            let rows_written = put_deduped_chat_datapoints(clickhouse, &[datapoint]).await?;
+            let rows_written = put_chat_datapoints(clickhouse, &[datapoint]).await?;
             if rows_written == 0 {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Datapoint with this source_inference_id already exists".to_string(),
@@ -367,12 +375,12 @@ pub async fn update_datapoint_handler(
                 tags: chat.tags,
                 auxiliary: chat.auxiliary,
                 is_deleted: false,
+                is_custom: chat.is_custom,
                 source_inference_id: chat.source_inference_id,
                 staled_at: None,
             };
             let rows_written =
-                put_deduped_chat_datapoints(&app_state.clickhouse_connection_info, &[datapoint])
-                    .await?;
+                put_chat_datapoints(&app_state.clickhouse_connection_info, &[datapoint]).await?;
             if rows_written == 0 {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Datapoint with this source_inference_id already exists".to_string(),
@@ -430,12 +438,12 @@ pub async fn update_datapoint_handler(
                 tags: json.tags,
                 auxiliary: json.auxiliary,
                 is_deleted: false,
+                is_custom: json.is_custom,
                 source_inference_id: json.source_inference_id,
                 staled_at: None,
             };
             let rows_written =
-                put_deduped_json_datapoints(&app_state.clickhouse_connection_info, &[datapoint])
-                    .await?;
+                put_json_datapoints(&app_state.clickhouse_connection_info, &[datapoint]).await?;
             if rows_written == 0 {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Datapoint with this source_inference_id already exists".to_string(),
@@ -582,6 +590,7 @@ pub async fn insert_datapoint(
                     tags: chat.tags,
                     auxiliary: "".to_string(),
                     is_deleted: false,
+                    is_custom: true,
                     source_inference_id: None,
                     staled_at: None,
                 })
@@ -657,6 +666,7 @@ pub async fn insert_datapoint(
                     tags: json.tags,
                     auxiliary: "".to_string(),
                     is_deleted: false,
+                    is_custom: true,
                     source_inference_id: None,
                     staled_at: None,
                 };
@@ -669,16 +679,10 @@ pub async fn insert_datapoint(
     let mut futures_vec: Vec<Pin<Box<dyn Future<Output = Result<u64, Error>> + Send>>> = Vec::new();
 
     if !chat_datapoints.is_empty() {
-        futures_vec.push(Box::pin(put_deduped_chat_datapoints(
-            clickhouse,
-            &chat_datapoints,
-        )));
+        futures_vec.push(Box::pin(put_chat_datapoints(clickhouse, &chat_datapoints)));
     }
     if !json_datapoints.is_empty() {
-        futures_vec.push(Box::pin(put_deduped_json_datapoints(
-            clickhouse,
-            &json_datapoints,
-        )));
+        futures_vec.push(Box::pin(put_json_datapoints(clickhouse, &json_datapoints)));
     }
 
     // Run all futures concurrently and propagate any error
@@ -716,18 +720,18 @@ pub async fn delete_datapoint(
     let json_delete_query = r#"
     INSERT INTO JsonInferenceDatapoint
     (dataset_name, function_name, id, episode_id, input, output, output_schema,
-     tags, auxiliary, is_deleted, source_inference_id, updated_at, staled_at)
+     tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
     SELECT dataset_name, function_name, id, episode_id, input, output, output_schema,
-           tags, auxiliary, is_deleted, source_inference_id, now64(), now64()
+           tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
     FROM JsonInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
 "#;
     let chat_delete_query = r#"
     INSERT INTO ChatInferenceDatapoint
     (dataset_name, function_name, id, episode_id, input, output, tool_params,
-     tags, auxiliary, is_deleted, source_inference_id, updated_at, staled_at)
+     tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
     SELECT dataset_name, function_name, id, episode_id, input, output, tool_params,
-           tags, auxiliary, is_deleted, source_inference_id, now64(), now64()
+           tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
     FROM ChatInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
 "#;
@@ -807,6 +811,7 @@ pub async fn list_datapoints(
             auxiliary,
             source_inference_id,
             is_deleted,
+            is_custom,
             staled_at
         FROM ChatInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
@@ -834,6 +839,7 @@ pub async fn list_datapoints(
             auxiliary,
             source_inference_id,
             is_deleted,
+            is_custom,
             staled_at
         FROM JsonInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
@@ -966,6 +972,7 @@ pub async fn get_datapoint(
             auxiliary,
             source_inference_id,
             is_deleted,
+            is_custom,
             staled_at
         FROM ChatInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
@@ -985,6 +992,7 @@ pub async fn get_datapoint(
             auxiliary,
             source_inference_id,
             is_deleted,
+            is_custom,
             staled_at
         FROM JsonInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
@@ -1110,6 +1118,7 @@ impl Datapoint {
     }
 }
 
+/// These input datapoints are used as input types by the `insert_datapoint` endpoint
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Datapoint {
@@ -1166,6 +1175,14 @@ impl Datapoint {
             Some(output_schema) => serialize_to_dict(py, output_schema)?.into_bound(py),
             None => py.None().into_bound(py),
         })
+    }
+
+    #[getter]
+    pub fn get_is_custom(&self) -> bool {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.is_custom,
+            Datapoint::Json(datapoint) => datapoint.is_custom,
+        }
     }
 }
 
@@ -1228,6 +1245,8 @@ pub struct ChatInferenceDatapoint {
     #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
     pub is_deleted: bool,
+    #[serde(default)]
+    pub is_custom: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
@@ -1264,6 +1283,8 @@ pub struct JsonInferenceDatapoint {
     #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
     pub is_deleted: bool,
+    #[serde(default)]
+    pub is_custom: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
@@ -1362,6 +1383,7 @@ pub struct SyntheticChatInferenceDatapoint {
     pub tags: Option<HashMap<String, String>>,
     #[serde(default)]
     pub auxiliary: String,
+    pub is_custom: bool,
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
 }
@@ -1379,6 +1401,7 @@ pub struct SyntheticJsonInferenceDatapoint {
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
+    pub is_custom: bool,
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
 }
@@ -1393,10 +1416,9 @@ fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
     }
 }
 
-/// Puts a chat datapoint into ClickHouse but only
-/// if it doesn't have a source_inference_id that already exists for this dataset.
+/// Puts a chat datapoint into ClickHouse
 /// Returns the number of rows written to ClickHouse
-async fn put_deduped_chat_datapoints(
+async fn put_chat_datapoints(
     clickhouse: &ClickHouseConnectionInfo,
     datapoints: &[ChatInferenceDatapoint],
 ) -> Result<u64, Error> {
@@ -1424,6 +1446,7 @@ async fn put_deduped_chat_datapoints(
             tags,
             auxiliary,
             is_deleted,
+            is_custom,
             source_inference_id
         )
         SELECT
@@ -1437,20 +1460,14 @@ async fn put_deduped_chat_datapoints(
             new_data.tags,
             new_data.auxiliary,
             new_data.is_deleted,
-            new_data.source_inference_id,
+            new_data.is_custom,
+            new_data.source_inference_id
         FROM new_data
-        LEFT JOIN ChatInferenceDatapoint AS existing FINAL
-          ON new_data.dataset_name = existing.dataset_name
-             AND new_data.function_name = existing.function_name
-             AND new_data.source_inference_id = existing.source_inference_id
-             AND new_data.id != existing.id -- this is to allow us to update the datapoint and keep the same source_inference_id
-             AND existing.staled_at IS NULL
-        WHERE existing.source_inference_id IS NULL
         "#;
 
     let external_data = ExternalDataInfo {
         external_data_name: "new_data".to_string(),
-        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, source_inference_id Nullable(UUID)".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID)".to_string(),
         format: "JSONEachRow".to_string(),
         data: serialized_datapoints.join("\n"),
     };
@@ -1460,7 +1477,9 @@ async fn put_deduped_chat_datapoints(
     Ok(result.metadata.written_rows)
 }
 
-async fn put_deduped_json_datapoints(
+/// Puts a json datapoint into ClickHouse
+/// Returns the number of rows written to ClickHouse
+async fn put_json_datapoints(
     clickhouse: &ClickHouseConnectionInfo,
     datapoints: &[JsonInferenceDatapoint],
 ) -> Result<u64, Error> {
@@ -1488,6 +1507,7 @@ async fn put_deduped_json_datapoints(
             tags,
             auxiliary,
             is_deleted,
+            is_custom,
             source_inference_id
         )
         SELECT
@@ -1501,20 +1521,14 @@ async fn put_deduped_json_datapoints(
             new_data.tags,
             new_data.auxiliary,
             new_data.is_deleted,
+            new_data.is_custom,
             new_data.source_inference_id
         FROM new_data
-        LEFT JOIN JsonInferenceDatapoint AS existing FINAL
-          ON new_data.dataset_name = existing.dataset_name
-             AND new_data.function_name = existing.function_name
-             AND new_data.source_inference_id = existing.source_inference_id
-             AND new_data.id != existing.id -- this is to allow us to update the datapoint and keep the same source_inference_id
-             AND existing.staled_at IS NULL
-        WHERE existing.source_inference_id IS NULL
         "#;
 
     let external_data = ExternalDataInfo {
         external_data_name: "new_data".to_string(),
-        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, source_inference_id Nullable(UUID)".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID)".to_string(),
         format: "JSONEachRow".to_string(),
         data: serialized_datapoints.join("\n"),
     };
@@ -1538,7 +1552,8 @@ mod test {
             "output": null,
             "tool_params": null,
             "tags": null,
-            "auxiliary": ""
+            "auxiliary": "",
+            "is_custom": false
         }"#;
 
         let datapoint: SyntheticChatInferenceDatapoint = serde_json::from_str(json_str).unwrap();
@@ -1547,6 +1562,7 @@ mod test {
         assert_eq!(datapoint.tool_params, None);
         assert_eq!(datapoint.tags, None);
         assert_eq!(datapoint.auxiliary, "");
+        assert!(!datapoint.is_custom);
     }
 
     #[test]
@@ -1557,7 +1573,8 @@ mod test {
             "output": [{"type": "text", "value": "Hello"}],
             "tool_params": {"tools_available": [], "tool_choice": "auto", "parallel_tool_calls": false},
             "tags": {"source": "test"},
-            "auxiliary": "extra data"
+            "auxiliary": "extra data",
+            "is_custom": true
         }"#;
 
         let datapoint: SyntheticChatInferenceDatapoint = serde_json::from_str(json_str).unwrap();
@@ -1569,6 +1586,7 @@ mod test {
             Some(HashMap::from([("source".to_string(), "test".to_string())]))
         );
         assert_eq!(datapoint.auxiliary, "extra data");
+        assert!(datapoint.is_custom);
     }
 
     #[test]
@@ -1579,7 +1597,8 @@ mod test {
             "output": null,
             "output_schema": {},
             "tags": null,
-            "auxiliary": ""
+            "auxiliary": "",
+            "is_custom": false
         }"#;
 
         let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
@@ -1587,6 +1606,7 @@ mod test {
         assert_eq!(datapoint.output, None);
         assert_eq!(datapoint.output_schema, json!({}));
         assert_eq!(datapoint.tags, None);
+        assert!(!datapoint.is_custom);
         assert_eq!(datapoint.auxiliary, "");
     }
 
@@ -1598,7 +1618,8 @@ mod test {
             "output": {"answer": "Hello"},
             "output_schema": {"type": "object", "properties": {"answer": {"type": "string"}}},
             "tags": {"source": "test"},
-            "auxiliary": "extra data"
+            "auxiliary": "extra data",
+            "is_custom": true
         }"#;
 
         let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
@@ -1610,6 +1631,7 @@ mod test {
             Some(HashMap::from([("source".to_string(), "test".to_string())]))
         );
         assert_eq!(datapoint.auxiliary, "extra data");
+        assert!(datapoint.is_custom);
     }
 
     #[test]
@@ -1619,7 +1641,8 @@ mod test {
             "input": {"system": {"assistant_name": "Test"}, "messages": []},
             "output_schema": {"type": "object", "properties": {"answer": {"type": "string"}}},
             "tags": {"source": "test"},
-            "auxiliary": "extra data"
+            "auxiliary": "extra data",
+            "is_custom": true
         }"#;
 
         let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
@@ -1651,5 +1674,11 @@ mod test {
     #[test]
     fn test_validate_dataset_name_valid() {
         validate_dataset_name("test").unwrap();
+    }
+
+    #[test]
+    fn test_deserialize_synthetic_json_datapoint() {
+        let json_str = r#"{"id":"0196368f-1ae8-7551-b5df-9a61593eb307","function_name":"extract_entities","variant_name":"gpt4o_mini_initial_prompt","episode_id":"0196368f-1ae8-7551-b5df-9a7df7e83048","input":"{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Mark Philippoussis ( Australia ) beat Andrei Olhovskiy ( Russia ) 6 - 3 6-4 6-2\"}]}]}","output":"{\"raw\":\"{\\n    \\\"person\\\": [\\\"Mark Philippoussis\\\", \\\"Andrei Olhovskiy\\\"],\\n    \\\"organization\\\": [],\\n    \\\"location\\\": [\\\"Australia\\\", \\\"Russia\\\"],\\n    \\\"miscellaneous\\\": [\\\"6 - 3\\\", \\\"6-4\\\", \\\"6-2\\\"]\\n}\",\"parsed\":{\"person\":[\"Mark Philippoussis\",\"Andrei Olhovskiy\"],\"organization\":[],\"location\":[\"Australia\",\"Russia\"],\"miscellaneous\":[\"6 - 3\",\"6-4\",\"6-2\"]}}","tool_params":"","inference_params":"{\"chat_completion\":{}}","processing_time_ms":12,"output_schema":"{\"$schema\":\"http:\/\/json-schema.org\/draft-07\/schema#\",\"type\":\"object\",\"properties\":{\"person\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"organization\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"location\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"miscellaneous\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},\"required\":[\"person\",\"organization\",\"location\",\"miscellaneous\"],\"additionalProperties\":false}","auxiliary_content":"","timestamp":"2025-04-14T23:07:50Z","tags":{"tensorzero::dataset_name":"foo","tensorzero::datapoint_id":"0193829b-cd48-7731-9df0-4e325119d96d","tensorzero::evaluation_name":"entity_extraction","tensorzero::evaluation_run_id":"0196368f-19bd-7082-a677-1c0bf346ff24"},"function_type":"json"}"#;
+        let _: TaggedInferenceDatabaseInsert = serde_json::from_str(json_str).unwrap();
     }
 }
