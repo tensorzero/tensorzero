@@ -91,6 +91,24 @@ class RenderedSample:
     output_schema: Optional[Dict[str, Any]]
 
 @final
+class OptimizerJobHandle:
+    OpenAISFT: Type["OptimizerJobHandle"]
+    FireworksSFT: Type["OptimizerJobHandle"]
+
+@final
+class OptimizerStatus:
+    OpenAISFT: Type["OptimizerStatus"]
+    FireworksSFT: Type["OptimizerStatus"]
+    @property
+    def message(self) -> str: ...
+    @property
+    def status(self) -> Literal["pending", "completed", "failed"]: ...
+    @property
+    def output(self) -> Optional[Any]: ...
+    @property
+    def estimated_finish(self) -> Optional[int]: ...
+
+@final
 class Datapoint:
     Chat: Type["Datapoint"]
     Json: Type["Datapoint"]
@@ -407,6 +425,36 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         """
         ...
 
+    def experimental_launch_optimization(
+        self,
+        *,
+        train_examples: List[RenderedSample],
+        val_examples: Optional[List[RenderedSample]] = None,
+        optimizer_config: Dict[str, Any],
+    ) -> OptimizerJobHandle:
+        """
+        Launch an optimization job.
+
+        :param train_examples: A list of RenderedSample objects that will be used for training.
+        :param val_examples: A list of RenderedSample objects that will be used for validation.
+        :param optimizer_config: The optimizer config.
+        :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+        """
+        ...
+
+    def experimental_poll_optimization(
+        self,
+        *,
+        job_handle: OptimizerJobHandle,
+    ) -> OptimizerStatus:
+        """
+        Poll an optimization job.
+
+        :param job_handle: The job handle returned by `experimental_launch_optimization`.
+        :return: An `OptimizerStatus` object.
+        """
+        ...
+
     def close(self) -> None:
         """
         Close the connection to the TensorZero gateway.
@@ -718,6 +766,36 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A list of rendered samples.
         """
 
+    async def experimental_launch_optimization(
+        self,
+        *,
+        train_examples: List[RenderedSample],
+        val_examples: Optional[List[RenderedSample]] = None,
+        optimizer_config: Dict[str, Any],
+    ) -> OptimizerJobHandle:
+        """
+        Launch an optimization job.
+
+        :param train_examples: A list of RenderedSample objects that will be used for training.
+        :param val_examples: A list of RenderedSample objects that will be used for validation.
+        :param optimizer_config: The optimizer config.
+        :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+        """
+        ...
+
+    async def experimental_poll_optimization(
+        self,
+        *,
+        job_handle: OptimizerJobHandle,
+    ) -> OptimizerStatus:
+        """
+        Poll an optimization job.
+
+        :param job_handle: The job handle returned by `experimental_launch_optimization`.
+        :return: An `OptimizerStatus` object.
+        """
+        ...
+
     async def close(self) -> None:
         """
         Close the connection to the TensorZero gateway.
@@ -755,4 +833,6 @@ __all__ = [
     "StoredInference",
     "ResolvedInput",
     "ResolvedInputMessage",
+    "OptimizerJobHandle",
+    "OptimizerStatus",
 ]

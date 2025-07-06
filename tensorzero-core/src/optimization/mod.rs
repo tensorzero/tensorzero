@@ -111,7 +111,7 @@ pub enum OptimizerStatus {
 /// PyO3 has special handling for complex enums that makes it difficult to #[pyclass] them directly if
 /// they contain elements that don't implement IntoPyObject.
 /// We work around this by implementing a custom pyclass that wraps the OptimizerStatus enum.
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "OptimizerStatus"))]
 pub struct OptimizerStatusPyClass(OptimizerStatus);
 
 #[cfg(feature = "pyo3")]

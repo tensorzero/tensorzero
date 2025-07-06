@@ -82,6 +82,8 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
+    m.add_class::<OptimizerJobHandle>()?;
+    m.add_class::<OptimizerStatusPyClass>()?;
 
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;
@@ -1023,7 +1025,13 @@ impl TensorZeroGateway {
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
 
-    #[pyo3(signature = (*, train_examples, val_examples, optimizer_config))]
+    /// Launch an optimization job.
+    ///
+    /// :param train_examples: A list of RenderedSample objects that will be used for training.
+    /// :param val_examples: A list of RenderedSample objects that will be used for validation.
+    /// :param optimizer_config: The optimizer config.
+    /// :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+    #[pyo3(signature = (*, train_examples, val_examples=None, optimizer_config))]
     fn experimental_launch_optimization(
         this: PyRef<'_, Self>,
         train_examples: Vec<Bound<'_, PyAny>>,
@@ -1053,6 +1061,11 @@ impl TensorZeroGateway {
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
 
+    /// Poll an optimization job.
+    ///
+    /// :param job_handle: The job handle returned by `experimental_launch_optimization`.
+    /// :return: An `OptimizerStatus` object.
+    #[pyo3(signature = (*, job_handle))]
     fn experimental_poll_optimization(
         this: PyRef<'_, Self>,
         job_handle: OptimizerJobHandle,
@@ -1717,7 +1730,13 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    #[pyo3(signature = (*, train_examples, val_examples, optimizer_config))]
+    /// Launch an optimization job.
+    ///
+    /// :param train_examples: A list of RenderedSample objects that will be used for training.
+    /// :param val_examples: A list of RenderedSample objects that will be used for validation.
+    /// :param optimizer_config: The optimizer config.
+    /// :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+    #[pyo3(signature = (*, train_examples, val_examples=None, optimizer_config))]
     fn experimental_launch_optimization<'a>(
         this: PyRef<'a, Self>,
         train_examples: Vec<Bound<'a, PyAny>>,
@@ -1755,6 +1774,10 @@ impl AsyncTensorZeroGateway {
         })
     }
 
+    /// Poll an optimization job.
+    ///
+    /// :param job_handle: The job handle returned by `experimental_launch_optimization`.
+    /// :return: An `OptimizerStatus` object.
     #[pyo3(signature = (*, job_handle))]
     fn experimental_poll_optimization<'a>(
         this: PyRef<'a, Self>,

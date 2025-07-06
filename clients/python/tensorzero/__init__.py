@@ -6,6 +6,8 @@ import httpx
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
     Datapoint,
+    OptimizerJobHandle,
+    OptimizerStatus,
     RenderedSample,
     ResolvedInput,
     ResolvedInputMessage,
@@ -112,6 +114,8 @@ __all__ = [
     "NotNode",  # DEPRECATED
     "OrFilter",
     "OrNode",  # DEPRECATED
+    "OptimizerJobHandle",
+    "OptimizerStatus",
     "patch_openai_client",
     "RawText",
     "RenderedStoredInference",  # DEPRECATED
