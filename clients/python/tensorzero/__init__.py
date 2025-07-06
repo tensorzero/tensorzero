@@ -6,6 +6,8 @@ import httpx
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
     Datapoint,
+    FireworksSFTConfig,
+    OpenAISFTConfig,
     OptimizerJobHandle,
     OptimizerStatus,
     RenderedSample,
@@ -116,6 +118,8 @@ __all__ = [
     "OrNode",  # DEPRECATED
     "OptimizerJobHandle",
     "OptimizerStatus",
+    "OpenAISFTConfig",
+    "FireworksSFTConfig",
     "patch_openai_client",
     "RawText",
     "RenderedStoredInference",  # DEPRECATED
