@@ -109,6 +109,32 @@ class OptimizerStatus:
     def estimated_finish(self) -> Optional[int]: ...
 
 @final
+class OpenAISFTConfig:
+    def __init__(
+            self,
+            *,
+            model: str,
+            batch_size: Optional[int] = None,
+            learning_rate_multiplier: Optional[float] = None,
+            n_epochs: Optional[int] = None,
+            credentials: Optional[str] = None,
+            api_base: Optional[str] = None,
+            seed: Optional[int] = None,
+            suffix: Optional[str] = None,
+    ) -> None: ...
+
+@final
+class FireworksSFTConfig:
+    def __init__(
+            self,
+            *,
+            model: str,
+            credentials: Optional[str] = None,
+            account_id: str,
+            api_base: Optional[str] = None,
+    ) -> None: ...
+
+@final
 class Datapoint:
     Chat: Type["Datapoint"]
     Json: Type["Datapoint"]
@@ -826,6 +852,7 @@ __all__ = [
     "AsyncTensorZeroGateway",
     "BaseTensorZeroGateway",
     "Datapoint",
+    "FireworksSFTConfig",
     "TensorZeroGateway",
     "LocalHttpGateway",
     "_start_http_gateway",
@@ -833,6 +860,7 @@ __all__ = [
     "StoredInference",
     "ResolvedInput",
     "ResolvedInputMessage",
+    "OpenAISFTConfig",
     "OptimizerJobHandle",
     "OptimizerStatus",
 ]

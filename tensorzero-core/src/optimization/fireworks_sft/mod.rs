@@ -147,6 +147,7 @@ impl std::fmt::Display for UninitializedFireworksSFTConfig {
 #[pymethods]
 impl UninitializedFireworksSFTConfig {
     #[new]
+    #[pyo3(signature = (*, model, credentials=None, account_id, api_base=None))]
     pub fn new(
         model: String,
         credentials: Option<String>,

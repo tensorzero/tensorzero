@@ -72,6 +72,7 @@ impl UninitializedOpenAISFTConfig {
     // We allow too many arguments since it is a Python constructor
     #[expect(clippy::too_many_arguments)]
     #[new]
+    #[pyo3(signature = (*, model, batch_size=None, learning_rate_multiplier=None, n_epochs=None, credentials=None, api_base=None, seed=None, suffix=None))]
     pub fn new(
         model: String,
         batch_size: Option<usize>,

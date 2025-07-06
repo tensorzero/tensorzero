@@ -35,7 +35,10 @@ use tensorzero_core::{
         },
         ResolvedInput, ResolvedInputMessage,
     },
-    optimization::{OptimizerStatusPyClass, UninitializedOptimizerInfo},
+    optimization::{
+        fireworks_sft::UninitializedFireworksSFTConfig, openai_sft::UninitializedOpenAISFTConfig,
+        OptimizerStatusPyClass, UninitializedOptimizerInfo,
+    },
 };
 use tensorzero_core::{
     endpoints::{
@@ -79,6 +82,8 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<LocalHttpGateway>()?;
     m.add_class::<RenderedSample>()?;
     m.add_class::<StoredInference>()?;
+    m.add_class::<UninitializedOpenAISFTConfig>()?;
+    m.add_class::<UninitializedFireworksSFTConfig>()?;
     m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
