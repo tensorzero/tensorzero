@@ -13,6 +13,10 @@ use std::time::Duration;
 
 use futures::try_join;
 use http::StatusCode;
+#[cfg(feature = "pyo3")]
+use pyo3::exceptions::PyValueError;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use reqwest::multipart::{Form, Part};
 use secrecy::ExposeSecret;
 use secrecy::SecretString;
@@ -121,14 +125,49 @@ pub struct FireworksSFTConfig {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "FireworksSFTConfig"))]
 pub struct UninitializedFireworksSFTConfig {
     pub model: String,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credentials: Option<CredentialLocation>,
     pub account_id: String,
     pub api_base: Option<Url>,
+}
+
+impl std::fmt::Display for UninitializedFireworksSFTConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl UninitializedFireworksSFTConfig {
+    #[new]
+    pub fn new(
+        model: String,
+        credentials: Option<String>,
+        account_id: String,
+        api_base: Option<String>,
+    ) -> PyResult<Self> {
+        let credentials = credentials
+            .map(|s| serde_json::from_str(&s).unwrap_or_else(|_| CredentialLocation::Env(s)));
+        let api_base = api_base
+            .map(|s| {
+                Url::parse(&s)
+                    .map_err(|e| PyErr::new::<PyValueError, std::string::String>(e.to_string()))
+            })
+            .transpose()?;
+        Ok(Self {
+            model,
+            credentials,
+            account_id,
+            api_base,
+        })
+    }
 }
 
 impl UninitializedFireworksSFTConfig {
@@ -460,8 +499,9 @@ impl Optimizer for FireworksSFTConfig {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 #[serde(rename_all = "camelCase")]
 pub struct FireworksSFTJobHandle {
     pub api_base: Url,
@@ -469,6 +509,13 @@ pub struct FireworksSFTJobHandle {
     pub job_path: String,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocation>,
+}
+
+impl std::fmt::Display for FireworksSFTJobHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]

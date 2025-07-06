@@ -28,12 +28,14 @@ use tensorzero_core::{
     clickhouse::ClickhouseFormat,
     inference::types::{
         pyo3_helpers::{
-            deserialize_from_pyobj, deserialize_from_stored_sample, serialize_to_dict,
+            deserialize_from_pyobj, deserialize_from_rendered_sample,
+            deserialize_from_stored_sample, deserialize_optimization_config, serialize_to_dict,
             tensorzero_core_error, tensorzero_core_error_class, tensorzero_error_class, JSON_DUMPS,
             JSON_LOADS,
         },
         ResolvedInput, ResolvedInputMessage,
     },
+    optimization::{OptimizerStatusPyClass, UninitializedOptimizerInfo},
 };
 use tensorzero_core::{
     endpoints::{
@@ -48,8 +50,8 @@ use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, Datapoint,
     DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, ListInferencesParams, RenderedSample, StoredInference,
-    TensorZeroError, Tool,
+    InferenceParams, InferenceStream, LaunchOptimizationParams, ListInferencesParams,
+    OptimizerJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -1020,6 +1022,48 @@ impl TensorZeroGateway {
         let fut = client.experimental_render_samples(stored_samples, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
+
+    #[pyo3(signature = (*, train_examples, val_examples, optimizer_config))]
+    fn experimental_launch_optimization(
+        this: PyRef<'_, Self>,
+        train_examples: Vec<Bound<'_, PyAny>>,
+        val_examples: Option<Vec<Bound<'_, PyAny>>>,
+        optimizer_config: Bound<'_, PyAny>,
+    ) -> PyResult<OptimizerJobHandle> {
+        let client = this.as_super().client.clone();
+        let train_examples = train_examples
+            .iter()
+            .map(|x| deserialize_from_rendered_sample(this.py(), x))
+            .collect::<Result<Vec<_>, _>>()?;
+        let val_examples = val_examples
+            .map(|x| {
+                x.iter()
+                    .map(|x| deserialize_from_rendered_sample(this.py(), x))
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()?;
+        let optimizer_config = deserialize_optimization_config(&optimizer_config)?;
+        let fut = client.experimental_launch_optimization(LaunchOptimizationParams {
+            train_examples,
+            val_examples,
+            optimizer_config: UninitializedOptimizerInfo {
+                inner: optimizer_config,
+            },
+        });
+        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+    }
+
+    fn experimental_poll_optimization(
+        this: PyRef<'_, Self>,
+        job_handle: OptimizerJobHandle,
+    ) -> PyResult<OptimizerStatusPyClass> {
+        let client = this.as_super().client.clone();
+        let fut = client.experimental_poll_optimization(job_handle);
+        match tokio_block_on_without_gil(this.py(), fut) {
+            Ok(status) => Ok(OptimizerStatusPyClass::new(status)),
+            Err(e) => Err(convert_error(this.py(), e)),
+        }
+    }
 }
 
 #[pyclass(extends=BaseTensorZeroGateway)]
@@ -1668,6 +1712,44 @@ impl AsyncTensorZeroGateway {
                 .await;
             Python::with_gil(|py| match res {
                 Ok(samples) => Ok(PyList::new(py, samples)?.unbind()),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    #[pyo3(signature = (*, train_examples, val_examples, optimizer_config))]
+    fn experimental_launch_optimization<'a>(
+        this: PyRef<'a, Self>,
+        train_examples: Vec<Bound<'a, PyAny>>,
+        val_examples: Option<Vec<Bound<'a, PyAny>>>,
+        optimizer_config: Bound<'a, PyAny>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let train_examples = train_examples
+            .iter()
+            .map(|x| deserialize_from_rendered_sample(this.py(), x))
+            .collect::<Result<Vec<_>, _>>()?;
+        let val_examples = val_examples
+            .as_ref()
+            .map(|x| {
+                x.iter()
+                    .map(|x| deserialize_from_rendered_sample(this.py(), x))
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()?;
+        let optimizer_config = deserialize_optimization_config(&optimizer_config)?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client
+                .experimental_launch_optimization(LaunchOptimizationParams {
+                    train_examples,
+                    val_examples,
+                    optimizer_config: UninitializedOptimizerInfo {
+                        inner: optimizer_config,
+                    },
+                })
+                .await;
+            Python::with_gil(|py| match res {
+                Ok(job_handle) => Ok(job_handle.into_pyobject(py)?),
                 Err(e) => Err(convert_error(py, e)),
             })
         })

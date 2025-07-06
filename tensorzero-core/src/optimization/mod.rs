@@ -1,4 +1,8 @@
+#[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use chrono::{DateTime, Utc};
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -41,14 +45,22 @@ enum OptimizerConfig {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OptimizerJobHandle {
     #[serde(rename = "openai_sft")]
     OpenAISFT(OpenAISFTJobHandle),
     #[serde(rename = "fireworks_sft")]
     FireworksSFT(FireworksSFTJobHandle),
+}
+
+impl std::fmt::Display for OptimizerJobHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 impl JobHandle for OptimizerJobHandle {
@@ -78,7 +90,7 @@ pub enum OptimizerOutput {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, ts(export))]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "status", rename_all = "snake_case")]
 pub enum OptimizerStatus {
     Pending {
         message: String,
@@ -94,6 +106,69 @@ pub enum OptimizerStatus {
         message: String,
         error: Option<Value>,
     },
+}
+
+/// PyO3 has special handling for complex enums that makes it difficult to #[pyclass] them directly if
+/// they contain elements that don't implement IntoPyObject.
+/// We work around this by implementing a custom pyclass that wraps the OptimizerStatus enum.
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub struct OptimizerStatusPyClass(OptimizerStatus);
+
+#[cfg(feature = "pyo3")]
+impl OptimizerStatusPyClass {
+    pub fn new(status: OptimizerStatus) -> Self {
+        Self(status)
+    }
+}
+
+impl std::fmt::Display for OptimizerStatusPyClass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(&self.0).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl OptimizerStatusPyClass {
+    #[getter]
+    fn get_message(&self) -> &str {
+        match &self.0 {
+            OptimizerStatus::Pending { message, .. } => message,
+            OptimizerStatus::Completed { .. } => "Completed",
+            OptimizerStatus::Failed { message, .. } => message,
+        }
+    }
+
+    #[getter]
+    fn get_status(&self) -> &str {
+        match &self.0 {
+            OptimizerStatus::Pending { .. } => "pending",
+            OptimizerStatus::Completed { .. } => "completed",
+            OptimizerStatus::Failed { .. } => "failed",
+        }
+    }
+
+    #[getter]
+    fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+        match &self.0 {
+            OptimizerStatus::Completed { output } => Ok(serialize_to_dict(py, output)
+                .map(|obj| Some(obj.into_pyobject(py)))?
+                .transpose()?),
+            _ => Ok(None),
+        }
+    }
+
+    /// Returns the estimated finish time in seconds since the Unix epoch.
+    #[getter]
+    fn get_estimated_finish(&self) -> Option<i64> {
+        match &self.0 {
+            OptimizerStatus::Pending {
+                estimated_finish, ..
+            } => estimated_finish.map(|dt| dt.timestamp()),
+            _ => None,
+        }
+    }
 }
 
 pub trait JobHandle {

@@ -818,7 +818,7 @@ impl Client {
     /// Launch an optimization job.
     pub async fn experimental_launch_optimization(
         &self,
-        params: tensorzero_core::endpoints::optimization::LaunchOptimizationParams,
+        params: LaunchOptimizationParams,
     ) -> Result<OptimizerJobHandle, TensorZeroError> {
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, timeout } => {

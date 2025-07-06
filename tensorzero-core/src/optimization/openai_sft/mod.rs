@@ -1,3 +1,7 @@
+#[cfg(feature = "pyo3")]
+use pyo3::exceptions::PyValueError;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use tokio::try_join;
@@ -40,8 +44,9 @@ pub struct OpenAISFTConfig {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISFTConfig"))]
 pub struct UninitializedOpenAISFTConfig {
     pub model: String,
     pub batch_size: Option<usize>,
@@ -52,6 +57,49 @@ pub struct UninitializedOpenAISFTConfig {
     pub api_base: Option<Url>,
     pub seed: Option<u64>,
     pub suffix: Option<String>,
+}
+
+impl std::fmt::Display for UninitializedOpenAISFTConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl UninitializedOpenAISFTConfig {
+    #[new]
+    pub fn new(
+        model: String,
+        batch_size: Option<usize>,
+        learning_rate_multiplier: Option<f64>,
+        n_epochs: Option<usize>,
+        credentials: Option<String>,
+        api_base: Option<String>,
+        seed: Option<u64>,
+        suffix: Option<String>,
+    ) -> PyResult<Self> {
+        // Use Deserialize to convert the string to a CredentialLocation
+        let credentials = credentials
+            .map(|s| serde_json::from_str(&s).unwrap_or_else(|_| CredentialLocation::Env(s)));
+        let api_base = api_base
+            .map(|s| {
+                Url::parse(&s)
+                    .map_err(|e| PyErr::new::<PyValueError, std::string::String>(e.to_string()))
+            })
+            .transpose()?;
+        Ok(Self {
+            model,
+            batch_size,
+            learning_rate_multiplier,
+            n_epochs,
+            credentials,
+            api_base,
+            seed,
+            suffix,
+        })
+    }
 }
 
 impl UninitializedOpenAISFTConfig {
@@ -76,13 +124,21 @@ impl UninitializedOpenAISFTConfig {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct OpenAISFTJobHandle {
     pub job_id: String,
     pub job_url: Url,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocation>,
+}
+
+impl std::fmt::Display for OpenAISFTJobHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 impl Optimizer for OpenAISFTConfig {
