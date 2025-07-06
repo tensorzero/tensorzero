@@ -69,6 +69,8 @@ impl std::fmt::Display for UninitializedOpenAISFTConfig {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl UninitializedOpenAISFTConfig {
+    // We allow too many arguments since it is a Python constructor
+    #[expect(clippy::too_many_arguments)]
     #[new]
     pub fn new(
         model: String,
@@ -81,8 +83,8 @@ impl UninitializedOpenAISFTConfig {
         suffix: Option<String>,
     ) -> PyResult<Self> {
         // Use Deserialize to convert the string to a CredentialLocation
-        let credentials = credentials
-            .map(|s| serde_json::from_str(&s).unwrap_or_else(|_| CredentialLocation::Env(s)));
+        let credentials =
+            credentials.map(|s| serde_json::from_str(&s).unwrap_or(CredentialLocation::Env(s)));
         let api_base = api_base
             .map(|s| {
                 Url::parse(&s)

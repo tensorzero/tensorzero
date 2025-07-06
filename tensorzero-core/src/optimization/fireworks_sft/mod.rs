@@ -153,8 +153,8 @@ impl UninitializedFireworksSFTConfig {
         account_id: String,
         api_base: Option<String>,
     ) -> PyResult<Self> {
-        let credentials = credentials
-            .map(|s| serde_json::from_str(&s).unwrap_or_else(|_| CredentialLocation::Env(s)));
+        let credentials =
+            credentials.map(|s| serde_json::from_str(&s).unwrap_or(CredentialLocation::Env(s)));
         let api_base = api_base
             .map(|s| {
                 Url::parse(&s)

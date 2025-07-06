@@ -1748,10 +1748,25 @@ impl AsyncTensorZeroGateway {
                     },
                 })
                 .await;
-            Python::with_gil(|py| match res {
-                Ok(job_handle) => Ok(job_handle.into_pyobject(py)?),
-                Err(e) => Err(convert_error(py, e)),
-            })
+            match res {
+                Ok(job_handle) => Ok(job_handle),
+                Err(e) => Python::with_gil(|py| Err(convert_error(py, e))),
+            }
+        })
+    }
+
+    #[pyo3(signature = (*, job_handle))]
+    fn experimental_poll_optimization<'a>(
+        this: PyRef<'a, Self>,
+        job_handle: OptimizerJobHandle,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.experimental_poll_optimization(job_handle).await;
+            match res {
+                Ok(status) => Ok(OptimizerStatusPyClass::new(status)),
+                Err(e) => Python::with_gil(|py| Err(convert_error(py, e))),
+            }
         })
     }
 }
