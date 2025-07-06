@@ -111,28 +111,30 @@ class OptimizerStatus:
 @final
 class OpenAISFTConfig:
     def __init__(
-            self,
-            *,
-            model: str,
-            batch_size: Optional[int] = None,
-            learning_rate_multiplier: Optional[float] = None,
-            n_epochs: Optional[int] = None,
-            credentials: Optional[str] = None,
-            api_base: Optional[str] = None,
-            seed: Optional[int] = None,
-            suffix: Optional[str] = None,
+        self,
+        *,
+        model: str,
+        batch_size: Optional[int] = None,
+        learning_rate_multiplier: Optional[float] = None,
+        n_epochs: Optional[int] = None,
+        credentials: Optional[str] = None,
+        api_base: Optional[str] = None,
+        seed: Optional[int] = None,
+        suffix: Optional[str] = None,
     ) -> None: ...
 
 @final
 class FireworksSFTConfig:
     def __init__(
-            self,
-            *,
-            model: str,
-            credentials: Optional[str] = None,
-            account_id: str,
-            api_base: Optional[str] = None,
+        self,
+        *,
+        model: str,
+        credentials: Optional[str] = None,
+        account_id: str,
+        api_base: Optional[str] = None,
     ) -> None: ...
+
+OptimizerConfig = Union[OpenAISFTConfig, FireworksSFTConfig]
 
 @final
 class Datapoint:
@@ -456,7 +458,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         *,
         train_examples: List[RenderedSample],
         val_examples: Optional[List[RenderedSample]] = None,
-        optimizer_config: Dict[str, Any],
+        optimizer_config: OptimizerConfig,
     ) -> OptimizerJobHandle:
         """
         Launch an optimization job.
@@ -797,7 +799,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         *,
         train_examples: List[RenderedSample],
         val_examples: Optional[List[RenderedSample]] = None,
-        optimizer_config: Dict[str, Any],
+        optimizer_config: OptimizerConfig,
     ) -> OptimizerJobHandle:
         """
         Launch an optimization job.
