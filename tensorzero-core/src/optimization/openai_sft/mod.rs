@@ -70,6 +70,11 @@ impl std::fmt::Display for UninitializedOpenAISFTConfig {
 #[pymethods]
 impl UninitializedOpenAISFTConfig {
     // We allow too many arguments since it is a Python constructor
+    /// NOTE: This signature currently does not work:
+    /// print(OpenAISFTConfig.__init__.__text_signature__)
+    /// prints out signature:
+    /// ($self, /, *args, **kwargs)
+    /// Same is true for FireworksSFTConfig
     #[expect(clippy::too_many_arguments)]
     #[new]
     #[pyo3(signature = (*, model, batch_size=None, learning_rate_multiplier=None, n_epochs=None, credentials=None, api_base=None, seed=None, suffix=None))]

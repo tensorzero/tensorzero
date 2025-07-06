@@ -74,6 +74,7 @@ RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample inste
 ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
+OptimizerConfig = t.Union[OpenAISFTConfig, FireworksSFTConfig]
 
 __all__ = [
     "AndFilter",
@@ -120,6 +121,7 @@ __all__ = [
     "OptimizerStatus",
     "OpenAISFTConfig",
     "FireworksSFTConfig",
+    "OptimizerConfig",
     "patch_openai_client",
     "RawText",
     "RenderedStoredInference",  # DEPRECATED

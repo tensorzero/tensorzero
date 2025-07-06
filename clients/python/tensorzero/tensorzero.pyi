@@ -27,6 +27,7 @@ from tensorzero import (
     InferenceInput,
     InferenceResponse,
     JsonDatapointInsert,
+    OptimizerConfig,
 )
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
@@ -133,8 +134,6 @@ class FireworksSFTConfig:
         account_id: str,
         api_base: Optional[str] = None,
     ) -> None: ...
-
-OptimizerConfig = Union[OpenAISFTConfig, FireworksSFTConfig]
 
 @final
 class Datapoint:
