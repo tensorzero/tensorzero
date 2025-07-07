@@ -68,7 +68,7 @@ impl JobHandle for OptimizationJobHandle {
         &self,
         client: &reqwest::Client,
         credentials: &InferenceCredentials,
-    ) -> Result<OptimizationStatus, Error> {
+    ) -> Result<OptimizationJobInfo, Error> {
         match self {
             OptimizationJobHandle::OpenAISFT(job_handle) => {
                 job_handle.poll(client, credentials).await
@@ -93,7 +93,7 @@ pub enum OptimizerOutput {
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "status", rename_all = "snake_case")]
-pub enum OptimizationStatus {
+pub enum OptimizationJobInfo {
     Pending {
         message: String,
         #[cfg_attr(test, ts(type = "Date | null"))]
@@ -112,49 +112,65 @@ pub enum OptimizationStatus {
 
 /// PyO3 has special handling for complex enums that makes it difficult to #[pyclass] them directly if
 /// they contain elements that don't implement IntoPyObject.
-/// We work around this by implementing a custom pyclass that wraps the OptimizerStatus enum.
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "OptimizationStatus"))]
-pub struct OptimizationStatusPyClass(OptimizationStatus);
+/// We work around this by implementing a custom pyclass that wraps the OptimizationJobInfo enum.
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "OptimizationJobInfo"))]
+pub struct OptimizationJobInfoPyClass(OptimizationJobInfo);
 
 #[cfg(feature = "pyo3")]
-impl OptimizationStatusPyClass {
-    pub fn new(status: OptimizationStatus) -> Self {
+impl OptimizationJobInfoPyClass {
+    pub fn new(status: OptimizationJobInfo) -> Self {
         Self(status)
     }
 }
 
-impl std::fmt::Display for OptimizationStatusPyClass {
+impl std::fmt::Display for OptimizationJobInfoPyClass {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(&self.0).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
     }
 }
 
+#[derive(Debug, Serialize, PartialEq)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, eq))]
+pub enum OptimizationJobStatus {
+    Pending,
+    Completed,
+    Failed,
+}
+
+impl std::fmt::Display for OptimizationJobStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl OptimizationStatusPyClass {
+impl OptimizationJobInfoPyClass {
     #[getter]
     fn get_message(&self) -> &str {
         match &self.0 {
-            OptimizationStatus::Pending { message, .. } => message,
-            OptimizationStatus::Completed { .. } => "Completed",
-            OptimizationStatus::Failed { message, .. } => message,
+            OptimizationJobInfo::Pending { message, .. } => message,
+            OptimizationJobInfo::Completed { .. } => "Completed",
+            OptimizationJobInfo::Failed { message, .. } => message,
         }
     }
 
     #[getter]
-    fn get_status(&self) -> &str {
+    fn get_status(&self) -> OptimizationJobStatus {
         match &self.0 {
-            OptimizationStatus::Pending { .. } => "pending",
-            OptimizationStatus::Completed { .. } => "completed",
-            OptimizationStatus::Failed { .. } => "failed",
+            OptimizationJobInfo::Pending { .. } => OptimizationJobStatus::Pending,
+            OptimizationJobInfo::Completed { .. } => OptimizationJobStatus::Completed,
+            OptimizationJobInfo::Failed { .. } => OptimizationJobStatus::Failed,
         }
     }
 
     #[getter]
     fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
         match &self.0 {
-            OptimizationStatus::Completed { output } => Ok(serialize_to_dict(py, output)
+            OptimizationJobInfo::Completed { output } => Ok(serialize_to_dict(py, output)
                 .map(|obj| Some(obj.into_pyobject(py)))?
                 .transpose()?),
             _ => Ok(None),
@@ -165,7 +181,7 @@ impl OptimizationStatusPyClass {
     #[getter]
     fn get_estimated_finish(&self) -> Option<i64> {
         match &self.0 {
-            OptimizationStatus::Pending {
+            OptimizationJobInfo::Pending {
                 estimated_finish, ..
             } => estimated_finish.map(|dt| dt.timestamp()),
             _ => None,
@@ -178,7 +194,7 @@ pub trait JobHandle {
         &self,
         client: &reqwest::Client,
         credentials: &InferenceCredentials,
-    ) -> Result<OptimizationStatus, Error>;
+    ) -> Result<OptimizationJobInfo, Error>;
 }
 
 pub trait Optimizer {

@@ -16,7 +16,7 @@ use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optim
 use tensorzero_core::endpoints::stored_inference::render_samples;
 use tensorzero_core::evaluations::EvaluationConfig;
 use tensorzero_core::function::FunctionConfig;
-pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationStatus};
+pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
     config_parser::Config,
@@ -872,7 +872,7 @@ impl Client {
     pub async fn experimental_poll_optimization(
         &self,
         job_handle: OptimizationJobHandle,
-    ) -> Result<OptimizationStatus, TensorZeroError> {
+    ) -> Result<OptimizationJobInfo, TensorZeroError> {
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {

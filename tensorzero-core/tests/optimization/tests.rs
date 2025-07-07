@@ -22,7 +22,7 @@ use tensorzero_core::{
         ModelInput, RequestMessage, Text,
     },
     optimization::JobHandle,
-    optimization::{OptimizationStatus, Optimizer, OptimizerInfo, OptimizerOutput},
+    optimization::{OptimizationJobInfo, Optimizer, OptimizerInfo, OptimizerOutput},
     tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
 };
@@ -56,10 +56,10 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     loop {
         status = job_handle.poll(&client, &credentials).await.unwrap();
         println!("Status: {status:?}");
-        if matches!(status, OptimizationStatus::Completed { .. }) {
+        if matches!(status, OptimizationJobInfo::Completed { .. }) {
             break;
         }
-        if matches!(status, OptimizationStatus::Failed { .. }) {
+        if matches!(status, OptimizationJobInfo::Failed { .. }) {
             panic!("Optimization failed: {status:?}");
         }
         sleep(if use_mock_inference_provider() {
@@ -69,8 +69,8 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         })
         .await;
     }
-    assert!(matches!(status, OptimizationStatus::Completed { .. }));
-    let OptimizationStatus::Completed {
+    assert!(matches!(status, OptimizationJobInfo::Completed { .. }));
+    let OptimizationJobInfo::Completed {
         output: OptimizerOutput::Model(model_config),
     } = status
     else {

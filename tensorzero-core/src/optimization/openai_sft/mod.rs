@@ -11,7 +11,7 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model::{build_creds_caching_default, CredentialLocation},
-    optimization::{JobHandle, OptimizationStatus, Optimizer},
+    optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::openai::{
         default_api_key_location,
         optimization::{
@@ -311,7 +311,7 @@ impl JobHandle for OpenAISFTJobHandle {
         &self,
         client: &reqwest::Client,
         credentials: &InferenceCredentials,
-    ) -> Result<OptimizationStatus, Error> {
+    ) -> Result<OptimizationJobInfo, Error> {
         let openai_credentials = build_creds_caching_default(
             self.credential_location.clone(),
             default_api_key_location(),

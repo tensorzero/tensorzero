@@ -12,7 +12,8 @@ use crate::{
     endpoints::{inference::InferenceCredentials, stored_inference::render_samples},
     error::{Error, ErrorDetails},
     optimization::{
-        JobHandle, OptimizationJobHandle, OptimizationStatus, Optimizer, UninitializedOptimizerInfo,
+        JobHandle, OptimizationJobHandle, OptimizationJobInfo, Optimizer,
+        UninitializedOptimizerInfo,
     },
     serde_util::deserialize_option_u64,
     stored_inference::RenderedSample,
@@ -104,9 +105,9 @@ pub async fn launch_optimization_workflow(
 #[derive(Debug, Deserialize)]
 #[cfg_attr(test, ts(export))]
 pub struct LaunchOptimizationParams {
-    pub train_examples: Vec<RenderedSample>,
-    pub val_examples: Option<Vec<RenderedSample>>,
-    pub optimizer_config: UninitializedOptimizerInfo,
+    pub train_samples: Vec<RenderedSample>,
+    pub val_samples: Option<Vec<RenderedSample>>,
+    pub optimization_config: UninitializedOptimizerInfo,
     // TODO: add a way to do {"type": "tensorzero", "name": "foo"} to grab an optimizer configured in
     // tensorzero.toml
 }
@@ -120,9 +121,9 @@ pub async fn launch_optimization(
     // For the TODO above: will need to pass config in here
 ) -> Result<OptimizationJobHandle, Error> {
     let LaunchOptimizationParams {
-        train_examples,
-        val_examples,
-        optimizer_config,
+        train_samples: train_examples,
+        val_samples: val_examples,
+        optimization_config: optimizer_config,
     } = params;
     let optimizer = optimizer_config.load()?;
     optimizer
@@ -140,7 +141,7 @@ pub async fn launch_optimization(
 pub async fn poll_optimization(
     http_client: &reqwest::Client,
     job_handle: &OptimizationJobHandle,
-) -> Result<OptimizationStatus, Error> {
+) -> Result<OptimizationJobInfo, Error> {
     job_handle
         .poll(http_client, &InferenceCredentials::default())
         .await

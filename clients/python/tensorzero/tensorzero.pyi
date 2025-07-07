@@ -108,13 +108,19 @@ class OptimizationJobHandle:
     FireworksSFT: Type["OptimizationJobHandle"]
 
 @final
-class OptimizationStatus:
-    OpenAISFT: Type["OptimizationStatus"]
-    FireworksSFT: Type["OptimizationStatus"]
+class OptimizationJobStatus:
+    Pending: Type["OptimizationJobStatus"]
+    Completed: Type["OptimizationJobStatus"]
+    Failed: Type["OptimizationJobStatus"]
+
+@final
+class OptimizationJobInfo:
+    OpenAISFT: Type["OptimizationJobInfo"]
+    FireworksSFT: Type["OptimizationJobInfo"]
     @property
     def message(self) -> str: ...
     @property
-    def status(self) -> Literal["pending", "completed", "failed"]: ...
+    def status(self) -> Type[OptimizationJobStatus]: ...
     @property
     def output(self) -> Optional[Any]: ...
     @property
@@ -466,16 +472,16 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     def experimental_launch_optimization(
         self,
         *,
-        train_examples: List[RenderedSample],
-        val_examples: Optional[List[RenderedSample]] = None,
+        train_samples: List[RenderedSample],
+        val_samples: Optional[List[RenderedSample]] = None,
         optimization_config: OptimizationConfig,
     ) -> OptimizationJobHandle:
         """
         Launch an optimization job.
 
-        :param train_examples: A list of RenderedSample objects that will be used for training.
-        :param val_examples: A list of RenderedSample objects that will be used for validation.
-        :param optimizer_config: The optimizer config.
+        :param train_samples: A list of RenderedSample objects that will be used for training.
+        :param val_samples: A list of RenderedSample objects that will be used for validation.
+        :param optimization_config: The optimization config.
         :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
         """
         ...
@@ -484,7 +490,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         job_handle: OptimizationJobHandle,
-    ) -> OptimizationStatus:
+    ) -> OptimizationJobInfo:
         """
         Poll an optimization job.
 
@@ -807,16 +813,16 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     async def experimental_launch_optimization(
         self,
         *,
-        train_examples: List[RenderedSample],
-        val_examples: Optional[List[RenderedSample]] = None,
+        train_samples: List[RenderedSample],
+        val_samples: Optional[List[RenderedSample]] = None,
         optimization_config: OptimizationConfig,
     ) -> OptimizationJobHandle:
         """
         Launch an optimization job.
 
-        :param train_examples: A list of RenderedSample objects that will be used for training.
-        :param val_examples: A list of RenderedSample objects that will be used for validation.
-        :param optimizer_config: The optimizer config.
+        :param train_samples: A list of RenderedSample objects that will be used for training.
+        :param val_samples: A list of RenderedSample objects that will be used for validation.
+        :param optimization_config: The optimization config.
         :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
         """
         ...
@@ -825,7 +831,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         job_handle: OptimizationJobHandle,
-    ) -> OptimizationStatus:
+    ) -> OptimizationJobInfo:
         """
         Poll an optimization job.
 
@@ -874,5 +880,6 @@ __all__ = [
     "ResolvedInputMessage",
     "OpenAISFTConfig",
     "OptimizationJobHandle",
-    "OptimizationStatus",
+    "OptimizationJobInfo",
+    "OptimizationJobStatus",
 ]
