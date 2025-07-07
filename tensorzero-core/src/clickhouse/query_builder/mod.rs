@@ -418,6 +418,7 @@ pub fn generate_list_inferences_sql(
         }
         InferenceOutputSource::Demonstration => {
             select_clauses.insert("demo_f.value AS output".to_string());
+            // [i.output] will produce an array in ClickHouse which will populate the dispreferred_outputs field
             select_clauses.insert("[i.output] as dispreferred_outputs".to_string());
 
             // NOTE: we may want to pre-filter this via subqueries or CTEs prior to the join for performance reasons
