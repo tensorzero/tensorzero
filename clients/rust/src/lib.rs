@@ -16,7 +16,7 @@ use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optim
 use tensorzero_core::endpoints::stored_inference::render_samples;
 use tensorzero_core::evaluations::EvaluationConfig;
 use tensorzero_core::function::FunctionConfig;
-pub use tensorzero_core::optimization::{OptimizerJobHandle, OptimizerStatus};
+pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationStatus};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
     config_parser::Config,
@@ -818,8 +818,8 @@ impl Client {
     /// Launch an optimization job.
     pub async fn experimental_launch_optimization(
         &self,
-        params: LaunchOptimizationParams,
-    ) -> Result<OptimizerJobHandle, TensorZeroError> {
+        params: tensorzero_core::endpoints::optimization::LaunchOptimizationParams,
+    ) -> Result<OptimizationJobHandle, TensorZeroError> {
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 // TODO: do we want this?
@@ -845,7 +845,7 @@ impl Client {
     pub async fn experimental_launch_optimization_workflow(
         &self,
         params: LaunchOptimizationWorkflowParams,
-    ) -> Result<OptimizerJobHandle, TensorZeroError> {
+    ) -> Result<OptimizationJobHandle, TensorZeroError> {
         let ClientMode::EmbeddedGateway { gateway, timeout } = &self.mode else {
             return Err(TensorZeroError::Other {
                 source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
@@ -871,8 +871,8 @@ impl Client {
     /// Poll an optimization job for status.
     pub async fn experimental_poll_optimization(
         &self,
-        job_handle: OptimizerJobHandle,
-    ) -> Result<OptimizerStatus, TensorZeroError> {
+        job_handle: OptimizationJobHandle,
+    ) -> Result<OptimizationStatus, TensorZeroError> {
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {

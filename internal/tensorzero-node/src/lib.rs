@@ -1,7 +1,7 @@
 #![deny(clippy::all)]
 use std::{path::Path, time::Duration};
 
-use tensorzero::{Client, ClientBuilder, ClientBuilderMode, OptimizerJobHandle};
+use tensorzero::{Client, ClientBuilder, ClientBuilderMode, OptimizationJobHandle};
 
 #[macro_use]
 extern crate napi_derive;
@@ -54,7 +54,7 @@ impl TensorZeroClient {
         &self,
         job_handle: String,
     ) -> Result<String, napi::Error> {
-        let job_handle: OptimizerJobHandle = serde_json::from_str(&job_handle)
+        let job_handle: OptimizationJobHandle = serde_json::from_str(&job_handle)
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let info = self
             .client

@@ -549,10 +549,10 @@ async fn get_latest_batch_inference(
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    if response.is_empty() {
+    if response.response.is_empty() {
         return None;
     }
-    let batch_request = serde_json::from_str::<BatchRequestRow>(&response).unwrap();
+    let batch_request = serde_json::from_str::<BatchRequestRow>(&response.response).unwrap();
     Some(batch_request)
 }
 
@@ -568,6 +568,7 @@ async fn get_all_batch_inferences(
         .await
         .unwrap();
     let rows = response
+        .response
         .lines()
         .filter(|line| !line.is_empty())
         .map(serde_json::from_str::<BatchModelInferenceRow>)

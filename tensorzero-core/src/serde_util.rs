@@ -32,6 +32,46 @@ where
     serde_json::from_str(&json_str).map_err(serde::de::Error::custom)
 }
 
+/// Deserializes a "doubly-serialized" field of a struct, but allows the string "" to be the default.
+/// If you have a struct like this:
+/// ```ignore
+/// #[derive(Deserialize, Default)]
+/// struct Inner {
+///     foo: u32,
+///     bar: String,
+/// }
+///
+/// #[derive(Deserialize)]
+/// struct Outer {
+///     #[serde(deserialize_with = "deserialize_json_string")]
+///     inner: Inner,
+/// }
+/// ```
+///
+/// And the inner struct is itself a JSON serialized string, you can deserialize it like this:
+/// ```ignore
+/// let outer = serde_json::from_str::<Outer>("{\"inner\": \"{\\"foo\\": 1, \\"bar\\": \\"baz\\"}\"}")?;
+/// assert_eq!(outer.inner.foo, 1);
+/// assert_eq!(outer.inner.bar, "baz");
+/// ```
+///
+/// you can also do this:
+/// ```ignore
+/// let outer = serde_json::from_str::<Outer>("{\"inner\": \"\"}")?;
+/// assert_eq!(outer.inner, Inner { foo: 0, bar: "".to_string() });
+/// ```
+pub fn deserialize_defaulted_json_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned + Default,
+{
+    let json_str = String::deserialize(deserializer)?;
+    if json_str.is_empty() {
+        return Ok(T::default());
+    }
+    serde_json::from_str(&json_str).map_err(serde::de::Error::custom)
+}
+
 /// Deserializes an optional "doubly-serialized" field of a struct.
 /// If you have a struct like this:
 /// ```ignore
@@ -236,6 +276,53 @@ where
     }
 }
 
+/// Deserializes a defaulted "doubly-serialized" field of a struct.
+/// If you have a struct like this:
+/// ```ignore
+/// #[derive(Deserialize, Default)]
+/// struct Inner {
+///     foo: u32,
+///     bar: String,
+/// }
+///
+///
+/// #[derive(Deserialize)]
+/// struct Outer {
+///     #[serde(deserialize_with = "deserialize_json_string")]
+///     inner: Inner,
+/// }
+/// ```
+///
+/// And the inner struct is itself a JSON serialized string, you can deserialize it like this:
+/// ```ignore
+/// let outer = serde_json::from_str::<Outer>("{\"inner\": \"{\\"foo\\": 1, \\"bar\\": \\"baz\\"}\"}")?;
+/// assert_eq!(outer.inner.foo, 1);
+/// assert_eq!(outer.inner.bar, "baz");
+/// ```
+///
+///
+/// In ClickHouse we also run into case where the data is the empty string as an indicator of null.
+/// ```ignore
+/// let outer = serde_json::from_str::<Outer>("{\"inner\": \"\"}")?;
+/// assert_eq!(outer.inner, Inner { foo: 0, bar: "".to_string() });
+/// ```
+pub fn deserialize_defaulted_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned + Default,
+{
+    let value: Value = Deserialize::deserialize(deserializer)?;
+    match value {
+        Value::String(s) => {
+            if s.is_empty() {
+                return Ok(T::default());
+            }
+            Ok(serde_json::from_str(&s).map_err(serde::de::Error::custom)?)
+        }
+        _ => Err(serde::de::Error::custom("expected a string")),
+    }
+}
+
 /// Like `deserialize_option_u64`, but requires a number to be present.
 pub fn deserialize_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
 where
@@ -312,6 +399,12 @@ mod tests {
         inner: TestStruct,
     }
 
+    #[derive(Debug, Deserialize, Default)]
+    struct TestDefaultedOuter {
+        #[serde(deserialize_with = "deserialize_defaulted_string")]
+        inner: TestStruct,
+    }
+
     #[derive(Debug, Deserialize)]
     struct TestOptionalOuter {
         #[serde(deserialize_with = "deserialize_optional_json_string")]
@@ -334,6 +427,18 @@ mod tests {
     struct TestDefaultedStringOrParsedOuter {
         #[serde(deserialize_with = "deserialize_defaulted_string_or_parsed_json")]
         inner: TestStruct,
+    }
+
+    #[derive(Debug, Deserialize, Default, PartialEq)]
+    struct TestDefaultedStruct {
+        foo: u32,
+        bar: String,
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct TestDefaultedJsonOuter {
+        #[serde(deserialize_with = "deserialize_defaulted_json_string")]
+        inner: TestDefaultedStruct,
     }
 
     #[test]
@@ -533,5 +638,48 @@ mod tests {
         let json = r#"{"inner": 1234567890}"#;
         let result: TestU64Outer = serde_json::from_str(json).unwrap();
         assert_eq!(result.inner, 1234567890);
+    }
+
+    #[test]
+    fn test_deserialize_defaulted_json_string_empty_string() {
+        let json = r#"{"inner": ""}"#;
+        let result: TestDefaultedJsonOuter = serde_json::from_str(json).unwrap();
+        assert_eq!(result.inner, TestDefaultedStruct::default());
+    }
+
+    #[test]
+    fn test_deserialize_defaulted_json_string_invalid_json() {
+        let json = r#"{"inner": "{\"foo\": 42, \"bar\": invalid"}"#;
+        let result: Result<TestDefaultedOuter, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deserialize_defaulted_json_string_valid() {
+        let json = r#"{"inner": "{\"foo\": 1, \"bar\": \"test\"}"}"#;
+        let result: TestDefaultedOuter = serde_json::from_str(json).unwrap();
+        assert_eq!(result.inner.foo, 1);
+        assert_eq!(result.inner.bar, "test");
+    }
+
+    #[test]
+    fn test_deserialize_defaulted_string_null() {
+        let json = r#"{"inner": null}"#;
+        let result: Result<TestDefaultedOuter, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+
+        let json = r#"{"inner": "{\"foo\": 21, \"bar\": \"datboi\"}"}"#;
+        let result: TestDefaultedOuter = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            result.inner,
+            TestStruct {
+                foo: 21,
+                bar: "datboi".to_string()
+            }
+        );
+
+        let json = r#"{"inner": ""}"#;
+        let result: TestDefaultedOuter = serde_json::from_str(json).unwrap();
+        assert_eq!(result.inner, TestStruct::default());
     }
 }

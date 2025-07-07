@@ -14,7 +14,7 @@ import { getConfig } from "~/utils/config/index.server";
 import { getEnv } from "../env.server";
 
 let _tensorZeroClient: TensorZeroClient | undefined;
-async function getTensorZeroClient(): Promise<TensorZeroClient> {
+export async function getNativeTensorZeroClient(): Promise<TensorZeroClient> {
   if (_tensorZeroClient) {
     return _tensorZeroClient;
   }
@@ -123,7 +123,7 @@ class NativeSFTJob extends SFTJob {
   }
 
   async poll(): Promise<SFTJob> {
-    const client = await getTensorZeroClient();
+    const client = await getNativeTensorZeroClient();
     const status = await client.experimentalPollOptimization(this.jobHandle);
     this.jobStatus = status;
     return this;
@@ -140,7 +140,7 @@ async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
   } else if (data.metric) {
     filters = await createFilters(data.metric, data.threshold);
   }
-  const client = await getTensorZeroClient();
+  const client = await getNativeTensorZeroClient();
   let optimizerConfig: UninitializedOptimizerInfo;
   if (data.model.provider == "openai") {
     optimizerConfig = {

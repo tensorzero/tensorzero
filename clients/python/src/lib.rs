@@ -37,7 +37,7 @@ use tensorzero_core::{
     },
     optimization::{
         fireworks_sft::UninitializedFireworksSFTConfig, openai_sft::UninitializedOpenAISFTConfig,
-        OptimizerStatusPyClass, UninitializedOptimizerInfo,
+        OptimizationStatusPyClass, UninitializedOptimizerInfo,
     },
 };
 use tensorzero_core::{
@@ -54,7 +54,7 @@ use tensorzero_rust::{
     ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, Datapoint,
     DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
     InferenceParams, InferenceStream, LaunchOptimizationParams, ListInferencesParams,
-    OptimizerJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
+    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -87,8 +87,8 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
-    m.add_class::<OptimizerJobHandle>()?;
-    m.add_class::<OptimizerStatusPyClass>()?;
+    m.add_class::<OptimizationJobHandle>()?;
+    m.add_class::<OptimizationStatusPyClass>()?;
 
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;
@@ -1034,15 +1034,15 @@ impl TensorZeroGateway {
     ///
     /// :param train_examples: A list of RenderedSample objects that will be used for training.
     /// :param val_examples: A list of RenderedSample objects that will be used for validation.
-    /// :param optimizer_config: The optimizer config.
+    /// :param optimization_config: The optimization config.
     /// :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
-    #[pyo3(signature = (*, train_examples, val_examples=None, optimizer_config))]
+    #[pyo3(signature = (*, train_examples, val_examples=None, optimization_config))]
     fn experimental_launch_optimization(
         this: PyRef<'_, Self>,
         train_examples: Vec<Bound<'_, PyAny>>,
         val_examples: Option<Vec<Bound<'_, PyAny>>>,
-        optimizer_config: Bound<'_, PyAny>,
-    ) -> PyResult<OptimizerJobHandle> {
+        optimization_config: Bound<'_, PyAny>,
+    ) -> PyResult<OptimizationJobHandle> {
         let client = this.as_super().client.clone();
         let train_examples = train_examples
             .iter()
@@ -1055,12 +1055,12 @@ impl TensorZeroGateway {
                     .collect::<Result<Vec<_>, _>>()
             })
             .transpose()?;
-        let optimizer_config = deserialize_optimization_config(&optimizer_config)?;
+        let optimization_config = deserialize_optimization_config(&optimization_config)?;
         let fut = client.experimental_launch_optimization(LaunchOptimizationParams {
             train_examples,
             val_examples,
             optimizer_config: UninitializedOptimizerInfo {
-                inner: optimizer_config,
+                inner: optimization_config,
             },
         });
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
@@ -1073,12 +1073,12 @@ impl TensorZeroGateway {
     #[pyo3(signature = (*, job_handle))]
     fn experimental_poll_optimization(
         this: PyRef<'_, Self>,
-        job_handle: OptimizerJobHandle,
-    ) -> PyResult<OptimizerStatusPyClass> {
+        job_handle: OptimizationJobHandle,
+    ) -> PyResult<OptimizationStatusPyClass> {
         let client = this.as_super().client.clone();
         let fut = client.experimental_poll_optimization(job_handle);
         match tokio_block_on_without_gil(this.py(), fut) {
-            Ok(status) => Ok(OptimizerStatusPyClass::new(status)),
+            Ok(status) => Ok(OptimizationStatusPyClass::new(status)),
             Err(e) => Err(convert_error(this.py(), e)),
         }
     }
@@ -1739,14 +1739,14 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param train_examples: A list of RenderedSample objects that will be used for training.
     /// :param val_examples: A list of RenderedSample objects that will be used for validation.
-    /// :param optimizer_config: The optimizer config.
+    /// :param optimiztion_config: The optimization config.
     /// :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
-    #[pyo3(signature = (*, train_examples, val_examples=None, optimizer_config))]
+    #[pyo3(signature = (*, train_examples, val_examples=None, optimization_config))]
     fn experimental_launch_optimization<'a>(
         this: PyRef<'a, Self>,
         train_examples: Vec<Bound<'a, PyAny>>,
         val_examples: Option<Vec<Bound<'a, PyAny>>>,
-        optimizer_config: Bound<'a, PyAny>,
+        optimization_config: Bound<'a, PyAny>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
         let train_examples = train_examples
@@ -1761,7 +1761,7 @@ impl AsyncTensorZeroGateway {
                     .collect::<Result<Vec<_>, _>>()
             })
             .transpose()?;
-        let optimizer_config = deserialize_optimization_config(&optimizer_config)?;
+        let optimizer_config = deserialize_optimization_config(&optimization_config)?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
                 .experimental_launch_optimization(LaunchOptimizationParams {
@@ -1786,13 +1786,13 @@ impl AsyncTensorZeroGateway {
     #[pyo3(signature = (*, job_handle))]
     fn experimental_poll_optimization(
         this: PyRef<'_, Self>,
-        job_handle: OptimizerJobHandle,
+        job_handle: OptimizationJobHandle,
     ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.experimental_poll_optimization(job_handle).await;
             match res {
-                Ok(status) => Ok(OptimizerStatusPyClass::new(status)),
+                Ok(status) => Ok(OptimizationStatusPyClass::new(status)),
                 Err(e) => Python::with_gil(|py| Err(convert_error(py, e))),
             }
         })

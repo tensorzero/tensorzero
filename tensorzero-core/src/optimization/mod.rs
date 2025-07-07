@@ -49,29 +49,31 @@ enum OptimizerConfig {
 #[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum OptimizerJobHandle {
+pub enum OptimizationJobHandle {
     #[serde(rename = "openai_sft")]
     OpenAISFT(OpenAISFTJobHandle),
     #[serde(rename = "fireworks_sft")]
     FireworksSFT(FireworksSFTJobHandle),
 }
 
-impl std::fmt::Display for OptimizerJobHandle {
+impl std::fmt::Display for OptimizationJobHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
     }
 }
 
-impl JobHandle for OptimizerJobHandle {
+impl JobHandle for OptimizationJobHandle {
     async fn poll(
         &self,
         client: &reqwest::Client,
         credentials: &InferenceCredentials,
-    ) -> Result<OptimizerStatus, Error> {
+    ) -> Result<OptimizationStatus, Error> {
         match self {
-            OptimizerJobHandle::OpenAISFT(job_handle) => job_handle.poll(client, credentials).await,
-            OptimizerJobHandle::FireworksSFT(job_handle) => {
+            OptimizationJobHandle::OpenAISFT(job_handle) => {
+                job_handle.poll(client, credentials).await
+            }
+            OptimizationJobHandle::FireworksSFT(job_handle) => {
                 job_handle.poll(client, credentials).await
             }
         }
@@ -91,7 +93,7 @@ pub enum OptimizerOutput {
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "status", rename_all = "snake_case")]
-pub enum OptimizerStatus {
+pub enum OptimizationStatus {
     Pending {
         message: String,
         #[cfg_attr(test, ts(type = "Date | null"))]
@@ -111,17 +113,17 @@ pub enum OptimizerStatus {
 /// PyO3 has special handling for complex enums that makes it difficult to #[pyclass] them directly if
 /// they contain elements that don't implement IntoPyObject.
 /// We work around this by implementing a custom pyclass that wraps the OptimizerStatus enum.
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "OptimizerStatus"))]
-pub struct OptimizerStatusPyClass(OptimizerStatus);
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "OptimizationStatus"))]
+pub struct OptimizationStatusPyClass(OptimizationStatus);
 
 #[cfg(feature = "pyo3")]
-impl OptimizerStatusPyClass {
-    pub fn new(status: OptimizerStatus) -> Self {
+impl OptimizationStatusPyClass {
+    pub fn new(status: OptimizationStatus) -> Self {
         Self(status)
     }
 }
 
-impl std::fmt::Display for OptimizerStatusPyClass {
+impl std::fmt::Display for OptimizationStatusPyClass {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(&self.0).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -130,29 +132,29 @@ impl std::fmt::Display for OptimizerStatusPyClass {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl OptimizerStatusPyClass {
+impl OptimizationStatusPyClass {
     #[getter]
     fn get_message(&self) -> &str {
         match &self.0 {
-            OptimizerStatus::Pending { message, .. } => message,
-            OptimizerStatus::Completed { .. } => "Completed",
-            OptimizerStatus::Failed { message, .. } => message,
+            OptimizationStatus::Pending { message, .. } => message,
+            OptimizationStatus::Completed { .. } => "Completed",
+            OptimizationStatus::Failed { message, .. } => message,
         }
     }
 
     #[getter]
     fn get_status(&self) -> &str {
         match &self.0 {
-            OptimizerStatus::Pending { .. } => "pending",
-            OptimizerStatus::Completed { .. } => "completed",
-            OptimizerStatus::Failed { .. } => "failed",
+            OptimizationStatus::Pending { .. } => "pending",
+            OptimizationStatus::Completed { .. } => "completed",
+            OptimizationStatus::Failed { .. } => "failed",
         }
     }
 
     #[getter]
     fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
         match &self.0 {
-            OptimizerStatus::Completed { output } => Ok(serialize_to_dict(py, output)
+            OptimizationStatus::Completed { output } => Ok(serialize_to_dict(py, output)
                 .map(|obj| Some(obj.into_pyobject(py)))?
                 .transpose()?),
             _ => Ok(None),
@@ -163,7 +165,7 @@ impl OptimizerStatusPyClass {
     #[getter]
     fn get_estimated_finish(&self) -> Option<i64> {
         match &self.0 {
-            OptimizerStatus::Pending {
+            OptimizationStatus::Pending {
                 estimated_finish, ..
             } => estimated_finish.map(|dt| dt.timestamp()),
             _ => None,
@@ -176,7 +178,7 @@ pub trait JobHandle {
         &self,
         client: &reqwest::Client,
         credentials: &InferenceCredentials,
-    ) -> Result<OptimizerStatus, Error>;
+    ) -> Result<OptimizationStatus, Error>;
 }
 
 pub trait Optimizer {
@@ -192,7 +194,7 @@ pub trait Optimizer {
 }
 
 impl Optimizer for OptimizerInfo {
-    type Handle = OptimizerJobHandle;
+    type Handle = OptimizationJobHandle;
     async fn launch(
         &self,
         client: &reqwest::Client,
@@ -204,11 +206,11 @@ impl Optimizer for OptimizerInfo {
             OptimizerConfig::OpenAISFT(config) => config
                 .launch(client, train_examples, val_examples, credentials)
                 .await
-                .map(OptimizerJobHandle::OpenAISFT),
+                .map(OptimizationJobHandle::OpenAISFT),
             OptimizerConfig::FireworksSFT(config) => config
                 .launch(client, train_examples, val_examples, credentials)
                 .await
-                .map(OptimizerJobHandle::FireworksSFT),
+                .map(OptimizationJobHandle::FireworksSFT),
         }
     }
 }

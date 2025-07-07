@@ -41,7 +41,7 @@ impl<C> MitmProxy<C> {
 
 impl<C> MitmProxy<C>
 where
-    C: Borrow<rcgen::CertifiedKey> + Send + Sync + 'static,
+    C: Borrow<rcgen::Issuer<'static, rcgen::KeyPair>> + Send + Sync + 'static,
 {
     /// Bind to a socket address and return a future that runs the proxy server.
     /// URL for requests that passed to service are full URL including scheme.

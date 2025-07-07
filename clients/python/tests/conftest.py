@@ -128,6 +128,7 @@ def mixed_rendered_samples(
             parallel_tool_calls=False,
         ),
         output_schema=None,
+        dispreferred_outputs=[],
     )
     json_inference = StoredInference(
         type="json",
@@ -152,6 +153,7 @@ def mixed_rendered_samples(
             "properties": {"answer": {"type": "string"}},
         },
         tool_params=None,
+        dispreferred_outputs=[],
     )
     sample_list = [chat_inference] * 10 + [json_inference] * 10
     return embedded_sync_client.experimental_render_samples(

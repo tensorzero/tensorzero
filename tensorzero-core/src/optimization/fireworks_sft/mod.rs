@@ -30,9 +30,9 @@ use crate::model::UninitializedModelConfig;
 use crate::model::UninitializedModelProvider;
 use crate::model::UninitializedProviderConfig;
 use crate::optimization::JobHandle;
+use crate::optimization::OptimizationStatus;
 use crate::optimization::Optimizer;
 use crate::optimization::OptimizerOutput;
-use crate::optimization::OptimizerStatus;
 use crate::providers::fireworks::prepare_fireworks_messages;
 use crate::providers::fireworks::FIREWORKS_API_BASE;
 use crate::providers::openai::tensorzero_to_openai_assistant_message;
@@ -814,7 +814,7 @@ impl JobHandle for FireworksSFTJobHandle {
         &self,
         client: &reqwest::Client,
         credentials: &InferenceCredentials,
-    ) -> Result<OptimizerStatus, Error> {
+    ) -> Result<OptimizationStatus, Error> {
         let fireworks_credentials = build_creds_caching_default(
             self.credential_location.clone(),
             default_api_key_location(),
@@ -850,7 +850,7 @@ impl JobHandle for FireworksSFTJobHandle {
                 FireworksDeploymentState::StateUnspecified
                 | FireworksDeploymentState::Deploying
                 | FireworksDeploymentState::Undeploying
-                | FireworksDeploymentState::Updating => Ok(OptimizerStatus::Pending {
+                | FireworksDeploymentState::Updating => Ok(OptimizationStatus::Pending {
                     message: deployment_state.to_string(),
                     estimated_finish: None,
                     trained_tokens: None,
@@ -868,7 +868,7 @@ impl JobHandle for FireworksSFTJobHandle {
                         timeouts: None,
                         discard_unknown_chunks: false,
                     };
-                    Ok(OptimizerStatus::Completed {
+                    Ok(OptimizationStatus::Completed {
                         output: OptimizerOutput::Model(UninitializedModelConfig {
                             routing: vec![model_path.clone().into()],
                             providers: HashMap::from([(model_path.into(), model_provider)]),
@@ -885,7 +885,7 @@ impl JobHandle for FireworksSFTJobHandle {
 
 pub fn convert_to_optimizer_status(
     job: FireworksFineTuningJobResponse,
-) -> Result<OptimizerStatus, Error> {
+) -> Result<OptimizationStatus, Error> {
     Ok(match job.state {
         FireworksFineTuningJobState::JobStateCreating
         | FireworksFineTuningJobState::JobStatePending
@@ -895,7 +895,7 @@ pub fn convert_to_optimizer_status(
         | FireworksFineTuningJobState::JobStateRollout
         | FireworksFineTuningJobState::JobStateEvaluation
         | FireworksFineTuningJobState::JobStateUnspecified
-        | FireworksFineTuningJobState::JobStatePolicyUpdate => OptimizerStatus::Pending {
+        | FireworksFineTuningJobState::JobStatePolicyUpdate => OptimizationStatus::Pending {
             message: job.state.to_string(),
             estimated_finish: None,
             trained_tokens: None,
@@ -905,7 +905,7 @@ pub fn convert_to_optimizer_status(
         | FireworksFineTuningJobState::JobStateFailedCleaningUp
         | FireworksFineTuningJobState::JobStateCancelled
         | FireworksFineTuningJobState::JobStateDeleting
-        | FireworksFineTuningJobState::JobStateDeletingCleaningUp => OptimizerStatus::Failed {
+        | FireworksFineTuningJobState::JobStateDeletingCleaningUp => OptimizationStatus::Failed {
             message: job.state.to_string(),
             error: job.status.map(|s| s.message.into()),
         },

@@ -8,8 +8,8 @@ from .tensorzero import (
     Datapoint,
     FireworksSFTConfig,
     OpenAISFTConfig,
-    OptimizerJobHandle,
-    OptimizerStatus,
+    OptimizationJobHandle,
+    OptimizationStatus,
     RenderedSample,
     ResolvedInput,
     ResolvedInputMessage,
@@ -74,7 +74,9 @@ RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample inste
 ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
-OptimizerConfig = t.Union[OpenAISFTConfig, FireworksSFTConfig]
+OptimizationConfig = t.Union[OpenAISFTConfig, FireworksSFTConfig]
+ChatInferenceOutput = t.List[ContentBlock]
+
 
 __all__ = [
     "AndFilter",
@@ -117,11 +119,11 @@ __all__ = [
     "NotNode",  # DEPRECATED
     "OrFilter",
     "OrNode",  # DEPRECATED
-    "OptimizerJobHandle",
-    "OptimizerStatus",
+    "OptimizationJobHandle",
+    "OptimizationStatus",
     "OpenAISFTConfig",
     "FireworksSFTConfig",
-    "OptimizerConfig",
+    "OptimizationConfig",
     "patch_openai_client",
     "RawText",
     "RenderedStoredInference",  # DEPRECATED

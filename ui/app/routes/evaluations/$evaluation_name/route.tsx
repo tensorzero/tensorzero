@@ -17,7 +17,7 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
-import { redirect, useNavigate } from "react-router";
+import { data, redirect, useNavigate } from "react-router";
 import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
 import BasicInfo from "./EvaluationBasicInfo";
 import { useConfig } from "~/context/config";
@@ -34,9 +34,20 @@ import { logger } from "~/utils/logger";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
-  const function_name =
-    config.evaluations[params.evaluation_name].function_name;
-  const function_type = config.functions[function_name].type;
+  const evaluationConfig = config.evaluations[params.evaluation_name];
+  if (!evaluationConfig) {
+    throw data(
+      `Evaluation config not found for evaluation ${params.evaluation_name}`,
+      { status: 404 },
+    );
+  }
+  const function_name = evaluationConfig.function_name;
+  const function_type = config.functions[function_name]?.type;
+  if (!function_type) {
+    throw data(`Function config not found for function ${function_name}`, {
+      status: 404,
+    });
+  }
 
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
@@ -51,9 +62,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const offset = parseInt(searchParams.get("offset") || "0");
   const pageSize = parseInt(searchParams.get("pageSize") || "15");
 
-  const evaluator_names = Object.keys(
-    config.evaluations[params.evaluation_name].evaluators,
-  );
+  const evaluator_names = Object.keys(evaluationConfig.evaluators);
 
   const metric_names = evaluator_names.map((evaluatorName) =>
     getEvaluatorMetricName(params.evaluation_name, evaluatorName),
@@ -245,6 +254,12 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
 
   const config = useConfig();
   const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw data(
+      `Evaluation config not found for evaluation ${evaluation_name}`,
+      { status: 404 },
+    );
+  }
   const hasErrorsToDisplay = Object.values(errors).some(
     (error) => error.errors.length > 0,
   );

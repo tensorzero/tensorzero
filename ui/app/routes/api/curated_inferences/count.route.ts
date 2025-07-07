@@ -1,10 +1,11 @@
 import { useEffect } from "react";
-import { useFetcher, type LoaderFunctionArgs } from "react-router";
+import { data, useFetcher, type LoaderFunctionArgs } from "react-router";
 import {
   countCuratedInferences,
   countFeedbacksForMetric,
 } from "~/utils/clickhouse/curation.server";
 import { countInferencesForFunction } from "~/utils/clickhouse/inference.server";
+import { getFeedbackConfig } from "~/utils/config/feedback";
 import { getConfig } from "~/utils/config/index.server";
 
 /// Count the number of inferences, feedbacks, and curated inferences for a given function and metric
@@ -22,32 +23,37 @@ export async function loader({
   const threshold = parseFloat(url.searchParams.get("threshold") || "0");
 
   const config = await getConfig();
+  const functionConfig = config.functions[functionName || ""];
+  if (functionName && !functionConfig) {
+    throw data(`Function ${functionName} not found in config`, { status: 404 });
+  }
+  const metricConfig = getFeedbackConfig(metricName || "", config);
+  if (metricName && !metricConfig) {
+    throw data(`Metric ${metricName} not found in config`, { status: 404 });
+  }
 
   // Run all fetches concurrently
   const [inferenceCount, feedbackCount, curatedInferenceCount] =
     await Promise.all([
-      functionName
-        ? countInferencesForFunction(
-            functionName,
-            config.functions[functionName],
-          )
+      functionConfig && functionName
+        ? countInferencesForFunction(functionName, functionConfig)
         : Promise.resolve(null),
 
-      functionName && metricName
+      functionName && functionConfig && metricName && metricConfig
         ? countFeedbacksForMetric(
             functionName,
-            config.functions[functionName],
+            functionConfig,
             metricName,
-            config.metrics[metricName],
+            metricConfig,
           )
         : Promise.resolve(null),
 
-      functionName && metricName
+      functionName && functionConfig && metricName && metricConfig
         ? countCuratedInferences(
             functionName,
-            config.functions[functionName],
+            functionConfig,
             metricName,
-            config.metrics[metricName],
+            metricConfig,
             threshold,
           )
         : Promise.resolve(null),

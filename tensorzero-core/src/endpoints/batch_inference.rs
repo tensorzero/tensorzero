@@ -461,7 +461,7 @@ pub async fn get_batch_request(
                 "#
             );
             let response = clickhouse.run_query_synchronous_no_params(query).await?;
-            if response.is_empty() {
+            if response.response.is_empty() {
                 return Err(ErrorDetails::BatchNotFound { id: *batch_id }.into());
             }
             response
@@ -492,17 +492,18 @@ pub async fn get_batch_request(
                 "#,
             );
             let response = clickhouse.run_query_synchronous_no_params(query).await?;
-            if response.is_empty() {
+            if response.response.is_empty() {
                 return Err(ErrorDetails::BatchNotFound { id: *inference_id }.into());
             }
             response
         }
     };
-    let batch_request = serde_json::from_str::<BatchRequestRow>(&response).map_err(|e| {
-        Error::new(ErrorDetails::ClickHouseDeserialization {
-            message: e.to_string(),
-        })
-    })?;
+    let batch_request =
+        serde_json::from_str::<BatchRequestRow>(&response.response).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: e.to_string(),
+            })
+        })?;
     Ok(batch_request)
 }
 
@@ -950,6 +951,7 @@ pub async fn get_batch_inferences(
         .run_query_synchronous_no_params(query)
         .await?;
     let rows = response
+        .response
         .lines()
         .filter(|line| !line.is_empty())
         .map(serde_json::from_str::<BatchModelInferenceRow>)
@@ -1005,7 +1007,7 @@ pub async fn get_completed_batch_inference_response(
                     .run_query_synchronous_no_params(query)
                     .await?;
                 let mut inference_responses = Vec::new();
-                for row in response.lines() {
+                for row in response.response.lines() {
                     let inference_response: ChatInferenceResponseDatabaseRead =
                         serde_json::from_str(row).map_err(|e| {
                             Error::new(ErrorDetails::Serialization {
@@ -1054,14 +1056,14 @@ pub async fn get_completed_batch_inference_response(
                 let response = clickhouse_connection_info
                     .run_query_synchronous_no_params(query)
                     .await?;
-                if response.is_empty() {
+                if response.response.is_empty() {
                     return Err(ErrorDetails::InferenceNotFound {
                         inference_id: *inference_id,
                     }
                     .into());
                 }
                 let inference_response: ChatInferenceResponseDatabaseRead =
-                    serde_json::from_str(&response).map_err(|e| {
+                    serde_json::from_str(&response.response).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: e.to_string(),
                         })
@@ -1104,7 +1106,7 @@ pub async fn get_completed_batch_inference_response(
                     .run_query_synchronous_no_params(query)
                     .await?;
                 let mut inference_responses = Vec::new();
-                for row in response.lines() {
+                for row in response.response.lines() {
                     let inference_response: JsonInferenceResponseDatabaseRead =
                         serde_json::from_str(row).map_err(|e| {
                             Error::new(ErrorDetails::Serialization {
@@ -1153,14 +1155,14 @@ pub async fn get_completed_batch_inference_response(
                 let response = clickhouse_connection_info
                     .run_query_synchronous_no_params(query)
                     .await?;
-                if response.is_empty() {
+                if response.response.is_empty() {
                     return Err(ErrorDetails::InferenceNotFound {
                         inference_id: *inference_id,
                     }
                     .into());
                 }
                 let inference_response: JsonInferenceResponseDatabaseRead =
-                    serde_json::from_str(&response).map_err(|e| {
+                    serde_json::from_str(&response.response).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: e.to_string(),
                         })
