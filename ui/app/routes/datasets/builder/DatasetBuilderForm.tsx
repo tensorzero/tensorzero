@@ -1,11 +1,9 @@
 import { useForm, useWatch } from "react-hook-form";
-import { Form } from "~/components/ui/form";
-import { DatasetSelector } from "./DatasetSelector";
+import { Form, FormField, FormItem, FormLabel } from "~/components/ui/form";
 import {
   DatasetBuilderFormValuesResolver,
   type DatasetBuilderFormValues,
 } from "./types";
-import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { useConfig } from "~/context/config";
 import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
@@ -16,12 +14,9 @@ import { Button } from "~/components/ui/button";
 import OutputSourceSelector from "./OutputSourceSelector";
 import { DatasetCountDisplay } from "./DatasetCountDisplay";
 import { logger } from "~/utils/logger";
+import { DatasetSelector } from "./DatasetSelector";
 
-export function DatasetBuilderForm({
-  dataset_counts,
-}: {
-  dataset_counts: DatasetCountInfo[];
-}) {
+export function DatasetBuilderForm() {
   const config = useConfig();
   const [submissionPhase, setSubmissionPhase] = useState<
     "idle" | "submitting" | "complete"
@@ -123,11 +118,23 @@ export function DatasetBuilderForm({
         className="space-y-6"
       >
         <div className="space-y-6">
-          <DatasetSelector
+          <FormField
             control={form.control}
-            dataset_counts={dataset_counts}
-            setIsNewDataset={setIsNewDataset}
+            name="dataset"
+            render={({ field }) => (
+              <FormItem className="flex flex-col gap-1">
+                <FormLabel className="sr-only">Dataset</FormLabel>
+                <DatasetSelector
+                  selected={field.value}
+                  onSelect={(dataset, isNew) => {
+                    field.onChange(dataset);
+                    setIsNewDataset(isNew);
+                  }}
+                />
+              </FormItem>
+            )}
           />
+
           <FunctionSelector<DatasetBuilderFormValues>
             control={form.control}
             name="function"
