@@ -10,6 +10,7 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_core::config_parser::MetricConfig;
+use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
@@ -750,6 +751,33 @@ impl Client {
                 .await?)
             }
         }
+    }
+
+    /// Stales all datapoints in a dataset that have not been staled yet.
+    /// This is a soft deletion, so evaluation runs will still refer to it.
+    /// Returns the number of datapoints that were staled as {num_staled_datapoints: u64}.
+    pub async fn stale_dataset(
+        &self,
+        dataset_name: String,
+    ) -> Result<StaleDatasetResponse, TensorZeroError> {
+        let ClientMode::EmbeddedGateway { gateway, timeout } = &self.mode else {
+            return Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            });
+        };
+        with_embedded_timeout(*timeout, async {
+            tensorzero_core::endpoints::datasets::stale_dataset(
+                &gateway.state.clickhouse_connection_info,
+                &dataset_name,
+            )
+            .await
+            .map_err(err_to_http)
+        })
+        .await
     }
 
     /// Query the Clickhouse database for inferences.
