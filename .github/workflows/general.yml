@@ -455,7 +455,7 @@ jobs:
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
       - name: Test (Rust)
-        run: TENSORZERO_E2E_PROXY=http://localhost:3003 cargo test-optimization
+        run: TENSORZERO_E2E_PROXY=http://localhost:3003 OPENAI_API_KEY=not_used FIREWORKS_API_KEY=not_used FIREWORKS_ACCOUNT_ID=not_used cargo test-optimization
 
       - name: Print e2e logs
         if: always()
