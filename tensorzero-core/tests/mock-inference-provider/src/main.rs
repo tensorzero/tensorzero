@@ -256,7 +256,7 @@ async fn create_openai_file(mut form: Multipart) -> Result<Json<serde_json::Valu
                     match result {
                         Ok(row) => {
                             for message in row.messages.iter() {
-                                let Some(content_array) = message.content.as_array() else {
+                                let Some(content_array) = message.content.as_ref().and_then(|v| v.as_array()) else {
                                     continue;
                                 };
                                 for content in content_array.iter() {
@@ -316,7 +316,11 @@ struct OpenAIFineTuningRow {
 #[derive(Debug, Deserialize)]
 struct OpenAIFineTuningMessage {
     // role is not used
-    content: Value,
+    #[serde(default)]
+    content: Option<Value>,
+    #[serde(default)]
+    #[expect(unused)]
+    tool_calls: Option<Vec<Value>>,
 }
 
 async fn completions_handler(Json(params): Json<serde_json::Value>) -> Response<Body> {

@@ -32,6 +32,10 @@ mod openai_sft;
 
 static FERRIS_PNG: &[u8] = include_bytes!("../e2e/providers/ferris.png");
 
+pub fn use_mock_inference_provider() -> bool {
+    std::env::var("TENSORZERO_USE_MOCK_INFERENCE_PROVIDER").is_ok()
+}
+
 pub trait OptimizationTestCase {
     fn supports_image_data(&self) -> bool;
     fn supports_tool_calls(&self) -> bool;
@@ -58,7 +62,12 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         if matches!(status, OptimizerStatus::Failed { .. }) {
             panic!("Optimization failed: {status:?}");
         }
-        sleep(Duration::from_secs(60)).await;
+        sleep(if use_mock_inference_provider() {
+            Duration::from_secs(1)
+        } else {
+            Duration::from_secs(60)
+        })
+        .await;
     }
     assert!(matches!(status, OptimizerStatus::Completed { .. }));
     let OptimizerStatus::Completed {
