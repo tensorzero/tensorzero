@@ -29,10 +29,7 @@ import {
 } from "~/utils/clickhouse/evaluations";
 import { useConfig } from "~/context/config";
 import MetricValue from "~/components/metric/MetricValue";
-import {
-  getMetricType,
-  type EvaluatorConfig,
-} from "~/utils/config/evaluations";
+import { getMetricType } from "~/utils/config/evaluations";
 import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
 import BasicInfo from "./EvaluationDatapointBasicInfo";
 import {
@@ -47,7 +44,7 @@ import {
   useColorAssigner,
 } from "~/hooks/evaluations/ColorAssigner";
 import { getConfig } from "~/utils/config/index.server";
-import type { EvaluationConfig } from "~/utils/config/evaluations";
+import type { EvaluationConfig, EvaluatorConfig } from "tensorzero-node";
 import type { ContentBlockOutput } from "~/utils/clickhouse/common";
 import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
@@ -68,6 +65,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const searchParams = new URLSearchParams(url.search);
   const config = await getConfig();
   const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw data(
+      `Evaluation config not found for evaluation ${evaluation_name}`,
+      { status: 404 },
+    );
+  }
   const function_name = evaluation_config.function_name;
   const newFeedbackId = searchParams.get("newFeedbackId");
   const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
@@ -185,6 +188,12 @@ export default function EvaluationDatapointPage({
   } = loaderData;
   const config = useConfig();
   const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw data(
+      `Evaluation config not found for evaluation ${evaluation_name}`,
+      { status: 404 },
+    );
+  }
   const outputsToDisplay = [
     {
       id: "Reference",
@@ -230,7 +239,7 @@ export default function EvaluationDatapointPage({
         <SectionsGroup>
           <SectionLayout>
             <SectionHeader heading="Input" />
-            <InputSnippet input={consolidatedEvaluationResults[0].input} />
+            <InputSnippet {...consolidatedEvaluationResults[0].input} />
           </SectionLayout>
           <OutputsSection
             outputsToDisplay={outputsToDisplay}
@@ -257,7 +266,7 @@ const MetricsDisplay = ({
 }: {
   metrics: ConsolidatedMetric[];
   evaluation_name: string;
-  evaluatorsConfig: Record<string, EvaluatorConfig>;
+  evaluatorsConfig: Record<string, EvaluatorConfig | undefined>;
   datapointId: string;
   inferenceId: string | null;
   evalRunId: string;
@@ -318,10 +327,7 @@ const MetricRow = ({
   const config = useConfig();
   const metric_name = getEvaluatorMetricName(evaluation_name, evaluatorName);
   const metricProperties = config.metrics[metric_name];
-  if (
-    metricProperties.type === "comment" ||
-    metricProperties.type === "demonstration"
-  ) {
+  if (!metricProperties) {
     return null;
   }
   if (inferenceId === null) {
@@ -373,7 +379,7 @@ const MetricRow = ({
             ? evaluatorConfig.optimize
             : "max"
         }
-        cutoff={evaluatorConfig.cutoff}
+        cutoff={evaluatorConfig.cutoff ?? undefined}
         isHumanFeedback={isHumanFeedback}
         className="text-sm"
       />

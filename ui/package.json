@@ -66,6 +66,7 @@
     "tailwindcss-animate": "^1.0.7",
     "tensorzero-node": "file:../internal/tensorzero-node",
     "tiktoken": "^1.0.20",
+    "type-fest": "^4.41.0",
     "typescript-eslint": "^8.35.0",
     "uuid": "^11.1.0",
     "vite-plugin-wasm": "^3.4.1",
