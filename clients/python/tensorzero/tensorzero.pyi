@@ -86,7 +86,7 @@ class StoredInference:
     @property
     def dispreferred_outputs(
         self,
-    ) -> Union[List[List[ContentBlock]], List[List[JsonInferenceOutput]]]: ...
+    ) -> Union[List[List[ContentBlock]], List[JsonInferenceOutput]]: ...
 
 @final
 class RenderedSample:
