@@ -6,9 +6,9 @@ import { TensorZeroClient } from "tensorzero-node";
 import type {
   InferenceFilterTreeNode,
   InferenceOutputSource,
-  OpenAISFTJobHandle,
   OptimizerJobHandle,
   OptimizerStatus,
+  UninitializedOptimizerInfo,
 } from "tensorzero-node";
 import { getConfig } from "~/utils/config/index.server";
 import { getEnv } from "../env.server";
@@ -49,6 +49,7 @@ function launch_sft_job_ts(data: SFTFormValues): Promise<SFTJob> {
 
 class NativeSFTJob extends SFTJob {
   private jobStatus: OptimizerStatus | "created";
+  private provider: "openai" | "fireworks" | "mistral";
   constructor(
     public jobHandle: OptimizerJobHandle,
     public formData: SFTFormValues,
@@ -57,6 +58,7 @@ class NativeSFTJob extends SFTJob {
     this.jobHandle = jobHandle;
     this.formData = formData;
     this.jobStatus = "created";
+    this.provider = formData.model.provider;
   }
 
   static from_job_handle_with_form_data(
@@ -72,12 +74,12 @@ class NativeSFTJob extends SFTJob {
         status: "idle",
       };
     }
-    switch (this.jobStatus.type) {
+    switch (this.jobStatus.status) {
       case "pending":
         return {
           status: "running",
-          modelProvider: "openai",
-          jobUrl: (this.jobHandle as OpenAISFTJobHandle).job_url,
+          modelProvider: this.provider,
+          jobUrl: this.jobHandle.job_url,
           formData: this.formData,
           rawData: {
             status: "ok",
@@ -87,9 +89,9 @@ class NativeSFTJob extends SFTJob {
       case "failed":
         return {
           status: "error",
-          modelProvider: "openai",
+          modelProvider: this.provider,
           formData: this.formData,
-          jobUrl: (this.jobHandle as OpenAISFTJobHandle).job_url,
+          jobUrl: this.jobHandle.job_url,
           rawData: {
             status: "error",
             message: "Job failed",
@@ -107,9 +109,9 @@ class NativeSFTJob extends SFTJob {
         }
         return {
           status: "completed",
-          modelProvider: "openai",
+          modelProvider: this.provider,
           formData: this.formData,
-          jobUrl: (this.jobHandle as OpenAISFTJobHandle).job_url,
+          jobUrl: this.jobHandle.job_url,
           rawData: {
             status: "ok",
             info: this.jobStatus,
@@ -130,9 +132,7 @@ class NativeSFTJob extends SFTJob {
 
 async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
   const openAINativeSFTBase = getEnv().OPENAI_BASE_URL;
-  if (data.model.provider !== "openai") {
-    throw new Error("Native SFT is only supported for OpenAI");
-  }
+  const fireworksNativeSFTBase = getEnv().FIREWORKS_BASE_URL;
   let filters: InferenceFilterTreeNode | null = null;
   let output_source: InferenceOutputSource = "Inference";
   if (data.metric === "demonstration") {
@@ -141,6 +141,37 @@ async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
     filters = await createFilters(data.metric, data.threshold);
   }
   const client = await getNativeTensorZeroClient();
+  let optimizerConfig: UninitializedOptimizerInfo;
+  if (data.model.provider == "openai") {
+    optimizerConfig = {
+      type: "openai_sft",
+      model: data.model.name,
+      batch_size: 1,
+      learning_rate_multiplier: 1,
+      n_epochs: 1,
+      credentials: null,
+      api_base: openAINativeSFTBase,
+      seed: null,
+      suffix: null,
+    };
+  } else if (data.model.provider == "fireworks") {
+    const accountId = getEnv().FIREWORKS_ACCOUNT_ID;
+    if (!accountId) {
+      throw new Error("FIREWORKS_ACCOUNT_ID is not set");
+    }
+    optimizerConfig = {
+      type: "fireworks_sft",
+      model: data.model.name,
+      credentials: null,
+      api_base: fireworksNativeSFTBase,
+      account_id: accountId,
+    };
+  } else {
+    throw new Error(
+      `Native SFT is not supported for provider ${data.model.provider}`,
+    );
+  }
+
   const job = await client.experimentalLaunchOptimizationWorkflow({
     function_name: data.function,
     template_variant_name: data.variant,
@@ -151,17 +182,7 @@ async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
     offset: BigInt(0),
     val_fraction: data.validationSplitPercent / 100,
     format: "JsonEachRow",
-    optimizer_config: {
-      type: "openai_sft",
-      model: data.model.name,
-      batch_size: 1,
-      learning_rate_multiplier: 1,
-      n_epochs: 1,
-      credentials: null,
-      api_base: openAINativeSFTBase,
-      seed: null,
-      suffix: null,
-    },
+    optimizer_config: optimizerConfig,
   });
   return NativeSFTJob.from_job_handle_with_form_data(job, data);
 }

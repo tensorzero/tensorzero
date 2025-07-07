@@ -9,13 +9,13 @@ use crate::{
         ClickHouseConnectionInfo, ClickhouseFormat,
     },
     config_parser::Config,
-    endpoints::{inference::InferenceCredentials, stored_inference::render_inferences},
+    endpoints::{inference::InferenceCredentials, stored_inference::render_samples},
     error::{Error, ErrorDetails},
     optimization::{
         JobHandle, Optimizer, OptimizerJobHandle, OptimizerStatus, UninitializedOptimizerInfo,
     },
     serde_util::deserialize_option_u64,
-    stored_inference::RenderedStoredInference,
+    stored_inference::RenderedSample,
 };
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -77,7 +77,13 @@ pub async fn launch_optimization_workflow(
         .await?;
     let variants = HashMap::from([(function_name.clone(), template_variant_name.clone())]);
     // Template the inferences and fetch any network resources needed
-    let rendered_inferences = render_inferences(config, stored_inferences, variants).await?;
+    let rendered_inferences = render_samples(config, stored_inferences, variants).await?;
+
+    // Drop any examples with output that is None
+    let rendered_inferences = rendered_inferences
+        .into_iter()
+        .filter(|example| example.output.is_some())
+        .collect::<Vec<_>>();
 
     // Split the inferences into train and val sets
     let (train_examples, val_examples) = split_examples(rendered_inferences, val_fraction)?;
@@ -98,8 +104,8 @@ pub async fn launch_optimization_workflow(
 #[derive(Debug, Deserialize)]
 #[cfg_attr(test, ts(export))]
 pub struct LaunchOptimizationParams {
-    pub train_examples: Vec<RenderedStoredInference>,
-    pub val_examples: Option<Vec<RenderedStoredInference>>,
+    pub train_examples: Vec<RenderedSample>,
+    pub val_examples: Option<Vec<RenderedSample>>,
     pub optimizer_config: UninitializedOptimizerInfo,
     // TODO: add a way to do {"type": "tensorzero", "name": "foo"} to grab an optimizer configured in
     // tensorzero.toml

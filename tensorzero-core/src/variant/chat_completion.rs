@@ -1373,7 +1373,7 @@ mod tests {
             result.usage_considering_cached(),
             Usage {
                 input_tokens: 10,
-                output_tokens: 10,
+                output_tokens: 1,
             }
         );
         match result {
@@ -1452,7 +1452,7 @@ mod tests {
             result.usage_considering_cached(),
             Usage {
                 input_tokens: 10,
-                output_tokens: 10,
+                output_tokens: 1,
             }
         );
         match result {
@@ -1541,7 +1541,7 @@ mod tests {
             result.usage_considering_cached(),
             Usage {
                 input_tokens: 10,
-                output_tokens: 10,
+                output_tokens: 1,
             }
         );
         match result {
@@ -1616,7 +1616,7 @@ mod tests {
             result.usage_considering_cached(),
             Usage {
                 input_tokens: 10,
-                output_tokens: 10,
+                output_tokens: 1,
             }
         );
         match result {
@@ -1728,7 +1728,7 @@ mod tests {
             result.usage_considering_cached(),
             Usage {
                 input_tokens: 10,
-                output_tokens: 10,
+                output_tokens: 1,
             }
         );
         match result {
@@ -1835,7 +1835,7 @@ mod tests {
             result.usage_considering_cached(),
             Usage {
                 input_tokens: 10,
-                output_tokens: 10,
+                output_tokens: 1,
             }
         );
         match result {

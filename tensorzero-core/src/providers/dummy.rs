@@ -65,6 +65,78 @@ impl DummyProvider {
     pub fn model_name(&self) -> &str {
         &self.model_name
     }
+
+    fn get_model_usage(&self, output_tokens: u32) -> Usage {
+        match self.model_name.as_str() {
+            "input_tokens_zero" => Usage {
+                input_tokens: 0,
+                output_tokens,
+            },
+            "output_tokens_zero" => Usage {
+                input_tokens: 10,
+                output_tokens: 0,
+            },
+            "input_tokens_output_tokens_zero" => Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+            },
+            _ => Usage {
+                input_tokens: 10,
+                output_tokens,
+            },
+        }
+    }
+
+    async fn create_streaming_reasoning_response(
+        &self,
+        thinking_chunks: Vec<&'static str>,
+        response_chunks: Vec<&'static str>,
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
+        let thinking_chunks = thinking_chunks.into_iter().map(|chunk| {
+            ContentBlockChunk::Thought(ThoughtChunk {
+                text: Some(chunk.to_string()),
+                signature: None,
+                id: "0".to_string(),
+            })
+        });
+        let response_chunks = response_chunks.into_iter().map(|chunk| {
+            ContentBlockChunk::Text(TextChunk {
+                text: chunk.to_string(),
+                id: "0".to_string(),
+            })
+        });
+        let num_chunks = thinking_chunks.len() + response_chunks.len();
+        let created = current_timestamp();
+        let chained = thinking_chunks
+            .into_iter()
+            .chain(response_chunks.into_iter());
+        let total_tokens = num_chunks as u32;
+        let stream = tokio_stream::iter(chained.enumerate())
+            .map(move |(i, chunk)| {
+                Ok(ProviderInferenceResponseChunk {
+                    created,
+                    content: vec![chunk],
+                    usage: None,
+                    raw_response: "".to_string(),
+                    latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
+                    finish_reason: None,
+                })
+            })
+            .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
+                created,
+                content: vec![],
+                usage: Some(self.get_model_usage(total_tokens)),
+                finish_reason: Some(FinishReason::Stop),
+                raw_response: "".to_string(),
+                latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
+            })))
+            .throttle(std::time::Duration::from_millis(10));
+
+        Ok((
+            futures::stream::StreamExt::peekable(Box::pin(stream)),
+            DUMMY_RAW_REQUEST.to_string(),
+        ))
+    }
 }
 
 fn default_api_key_location() -> CredentialLocation {
@@ -129,10 +201,6 @@ pub static DUMMY_JSON_GOODBYE_RESPONSE_RAW: &str = r#"{"answer":"Goodbye"}"#;
 pub static DUMMY_JSON_RESPONSE_RAW_DIFF_SCHEMA: &str = r#"{"response":"Hello"}"#;
 pub static DUMMY_JSON_COT_RESPONSE_RAW: &str =
     r#"{"thinking":"hmmm", "response": {"answer":"tokyo!"}}"#;
-pub static DUMMY_INFER_USAGE: Usage = Usage {
-    input_tokens: 10,
-    output_tokens: 10,
-};
 pub static DUMMY_STREAMING_THINKING: [&str; 2] = ["hmmm", "hmmm"];
 pub static DUMMY_STREAMING_RESPONSE: [&str; 16] = [
     "Wally,",
@@ -439,21 +507,7 @@ impl InferenceProvider for DummyProvider {
             "best_of_n_big" => r#"{"thinking": "hmmm", "answer_choice": 100}"#.to_string(),
             _ => DUMMY_INFER_RESPONSE_RAW.to_string(),
         };
-        let usage = match self.model_name.as_str() {
-            "input_tokens_zero" => Usage {
-                input_tokens: 0,
-                output_tokens: 10,
-            },
-            "output_tokens_zero" => Usage {
-                input_tokens: 10,
-                output_tokens: 0,
-            },
-            "input_tokens_output_tokens_zero" => Usage {
-                input_tokens: 0,
-                output_tokens: 0,
-            },
-            _ => DUMMY_INFER_USAGE.clone(),
-        };
+        let usage = self.get_model_usage(content.len() as u32);
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
@@ -516,18 +570,25 @@ impl InferenceProvider for DummyProvider {
             }
         }
         if self.model_name == "reasoner" {
-            return create_streaming_reasoning_response(
-                DUMMY_STREAMING_THINKING.to_vec(),
-                DUMMY_STREAMING_RESPONSE.to_vec(),
-            )
-            .await;
+            return self
+                .create_streaming_reasoning_response(
+                    DUMMY_STREAMING_THINKING.to_vec(),
+                    DUMMY_STREAMING_RESPONSE.to_vec(),
+                )
+                .await;
         }
         if self.model_name == "json_reasoner" {
-            return create_streaming_reasoning_response(
-                DUMMY_STREAMING_THINKING.to_vec(),
-                DUMMY_STREAMING_JSON_RESPONSE.to_vec(),
-            )
-            .await;
+            return self
+                .create_streaming_reasoning_response(
+                    DUMMY_STREAMING_THINKING.to_vec(),
+                    DUMMY_STREAMING_JSON_RESPONSE.to_vec(),
+                )
+                .await;
+        }
+        if self.model_name == "json" {
+            return self
+                .create_streaming_reasoning_response(vec![], DUMMY_STREAMING_JSON_RESPONSE.to_vec())
+                .await;
         }
 
         if self.model_name.starts_with("error") {
@@ -554,7 +615,6 @@ impl InferenceProvider for DummyProvider {
             _ => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
         };
 
-        let total_tokens = content_chunks.len() as u32;
         let content_chunk_len = content_chunks.len();
         let finish_reason = match is_tool_call {
             true => Some(FinishReason::ToolCall),
@@ -614,10 +674,7 @@ impl InferenceProvider for DummyProvider {
                 .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
                     created,
                     content: vec![],
-                    usage: Some(crate::inference::types::Usage {
-                        input_tokens: 10,
-                        output_tokens: total_tokens,
-                    }),
+                    usage: Some(self.get_model_usage(content_chunk_len as u32)),
                     finish_reason,
                     raw_response: "".to_string(),
                     latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
@@ -695,7 +752,10 @@ impl EmbeddingProvider for DummyProvider {
         let embedding = vec![0.0; 1536];
         let raw_request = DUMMY_RAW_REQUEST.to_string();
         let raw_response = DUMMY_RAW_REQUEST.to_string();
-        let usage = DUMMY_INFER_USAGE.clone();
+        let usage = Usage {
+            input_tokens: 10,
+            output_tokens: 1,
+        };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
@@ -710,56 +770,4 @@ impl EmbeddingProvider for DummyProvider {
             latency,
         })
     }
-}
-
-async fn create_streaming_reasoning_response(
-    thinking_chunks: Vec<&'static str>,
-    response_chunks: Vec<&'static str>,
-) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-    let thinking_chunks = thinking_chunks.into_iter().map(|chunk| {
-        ContentBlockChunk::Thought(ThoughtChunk {
-            text: Some(chunk.to_string()),
-            signature: None,
-            id: "0".to_string(),
-        })
-    });
-    let response_chunks = response_chunks.into_iter().map(|chunk| {
-        ContentBlockChunk::Text(TextChunk {
-            text: chunk.to_string(),
-            id: "0".to_string(),
-        })
-    });
-    let num_chunks = thinking_chunks.len() + response_chunks.len();
-    let created = current_timestamp();
-    let chained = thinking_chunks
-        .into_iter()
-        .chain(response_chunks.into_iter());
-    let stream = tokio_stream::iter(chained.enumerate())
-        .map(move |(i, chunk)| {
-            Ok(ProviderInferenceResponseChunk {
-                created,
-                content: vec![chunk],
-                usage: None,
-                raw_response: "".to_string(),
-                latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
-                finish_reason: None,
-            })
-        })
-        .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
-            created,
-            content: vec![],
-            usage: Some(crate::inference::types::Usage {
-                input_tokens: 10,
-                output_tokens: 10,
-            }),
-            finish_reason: Some(FinishReason::Stop),
-            raw_response: "".to_string(),
-            latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
-        })))
-        .throttle(std::time::Duration::from_millis(10));
-
-    Ok((
-        futures::stream::StreamExt::peekable(Box::pin(stream)),
-        DUMMY_RAW_REQUEST.to_string(),
-    ))
 }

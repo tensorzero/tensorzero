@@ -1320,7 +1320,7 @@ fn tensorzero_to_openai_user_messages<'a>(
     Ok(messages)
 }
 
-fn tensorzero_to_openai_assistant_message<'a>(
+pub fn tensorzero_to_openai_assistant_message<'a>(
     content_blocks: Cow<'a, [ContentBlock]>,
     provider_type: &str,
 ) -> Result<OpenAIRequestMessage<'a>, Error> {

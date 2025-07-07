@@ -11,4 +11,4 @@ export type OptimizerStatus =
       error: JsonValue | null;
     }
   | { type: "completed"; output: OptimizerOutput }
-  | { type: "failed" };
+  | { type: "failed"; message: string; error: JsonValue | null };

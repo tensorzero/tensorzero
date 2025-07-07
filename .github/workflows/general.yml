@@ -40,6 +40,42 @@ jobs:
   check-python-client-build:
     uses: ./.github/workflows/python-client-build.yml
 
+  check-node-bindings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version: "22.9.0"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+
+      - name: Install dependencies
+        working-directory: internal/tensorzero-node
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Node.js bindings
+        working-directory: internal/tensorzero-node
+        run: pnpm build-bindings
+
+      - name: Check for git diff after building bindings
+        id: git_diff_check
+        run: git diff --exit-code
+
+      - name: Upload bindings artifact on diff failure
+        if: failure()
+        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
+        with:
+          name: node-bindings
+          path: internal/tensorzero-node/lib/bindings
+          retention-days: 7
+
+      - name: Check tensorzero-node bindings are properly exported
+        run: pnpm --filter=tensorzero-node run check-exports
+
   build-windows:
     runs-on: windows-latest
     steps:
@@ -258,9 +294,6 @@ jobs:
       - name: Build npm workspace
         run: pnpm -r build
 
-      - name: Check tensorzero-node bindings are properly exported
-        run: pnpm --filter=tensorzero-node run check-exports
-
       - name: Format tensorzero-node package
         run: pnpm --filter=tensorzero-node run format:check
 
@@ -395,6 +428,7 @@ jobs:
       [
         check-docker-compose,
         check-python-client-build,
+        check-node-bindings,
         build-windows,
         validate,
         clickhouse-tests,

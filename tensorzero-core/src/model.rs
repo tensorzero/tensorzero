@@ -150,7 +150,7 @@ impl StreamResponse {
                         // For all chunks but the last one, the finish reason is None
                         // For the last chunk, the finish reason is the same as the cache lookup
                         finish_reason: if index == chunks_len - 1 {
-                            cache_lookup.finish_reason.clone()
+                            cache_lookup.finish_reason
                         } else {
                             None
                         },
@@ -1196,6 +1196,7 @@ impl ModelProvider {
         gen_ai.operation.name = "chat",
         gen_ai.system = self.genai_system_name(),
         gen_ai.request.model = self.genai_model_name(),
+        time_to_first_token,
     stream = true))]
     async fn infer_stream(
         &self,
@@ -1873,7 +1874,7 @@ mod tests {
         model_table::RESERVED_MODEL_PREFIXES,
         providers::dummy::{
             DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
-            DUMMY_INFER_USAGE, DUMMY_STREAMING_RESPONSE,
+            DUMMY_STREAMING_RESPONSE,
         },
     };
     use secrecy::SecretString;
@@ -1958,7 +1959,13 @@ mod tests {
         let raw = response.raw_response;
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
-        assert_eq!(usage, DUMMY_INFER_USAGE);
+        assert_eq!(
+            usage,
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         assert_eq!(&*response.model_provider_name, "good_provider");
 
         // Try inferring the bad model
@@ -2095,7 +2102,13 @@ mod tests {
         let raw = response.raw_response;
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
-        assert_eq!(usage, DUMMY_INFER_USAGE);
+        assert_eq!(
+            usage,
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         assert_eq!(&*response.model_provider_name, "good_provider");
     }
 

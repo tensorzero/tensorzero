@@ -149,8 +149,9 @@ pub struct ModelUsedInfo {
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
-    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub cached: bool,
+    // These responses will get added into the final inference result (after `collect_chunks` finishes)
+    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
 }
 
 pub trait Variant {
@@ -749,13 +750,13 @@ mod tests {
     use crate::error::ErrorDetails;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::{
-        ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role,
+        ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role, Usage,
     };
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
     use crate::providers::dummy::{
-        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_USAGE, DUMMY_JSON_RESPONSE_RAW,
+        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW,
         DUMMY_STREAMING_RESPONSE,
     };
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -1106,7 +1107,10 @@ mod tests {
         let inference_result = result.unwrap();
         assert_eq!(
             inference_result.usage_considering_cached(),
-            DUMMY_INFER_USAGE.clone()
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
         );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
@@ -1218,7 +1222,10 @@ mod tests {
         let inference_result = result.unwrap();
         assert_eq!(
             inference_result.usage_considering_cached(),
-            DUMMY_INFER_USAGE.clone()
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
         );
         match inference_result {
             InferenceResult::Json(json_result) => {
@@ -1418,7 +1425,10 @@ mod tests {
         let inference_result = result.unwrap();
         assert_eq!(
             inference_result.usage_considering_cached(),
-            DUMMY_INFER_USAGE.clone()
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
         );
         match inference_result {
             InferenceResult::Chat(chat_result) => {

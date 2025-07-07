@@ -239,7 +239,7 @@ export default function EvaluationDatapointPage({
         <SectionsGroup>
           <SectionLayout>
             <SectionHeader heading="Input" />
-            <InputSnippet input={consolidatedEvaluationResults[0].input} />
+            <InputSnippet {...consolidatedEvaluationResults[0].input} />
           </SectionLayout>
           <OutputsSection
             outputsToDisplay={outputsToDisplay}

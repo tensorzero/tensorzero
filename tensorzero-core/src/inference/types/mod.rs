@@ -21,6 +21,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use serde_untagged::UntaggedEnumVisitor;
 use std::borrow::Borrow;
+use std::ops::Add;
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -533,7 +534,7 @@ impl ModelInput {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FinishReason {
     Stop,
@@ -565,7 +566,7 @@ pub struct ProviderInferenceResponse {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Usage {
     pub input_tokens: u32,
     pub output_tokens: u32,
@@ -633,7 +634,7 @@ impl ModelInferenceResponseWithMetadata {
                 output_tokens: 0,
             }
         } else {
-            self.usage.clone()
+            self.usage
         }
     }
 }
@@ -1194,7 +1195,7 @@ fn get_finish_reason(
         .iter()
         .sorted_by_key(|r| r.created)
         .next_back()
-        .and_then(|r| r.finish_reason.clone())
+        .and_then(|r| r.finish_reason)
 }
 
 pub async fn parse_chat_output(
@@ -1729,7 +1730,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         input_messages,
         raw_request,
         raw_response,
-        usage: usage.clone(),
+        usage,
         latency: latency.clone(),
         finish_reason,
     });
@@ -1819,13 +1820,18 @@ impl From<JsonMode> for ModelInferenceRequestJsonMode {
     }
 }
 
+impl Add for Usage {
+    type Output = Usage;
+    fn add(self, other: Usage) -> Usage {
+        Usage {
+            input_tokens: self.input_tokens.saturating_add(other.input_tokens),
+            output_tokens: self.output_tokens.saturating_add(other.output_tokens),
+        }
+    }
+}
 impl std::iter::Sum<Usage> for Usage {
     fn sum<I: Iterator<Item = Usage>>(iter: I) -> Self {
-        iter.fold(Usage::default(), |mut acc, u| {
-            acc.input_tokens = acc.input_tokens.saturating_add(u.input_tokens);
-            acc.output_tokens = acc.output_tokens.saturating_add(u.output_tokens);
-            acc
-        })
+        iter.fold(Usage::default(), |acc, u| acc + u)
     }
 }
 
@@ -1941,7 +1947,7 @@ mod tests {
             output: content.clone(),
             raw_request: raw_request.clone(),
             raw_response: "".to_string(),
-            usage: usage.clone(),
+            usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
@@ -1989,7 +1995,7 @@ mod tests {
             output: content.clone(),
             raw_request: raw_request.clone(),
             raw_response: "".to_string(),
-            usage: usage.clone(),
+            usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
@@ -2041,7 +2047,7 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: "".to_string(),
             finish_reason: Some(FinishReason::Stop),
-            usage: usage.clone(),
+            usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
@@ -2087,7 +2093,7 @@ mod tests {
             output: content.clone(),
             raw_request: raw_request.clone(),
             raw_response: "".to_string(),
-            usage: usage.clone(),
+            usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
@@ -2155,7 +2161,7 @@ mod tests {
             finish_reason: None,
             raw_request: raw_request.clone(),
             raw_response: "".to_string(),
-            usage: usage.clone(),
+            usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
@@ -2240,7 +2246,7 @@ mod tests {
             finish_reason: None,
             raw_request: raw_request.clone(),
             raw_response: "".to_string(),
-            usage: usage.clone(),
+            usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
@@ -2332,7 +2338,7 @@ mod tests {
             finish_reason: None,
             raw_request: raw_request.clone(),
             raw_response: "".to_string(),
-            usage: usage.clone(),
+            usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
@@ -2382,7 +2388,7 @@ mod tests {
             finish_reason: None,
             raw_request: raw_request.clone(),
             raw_response: "".to_string(),
-            usage: usage.clone(),
+            usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
@@ -2453,7 +2459,7 @@ mod tests {
             output: content.clone(),
             raw_request: raw_request.clone(),
             raw_response: "".to_string(),
-            usage: usage.clone(),
+            usage,
             finish_reason: None,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2510,7 +2516,7 @@ mod tests {
             finish_reason: None,
             raw_request: raw_request.clone(),
             raw_response: "".to_string(),
-            usage: usage.clone(),
+            usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
@@ -2693,7 +2699,7 @@ mod tests {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
                 created,
-                usage: Some(usage1.clone()),
+                usage: Some(usage1),
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(150),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -2702,7 +2708,7 @@ mod tests {
                 raw: Some("\"John\",\"age\":30}".to_string()),
                 thought: Some("Thought 2".to_string()),
                 created,
-                usage: Some(usage2.clone()),
+                usage: Some(usage2),
                 raw_response: "\"John\",\"age\":30}".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::Stop),
@@ -2773,7 +2779,7 @@ mod tests {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
                 created,
-                usage: Some(usage.clone()),
+                usage: Some(usage),
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(100),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -2845,7 +2851,7 @@ mod tests {
                 raw: Some("{\"name\":\"John\",".to_string()),
                 thought: None,
                 created,
-                usage: Some(usage.clone()),
+                usage: Some(usage),
                 raw_response: "{\"name\":\"John\",".to_string(),
                 latency: Duration::from_millis(100),
                 finish_reason: None,
@@ -2960,7 +2966,7 @@ mod tests {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
                 created,
-                usage: Some(usage1.clone()),
+                usage: Some(usage1),
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(150),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -2969,7 +2975,7 @@ mod tests {
                 raw: Some("\"John\",\"age\":30}".to_string()),
                 thought: Some("Thought 2".to_string()),
                 created,
-                usage: Some(usage2.clone()),
+                usage: Some(usage2),
                 raw_response: "\"John\",\"age\":30}".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::Stop),
@@ -3069,7 +3075,7 @@ mod tests {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
                 created,
-                usage: Some(usage1.clone()),
+                usage: Some(usage1),
                 finish_reason: Some(FinishReason::Stop),
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(150),
@@ -3078,7 +3084,7 @@ mod tests {
                 raw: Some("\"John\",\"age\":30}".to_string()),
                 thought: Some("Thought 2".to_string()),
                 created,
-                usage: Some(usage2.clone()),
+                usage: Some(usage2),
                 finish_reason: Some(FinishReason::ToolCall),
                 raw_response: "\"John\",\"age\":30}".to_string(),
                 latency: Duration::from_millis(250),
