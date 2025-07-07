@@ -110,7 +110,7 @@ class OptimizerStatus:
     def estimated_finish(self) -> Optional[int]: ...
 
 @final
-class OpenAISFTConfig:
+class UninitializedOpenAISFTConfig:
     def __init__(
         self,
         *,

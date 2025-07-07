@@ -46,7 +46,7 @@ pub struct OpenAISFTConfig {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISFTConfig"))]
+#[cfg_attr(feature = "pyo3", pyclass(name = "OpenAISFTConfig", str))]
 pub struct UninitializedOpenAISFTConfig {
     pub model: String,
     pub batch_size: Option<usize>,
@@ -76,36 +76,51 @@ impl UninitializedOpenAISFTConfig {
     /// ($self, /, *args, **kwargs)
     /// Same is true for FireworksSFTConfig
     #[expect(clippy::too_many_arguments)]
-    #[new]
-    #[pyo3(signature = (*, model, batch_size=None, learning_rate_multiplier=None, n_epochs=None, credentials=None, api_base=None, seed=None, suffix=None))]
+    // #[new]
+    // #[pyo3(signature = (*, model="openai/gpt-4o-mini".to_string(), batch_size=None, learning_rate_multiplier=None, n_epochs=None, credentials=None, api_base=None, seed=None, suffix=None))]
+    // #[pyo3(signature = (base_url, *, timeout=None))]
     pub fn new(
-        model: String,
-        batch_size: Option<usize>,
-        learning_rate_multiplier: Option<f64>,
-        n_epochs: Option<usize>,
-        credentials: Option<String>,
-        api_base: Option<String>,
-        seed: Option<u64>,
-        suffix: Option<String>,
+        py: Python<'_>,
+        base_url: &str,
+        timeout: Option<f64>,
+        // model: String,
+        // batch_size: Option<usize>,
+        // learning_rate_multiplier: Option<f64>,
+        // n_epochs: Option<usize>,
+        // credentials: Option<String>,
+        // api_base: Option<String>,
+        // seed: Option<u64>,
+        // suffix: Option<String>,
     ) -> PyResult<Self> {
         // Use Deserialize to convert the string to a CredentialLocation
-        let credentials =
-            credentials.map(|s| serde_json::from_str(&s).unwrap_or(CredentialLocation::Env(s)));
-        let api_base = api_base
-            .map(|s| {
-                Url::parse(&s)
-                    .map_err(|e| PyErr::new::<PyValueError, std::string::String>(e.to_string()))
-            })
-            .transpose()?;
+        panic!("Stop here");
+        // let credentials =
+        //     credentials.map(|s| serde_json::from_str(&s).unwrap_or(CredentialLocation::Env(s)));
+        // let api_base = api_base
+        //     .map(|s| {
+        //         Url::parse(&s)
+        //             .map_err(|e| PyErr::new::<PyValueError, std::string::String>(e.to_string()))
+        //     })
+        //     .transpose()?;
+        // Ok(Self {
+        //     model,
+        //     batch_size,
+        //     learning_rate_multiplier,
+        //     n_epochs,
+        //     credentials,
+        //     api_base,
+        //     seed,
+        //     suffix,
+        // })
         Ok(Self {
-            model,
-            batch_size,
-            learning_rate_multiplier,
-            n_epochs,
-            credentials,
-            api_base,
-            seed,
-            suffix,
+            model: "openai/gpt-4o-mini".to_string(),
+            batch_size: None,
+            learning_rate_multiplier: None,
+            n_epochs: None,
+            credentials: None,
+            api_base: None,
+            seed: None,
+            suffix: None,
         })
     }
 }

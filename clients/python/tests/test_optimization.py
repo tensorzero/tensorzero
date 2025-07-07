@@ -15,9 +15,13 @@ def test_sync_openai_sft(
     embedded_sync_client: TensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
 ):
-    optimizer_config = OpenAISFTConfig(
-        model="gpt-4o-mini", api_base="http://localhost:3030/openai/"
-    )
+    # optimizer_config = OpenAISFTConfig(
+    #     model="gpt-4o-mini", api_base="http://localhost:3030/openai/"
+    # )
+    
+    print(OpenAISFTConfig.__init__.__text_signature__)
+    print(embedded_sync_client.experimental_launch_optimization.__text_signature__)
+    raise Exception()
     optimizer_job_handle = embedded_sync_client.experimental_launch_optimization(
         train_examples=mixed_rendered_samples,
         val_examples=None,
