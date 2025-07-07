@@ -42,7 +42,7 @@ describe("native sft", () => {
     });
 
     let status = await client.experimentalPollOptimization(job);
-    while (status.status !== "completed") {
+    while (status.type !== "completed") {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       status = await client.experimentalPollOptimization(job);
     }
