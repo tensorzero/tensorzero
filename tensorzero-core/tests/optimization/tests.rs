@@ -163,6 +163,9 @@ fn generate_text_example() -> RenderedSample {
         inference_id: Some(Uuid::now_v7()),
         tool_params: None,
         output_schema: None,
+        dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
+            text: "The capital of France is Marseille.".to_string(),
+        })]],
     }
 }
 
@@ -257,6 +260,7 @@ fn generate_tool_call_example() -> RenderedSample {
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         output_schema: None,
+        dispreferred_outputs: vec![],
     }
 }
 
@@ -298,6 +302,9 @@ fn generate_image_example() -> RenderedSample {
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         output_schema: None,
+        dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
+            text: "Blue!".to_string(),
+        })]],
     }
 }
 
