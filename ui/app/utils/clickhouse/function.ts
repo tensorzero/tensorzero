@@ -1,7 +1,6 @@
 import z from "zod";
 import { getInferenceTableName } from "./common";
-import type { MetricConfig } from "../config/metric";
-import type { FunctionConfig } from "../config/function";
+import type { FunctionConfig, MetricConfig } from "tensorzero-node";
 import { getClickhouseClient } from "./client.server";
 
 export const timeWindowUnitSchema = z.enum([
@@ -28,12 +27,6 @@ export async function getVariantPerformances(params: {
     time_window_unit,
     variant_name,
   } = params;
-  if (
-    metric_config.type === "comment" ||
-    metric_config.type === "demonstration"
-  ) {
-    return undefined;
-  }
   const metric_table_name = (() => {
     switch (metric_config.type) {
       case "float":
