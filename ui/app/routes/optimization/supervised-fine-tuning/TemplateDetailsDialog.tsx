@@ -7,7 +7,7 @@ import {
   DialogTrigger,
 } from "~/components/ui/dialog";
 import { Textarea } from "~/components/ui/textarea";
-import type { ChatCompletionConfig } from "~/utils/config/variant";
+import type { ChatCompletionConfig } from "tensorzero-node";
 
 interface TemplateDetailsDialogProps {
   variant: string;
@@ -46,7 +46,7 @@ export function TemplateDetailsDialog({
                           readOnly
                           value={
                             chatCompletionVariants[variant]?.system_template
-                              ?.content
+                              ?.contents
                           }
                           className="h-[200px] resize-none"
                         />
@@ -66,7 +66,7 @@ export function TemplateDetailsDialog({
                           readOnly
                           value={
                             chatCompletionVariants[variant]?.user_template
-                              ?.content
+                              ?.contents
                           }
                           className="h-[200px] resize-none"
                         />
@@ -88,7 +88,7 @@ export function TemplateDetailsDialog({
                       readOnly
                       value={
                         chatCompletionVariants[variant]?.assistant_template
-                          ?.content
+                          ?.contents
                       }
                       className="h-[200px] resize-none"
                     />

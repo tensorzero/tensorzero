@@ -1,8 +1,8 @@
 import { Badge } from "~/components/ui/badge";
-import type { ProviderType } from "~/utils/config/models";
+import type { ProviderConfig } from "tensorzero-node";
 
 interface ModelBadgeProps {
-  provider: ProviderType;
+  provider: ProviderConfig["type"];
 }
 
 export function ModelBadge({ provider }: ModelBadgeProps) {
@@ -17,7 +17,7 @@ export function ModelBadge({ provider }: ModelBadgeProps) {
   );
 }
 
-function formatProvider(provider: ProviderType): {
+function formatProvider(provider: ProviderConfig["type"]): {
   name: string;
   className: string;
 } {
