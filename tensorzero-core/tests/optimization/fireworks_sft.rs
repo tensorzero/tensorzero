@@ -21,7 +21,7 @@ impl OptimizationTestCase for FireworksSFTTestCase {
                 model: "accounts/fireworks/models/llama-v3p1-8b-instruct".to_string(),
                 account_id: "viraj-ebfe5a".to_string(),
                 credentials: None,
-                api_base: None,
+                api_base: Some("http://localhost:3030/fireworks/".parse().unwrap()),
             }),
         }
         .load()
