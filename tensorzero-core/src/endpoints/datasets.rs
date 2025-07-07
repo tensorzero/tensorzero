@@ -1543,19 +1543,11 @@ pub async fn stale_dataset(
     let chat_query = r#"
     INSERT INTO ChatInferenceDatapoint
     SELECT
-        dataset_name,
-        function_name,
-        id,
-        episode_id,
-        input,
-        output,
-        tool_params,
-        tags,
-        auxiliary,
-        is_deleted,
-        now64(), -- updated_at
-        now64(), -- staled_at
-        source_inference_id
+        *
+        REPLACE (
+            now64() AS updated_at,
+            now64() AS staled_at
+        )
     FROM ChatInferenceDatapoint FINAL
     WHERE dataset_name = {dataset_name:String}
     AND staled_at IS NULL
@@ -1565,19 +1557,11 @@ pub async fn stale_dataset(
     let json_query = r#"
     INSERT INTO JsonInferenceDatapoint
     SELECT
-        dataset_name,
-        function_name,
-        id,
-        episode_id,
-        input,
-        output,
-        output_schema,
-        tags,
-        auxiliary,
-        is_deleted,
-        now64(), -- updated_at
-        now64(), -- staled_at
-        source_inference_id
+        *
+        REPLACE (
+            now64() AS updated_at,
+            now64() AS staled_at
+        )
     FROM JsonInferenceDatapoint FINAL
     WHERE dataset_name = {dataset_name:String}
     AND staled_at IS NULL
