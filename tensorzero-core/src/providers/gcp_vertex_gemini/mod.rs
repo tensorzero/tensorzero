@@ -277,6 +277,50 @@ pub async fn make_gcp_object_store(
     })
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GCPVertexGeminiSupervisedRow<'a> {
+    contents: Vec<GCPVertexGeminiRequestMessage<'a>>,
+    system_instruction: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tools: Vec<GCPVertexGeminiSFTTool<'a>>,
+}
+
+pub async fn upload_rows_to_gcp_object_store<'a>(
+    rows: &[GCPVertexGeminiSupervisedRow<'a>],
+    gs_url: &str,
+    credentials: &GCPVertexCredentials,
+    dynamic_api_keys: &InferenceCredentials,
+) -> Result<(), Error> {
+    // Get the object store
+    let store_and_path = make_gcp_object_store(gs_url, credentials, dynamic_api_keys).await?;
+
+    // Serialize the data to JSONL format
+    let mut jsonl_data = Vec::new();
+    for row in rows {
+        let line = serde_json::to_string(row).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize row: {e}"),
+            })
+        })?;
+        jsonl_data.extend(line.as_bytes());
+        jsonl_data.push(b'\n');
+    }
+
+    // Upload the data to GCS
+    store_and_path
+        .store
+        .put(&store_and_path.path, jsonl_data.into())
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to upload data to {gs_url}: {e}"),
+            })
+        })?;
+
+    Ok(())
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum ShorthandUrl<'a> {
     // We enforce that the publisher is 'google' or 'anthropic' when parsing the url,
@@ -626,6 +670,15 @@ impl TryFrom<(Credential, &str)> for GCPVertexCredentials {
                 message: format!("Invalid credential_location for {model} provider"),
             }))?,
         }
+    }
+}
+
+impl TryFrom<Credential> for GCPVertexCredentials {
+    type Error = Error;
+
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        // Use a generic model name since we don't have context here
+        Self::try_from((credentials, "GCP Vertex"))
     }
 }
 

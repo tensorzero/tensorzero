@@ -6,7 +6,7 @@ use std::{borrow::Cow, collections::HashMap};
 use super::{
     prepare_gcp_vertex_gemini_messages, tensorzero_to_gcp_vertex_gemini_model_message,
     tensorzero_to_gcp_vertex_gemini_system_message, GCPVertexGeminiFileURI,
-    GCPVertexGeminiRequestMessage, GCPVertexGeminiSFTTool,
+    GCPVertexGeminiRequestMessage, GCPVertexGeminiSupervisedRow,
 };
 use crate::{
     config_parser::TimeoutsConfig,
@@ -28,8 +28,8 @@ pub struct EncryptionSpec {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SupervisedHyperparameters {
-    pub epoch_count: Option<u64>,
-    pub adapter_size: Option<u64>,
+    pub epoch_count: Option<usize>,
+    pub adapter_size: Option<usize>,
     pub learning_rate_multiplier: Option<f64>,
 }
 
@@ -51,15 +51,6 @@ pub struct GCPVertexGeminiFineTuningRequest {
     pub tuned_model_display_name: Option<String>,
     pub service_account: Option<String>,
     pub encryption_spec: Option<EncryptionSpec>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GCPVertexGeminiSupervisedRow<'a> {
-    contents: Vec<GCPVertexGeminiRequestMessage<'a>>,
-    system_instruction: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    tools: Vec<GCPVertexGeminiSFTTool<'a>>,
 }
 
 impl<'a> TryFrom<&'a RenderedSample> for GCPVertexGeminiSupervisedRow<'a> {

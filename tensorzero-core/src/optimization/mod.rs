@@ -15,6 +15,7 @@ use crate::stored_inference::RenderedSample;
 use crate::variant::VariantConfig;
 
 pub mod fireworks_sft;
+pub mod gcp_vertex_gemini_sft;
 pub mod openai_sft;
 
 #[derive(Clone, Debug, Serialize)]
