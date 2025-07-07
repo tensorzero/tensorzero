@@ -433,29 +433,8 @@ jobs:
       - name: Launch ClickHouse container for E2E tests
         run: TENSORZERO_SKIP_LARGE_FIXTURES=1 docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
 
-      # We run this as a separate step so that we can see live build logs
-      # (and fail the job immediately if the build fails)
-      - name: Build the gateway for E2E tests
-        run: cargo build-e2e
-
-      - name: Launch the gateway for E2E tests
-        run: |
-          TENSORZERO_E2E_PROXY=http://localhost:3003 cargo run-e2e > e2e_logs.txt 2>&1 &
-            count=0
-            max_attempts=10
-            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
-              echo "Waiting for gateway to be healthy..."
-              sleep 1
-              count=$((count + 1))
-              if [ $count -ge $max_attempts ]; then
-                echo "Gateway failed to become healthy after $max_attempts attempts"
-                exit 1
-              fi
-            done
-          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
-
       - name: Test (Rust)
-        run: TENSORZERO_E2E_PROXY=http://localhost:3003 OPENAI_API_KEY=not_used FIREWORKS_API_KEY=not_used FIREWORKS_ACCOUNT_ID=not_used cargo test-optimization
+        run: TENSORZERO_USE_MOCK_INFERENCE_PROVIDER=1 OPENAI_API_KEY=not_used FIREWORKS_API_KEY=not_used FIREWORKS_ACCOUNT_ID=not_used cargo test-optimization
 
       - name: Print e2e logs
         if: always()
