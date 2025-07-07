@@ -46,7 +46,7 @@ pub struct OpenAISFTConfig {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(name = "OpenAISFTConfig", str))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISFTConfig"))]
 pub struct UninitializedOpenAISFTConfig {
     pub model: String,
     pub batch_size: Option<usize>,
@@ -78,7 +78,6 @@ impl UninitializedOpenAISFTConfig {
     #[expect(clippy::too_many_arguments)]
     #[new]
     #[pyo3(signature = (*, model, batch_size=None, learning_rate_multiplier=None, n_epochs=None, credentials=None, api_base=None, seed=None, suffix=None))]
-    // #[pyo3(signature = (base_url, *, timeout=None))]
     pub fn new(
         model: String,
         batch_size: Option<usize>,
