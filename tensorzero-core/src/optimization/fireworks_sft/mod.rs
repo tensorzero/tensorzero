@@ -452,7 +452,7 @@ impl Optimizer for FireworksSFTConfig {
             })?;
 
         // Fireworks job names look like 'accounts/{account_id}/supervisedFineTuningJobs/{job_id}'
-        // Extract the job name to construct a dashboard URL
+        // Extract the job id to construct a dashboard URL
         let job_id = job.name.split("/").last().ok_or_else(|| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("No job ID in job path: {}", job.name),
