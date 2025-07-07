@@ -74,7 +74,7 @@ class NativeSFTJob extends SFTJob {
         status: "idle",
       };
     }
-    switch (this.jobStatus.type) {
+    switch (this.jobStatus.status) {
       case "pending":
         return {
           status: "running",

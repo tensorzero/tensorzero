@@ -4,11 +4,11 @@ import type { JsonValue } from "./serde_json/JsonValue";
 
 export type OptimizerStatus =
   | {
-      type: "pending";
+      status: "pending";
       message: string;
       estimated_finish: Date | null;
       trained_tokens: bigint | null;
       error: JsonValue | null;
     }
-  | { type: "completed"; output: OptimizerOutput }
-  | { type: "failed"; message: string; error: JsonValue | null };
+  | { status: "completed"; output: OptimizerOutput }
+  | { status: "failed"; message: string; error: JsonValue | null };

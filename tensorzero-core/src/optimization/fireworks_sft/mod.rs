@@ -536,7 +536,6 @@ impl Optimizer for FireworksSFTConfig {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[serde(rename_all = "camelCase")]
 pub struct FireworksSFTJobHandle {
     pub api_base: Url,
     pub account_id: String,
