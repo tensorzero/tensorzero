@@ -316,8 +316,8 @@ pub fn deserialize_from_rendered_sample<'a>(
     }
 }
 
-pub fn deserialize_optimization_config<'a>(
-    obj: &Bound<'a, PyAny>,
+pub fn deserialize_optimization_config(
+    obj: &Bound<'_, PyAny>,
 ) -> PyResult<UninitializedOptimizerConfig> {
     if obj.is_instance_of::<UninitializedOpenAISFTConfig>() {
         Ok(UninitializedOptimizerConfig::OpenAISFT(obj.extract()?))

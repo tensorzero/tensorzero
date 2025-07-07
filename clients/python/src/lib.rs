@@ -1784,10 +1784,10 @@ impl AsyncTensorZeroGateway {
     /// :param job_handle: The job handle returned by `experimental_launch_optimization`.
     /// :return: An `OptimizerStatus` object.
     #[pyo3(signature = (*, job_handle))]
-    fn experimental_poll_optimization<'a>(
-        this: PyRef<'a, Self>,
+    fn experimental_poll_optimization(
+        this: PyRef<'_, Self>,
         job_handle: OptimizerJobHandle,
-    ) -> PyResult<Bound<'a, PyAny>> {
+    ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.experimental_poll_optimization(job_handle).await;
