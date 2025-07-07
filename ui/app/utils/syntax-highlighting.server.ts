@@ -1,5 +1,6 @@
 import { codeToHtml } from "shiki";
 import { JSONParseError } from "./common";
+import { data } from "react-router";
 
 export type SupportedLanguage = "json";
 
@@ -36,4 +37,14 @@ export async function processJson(object: object, objectRef: string) {
   }
 
   return { raw, html };
+}
+
+export function handleJsonProcessingError(
+  error: unknown,
+  unhandledErrorMessage?: "Server error while processing JSON. Please contact support.",
+): never {
+  if (error instanceof JSONParseError) {
+    throw data(error.message, { status: 400 });
+  }
+  throw data(unhandledErrorMessage, { status: 500 });
 }

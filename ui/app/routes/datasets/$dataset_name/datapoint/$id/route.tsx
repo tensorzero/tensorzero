@@ -78,7 +78,14 @@ export async function action({ request }: ActionFunctionArgs) {
     ParsedDatasetRowSchema.parse(cleanedData);
   const config = await getConfig();
   const functionConfig = config.functions[parsedFormData.function_name];
-  const functionType = functionConfig?.type;
+  if (!functionConfig) {
+    return new Response(
+      `Failed to find function config for function ${parsedFormData.function_name}`,
+      { status: 400 },
+    );
+  }
+  const functionType = functionConfig.type;
+
   const action = formData.get("action");
   if (action === "delete") {
     await staleDatapoint(
