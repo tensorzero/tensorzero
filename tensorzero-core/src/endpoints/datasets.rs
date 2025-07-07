@@ -85,12 +85,12 @@ async fn query_demonstration(
             ]),
         )
         .await?;
-    if result.is_empty() {
+    if result.response.is_empty() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
             message: format!("No demonstration found for inference `{inference_id}`"),
         }));
     }
-    let demonstration: Demonstration = serde_json::from_str(&result).map_err(|e| {
+    let demonstration: Demonstration = serde_json::from_str(&result.response).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
             message: format!("Failed to deserialize demonstration ClickHouse response: {e}"),
         })
@@ -109,7 +109,7 @@ async fn query_inference_for_datapoint(
     clickhouse: &ClickHouseConnectionInfo,
     inference_id: Uuid,
 ) -> Result<TaggedInferenceDatabaseInsert, Error> {
-    let result: String = clickhouse
+    let result = clickhouse
         .run_query_synchronous(
             r#"
             SELECT
@@ -157,14 +157,14 @@ FORMAT JSONEachRow;"#
         )
         .await?;
 
-    if result.is_empty() {
+    if result.response.is_empty() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
             message: format!("Inference `{inference_id}` not found"),
         }));
     }
 
-    let inference_data: TaggedInferenceDatabaseInsert =
-        serde_json::from_str(&result).map_err(|e| {
+    let inference_data: TaggedInferenceDatabaseInsert = serde_json::from_str(&result.response)
+        .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to deserialize inference data: {e}"),
             })
@@ -872,10 +872,10 @@ pub async fn list_datapoints(
     let result = clickhouse
         .run_query_synchronous(query.to_string(), &params)
         .await?;
-    if result.is_empty() {
+    if result.response.is_empty() {
         return Ok(vec![]);
     }
-    let result_lines = result.trim().split("\n").collect::<Vec<&str>>();
+    let result_lines = result.response.trim().split("\n").collect::<Vec<&str>>();
 
     let datapoints: Result<Vec<Datapoint>, _> = result_lines
         .iter()
@@ -1004,13 +1004,13 @@ pub async fn get_datapoint(
     let result = clickhouse
         .run_query_synchronous(query.to_string(), &params)
         .await?;
-    if result.is_empty() {
+    if result.response.is_empty() {
         return Err(Error::new(ErrorDetails::DatapointNotFound {
             dataset_name,
             datapoint_id,
         }));
     }
-    let datapoint: Datapoint = serde_json::from_str(&result).map_err(|e| {
+    let datapoint: Datapoint = serde_json::from_str(&result.response).map_err(|e| {
         Error::new(ErrorDetails::ClickHouseDeserialization {
             message: format!("Failed to deserialize datapoint: {e}"),
         })
