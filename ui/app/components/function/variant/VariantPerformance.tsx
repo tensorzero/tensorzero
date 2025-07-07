@@ -1,10 +1,9 @@
+import * as React from "react";
 import type {
   TimeWindowUnit,
   VariantPerformanceRow,
 } from "~/utils/clickhouse/function";
-// import { TrendingUp } from "lucide-react";
 import { Bar, BarChart, ErrorBar, CartesianGrid, XAxis, YAxis } from "recharts";
-
 import {
   Card,
   CardContent,
@@ -20,6 +19,7 @@ import {
   ChartTooltipContent,
 } from "~/components/ui/chart";
 import { TimeGranularitySelector } from "./TimeGranularitySelector";
+import { VariantFilter } from "./variant-filter";
 
 const CHART_COLORS = [
   "hsl(var(--chart-1))",
@@ -42,22 +42,15 @@ export function VariantPerformance({
   onTimeGranularityChange: (time_granularity: TimeWindowUnit) => void;
   singleVariantMode?: boolean;
 }) {
-  const { data, variantNames } =
-    transformVariantPerformances(variant_performances);
+  const { data, variants, chartConfig } = React.useMemo(
+    () =>
+      transformVariantPerformances(variant_performances, { singleVariantMode }),
+    [variant_performances, singleVariantMode],
+  );
 
-  const chartConfig: Record<string, { label: string; color: string }> =
-    variantNames.reduce(
-      (config, variantName, index) => ({
-        ...config,
-        [variantName]: {
-          label: variantName,
-          color: singleVariantMode
-            ? CHART_COLORS[0]
-            : CHART_COLORS[index % CHART_COLORS.length],
-        },
-      }),
-      {},
-    );
+  const [filteredVariants, setFilteredVariants] = React.useState(
+    variants.map((v) => v.name),
+  );
 
   return (
     <div className="space-y-8">
@@ -82,10 +75,17 @@ export function VariantPerformance({
               )}
             </CardDescription>
           </div>
-          <TimeGranularitySelector
-            time_granularity={time_granularity}
-            onTimeGranularityChange={onTimeGranularityChange}
-          />
+          <div className="flex gap-4">
+            <VariantFilter
+              variants={variants}
+              selectedValues={filteredVariants}
+              setSelectedValues={setFilteredVariants}
+            />
+            <TimeGranularitySelector
+              timeGranularity={time_granularity}
+              onTimeGranularityChange={onTimeGranularityChange}
+            />
+          </div>
         </CardHeader>
         <CardContent>
           <ChartContainer config={chartConfig} className="h-80 w-full">
@@ -128,34 +128,39 @@ export function VariantPerformance({
               <ChartLegend content={<ChartLegendContent />} />
               {singleVariantMode ? (
                 <Bar
-                  key={variantNames[0]}
-                  dataKey={variantNames[0]}
-                  name={variantNames[0]}
-                  fill={CHART_COLORS[0]}
+                  key={variants[0].name}
+                  dataKey={variants[0].name}
+                  name={variants[0].name}
+                  fill={variants[0].color}
                   radius={4}
                   maxBarSize={100}
                 >
                   <ErrorBar
-                    dataKey={`${variantNames[0]}_ci_error`}
+                    dataKey={`${variants[0].name}_ci_error`}
                     strokeWidth={1}
                   />
                 </Bar>
               ) : (
-                variantNames.map((variantName) => (
-                  <Bar
-                    key={variantName}
-                    dataKey={variantName}
-                    name={variantName}
-                    fill={chartConfig[variantName].color}
-                    radius={4}
-                    maxBarSize={100}
-                  >
-                    <ErrorBar
-                      dataKey={`${variantName}_ci_error`}
-                      strokeWidth={1}
-                    />
-                  </Bar>
-                ))
+                filteredVariants.map((variantName) => {
+                  const variant = variants.find((v) => v.name === variantName);
+                  if (!variant) return null;
+
+                  return (
+                    <Bar
+                      key={variant.name}
+                      dataKey={variant.name}
+                      name={variant.name}
+                      fill={variant.color}
+                      radius={4}
+                      maxBarSize={100}
+                    >
+                      <ErrorBar
+                        dataKey={`${variant.name}_ci_error`}
+                        strokeWidth={1}
+                      />
+                    </Bar>
+                  );
+                })
               )}
             </BarChart>
           </ChartContainer>
@@ -186,16 +191,34 @@ type PerformanceDataGroupedByDate = {
   >;
 }[];
 
+type VariantData = { color: string; name: string };
+
 export function transformVariantPerformances(
   parsedRows: VariantPerformanceRow[],
+  args: { singleVariantMode: boolean },
 ): {
   data: VariantPerformanceData[];
-  variantNames: string[];
+  variants: VariantData[];
+  chartConfig: Record<string, { label: string; color: string }>;
 } {
-  // Remove rows with n=0 inferences
+  const { singleVariantMode } = args;
   const filtered = parsedRows.filter((row) => row.count > 0);
-
   const variantNames = [...new Set(filtered.map((row) => row.variant_name))];
+  const variants: VariantData[] = variantNames.map((name, index) => ({
+    name: name,
+    color: singleVariantMode
+      ? CHART_COLORS[0]
+      : CHART_COLORS[index % CHART_COLORS.length],
+  }));
+
+  const chartConfig: Record<string, { label: string; color: string }> =
+    variants.reduce(
+      (config, { name: variantName, color }) => ({
+        ...config,
+        [variantName]: { label: variantName, color },
+      }),
+      {},
+    );
 
   // First group by date
   const groupedByDate = filtered.reduce<PerformanceDataGroupedByDate>(
@@ -234,18 +257,17 @@ export function transformVariantPerformances(
 
   // Convert to Recharts-friendly shape
   const data = sortedAndLimited.map((entry) => {
-    const row: VariantPerformanceData = { date: entry.date };
-    variantNames.forEach((variant) => {
-      const vData = entry.variants[variant];
-      row[variant] = vData?.avg_metric ?? 0;
-      row[`${variant}_ci_error`] = vData?.ci_error ?? 0;
-      row[`${variant}_num_inferences`] = vData?.num_inferences ?? 0;
+    const row: VariantPerformanceData = {
+      date: entry.date,
+    };
+    variants.forEach((variant) => {
+      const vData = entry.variants[variant.name];
+      row[variant.name] = vData?.avg_metric ?? 0;
+      row[`${variant.name}_ci_error`] = vData?.ci_error ?? 0;
+      row[`${variant.name}_num_inferences`] = vData?.num_inferences ?? 0;
     });
     return row;
   });
 
-  return {
-    data,
-    variantNames,
-  };
+  return { data, variants, chartConfig };
 }

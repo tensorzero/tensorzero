@@ -8,12 +8,12 @@ import {
 import type { TimeWindowUnit } from "~/utils/clickhouse/function";
 
 type TimeGranularitySelectorProps = {
-  time_granularity: TimeWindowUnit;
+  timeGranularity: TimeWindowUnit;
   onTimeGranularityChange: (time_granularity: TimeWindowUnit) => void;
 };
 
 export function TimeGranularitySelector({
-  time_granularity: timeGranularity,
+  timeGranularity,
   onTimeGranularityChange,
 }: TimeGranularitySelectorProps) {
   return (
