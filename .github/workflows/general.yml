@@ -404,6 +404,63 @@ jobs:
         if: always()
         run: cat e2e_logs.txt
 
+  # Run 'cargo test-optimization' against mock-inference-provider
+  mock-optimization-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          shared-key: "build-gateway-cache"
+          save-if: false
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        with:
+          tool: cargo-nextest
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - name: Download ClickHouse fixtures
+        run: uv run ./ui/fixtures/download-fixtures.py
+
+      - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
+        run: |
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+
+      - name: Launch ClickHouse container for E2E tests
+        run: TENSORZERO_SKIP_LARGE_FIXTURES=1 docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
+
+      # We run this as a separate step so that we can see live build logs
+      # (and fail the job immediately if the build fails)
+      - name: Build the gateway for E2E tests
+        run: cargo build-e2e
+
+      - name: Launch the gateway for E2E tests
+        run: |
+          TENSORZERO_E2E_PROXY=http://localhost:3003 cargo run-e2e > e2e_logs.txt 2>&1 &
+            count=0
+            max_attempts=10
+            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+              echo "Waiting for gateway to be healthy..."
+              sleep 1
+              count=$((count + 1))
+              if [ $count -ge $max_attempts ]; then
+                echo "Gateway failed to become healthy after $max_attempts attempts"
+                exit 1
+              fi
+            done
+          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
+
+      - name: Test (Rust)
+        run: TENSORZERO_E2E_PROXY=http://localhost:3003 cargo test-optimization
+
+      - name: Print e2e logs
+        if: always()
+        run: cat e2e_logs.txt
+
   build-gateway-container:
     uses: ./.github/workflows/build-gateway-container.yml
 
@@ -434,6 +491,7 @@ jobs:
         clickhouse-tests,
         ui-tests,
         ui-tests-e2e,
+        mock-optimization-tests,
       ]
     runs-on: ubuntu-latest
     steps:
