@@ -340,6 +340,8 @@ test("should be able to add chat demonstration feedback via the inference page",
 test("should be able to add a datapoint from the inference page", async ({
   page,
 }) => {
+  // NOTE: this datapoint has auxiliary_content as "" so was failing to insert into dataset
+  // We want to make sure that we can add it to a dataset now that we've fixed that issue.
   await page.goto(
     "/observability/inferences/0196368f-1ae8-7551-b5df-9a61593eb307",
   );

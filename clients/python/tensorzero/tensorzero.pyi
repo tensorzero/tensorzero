@@ -18,6 +18,7 @@ import uuid_utils
 
 from tensorzero import (
     ChatDatapointInsert,
+    ChatInferenceOutput,
     ContentBlock,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
@@ -31,6 +32,7 @@ from tensorzero import (
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
     InferenceFilterTreeNode,
+    JsonInferenceOutput,
 )
 
 @final
@@ -55,10 +57,14 @@ class StoredInference:
         variant_name: str,
         input: Any,
         output: Any,
-        episode_id: Any,
-        inference_id: Any,
+        episode_id: UUID,
+        inference_id: UUID,
         tool_params: Optional[Any] = None,
         output_schema: Optional[Any] = None,
+        # Dispreferred outputs are lists because there may be several of them in the future.
+        dispreferred_outputs: Union[
+            List[ChatInferenceOutput], List[JsonInferenceOutput]
+        ] = [],
     ) -> None: ...
     def __repr__(self) -> str: ...
     @property
@@ -79,16 +85,21 @@ class StoredInference:
     def output_schema(self) -> Optional[Any]: ...
     @property
     def type(self) -> str: ...
+    @property
+    def dispreferred_outputs(
+        self,
+    ) -> Union[List[ChatInferenceOutput], List[JsonInferenceOutput]]: ...
 
 @final
 class RenderedSample:
     function_name: str
     input: ModelInput
-    output: Optional[List[ContentBlock]]
+    output: Optional[ChatInferenceOutput]
     episode_id: Optional[UUID]
     inference_id: Optional[UUID]
     tool_params: Optional[ToolCallConfigDatabaseInsert]
     output_schema: Optional[Dict[str, Any]]
+    dispreferred_outputs: List[ChatInferenceOutput] = []
 
 @final
 class Datapoint:

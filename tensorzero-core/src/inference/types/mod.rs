@@ -820,6 +820,8 @@ pub struct JsonInferenceDatabaseInsert {
     pub input: ResolvedInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: JsonInferenceOutput,
+    // We at one point wrote empty auxiliary content to the database as "" but now write it as []
+    // In either case, we want to deserialize it as [] if empty
     #[serde(deserialize_with = "deserialize_defaulted_json_string")]
     pub auxiliary_content: Vec<ContentBlockOutput>,
     #[serde(deserialize_with = "deserialize_json_string")]
