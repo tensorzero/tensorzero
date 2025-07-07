@@ -180,7 +180,7 @@ pub fn convert_to_optimizer_status(
 
             let model_provider = UninitializedModelProvider {
                 config: UninitializedProviderConfig::GCPVertexGemini {
-                    model_id: Some(tuned_model.model.clone()),
+                    model_id: None,
                     endpoint_id: tuned_model.endpoint.clone(), // This is now Option<String>
                     location,
                     project_id,
@@ -282,6 +282,7 @@ mod tests {
             inference_id: Some(uuid::Uuid::now_v7()),
             tool_params: None,
             output_schema: None,
+            dispreferred_outputs: vec![],
         };
         let row = GCPVertexGeminiSupervisedRow::try_from(&inference).unwrap();
 
