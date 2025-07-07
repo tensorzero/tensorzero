@@ -20,6 +20,7 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
+    "@ariakit/react": "^0.4.17",
     "@clickhouse/client": "^1.11.2",
     "@eslint/js": "^9.29.0",
     "@hookform/resolvers": "^5.1.1",
@@ -54,6 +55,7 @@
     "http-status-codes": "^2.3.0",
     "isbot": "^5.1.25",
     "lucide-react": "^0.487.0",
+    "match-sorter": "^8.0.3",
     "openai": "^4.104.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
