@@ -2750,6 +2750,7 @@ async fn test_stale_dataset_empty() {
 async fn test_stale_dataset_already_staled() {
     let client = make_embedded_gateway().await;
     let http_client = Client::new();
+    let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-already-staled-{}", Uuid::now_v7());
     println!("dataset_name: {dataset_name}");
 
@@ -2768,6 +2769,8 @@ async fn test_stale_dataset_already_staled() {
         .await
         .unwrap();
     assert!(resp.status().is_success());
+    let resp_json: Value = resp.json().await.unwrap();
+    let id = Uuid::parse_str(resp_json["id"].as_str().unwrap()).unwrap();
     // Sleep for 500ms
     tokio::time::sleep(Duration::from_millis(500)).await;
 
@@ -2776,6 +2779,12 @@ async fn test_stale_dataset_already_staled() {
     let stale_result1 = client.stale_dataset(dataset_name.clone()).await.unwrap();
     assert_eq!(stale_result1.num_staled_datapoints, 1);
 
+    // Verify the datapoint is staled
+    let datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
+        .await
+        .unwrap();
+    let staled_at = datapoint["staled_at"].as_str().unwrap();
+
     // Wait for 500ms
     tokio::time::sleep(Duration::from_millis(500)).await;
 
@@ -2783,6 +2792,13 @@ async fn test_stale_dataset_already_staled() {
     // Try to stale it again - should return 0 since datapoints are already staled
     let stale_result2 = client.stale_dataset(dataset_name.clone()).await.unwrap();
     assert_eq!(stale_result2.num_staled_datapoints, 0);
+
+    // Verify the datapoint is still staled
+    let datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
+        .await
+        .unwrap();
+    let new_staled_at = datapoint["staled_at"].as_str().unwrap();
+    assert_eq!(staled_at, new_staled_at);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -2822,7 +2838,7 @@ async fn test_stale_dataset_mixed_staled_fresh() {
     let datapoint1 = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id1)
         .await
         .unwrap();
-    assert!(datapoint1["staled_at"].as_str().is_some());
+    let staled_at = datapoint1["staled_at"].as_str().unwrap();
 
     // Insert second datapoint after the first was staled
     let datapoint_id2 = Uuid::now_v7();
@@ -2849,4 +2865,10 @@ async fn test_stale_dataset_mixed_staled_fresh() {
         .await
         .unwrap();
     assert!(datapoint2["staled_at"].as_str().is_some());
+
+    let datapoint1 = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id1)
+        .await
+        .unwrap();
+    let new_staled_at = datapoint1["staled_at"].as_str().unwrap();
+    assert_eq!(staled_at, new_staled_at);
 }
