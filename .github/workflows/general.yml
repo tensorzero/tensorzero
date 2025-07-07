@@ -404,6 +404,38 @@ jobs:
         if: always()
         run: cat e2e_logs.txt
 
+  # Run 'cargo test-optimization' against mock-inference-provider
+  mock-optimization-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          shared-key: "build-gateway-cache"
+          save-if: false
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        with:
+          tool: cargo-nextest
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - name: Download ClickHouse fixtures
+        run: uv run ./ui/fixtures/download-fixtures.py
+
+      - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
+        run: |
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+
+      - name: Launch ClickHouse container for E2E tests
+        run: TENSORZERO_SKIP_LARGE_FIXTURES=1 docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
+
+      - name: Test (Rust)
+        run: TENSORZERO_USE_MOCK_INFERENCE_PROVIDER=1 OPENAI_API_KEY=not_used FIREWORKS_API_KEY=not_used FIREWORKS_ACCOUNT_ID=not_used cargo test-optimization
+
   build-gateway-container:
     uses: ./.github/workflows/build-gateway-container.yml
 
@@ -434,6 +466,7 @@ jobs:
         clickhouse-tests,
         ui-tests,
         ui-tests-e2e,
+        mock-optimization-tests,
       ]
     runs-on: ubuntu-latest
     steps:

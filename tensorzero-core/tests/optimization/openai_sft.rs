@@ -1,4 +1,4 @@
-use crate::{optimization_test_case, OptimizationTestCase};
+use crate::{optimization_test_case, use_mock_inference_provider, OptimizationTestCase};
 use tensorzero_core::optimization::{
     openai_sft::UninitializedOpenAISFTConfig, OptimizerInfo, UninitializedOptimizerConfig,
     UninitializedOptimizerInfo,
@@ -26,7 +26,11 @@ impl OptimizationTestCase for OpenAISFTTestCase {
                 credentials: None,
                 seed: None,
                 suffix: None,
-                api_base: None,
+                api_base: if use_mock_inference_provider() {
+                    Some("http://localhost:3030/openai/".parse().unwrap())
+                } else {
+                    None
+                },
             }),
         }
         .load()

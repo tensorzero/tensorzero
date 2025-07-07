@@ -251,6 +251,8 @@ impl ClickHouseConnectionInfo {
 
                 // Get the ClickHouse summary info from the headers
                 let metadata = if let Some(summary) = res.headers().get("x-clickhouse-summary") {
+                    // NOTE: X-Clickhouse-Summary is a ClickHouse-specific header that contains information about the query execution.
+                    // It is not formally specified in the ClickHouse documentation so we only warn if it isn't working but won't error here.
                     let summary_str = summary.to_str().map_err(|e| {
                         Error::new(ErrorDetails::ClickHouseQuery {
                             message: format!("Failed to parse x-clickhouse-summary header: {e}"),
@@ -485,11 +487,13 @@ impl ClickHouseConnectionInfo {
             .trim()
             .lines()
             .map(|line| {
-                serde_json::from_str::<StoredInference>(line).map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to deserialize response: {e:?}"),
+                serde_json::from_str::<query_builder::ClickHouseStoredInference>(line)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseQuery {
+                            message: format!("Failed to deserialize response: {e:?}"),
+                        })
                     })
-                })
+                    .and_then(|inference| inference.try_into())
             })
             .collect::<Result<Vec<StoredInference>, Error>>()?;
         Ok(inferences)

@@ -8,8 +8,8 @@ import { useRevalidator } from "react-router";
 import { redirect } from "react-router";
 import { useConfig } from "~/context/config";
 import {
-  dump_model_config,
-  get_fine_tuned_model_config,
+  dump_provider_config,
+  get_fine_tuned_provider_config,
 } from "~/utils/config/models";
 import type { Route } from "./+types/route";
 import FineTuningStatus from "./FineTuningStatus";
@@ -68,7 +68,6 @@ export async function action({ request }: Route.ActionArgs) {
   }
   const jsonData = JSON.parse(serializedFormData);
   const validatedData = SFTFormValuesSchema.parse(jsonData);
-
   let job;
   try {
     job = await launch_sft_job(validatedData);
@@ -120,8 +119,9 @@ function SupervisedFineTuningImpl(
 
   const finalResult =
     props.status === "completed"
-      ? dump_model_config(
-          get_fine_tuned_model_config(props.result, props.modelProvider),
+      ? dump_provider_config(
+          props.result,
+          get_fine_tuned_provider_config(props.result, props.modelProvider),
         )
       : null;
   if (finalResult && submissionPhase !== "complete") {

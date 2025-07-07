@@ -70,6 +70,8 @@ RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample inste
 ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
+ChatInferenceOutput = t.List[ContentBlock]
+
 
 __all__ = [
     "AndFilter",

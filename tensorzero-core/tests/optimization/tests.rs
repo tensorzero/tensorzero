@@ -32,6 +32,10 @@ mod openai_sft;
 
 static FERRIS_PNG: &[u8] = include_bytes!("../e2e/providers/ferris.png");
 
+pub fn use_mock_inference_provider() -> bool {
+    std::env::var("TENSORZERO_USE_MOCK_INFERENCE_PROVIDER").is_ok()
+}
+
 pub trait OptimizationTestCase {
     fn supports_image_data(&self) -> bool;
     fn supports_tool_calls(&self) -> bool;
@@ -58,7 +62,12 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         if matches!(status, OptimizerStatus::Failed { .. }) {
             panic!("Optimization failed: {status:?}");
         }
-        sleep(Duration::from_secs(60)).await;
+        sleep(if use_mock_inference_provider() {
+            Duration::from_secs(1)
+        } else {
+            Duration::from_secs(60)
+        })
+        .await;
     }
     assert!(matches!(status, OptimizerStatus::Completed { .. }));
     let OptimizerStatus::Completed {
@@ -103,6 +112,10 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         credentials: &HashMap::new(),
         cache_options: &CacheOptions::default(),
     };
+    // We didn't produce a real model, so there's nothing to test
+    if use_mock_inference_provider() {
+        return;
+    }
     let response = model_config
         .infer(&request, &clients, "test")
         .await
@@ -150,6 +163,9 @@ fn generate_text_example() -> RenderedSample {
         inference_id: Some(Uuid::now_v7()),
         tool_params: None,
         output_schema: None,
+        dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
+            text: "The capital of France is Marseille.".to_string(),
+        })]],
     }
 }
 
@@ -244,6 +260,7 @@ fn generate_tool_call_example() -> RenderedSample {
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         output_schema: None,
+        dispreferred_outputs: vec![],
     }
 }
 
@@ -285,6 +302,9 @@ fn generate_image_example() -> RenderedSample {
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         output_schema: None,
+        dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
+            text: "Blue!".to_string(),
+        })]],
     }
 }
 
