@@ -1,7 +1,10 @@
-use crate::{optimization_test_case, OptimizationTestCase};
-use tensorzero_core::optimization::{
-    gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig, OptimizerInfo,
-    UninitializedOptimizerConfig, UninitializedOptimizerInfo,
+use crate::{optimization_test_case, use_mock_inference_provider, OptimizationTestCase};
+use tensorzero_core::{
+    model::CredentialLocation,
+    optimization::{
+        gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig, OptimizerInfo,
+        UninitializedOptimizerConfig, UninitializedOptimizerInfo,
+    },
 };
 
 struct GCPVertexGeminiSFTTestCase();
@@ -25,7 +28,11 @@ impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {
                     n_epochs: Some(1),
                     export_last_checkpoint_only: None,
                     credentials: None,
-                    credential_location: None,
+                    credential_location: if use_mock_inference_provider() {
+                        Some(CredentialLocation::None)
+                    } else {
+                        None
+                    },
                     seed: None,
                     api_base: None,
                     service_account: None,
