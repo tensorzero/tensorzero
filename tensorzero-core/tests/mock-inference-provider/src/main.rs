@@ -256,7 +256,9 @@ async fn create_openai_file(mut form: Multipart) -> Result<Json<serde_json::Valu
                     match result {
                         Ok(row) => {
                             for message in row.messages.iter() {
-                                let Some(content_array) = message.content.as_ref().and_then(|v| v.as_array()) else {
+                                let Some(content_array) =
+                                    message.content.as_ref().and_then(|v| v.as_array())
+                                else {
                                     continue;
                                 };
                                 for content in content_array.iter() {

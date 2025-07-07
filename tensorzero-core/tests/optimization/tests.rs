@@ -112,6 +112,10 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         credentials: &HashMap::new(),
         cache_options: &CacheOptions::default(),
     };
+    // We didn't produce a real model, so there's nothing to test
+    if use_mock_inference_provider() {
+        return;
+    }
     let response = model_config
         .infer(&request, &clients, "test")
         .await
