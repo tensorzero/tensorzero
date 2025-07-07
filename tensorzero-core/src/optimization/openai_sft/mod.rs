@@ -108,6 +108,32 @@ impl UninitializedOpenAISFTConfig {
             suffix,
         })
     }
+
+    /// Initialize the OpenAISFTConfig. All parameters are optional except for `model`.
+    ///
+    /// :param model: The model to use for the fine-tuning job.
+    /// :param batch_size: The batch size to use for the fine-tuning job.
+    /// :param learning_rate_multiplier: The learning rate multiplier to use for the fine-tuning job.
+    /// :param n_epochs: The number of epochs to use for the fine-tuning job.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::OPENAI_API_KEY". See docs for more details.
+    /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
+    /// :param seed: The seed to use for the fine-tuning job.
+    /// :param suffix: The suffix to use for the fine-tuning job (this is for naming in OpenAI).
+    #[expect(unused_variables, clippy::too_many_arguments)]
+    #[pyo3(signature = (*, model, batch_size=None, learning_rate_multiplier=None, n_epochs=None, credentials=None, api_base=None, seed=None, suffix=None))]
+    fn __init__(
+        this: Py<Self>,
+        model: String,
+        batch_size: Option<usize>,
+        learning_rate_multiplier: Option<f64>,
+        n_epochs: Option<usize>,
+        credentials: Option<String>,
+        api_base: Option<String>,
+        seed: Option<u64>,
+        suffix: Option<String>,
+    ) -> Py<Self> {
+        this
+    }
 }
 
 impl UninitializedOpenAISFTConfig {

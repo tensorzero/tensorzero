@@ -169,6 +169,24 @@ impl UninitializedFireworksSFTConfig {
             api_base,
         })
     }
+
+    /// Initialize the FireworksSFTConfig. All parameters are optional except for `model` and `account_id`.
+    ///
+    /// :param model: The model to use for the fine-tuning job.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::FIREWORKS_API_KEY". See docs for more details.
+    /// :param account_id: The account ID to use for the fine-tuning job.
+    /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
+    #[expect(unused_variables)]
+    #[pyo3(signature = (*, model, credentials=None, account_id, api_base=None))]
+    fn __init__(
+        this: Py<Self>,
+        model: String,
+        credentials: Option<String>,
+        account_id: String,
+        api_base: Option<String>,
+    ) -> Py<Self> {
+        this
+    }
 }
 
 impl UninitializedFireworksSFTConfig {
