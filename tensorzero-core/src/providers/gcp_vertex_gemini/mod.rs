@@ -57,7 +57,7 @@ use crate::model::{
     build_creds_caching_default_with_fn, fully_qualified_name, Credential, CredentialLocation,
     ModelProvider,
 };
-use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_anthropic::make_gcp_sdk_credentials;
 use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
@@ -281,7 +281,7 @@ pub async fn make_gcp_object_store(
 #[serde(rename_all = "camelCase")]
 pub struct GCPVertexGeminiSupervisedRow<'a> {
     contents: Vec<GCPVertexGeminiRequestMessage<'a>>,
-    system_instruction: Option<String>,
+    system_instruction: Option<GCPVertexGeminiRequestMessage<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<GCPVertexGeminiSFTTool<'a>>,
 }
@@ -294,7 +294,6 @@ pub async fn upload_rows_to_gcp_object_store<'a>(
 ) -> Result<(), Error> {
     // Get the object store
     let store_and_path = make_gcp_object_store(gs_url, credentials, dynamic_api_keys).await?;
-
     // Serialize the data to JSONL format
     let mut jsonl_data = Vec::new();
     for row in rows {
@@ -771,22 +770,6 @@ fn make_provider_batch_inference_output(
         usage,
         finish_reason,
     })
-}
-
-fn serialize_text_content_vec<S>(
-    content: &Vec<GCPVertexGeminiContentPart<'_>>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    // If we have a single text block, serialize it as a string
-    // to stay compatible with older providers which may not support content blocks
-    if let [GCPVertexGeminiContentPart::Text { text }] = content.as_slice() {
-        text.serialize(serializer)
-    } else {
-        content.serialize(serializer)
-    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -1761,39 +1744,39 @@ pub struct GCPVertexGeminiSFTTool<'a> {
     pub tool: GCPVertexGeminiTool<'a>,
 }
 
-impl<'a> From<&'a Tool> for GCPVertexGeminiSFTTool<'a> {
-    fn from(tool: &'a Tool) -> Self {
-        let function_declaration = GCPVertexGeminiFunctionDeclaration {
-            name: &tool.name,
-            description: Some(&tool.description),
-            parameters: Some(tool.parameters.clone()),
-        };
+// impl<'a> From<&'a Tool> for GCPVertexGeminiSFTTool<'a> {
+//     fn from(tool: &'a Tool) -> Self {
+//         let function_declaration = GCPVertexGeminiFunctionDeclaration {
+//             name: &tool.name,
+//             description: Some(&tool.description),
+//             parameters: Some(tool.parameters.clone()),
+//         };
 
-        GCPVertexGeminiSFTTool {
-            tool: GCPVertexGeminiTool::FunctionDeclarations(vec![function_declaration]),
-        }
-    }
-}
+//         GCPVertexGeminiSFTTool {
+//             tool: GCPVertexGeminiTool::FunctionDeclarations(vec![function_declaration]),
+//         }
+//     }
+// }
 
-impl<'a> From<&'a ToolConfig> for GCPVertexGeminiSFTTool<'a> {
-    fn from(tool: &'a ToolConfig) -> Self {
-        let mut parameters = tool.parameters().clone();
-        if let Some(obj) = parameters.as_object_mut() {
-            obj.remove("additionalProperties");
-            obj.remove("$schema");
-        }
+// impl<'a> From<&'a ToolConfig> for GCPVertexGeminiSFTTool<'a> {
+//     fn from(tool: &'a ToolConfig) -> Self {
+//         let mut parameters = tool.parameters().clone();
+//         if let Some(obj) = parameters.as_object_mut() {
+//             obj.remove("additionalProperties");
+//             obj.remove("$schema");
+//         }
 
-        let function_declaration = GCPVertexGeminiFunctionDeclaration {
-            name: tool.name(),
-            description: Some(tool.description()),
-            parameters: Some(parameters),
-        };
+//         let function_declaration = GCPVertexGeminiFunctionDeclaration {
+//             name: tool.name(),
+//             description: Some(tool.description()),
+//             parameters: Some(parameters),
+//         };
 
-        GCPVertexGeminiSFTTool {
-            tool: GCPVertexGeminiTool::FunctionDeclarations(vec![function_declaration]),
-        }
-    }
-}
+//         GCPVertexGeminiSFTTool {
+//             tool: GCPVertexGeminiTool::FunctionDeclarations(vec![function_declaration]),
+//         }
+//     }
+// }
 
 // Auto is the default mode where a tool could be called but it isn't required.
 // Any is a mode where a tool is required and if allowed_function_names is Some it has to be from that list.
@@ -1969,12 +1952,11 @@ impl<'a> GCPVertexGeminiRequest<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct GCPVertexGeminiSystemRequestMessage<'a> {
-    pub parts: Cow<'a, str>,
+    pub parts: Vec<GCPVertexGeminiContentPart<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct GCPVertexGeminiUserOrModelRequestMessage<'a> {
-    #[serde(serialize_with = "serialize_text_content_vec")]
     pub parts: Vec<GCPVertexGeminiContentPart<'a>>,
 }
 
@@ -1992,9 +1974,13 @@ impl GCPVertexGeminiRequestMessage<'_> {
         let value_lower = value.to_lowercase();
 
         match self {
-            GCPVertexGeminiRequestMessage::System(msg) => {
-                msg.parts.to_string().to_lowercase().contains(&value_lower)
-            }
+            GCPVertexGeminiRequestMessage::System(msg) => msg.parts.iter().any(|part| {
+                if let GCPVertexGeminiContentPart::Text { text } = part {
+                    text.to_lowercase().contains(&value_lower)
+                } else {
+                    false
+                }
+            }),
             GCPVertexGeminiRequestMessage::User(msg)
             | GCPVertexGeminiRequestMessage::Model(msg) => {
                 msg.parts.iter().any(|part| match part {
@@ -2067,19 +2053,25 @@ pub(super) fn tensorzero_to_gcp_vertex_gemini_system_message<'a>(
                         || system.to_lowercase().contains("json")
                     {
                         GCPVertexGeminiRequestMessage::System(GCPVertexGeminiSystemRequestMessage {
-                            parts: Cow::Borrowed(system),
+                            parts: vec![GCPVertexGeminiContentPart::Text {
+                                text: Cow::Borrowed(system),
+                            }],
                         })
                     } else {
                         let formatted_instructions = format!("Respond using JSON.\n\n{system}");
                         GCPVertexGeminiRequestMessage::System(GCPVertexGeminiSystemRequestMessage {
-                            parts: Cow::Owned(formatted_instructions),
+                            parts: vec![GCPVertexGeminiContentPart::Text {
+                                text: Cow::Owned(formatted_instructions),
+                            }],
                         })
                     }
                 }
 
                 // If JSON mode is either off or strict, we don't need to do anything special
                 _ => GCPVertexGeminiRequestMessage::System(GCPVertexGeminiSystemRequestMessage {
-                    parts: Cow::Borrowed(system),
+                    parts: vec![GCPVertexGeminiContentPart::Text {
+                        text: Cow::Borrowed(system),
+                    }],
                 }),
             }
             .into()
@@ -2087,7 +2079,9 @@ pub(super) fn tensorzero_to_gcp_vertex_gemini_system_message<'a>(
         None => match json_mode {
             Some(ModelInferenceRequestJsonMode::On) => Some(GCPVertexGeminiRequestMessage::System(
                 GCPVertexGeminiSystemRequestMessage {
-                    parts: Cow::Owned("Respond using JSON.".to_string()),
+                    parts: vec![GCPVertexGeminiContentPart::Text {
+                        text: Cow::Owned("Respond using JSON.".to_string()),
+                    }],
                 },
             )),
             _ => None,
@@ -3857,7 +3851,9 @@ mod tests {
         ];
         let expected = Some(GCPVertexGeminiRequestMessage::System(
             GCPVertexGeminiSystemRequestMessage {
-                parts: Cow::Borrowed("System instructions"),
+                parts: vec![GCPVertexGeminiContentPart::Text {
+                    text: Cow::Borrowed("System instructions"),
+                }],
             },
         ));
         let result =
@@ -3882,7 +3878,9 @@ mod tests {
         let expected_content = "Respond using JSON.\n\nSystem instructions".to_string();
         let expected = Some(GCPVertexGeminiRequestMessage::System(
             GCPVertexGeminiSystemRequestMessage {
-                parts: Cow::Owned(expected_content),
+                parts: vec![GCPVertexGeminiContentPart::Text {
+                    text: Cow::Owned(expected_content),
+                }],
             },
         ));
         let result =
@@ -3906,7 +3904,9 @@ mod tests {
         ];
         let expected = Some(GCPVertexGeminiRequestMessage::System(
             GCPVertexGeminiSystemRequestMessage {
-                parts: Cow::Borrowed("System instructions"),
+                parts: vec![GCPVertexGeminiContentPart::Text {
+                    text: Cow::Borrowed("System instructions"),
+                }],
             },
         ));
         let result =
@@ -3930,7 +3930,9 @@ mod tests {
         ];
         let expected = Some(GCPVertexGeminiRequestMessage::System(
             GCPVertexGeminiSystemRequestMessage {
-                parts: Cow::Borrowed("System instructions"),
+                parts: vec![GCPVertexGeminiContentPart::Text {
+                    text: Cow::Borrowed("System instructions"),
+                }],
             },
         ));
         let result =
@@ -3949,7 +3951,9 @@ mod tests {
         )];
         let expected = Some(GCPVertexGeminiRequestMessage::System(
             GCPVertexGeminiSystemRequestMessage {
-                parts: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
+                parts: vec![GCPVertexGeminiContentPart::Text {
+                    text: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
+                }],
             },
         ));
         let result =
@@ -3973,7 +3977,9 @@ mod tests {
         ];
         let expected = Some(GCPVertexGeminiRequestMessage::System(
             GCPVertexGeminiSystemRequestMessage {
-                parts: Cow::Owned("Respond using JSON.".to_string()),
+                parts: vec![GCPVertexGeminiContentPart::Text {
+                    text: Cow::Owned("Respond using JSON.".to_string()),
+                }],
             },
         ));
         let result =
@@ -4006,7 +4012,9 @@ mod tests {
         let messages: Vec<GCPVertexGeminiRequestMessage> = vec![];
         let expected = Some(GCPVertexGeminiRequestMessage::System(
             GCPVertexGeminiSystemRequestMessage {
-                parts: Cow::Owned("Respond using JSON.".to_string()),
+                parts: vec![GCPVertexGeminiContentPart::Text {
+                    text: Cow::Owned("Respond using JSON.".to_string()),
+                }],
             },
         ));
         let result =

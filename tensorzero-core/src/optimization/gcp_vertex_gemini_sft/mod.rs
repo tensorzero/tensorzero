@@ -68,6 +68,8 @@ pub struct UninitializedGCPVertexGeminiSFTConfig {
     pub export_last_checkpoint_only: Option<bool>,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credentials: Option<CredentialLocation>,
+    #[cfg_attr(test, ts(type = "string | null"))]
+    pub credential_location: Option<CredentialLocation>,
     pub api_base: Option<Url>,
     pub seed: Option<u64>,
     pub service_account: Option<String>,
@@ -94,7 +96,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
                 PROVIDER_TYPE,
                 &DEFAULT_CREDENTIALS,
             )?,
-            credential_location: self.credentials,
+            credential_location: self.credential_location,
             seed: self.seed,
             service_account: self.service_account,
             kms_key_name: self.kms_key_name,
@@ -145,7 +147,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             })
             .transpose()?;
 
-        let train_filename = format!("train_{}.jsonl", uuid::Uuid::new_v4()); // or use job ID
+        let train_filename = format!("train_{}.jsonl", uuid::Uuid::now_v7()); // or use job ID
         let train_gs_url = match &self.bucket_path_prefix {
             Some(prefix) => format!("gs://{}/{}/{}", self.bucket_name, prefix, train_filename),
             None => format!("gs://{}/{}", self.bucket_name, train_filename),
@@ -155,7 +157,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
 
         // Upload validation data if provided
         let val_gs_url = if let Some(val_rows) = &val_rows {
-            let val_filename = format!("val_{}.jsonl", uuid::Uuid::new_v4());
+            let val_filename = format!("val_{}.jsonl", uuid::Uuid::now_v7());
             let val_url = match &self.bucket_path_prefix {
                 Some(prefix) => format!("gs://{}/{}/{}", self.bucket_name, prefix, val_filename),
                 None => format!("gs://{}/{}", self.bucket_name, val_filename),
@@ -171,7 +173,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         let supervised_tuning_spec = SupervisedTuningSpec {
             training_dataset_uri: train_gs_url,
             validation_dataset_uri: val_gs_url,
-            hyper_params: Some(SupervisedHyperparameters {
+            hyper_parameters: Some(SupervisedHyperparameters {
                 epoch_count: self.n_epochs,
                 adapter_size: self.adapter_size,
                 learning_rate_multiplier: self.learning_rate_multiplier,
