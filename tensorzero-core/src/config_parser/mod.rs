@@ -15,7 +15,9 @@ use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
-use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
+use crate::function::{
+    FunctionConfig, FunctionConfigChat, FunctionConfigJson, FunctionConfigPyClass,
+};
 use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -760,6 +762,36 @@ impl Config {
     }
 }
 
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Config {
+    #[getter]
+    fn get_functions(&self) -> FunctionsConfigPyClass {
+        FunctionsConfigPyClass {
+            inner: self.functions.clone(),
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(mapping, name = "FunctionsConfig")]
+struct FunctionsConfigPyClass {
+    inner: HashMap<String, Arc<FunctionConfig>>,
+}
+
+#[pymethods]
+impl FunctionsConfigPyClass {
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn __getitem__(&self, function_name: &str) -> Option<FunctionConfigPyClass> {
+        self.inner
+            .get(function_name)
+            .map(|f| FunctionConfigPyClass { inner: f.clone() })
+    }
+}
+
 /// A trait for loading configs with a base path
 pub trait LoadableConfig<T> {
     fn load<P: AsRef<Path>>(self, base_path: P) -> Result<T, Error>;
@@ -910,7 +942,7 @@ impl UninitializedFunctionConfig {
                 let variants = params
                     .variants
                     .into_iter()
-                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
+                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, Arc::new(v))))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
                 for (name, variant) in variants.iter() {
                     if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
@@ -957,7 +989,7 @@ impl UninitializedFunctionConfig {
                 let variants = params
                     .variants
                     .into_iter()
-                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
+                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, Arc::new(v))))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
 
                 for (name, variant) in variants.iter() {

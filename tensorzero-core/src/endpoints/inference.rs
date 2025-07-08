@@ -529,13 +529,13 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                 Arc::new(FunctionConfig::Chat(FunctionConfigChat {
                     variants: [(
                         model_name.clone(),
-                        VariantInfo {
+                        Arc::new(VariantInfo {
                             timeouts: Default::default(),
                             inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
                                 model: (&**model_name).into(),
                                 ..Default::default()
                             }),
-                        },
+                        }),
                     )]
                     .into_iter()
                     .collect(),

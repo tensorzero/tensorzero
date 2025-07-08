@@ -1,3 +1,5 @@
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -30,7 +32,14 @@ pub enum FunctionConfig {
     Json(FunctionConfigJson),
 }
 
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "FunctionConfig")]
+pub struct FunctionConfigPyClass {
+    pub inner: Arc<FunctionConfig>,
+}
+
 #[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub enum FunctionConfigType {
     Chat,
     Json,
@@ -56,7 +65,7 @@ impl FunctionConfig {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct FunctionConfigChat {
-    pub variants: HashMap<String, VariantInfo>, // variant name => variant config
+    pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub system_schema: Option<StaticJSONSchema>,
     pub user_schema: Option<StaticJSONSchema>,
     pub assistant_schema: Option<StaticJSONSchema>,
@@ -70,7 +79,7 @@ pub struct FunctionConfigChat {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct FunctionConfigJson {
-    pub variants: HashMap<String, VariantInfo>, // variant name => variant config
+    pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub system_schema: Option<StaticJSONSchema>,
     pub user_schema: Option<StaticJSONSchema>,
     pub assistant_schema: Option<StaticJSONSchema>,
@@ -80,7 +89,7 @@ pub struct FunctionConfigJson {
 }
 
 impl FunctionConfig {
-    pub fn variants(&self) -> &HashMap<String, VariantInfo> {
+    pub fn variants(&self) -> &HashMap<String, Arc<VariantInfo>> {
         match self {
             FunctionConfig::Chat(params) => &params.variants,
             FunctionConfig::Json(params) => &params.variants,
@@ -437,10 +446,10 @@ fn validate_single_message(
 /// Sample a variant from the function based on variant weights (uniform random selection)
 pub fn sample_variant<'a>(
     candidate_variant_names: &mut Vec<&'a str>,
-    variants: &'a HashMap<String, VariantInfo>,
+    variants: &'a HashMap<String, Arc<VariantInfo>>,
     function_name: &str,
     episode_id: &Uuid,
-) -> Result<(&'a str, &'a VariantInfo), Error> {
+) -> Result<(&'a str, &'a Arc<VariantInfo>), Error> {
     // Compute the total weight of variants present in variant_names
     let total_weight = candidate_variant_names
         .iter()
@@ -1380,20 +1389,20 @@ mod tests {
     #[test]
     fn test_sample_variant() {
         // Helper function to create a HashMap of variant names to their weights
-        fn create_variants(variant_weights: &[(&str, f64)]) -> HashMap<String, VariantInfo> {
+        fn create_variants(variant_weights: &[(&str, f64)]) -> HashMap<String, Arc<VariantInfo>> {
             variant_weights
                 .iter()
                 .map(|&(name, weight)| {
                     (
                         name.to_string(),
-                        VariantInfo {
+                        Arc::new(VariantInfo {
                             inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
                                 weight: Some(weight),
                                 model: "model-name".into(),
                                 ..Default::default()
                             }),
                             timeouts: Default::default(),
-                        },
+                        }),
                     )
                 })
                 .collect()
@@ -1402,7 +1411,7 @@ mod tests {
         // Helper function to test the distribution of variant weights by sampling them many times
         // and checking if the observed distribution is close to the expected distribution
         fn test_variant_distribution(
-            variants: &HashMap<String, VariantInfo>,
+            variants: &HashMap<String, Arc<VariantInfo>>,
             sample_size: usize,
             tolerance: f64,
         ) {
