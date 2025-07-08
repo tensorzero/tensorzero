@@ -21,9 +21,9 @@ NOTE: This is the new output component but it is not editable yet so we are roll
 it out across the UI incrementally.
 */
 
-type ChatInferenceOutputRenderingData = ContentBlockOutput[];
+export type ChatInferenceOutputRenderingData = ContentBlockOutput[];
 
-interface JsonInferenceOutputRenderingData extends JsonInferenceOutput {
+export interface JsonInferenceOutputRenderingData extends JsonInferenceOutput {
   schema?: Record<string, unknown>;
 }
 

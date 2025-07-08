@@ -1,33 +1,15 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { type ReactNode, useState, useRef, useEffect } from "react";
+import React, { type ReactNode, useState, useRef, useEffect } from "react";
 import { Button } from "~/components/ui/button";
 import { clsx } from "clsx";
+import { cva } from "class-variance-authority";
 
-// Main layout component
-interface SnippetLayoutProps {
-  children: ReactNode;
-}
-
-export function SnippetLayout({ children }: SnippetLayoutProps) {
+export function SnippetLayout({ children }: React.PropsWithChildren) {
   return (
-    <div className="bg-bg-primary border-border w-full rounded-lg border">
+    <div className="bg-bg-primary border-border flex w-full flex-col gap-1 rounded-lg border p-4">
       {children}
     </div>
   );
-}
-
-// Heading component
-interface SnippetHeadingProps {
-  heading: string;
-}
-
-export function SnippetHeading({ heading }: SnippetHeadingProps) {
-  return <h3 className="px-5 pt-5 pb-1 text-lg font-medium">{heading}</h3>;
-}
-
-// Divider component
-export function SnippetDivider() {
-  return <div className="border-border h-px w-full border-t" />;
 }
 
 // Content component
@@ -60,7 +42,7 @@ export function SnippetContent({
   }, [children, maxHeight]);
 
   return (
-    <div className="relative overflow-hidden">
+    <div className="relative">
       <div
         ref={contentRef}
         style={
@@ -69,7 +51,7 @@ export function SnippetContent({
             : {}
         }
         className={clsx(
-          "py-3",
+          "flex flex-col gap-2",
           !expanded &&
             needsExpansion &&
             maxHeight !== "Content" &&
@@ -105,11 +87,11 @@ export function SnippetMessage({
   // Input variant - contains role and children
   if (variant === "input") {
     return (
-      <div className="flex w-full flex-col gap-2 px-5 py-2">
+      <div className="flex w-full flex-col gap-1">
         <div className="text-sm font-medium text-purple-600 capitalize">
           {role}
         </div>
-        <div className="border-border flex w-full flex-col gap-4 border-l pl-4">
+        <div className="border-border flex w-full flex-col gap-4 border-l pl-2">
           {children}
         </div>
       </div>
@@ -124,7 +106,6 @@ export function SnippetMessage({
   );
 }
 
-// Tab components
 export interface SnippetTab {
   id: string;
   label: string;
@@ -139,6 +120,17 @@ interface SnippetTabsProps {
   onTabChange?: (tabId: string) => void;
 }
 
+const tabIndicator = cva("", {
+  variants: {
+    indicator: {
+      empty: "bg-gray-300",
+      content: "bg-green-500",
+      fail: "bg-red-500",
+      warning: "bg-yellow-500",
+    },
+  },
+});
+
 export function SnippetTabs({
   tabs,
   defaultTab,
@@ -147,60 +139,56 @@ export function SnippetTabs({
 }: SnippetTabsProps) {
   const defaultTabId = defaultTab || tabs[0]?.id;
   const [activeTab, setActiveTab] = useState(defaultTabId);
-  if (!tabs || tabs.length === 0) return null;
 
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
     onTabChange?.(tabId);
   };
 
-  // Function to get indicator color based on indicator type
-  const getIndicatorColor = (indicator?: string) => {
-    switch (indicator) {
-      case "empty":
-        return "bg-gray-300";
-      case "content":
-        return "bg-green-500";
-      case "fail":
-        return "bg-red-500";
-      case "warning":
-        return "bg-yellow-500";
-      default:
-        return "";
-    }
-  };
-
   return (
-    <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-      <TabsList className="border-border flex w-full justify-start rounded-none border-b p-3">
-        {tabs.map((tab) => (
-          <TabsTrigger
-            key={tab.id}
-            value={tab.id}
-            className={clsx("flex items-center", tab.indicator && "gap-2")}
-          >
-            {tab.indicator && tab.indicator !== "none" && (
-              <div
-                className={clsx(
-                  "h-2 w-2 rounded-full",
-                  getIndicatorColor(tab.indicator),
-                )}
-              />
-            )}
-            {tab.label}
-          </TabsTrigger>
-        ))}
-      </TabsList>
+    tabs &&
+    tabs.length > 0 && (
+      <Tabs
+        value={activeTab}
+        onValueChange={handleTabChange}
+        className="w-full"
+      >
+        <TabsList className="flex w-full justify-start rounded-none">
+          {tabs.map((tab) => (
+            <TabsTrigger
+              key={tab.id}
+              value={tab.id}
+              className={clsx(
+                "flex items-center text-xs",
+                tab.indicator && "gap-2",
+              )}
+            >
+              {tab.indicator && tab.indicator !== "none" && (
+                <div
+                  className={clsx(
+                    "h-2 w-2 rounded-full",
+                    tabIndicator({
+                      indicator: tab.indicator,
+                    }),
+                  )}
+                />
+              )}
 
-      {typeof children === "function" ? (
-        <TabsContent value={activeTab}>{children(activeTab)}</TabsContent>
-      ) : (
-        tabs.map((tab) => (
-          <TabsContent key={tab.id} value={tab.id}>
-            {tab.content}
-          </TabsContent>
-        ))
-      )}
-    </Tabs>
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        {typeof children === "function" ? (
+          <TabsContent value={activeTab}>{children(activeTab)}</TabsContent>
+        ) : (
+          tabs.map((tab) => (
+            <TabsContent key={tab.id} value={tab.id}>
+              {tab.content}
+            </TabsContent>
+          ))
+        )}
+      </Tabs>
+    )
   );
 }

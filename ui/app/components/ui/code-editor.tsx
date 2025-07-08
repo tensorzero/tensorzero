@@ -22,8 +22,41 @@ import {
   CheckCheckIcon,
   ClipboardIcon,
 } from "lucide-react";
+import type { JsonValue } from "tensorzero-node";
+import clsx from "clsx";
 
 export type Language = "json" | "markdown" | "jinja2" | "text";
+
+/** Try to format the given string/object if it's JSON. Passthrough gracefully if it's not JSON. */
+export function useFormattedJson(initialValue: string | JsonValue): string {
+  return useMemo(() => {
+    // If it's already a string
+    if (typeof initialValue === "string") {
+      try {
+        // Only attempt to parse/format if it looks like JSON
+        const trimmed = initialValue.trim();
+        if (
+          (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+          (trimmed.startsWith("[") && trimmed.endsWith("]"))
+        ) {
+          const parsed = JSON.parse(trimmed);
+          return JSON.stringify(parsed, null, 2);
+        }
+      } catch {
+        // Not valid JSON, return as-is
+      }
+      return initialValue;
+    }
+
+    // If it's an object/array/other JSON value, format it
+    try {
+      return JSON.stringify(initialValue, null, 2);
+    } catch {
+      // Fallback for circular references or other stringify errors
+      return String(initialValue);
+    }
+  }, [initialValue]);
+}
 
 export interface CodeEditorProps {
   value?: string;
@@ -125,6 +158,12 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   );
   const { copy, didCopy, isCopyAvailable } = useCopy();
 
+  // Don't show line numbers if everything is on a single line
+  const shouldShowLineNumbers = useMemo(
+    () => showLineNumbers && value.includes("\n"),
+    [showLineNumbers, value],
+  );
+
   // Custom theme to remove dotted border and add focus styles
   const extensions = useMemo(() => {
     const customTheme = EditorView.theme({
@@ -149,7 +188,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   }, [language, wordWrap, readOnly]);
 
   return (
-    <div className={cn("group relative", className)}>
+    <div className={cn("group relative rounded-sm", className)}>
       <div className="absolute top-1 right-1 z-10 flex gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
         {isCopyAvailable && (
           <Button
@@ -223,8 +262,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           placeholder={placeholder}
           basicSetup={{
             // Line numbers
-            lineNumbers: showLineNumbers,
-            foldGutter: showLineNumbers,
+            lineNumbers: shouldShowLineNumbers,
+            foldGutter: shouldShowLineNumbers,
 
             // Read-only mode
             autocompletion: !readOnly,
@@ -235,7 +274,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             highlightActiveLine: !readOnly,
             highlightActiveLineGutter: !readOnly,
           }}
-          className="min-h-8"
+          className="max-h-64 min-h-8 overflow-auto"
         />
       </div>
     </div>

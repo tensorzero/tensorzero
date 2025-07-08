@@ -1,26 +1,21 @@
 import * as React from "react";
 import { Link } from "react-router";
 import {
-  AlignLeft,
   Terminal,
   ArrowRight,
-  Image as ImageIcon,
+  ImageIcon,
   ImageOff,
   Download,
   ExternalLink,
   FileText,
   FileAudio,
+  AlignLeftIcon,
+  BlocksIcon,
 } from "lucide-react";
 import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
+import { CodeEditor, useFormattedJson } from "../ui/code-editor";
 
-// Empty message component
-interface EmptyMessageProps {
-  message?: string;
-}
-
-export function EmptyMessage({
-  message = "No content defined",
-}: EmptyMessageProps) {
+export function EmptyMessage({ message = "No content" }: { message?: string }) {
   return (
     <div className="text-fg-muted flex items-center justify-center py-12 text-sm">
       {message}
@@ -28,22 +23,23 @@ export function EmptyMessage({
   );
 }
 
-// Label component
 interface LabelProps {
   text?: string;
   icon?: React.ReactNode;
 }
 
-function Label({ text, icon }: LabelProps) {
-  if (!text) return null;
-
+export function Label({ text, icon }: LabelProps) {
   return (
-    <div className="flex flex-row items-center gap-1">
-      {icon}
-      <span className="text-fg-tertiary text-xs font-medium">{text}</span>
-    </div>
+    text && (
+      <div className="flex flex-row items-center gap-1">
+        {icon}
+        <span className="text-fg-tertiary text-xs font-medium">{text}</span>
+      </div>
+    )
   );
 }
+
+// TODO Remove `CodeMessage` - unused for input snippet rendering, but used elsewhere
 
 // Code content component
 interface CodeMessageProps {
@@ -96,10 +92,9 @@ export function CodeMessage({
   );
 }
 
-// Text content component
 interface TextMessageProps {
   label?: string;
-  content?: React.ReactNode;
+  content?: string;
   emptyMessage?: string;
 }
 
@@ -108,26 +103,67 @@ export function TextMessage({
   content,
   emptyMessage,
 }: TextMessageProps) {
-  if (!content) {
-    return <EmptyMessage message={emptyMessage} />;
-  }
+  const formattedContent = useFormattedJson(content || "");
 
-  return (
+  return !content ? (
+    <EmptyMessage message={emptyMessage} />
+  ) : (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label
         text={label}
-        icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
+        icon={<AlignLeftIcon className="text-fg-muted h-3 w-3" />}
       />
-      {React.isValidElement(content) ? (
-        content
-      ) : (
-        <span className="text-fg-primary w-full text-sm">{content}</span>
-      )}
+      <CodeEditor value={formattedContent} readOnly />
     </div>
   );
 }
 
-// Tool Call Message component
+export function ParameterizedMessage({ parameters }: { parameters?: unknown }) {
+  const formattedJson = useFormattedJson(parameters ?? {});
+
+  return (
+    <div className="flex max-w-240 min-w-80 flex-col gap-1">
+      <Label
+        text="Template parameters"
+        icon={<BlocksIcon className="text-fg-muted h-3 w-3" />}
+      />
+      <CodeEditor allowedLanguages={["json"]} value={formattedJson} readOnly />
+    </div>
+  );
+}
+
+function ToolDetails({
+  name,
+  id,
+  payload,
+  payloadLabel,
+}: {
+  name: string;
+  id: string;
+  payload: string;
+  payloadLabel: string;
+}) {
+  const formattedPayload = useFormattedJson(payload);
+
+  return (
+    <div className="border-border bg-bg-tertiary/50 grid grid-flow-row grid-cols-[min-content_1fr] grid-rows-[repeat(3,min-content)] place-content-center gap-x-4 gap-y-2 rounded-sm px-3 py-2">
+      <p className="text-fg-secondary text-xs font-medium">Name</p>
+      <p className="self-center truncate text-sm">{name}</p>
+
+      <p className="text-fg-secondary text-xs font-medium">ID</p>
+      <p className="self-center truncate font-mono text-sm">{id}</p>
+
+      <p className="text-fg-secondary text-xs font-medium">{payloadLabel}</p>
+      <CodeEditor
+        value={formattedPayload}
+        allowedLanguages={["json"]}
+        className="bg-white"
+        readOnly
+      />
+    </div>
+  );
+}
+
 interface ToolCallMessageProps {
   toolName: string;
   toolArguments: string;
@@ -145,29 +181,16 @@ export function ToolCallMessage({
         text="Tool Call"
         icon={<Terminal className="text-fg-muted h-3 w-3" />}
       />
-      <div className="border-border bg-bg-tertiary flex flex-col gap-1 rounded-md border px-3 py-2 text-sm">
-        <div className="flex flex-row items-start gap-1 whitespace-nowrap">
-          <span className="text-fg-secondary w-16 min-w-16">Name:</span>
-          <span className="overflow-hidden text-ellipsis">{toolName}</span>
-        </div>
-        <div className="flex flex-row items-start gap-1 whitespace-nowrap">
-          <span className="text-fg-secondary w-16 min-w-16">ID:</span>
-          <span className="overflow-hidden font-mono text-ellipsis">
-            {toolCallId}
-          </span>
-        </div>
-        <div className="flex flex-row items-start gap-1">
-          <span className="text-fg-secondary w-16 min-w-16">Args:</span>
-          <pre className="max-w-full font-mono break-words whitespace-pre-wrap">
-            {toolArguments}
-          </pre>
-        </div>
-      </div>
+      <ToolDetails
+        name={toolName}
+        id={toolCallId}
+        payload={toolArguments}
+        payloadLabel="Arguments"
+      />
     </div>
   );
 }
 
-// Tool Result Message component
 interface ToolResultMessageProps {
   toolName: string;
   toolResult: string;
@@ -185,31 +208,16 @@ export function ToolResultMessage({
         text="Tool Result"
         icon={<ArrowRight className="text-fg-muted h-3 w-3" />}
       />
-      <div className="border-border bg-bg-tertiary flex flex-col gap-1 rounded-md border px-3 py-2 text-sm">
-        <div className="flex flex-row items-start gap-1 whitespace-nowrap">
-          <span className="text-fg-secondary w-16 min-w-16">Name:</span>
-          <span className="overflow-hidden text-ellipsis">{toolName}</span>
-        </div>
-        <div className="flex flex-row items-start gap-1 whitespace-nowrap">
-          <span className="text-fg-secondary w-16 min-w-16">ID:</span>
-          <span className="overflow-hidden font-mono text-ellipsis">
-            {toolResultId}
-          </span>
-        </div>
-        <div className="flex flex-row items-start gap-1">
-          <span className="text-fg-secondary w-16 min-w-16">Result:</span>
-          <div className="w-full overflow-x-auto">
-            <pre className="max-w-full font-mono break-words whitespace-pre-wrap">
-              {toolResult}
-            </pre>
-          </div>
-        </div>
-      </div>
+      <ToolDetails
+        name={toolName}
+        id={toolResultId}
+        payload={toolResult}
+        payloadLabel="Result"
+      />
     </div>
   );
 }
 
-// Image Message component
 interface ImageMessageProps {
   url: string;
   downloadName?: string;
@@ -217,7 +225,7 @@ interface ImageMessageProps {
 
 export function ImageMessage({ url, downloadName }: ImageMessageProps) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <Label
         text="Image"
         icon={<ImageIcon className="text-fg-muted h-3 w-3" />}
@@ -244,7 +252,7 @@ interface FileErrorMessageProps {
 // Image Error Message component
 export function FileErrorMessage({ error }: FileErrorMessageProps) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <Label
         text="Image (Error)"
         icon={<ImageIcon className="text-fg-muted h-3 w-3" />}
@@ -307,23 +315,22 @@ function TruncatedFileName({
   );
 }
 
-const FileMetadata: React.FC<
-  React.PropsWithChildren<{
-    mimeType: string;
-    filePath: string;
-  }>
-> = ({ mimeType, filePath, children }) => (
-  <div className="flex items-center gap-2">
-    <div className="min-w-0 flex-1">
+function FileMetadata({
+  mimeType,
+  filePath,
+}: {
+  mimeType: string;
+  filePath: string;
+}) {
+  return (
+    <div className="flex flex-col">
       <div className="text-fg-primary text-sm font-medium" title={filePath}>
         <TruncatedFileName filename={filePath} />
       </div>
       <div className="text-fg-tertiary text-xs">{mimeType}</div>
     </div>
-
-    {children}
-  </div>
-);
+  );
+}
 
 interface FileMessageProps {
   /** Base64-encoded "data:" URL containing the file data */
@@ -340,7 +347,7 @@ export const AudioMessage: React.FC<FileMessageProps> = ({
   const url = useBase64UrlToBlobUrl(fileData, mimeType);
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <Label
         text="Audio"
         icon={<FileAudio className="text-fg-muted h-3 w-3" />}
@@ -356,42 +363,41 @@ export const AudioMessage: React.FC<FileMessageProps> = ({
   );
 };
 
-export const FileMessage: React.FC<FileMessageProps> = ({
+export function FileMessage({
   fileData,
   filePath,
   mimeType,
-}) => {
+}: FileMessageProps) {
   const url = useBase64UrlToBlobUrl(fileData, mimeType);
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <Label
         text="File"
         icon={<FileText className="text-fg-muted h-3 w-3" />}
       />
-      <div className="border-border flex w-80 flex-col gap-4 rounded-md border p-3">
-        <FileMetadata filePath={filePath} mimeType={mimeType}>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-4">
-              <Link
-                to={fileData}
-                download={`tensorzero_${filePath}`}
-                aria-label={`Download ${filePath}`}
-              >
-                <Download className="h-5 w-5" />
-              </Link>
-              <Link
-                to={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`Open ${filePath} in new tab`}
-              >
-                <ExternalLink className="h-5 w-5" />
-              </Link>
-            </div>
-          </div>
-        </FileMetadata>
+      <div className="border-border flex w-80 flex-row gap-3 rounded-md border p-3">
+        <div className="flex-1">
+          <FileMetadata filePath={filePath} mimeType={mimeType} />
+        </div>
+
+        <Link
+          to={fileData}
+          download={`tensorzero_${filePath}`}
+          aria-label={`Download ${filePath}`}
+        >
+          <Download className="h-5 w-5" />
+        </Link>
+
+        <Link
+          to={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Open ${filePath} in new tab`}
+        >
+          <ExternalLink className="h-5 w-5" />
+        </Link>
       </div>
     </div>
   );
-};
+}
