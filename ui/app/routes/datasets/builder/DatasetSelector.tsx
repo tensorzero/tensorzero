@@ -196,41 +196,41 @@ export function DatasetSelector({
                     ))}
                   </CommandGroup>
                 )}
-
-                {
-                  // If creation is allowed...
-                  allowCreation &&
-                    // ...and the user has typed something...
-                    inputValue.trim() &&
-                    // ...and the dataset doesn't exist in the list of recently updated datasets...
-                    !recentlyUpdatedDatasets.some(
-                      (dataset) =>
-                        dataset.name.toLowerCase() ===
-                        inputValue.trim().toLowerCase(),
-                    ) && (
-                      // ...then show the "New dataset" group
-                      <CommandGroup heading="New dataset">
-                        <CommandItem
-                          value={`create-${inputValue.trim()}`}
-                          onSelect={() => {
-                            onSelect(inputValue.trim(), true);
-                            setInputValue("");
-                            setOpen(false);
-                          }}
-                          className="flex items-center justify-between"
-                        >
-                          <div className="flex items-center truncate">
-                            <TablePlus className="mr-2 h-4 w-4 text-blue-600" />
-                            <span className="text-fg-primary truncate font-mono text-sm">
-                              {inputValue.trim()}
-                            </span>
-                          </div>
-                        </CommandItem>
-                      </CommandGroup>
-                    )
-                }
               </CommandList>
             )}
+
+            {
+              // If creation is allowed...
+              allowCreation &&
+                // ...and the user has typed something...
+                inputValue.trim() &&
+                // ...and the dataset doesn't exist in the list of recently updated datasets...
+                !recentlyUpdatedDatasets.some(
+                  (dataset) =>
+                    dataset.name.toLowerCase() ===
+                    inputValue.trim().toLowerCase(),
+                ) && (
+                  // ...then show the "New dataset" group
+                  <CommandGroup heading="New dataset">
+                    <CommandItem
+                      value={`create-${inputValue.trim()}`}
+                      onSelect={() => {
+                        onSelect(inputValue.trim(), true);
+                        setInputValue("");
+                        setOpen(false);
+                      }}
+                      className="flex items-center justify-between"
+                    >
+                      <div className="flex items-center truncate">
+                        <TablePlus className="mr-2 h-4 w-4 text-blue-600" />
+                        <span className="text-fg-primary truncate font-mono text-sm">
+                          {inputValue.trim()}
+                        </span>
+                      </div>
+                    </CommandItem>
+                  </CommandGroup>
+                )
+            }
           </Command>
         </PopoverContent>
       </Popover>
