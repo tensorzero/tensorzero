@@ -1,26 +1,30 @@
+use std::borrow::Cow;
 use std::{
     cmp::Ordering, collections::HashMap, env, fmt::Display, future::Future, path::PathBuf,
     sync::Arc, time::Duration,
 };
 
-use futures::future::join_all;
 use git::GitInfo;
 use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
+use tensorzero_core::config_parser::MetricConfig;
+use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
-pub use tensorzero_core::optimization::{OptimizerJobHandle, OptimizerStatus};
-use tensorzero_core::stored_inference::{render_stored_inference, reresolve_input_for_fine_tuning};
+use tensorzero_core::endpoints::stored_inference::render_samples;
+use tensorzero_core::evaluations::EvaluationConfig;
+use tensorzero_core::function::FunctionConfig;
+pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
+use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
     config_parser::Config,
     endpoints::{
         datasets::InsertDatapointParams,
         dynamic_evaluation_run::{
-            validate_variant_pins, DynamicEvaluationRunEpisodeParams,
-            DynamicEvaluationRunEpisodeResponse,
+            DynamicEvaluationRunEpisodeParams, DynamicEvaluationRunEpisodeResponse,
         },
         validate_tags,
     },
@@ -37,7 +41,7 @@ mod client_inference_params;
 mod client_input;
 mod git;
 pub use tensorzero_core::stored_inference::{
-    RenderedStoredInference, StoredChatInference, StoredInference, StoredJsonInference,
+    RenderedSample, StoredChatInference, StoredInference, StoredJsonInference,
 };
 pub mod input_handling;
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
@@ -363,14 +367,6 @@ impl Client {
                 .health()
                 .await
                 .map_err(|e| TensorZeroError::Other { source: e.into() }),
-        }
-    }
-
-    #[cfg(feature = "pyo3")]
-    pub fn get_config(&self) -> Option<Arc<Config<'_>>> {
-        match &self.mode {
-            ClientMode::EmbeddedGateway { gateway, .. } => Some(gateway.state.config.clone()),
-            _ => None,
         }
     }
 
@@ -757,6 +753,33 @@ impl Client {
         }
     }
 
+    /// Stales all datapoints in a dataset that have not been staled yet.
+    /// This is a soft deletion, so evaluation runs will still refer to it.
+    /// Returns the number of datapoints that were staled as {num_staled_datapoints: u64}.
+    pub async fn stale_dataset(
+        &self,
+        dataset_name: String,
+    ) -> Result<StaleDatasetResponse, TensorZeroError> {
+        let ClientMode::EmbeddedGateway { gateway, timeout } = &self.mode else {
+            return Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            });
+        };
+        with_embedded_timeout(*timeout, async {
+            tensorzero_core::endpoints::datasets::stale_dataset(
+                &gateway.state.clickhouse_connection_info,
+                &dataset_name,
+            )
+            .await
+            .map_err(err_to_http)
+        })
+        .await
+    }
+
     /// Query the Clickhouse database for inferences.
     ///
     /// This function is only available in EmbeddedGateway mode.
@@ -801,11 +824,11 @@ impl Client {
     /// IMPORTANT: For now, this function drops datapoints which are bad, e.g. ones where templating fails, the function
     ///            has no variant specified, or where the process of downloading resources fails.
     ///            In future we will make this behavior configurable by the caller.
-    pub async fn experimental_render_inferences(
+    pub async fn experimental_render_samples<T: StoredSample>(
         &self,
-        mut stored_inferences: Vec<StoredInference>,
+        stored_samples: Vec<T>,
         variants: HashMap<String, String>, // Map from function name to variant name
-    ) -> Result<Vec<RenderedStoredInference>, TensorZeroError> {
+    ) -> Result<Vec<RenderedSample>, TensorZeroError> {
         let ClientMode::EmbeddedGateway { gateway, .. } = &self.mode else {
             return Err(TensorZeroError::Other {
                 source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
@@ -815,56 +838,16 @@ impl Client {
                 .into(),
             });
         };
-        validate_variant_pins(&variants, &gateway.state.config)
-            .map_err(|e| TensorZeroError::Other { source: e.into() })?;
-        let resolution_futures = stored_inferences.iter_mut().map(|inference_example| {
-            // Create a future for each call to reresolve_input_for_fine_tuning.
-            // This function modifies inference_example.input_mut() in place.
-            // `self` (the client) is passed by immutable reference.
-            reresolve_input_for_fine_tuning(inference_example.input_mut(), &gateway.state.config)
-        });
-
-        // Await all futures concurrently.
-        // For now, we drop the errors here.
-        // They are logged on construction in the task.
-        // TODO: make it configurable whether to drop or error on failures.
-        let results = join_all(resolution_futures).await;
-
-        // Ensure that the number of results matches the number of inference examples.
-        // This should be guaranteed to be true based on the code above, but we assert it anyway.
-        assert_eq!(
-            stored_inferences.len(),
-            results.len(),
-            "Mismatch between number of inference examples and resolution results. This indicates a bug."
-        );
-
-        let final_rendered_examples: Vec<RenderedStoredInference> = stored_inferences
-            .into_iter() // Consumes Vec<StoredInference>; elements are already mutated
-            .zip(results.into_iter()) // Creates an iterator of (StoredInference, Result<(), Error>)
-            .filter_map(|(example, resolution_result)| {
-                // Filter out examples where reresolve_input_for_fine_tuning failed.
-                // If resolution_result is Ok, map Some(()) to Some(example).
-                // If resolution_result is Err, .ok() yields None, so filter_map drops it.
-                resolution_result.ok().map(|_| example)
-            })
-            .filter_map(|resolved_example| {
-                // resolved_example is a StoredInference that was successfully processed by reresolve.
-                // Now, attempt to render it.
-                // render_stored_inference returns Result<RenderedStoredInference, Error>.
-                // .ok() converts this to Option<RenderedStoredInference>.
-                // filter_map will keep Some(RenderedStoredInference) and discard None (if rendering failed).
-                render_stored_inference(resolved_example, &gateway.state.config, &variants).ok()
-            })
-            .collect();
-
-        Ok(final_rendered_examples)
+        render_samples(gateway.state.config.clone(), stored_samples, variants)
+            .await
+            .map_err(err_to_http)
     }
 
     /// Launch an optimization job.
     pub async fn experimental_launch_optimization(
         &self,
         params: tensorzero_core::endpoints::optimization::LaunchOptimizationParams,
-    ) -> Result<OptimizerJobHandle, TensorZeroError> {
+    ) -> Result<OptimizationJobHandle, TensorZeroError> {
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 // TODO: do we want this?
@@ -890,7 +873,7 @@ impl Client {
     pub async fn experimental_launch_optimization_workflow(
         &self,
         params: LaunchOptimizationWorkflowParams,
-    ) -> Result<OptimizerJobHandle, TensorZeroError> {
+    ) -> Result<OptimizationJobHandle, TensorZeroError> {
         let ClientMode::EmbeddedGateway { gateway, timeout } = &self.mode else {
             return Err(TensorZeroError::Other {
                 source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
@@ -916,8 +899,8 @@ impl Client {
     /// Poll an optimization job for status.
     pub async fn experimental_poll_optimization(
         &self,
-        job_handle: OptimizerJobHandle,
-    ) -> Result<OptimizerStatus, TensorZeroError> {
+        job_handle: OptimizationJobHandle,
+    ) -> Result<OptimizationJobInfo, TensorZeroError> {
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
@@ -930,6 +913,149 @@ impl Client {
                 })
                 .await?)
             }
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    /// List all functions in the config.
+    pub fn list_functions(&self) -> Result<Vec<&str>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => Ok(gateway
+                .state
+                .config
+                .functions
+                .keys()
+                .map(|s| s.as_str())
+                .collect()),
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    /// Get a function config by name.
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// Returns an Err if the function is not found.
+    pub fn get_function_config<'a>(
+        &'a self,
+        function_name: &str,
+    ) -> Result<Cow<'a, Arc<FunctionConfig>>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => gateway
+                .state
+                .config
+                .get_function(function_name)
+                .map_err(|e| TensorZeroError::Other { source: e.into() }),
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    /// List all metrics in the config.
+    /// Note: not sure whether this should return "comment" or "demonstration".
+    pub fn list_metrics(&self) -> Result<Vec<&str>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => Ok(gateway
+                .state
+                .config
+                .metrics
+                .keys()
+                .map(|s| s.as_str())
+                .collect()),
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    /// Get a metric config by name.
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// Returns an Err if the metric is not found.
+    pub fn get_metric_config<'a>(
+        &'a self,
+        metric_name: &str,
+    ) -> Result<&'a MetricConfig, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => gateway
+                .state
+                .config
+                .get_metric_or_err(metric_name)
+                .map_err(|e| TensorZeroError::Other { source: e.into() }),
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    pub fn list_evaluations(&self) -> Result<Vec<&str>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => Ok(gateway
+                .state
+                .config
+                .evaluations
+                .keys()
+                .map(|s| s.as_str())
+                .collect()),
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    pub fn get_evaluation_config(
+        &self,
+        evaluation_name: &str,
+    ) -> Result<Arc<EvaluationConfig>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => gateway
+                .state
+                .config
+                .get_evaluation(evaluation_name)
+                .map_err(|e| TensorZeroError::Other { source: e.into() }),
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    pub fn get_config(&self) -> Result<Arc<Config>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => Ok(gateway.state.config.clone()),
             ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
                 source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
                     mode: "Http".to_string(),

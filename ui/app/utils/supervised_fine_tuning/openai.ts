@@ -13,7 +13,7 @@ import {
 } from "../clickhouse/common";
 import type { ParsedInferenceExample } from "../clickhouse/curation";
 import { getCuratedInferences } from "../clickhouse/curation.server";
-import { get_template_env, type ChatCompletionConfig } from "../config/variant";
+import { get_template_env } from "../config/variant";
 import { getConfig } from "../config/index.server";
 import type { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
 import { splitValidationData, type SFTJobStatus } from "./common";
@@ -23,6 +23,8 @@ import { validateMessage, analyzeDataset } from "./validation";
 import { getEncodingForModel, getModelTokenLimit } from "./openAITokenCounter";
 import type { OpenAIMessage, OpenAIRole } from "./types";
 import type { Tiktoken } from "tiktoken";
+import { logger } from "~/utils/logger";
+import { getFeedbackConfig } from "../config/feedback";
 
 export const client = process.env.OPENAI_API_KEY
   ? new OpenAI({
@@ -30,7 +32,7 @@ export const client = process.env.OPENAI_API_KEY
       baseURL: process.env.OPENAI_BASE_URL || undefined,
     })
   : (() => {
-      console.warn("OPENAI_API_KEY environment variable is not set");
+      logger.warn("OPENAI_API_KEY environment variable is not set");
       return undefined;
     })();
 
@@ -74,26 +76,38 @@ export class OpenAISFTJob extends SFTJob {
 
   static async from_form_data(data: SFTFormValues): Promise<OpenAISFTJob> {
     const config = await getConfig();
-    const currentVariant = config.functions[data.function].variants[
-      data.variant
-    ] as ChatCompletionConfig;
-    if (currentVariant.type != "chat_completion") {
+    const functionConfig = config.functions[data.function];
+    if (!functionConfig) {
+      throw new Error(`Function ${data.function} not found in config`);
+    }
+    const currentVariant = functionConfig.variants[data.variant];
+    if (!currentVariant) {
+      throw new Error("Variant not found");
+    }
+    if (currentVariant.inner.type != "chat_completion") {
       throw new Error(
         "Supervised fine-tuning is only supported for chat completion variants",
       );
     }
+    let metricConfig = null;
+    if (data.metric) {
+      metricConfig = getFeedbackConfig(data.metric, config);
+      if (!metricConfig) {
+        throw new Error(`Metric ${data.metric} not found in config`);
+      }
+    }
     const curatedInferences = await getCuratedInferences(
       data.function,
-      config.functions[data.function],
+      functionConfig,
       data.metric,
-      data.metric ? config.metrics[data.metric] : null,
+      metricConfig,
       data.threshold,
       data.maxSamples,
     );
     if (!curatedInferences || curatedInferences.length === 0) {
       throw new Error("No curated inferences found");
     }
-    const templateEnv = await get_template_env(currentVariant);
+    const templateEnv = await get_template_env(currentVariant.inner);
 
     let job;
     try {
@@ -491,7 +505,7 @@ async function upload_examples_to_openai(samples: OpenAIMessage[][]) {
       try {
         await fs.unlink(tempFile);
       } catch (err) {
-        console.error(`Error deleting temp file ${tempFile}: ${err}`);
+        logger.error(`Error deleting temp file ${tempFile}: ${err}`);
       }
     }
   }
@@ -520,7 +534,7 @@ async function create_openai_fine_tuning_job(
     const job = await client.fineTuning.jobs.create(params);
     return job;
   } catch (error) {
-    console.error("Error creating fine-tuning job:", error);
+    logger.error("Error creating fine-tuning job:", error);
     throw error;
   }
 }

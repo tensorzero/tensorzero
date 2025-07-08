@@ -59,7 +59,9 @@ use crate::providers::{
     xai::XAIProvider,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
@@ -140,21 +142,15 @@ impl StreamResponse {
                         // request:
                         // The new result was 'created' now
                         created: current_timestamp(),
-                        // Only include usage in the last chunk, None for all others
-                        usage: if index == chunks_len - 1 {
-                            Some(Usage {
-                                input_tokens: cache_lookup.input_tokens,
-                                output_tokens: cache_lookup.output_tokens,
-                            })
-                        } else {
-                            None
-                        },
+                        // Use the real usage (so that the `ModelInference` row we write is accurate)
+                        // The usage returned to over HTTP is adjusted in `InferenceResponseChunk::new`
+                        usage: c.usage,
                         // We didn't make any network calls to the model provider, so the latency is 0
                         latency: Duration::from_secs(0),
                         // For all chunks but the last one, the finish reason is None
                         // For the last chunk, the finish reason is the same as the cache lookup
                         finish_reason: if index == chunks_len - 1 {
-                            cache_lookup.finish_reason.clone()
+                            cache_lookup.finish_reason
                         } else {
                             None
                         },
@@ -638,7 +634,9 @@ pub struct UninitializedModelProvider {
     pub discard_unknown_chunks: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ModelProvider {
     pub name: Arc<str>,
     pub config: ProviderConfig,
@@ -736,26 +734,39 @@ pub struct ModelProviderRequestInfo {
     pub extra_body: Option<ExtraBodyConfig>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
+    #[serde(rename = "aws_bedrock")]
     AWSBedrock(AWSBedrockProvider),
+    #[serde(rename = "aws_sagemaker")]
     AWSSagemaker(AWSSagemakerProvider),
     Azure(AzureProvider),
     DeepSeek(DeepSeekProvider),
     Fireworks(FireworksProvider),
+    #[serde(rename = "gcp_vertex_anthropic")]
     GCPVertexAnthropic(GCPVertexAnthropicProvider),
+    #[serde(rename = "gcp_vertex_gemini")]
     GCPVertexGemini(GCPVertexGeminiProvider),
+    #[serde(rename = "google_ai_studio_gemini")]
     GoogleAIStudioGemini(GoogleAIStudioGeminiProvider),
     Groq(GroqProvider),
     Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
     OpenRouter(OpenRouterProvider),
+    #[serde(rename = "sglang")]
     SGLang(SGLangProvider),
+    #[serde(rename = "tgi")]
     TGI(TGIProvider),
     Together(TogetherProvider),
+    #[serde(rename = "vllm")]
     VLLM(VLLMProvider),
+    #[serde(rename = "xai")]
     XAI(XAIProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
@@ -1185,6 +1196,7 @@ impl ModelProvider {
         gen_ai.operation.name = "chat",
         gen_ai.system = self.genai_system_name(),
         gen_ai.request.model = self.genai_model_name(),
+        time_to_first_token,
     stream = true))]
     async fn infer_stream(
         &self,
@@ -1862,7 +1874,7 @@ mod tests {
         model_table::RESERVED_MODEL_PREFIXES,
         providers::dummy::{
             DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
-            DUMMY_INFER_USAGE, DUMMY_STREAMING_RESPONSE,
+            DUMMY_STREAMING_RESPONSE,
         },
     };
     use secrecy::SecretString;
@@ -1947,7 +1959,13 @@ mod tests {
         let raw = response.raw_response;
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
-        assert_eq!(usage, DUMMY_INFER_USAGE);
+        assert_eq!(
+            usage,
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         assert_eq!(&*response.model_provider_name, "good_provider");
 
         // Try inferring the bad model
@@ -2084,7 +2102,13 @@ mod tests {
         let raw = response.raw_response;
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
-        assert_eq!(usage, DUMMY_INFER_USAGE);
+        assert_eq!(
+            usage,
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         assert_eq!(&*response.model_provider_name, "good_provider");
     }
 

@@ -1,8 +1,13 @@
 import { createRequire } from "module";
 import {
-  OptimizerJobHandle,
-  OptimizerStatus,
+  OptimizationJobHandle,
+  OptimizationJobInfo,
   LaunchOptimizationWorkflowParams,
+  FunctionConfig,
+  MetricConfig,
+  EvaluationConfig,
+  Config,
+  StaleDatasetResponse,
 } from "./bindings";
 import type { TensorZeroClient as NativeTensorZeroClientType } from "../index";
 
@@ -42,7 +47,7 @@ export class TensorZeroClient {
 
   async experimentalLaunchOptimizationWorkflow(
     params: LaunchOptimizationWorkflowParams,
-  ): Promise<OptimizerJobHandle> {
+  ): Promise<OptimizationJobHandle> {
     const paramsString = JSON.stringify(params, (_key, value) =>
       typeof value === "bigint" ? value.toString() : value,
     );
@@ -50,16 +55,56 @@ export class TensorZeroClient {
       await this.nativeClient.experimentalLaunchOptimizationWorkflow(
         paramsString,
       );
-    return JSON.parse(jobHandleString) as OptimizerJobHandle;
+    return JSON.parse(jobHandleString) as OptimizationJobHandle;
   }
 
   async experimentalPollOptimization(
-    jobHandle: OptimizerJobHandle,
-  ): Promise<OptimizerStatus> {
+    jobHandle: OptimizationJobHandle,
+  ): Promise<OptimizationJobInfo> {
     const jobHandleString = JSON.stringify(jobHandle);
     const statusString =
       await this.nativeClient.experimentalPollOptimization(jobHandleString);
-    return JSON.parse(statusString) as OptimizerStatus;
+    return JSON.parse(statusString) as OptimizationJobInfo;
+  }
+
+  listFunctions(): string[] {
+    return this.nativeClient.listFunctions();
+  }
+
+  getFunctionConfig(functionName: string): FunctionConfig {
+    const functionConfigString =
+      this.nativeClient.getFunctionConfig(functionName);
+    return JSON.parse(functionConfigString) as FunctionConfig;
+  }
+
+  listMetrics(): string[] {
+    return this.nativeClient.listMetrics();
+  }
+
+  getMetricConfig(metricName: string): MetricConfig {
+    const metricConfigString = this.nativeClient.getMetricConfig(metricName);
+    return JSON.parse(metricConfigString) as MetricConfig;
+  }
+
+  listEvaluations(): string[] {
+    return this.nativeClient.listEvaluations();
+  }
+
+  getEvaluationConfig(evaluationName: string): EvaluationConfig {
+    const evaluationConfigString =
+      this.nativeClient.getEvaluationConfig(evaluationName);
+    return JSON.parse(evaluationConfigString) as EvaluationConfig;
+  }
+
+  getConfig(): Config {
+    const configString = this.nativeClient.getConfig();
+    return JSON.parse(configString) as Config;
+  }
+
+  async staleDataset(datasetName: string): Promise<StaleDatasetResponse> {
+    const staleDatasetString =
+      await this.nativeClient.staleDataset(datasetName);
+    return JSON.parse(staleDatasetString) as StaleDatasetResponse;
   }
 }
 

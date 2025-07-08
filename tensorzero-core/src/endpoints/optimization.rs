@@ -9,13 +9,14 @@ use crate::{
         ClickHouseConnectionInfo, ClickhouseFormat,
     },
     config_parser::Config,
-    endpoints::{inference::InferenceCredentials, stored_inference::render_inferences},
+    endpoints::{inference::InferenceCredentials, stored_inference::render_samples},
     error::{Error, ErrorDetails},
     optimization::{
-        JobHandle, Optimizer, OptimizerJobHandle, OptimizerStatus, UninitializedOptimizerInfo,
+        JobHandle, OptimizationJobHandle, OptimizationJobInfo, Optimizer,
+        UninitializedOptimizerInfo,
     },
     serde_util::deserialize_option_u64,
-    stored_inference::RenderedStoredInference,
+    stored_inference::RenderedSample,
 };
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -47,7 +48,7 @@ pub async fn launch_optimization_workflow(
     config: Arc<Config<'static>>,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     params: LaunchOptimizationWorkflowParams,
-) -> Result<OptimizerJobHandle, Error> {
+) -> Result<OptimizationJobHandle, Error> {
     let LaunchOptimizationWorkflowParams {
         function_name,
         template_variant_name,
@@ -77,7 +78,13 @@ pub async fn launch_optimization_workflow(
         .await?;
     let variants = HashMap::from([(function_name.clone(), template_variant_name.clone())]);
     // Template the inferences and fetch any network resources needed
-    let rendered_inferences = render_inferences(config, stored_inferences, variants).await?;
+    let rendered_inferences = render_samples(config, stored_inferences, variants).await?;
+
+    // Drop any examples with output that is None
+    let rendered_inferences = rendered_inferences
+        .into_iter()
+        .filter(|example| example.output.is_some())
+        .collect::<Vec<_>>();
 
     // Split the inferences into train and val sets
     let (train_examples, val_examples) = split_examples(rendered_inferences, val_fraction)?;
@@ -98,9 +105,9 @@ pub async fn launch_optimization_workflow(
 #[derive(Debug, Deserialize)]
 #[cfg_attr(test, ts(export))]
 pub struct LaunchOptimizationParams {
-    pub train_examples: Vec<RenderedStoredInference>,
-    pub val_examples: Option<Vec<RenderedStoredInference>>,
-    pub optimizer_config: UninitializedOptimizerInfo,
+    pub train_samples: Vec<RenderedSample>,
+    pub val_samples: Option<Vec<RenderedSample>>,
+    pub optimization_config: UninitializedOptimizerInfo,
     // TODO: add a way to do {"type": "tensorzero", "name": "foo"} to grab an optimizer configured in
     // tensorzero.toml
 }
@@ -112,11 +119,11 @@ pub async fn launch_optimization(
     http_client: &reqwest::Client,
     params: LaunchOptimizationParams,
     // For the TODO above: will need to pass config in here
-) -> Result<OptimizerJobHandle, Error> {
+) -> Result<OptimizationJobHandle, Error> {
     let LaunchOptimizationParams {
-        train_examples,
-        val_examples,
-        optimizer_config,
+        train_samples: train_examples,
+        val_samples: val_examples,
+        optimization_config: optimizer_config,
     } = params;
     let optimizer = optimizer_config.load()?;
     optimizer
@@ -133,8 +140,8 @@ pub async fn launch_optimization(
 /// This should return the status of the job.
 pub async fn poll_optimization(
     http_client: &reqwest::Client,
-    job_handle: &OptimizerJobHandle,
-) -> Result<OptimizerStatus, Error> {
+    job_handle: &OptimizationJobHandle,
+) -> Result<OptimizationJobInfo, Error> {
     job_handle
         .poll(http_client, &InferenceCredentials::default())
         .await

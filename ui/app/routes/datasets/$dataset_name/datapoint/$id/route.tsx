@@ -41,6 +41,7 @@ import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
 } from "~/routes/api/tensorzero/inference.utils";
+import { logger } from "~/utils/logger";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -75,7 +76,14 @@ export async function action({ request }: ActionFunctionArgs) {
     ParsedDatasetRowSchema.parse(cleanedData);
   const config = await getConfig();
   const functionConfig = config.functions[parsedFormData.function_name];
-  const functionType = functionConfig?.type;
+  if (!functionConfig) {
+    return new Response(
+      `Failed to find function config for function ${parsedFormData.function_name}`,
+      { status: 400 },
+    );
+  }
+  const functionType = functionConfig.type;
+
   const action = formData.get("action");
   if (action === "delete") {
     await staleDatapoint(
@@ -143,7 +151,7 @@ export async function action({ request }: ActionFunctionArgs) {
         `/datasets/${parsedFormData.dataset_name}/datapoint/${id}`,
       );
     } catch (error) {
-      console.error("Error updating datapoint:", error);
+      logger.error("Error updating datapoint:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
@@ -419,7 +427,7 @@ function getUserFacingError(error: unknown): {
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   useEffect(() => {
-    console.error(error);
+    logger.error(error);
   }, [error]);
   const { heading, message } = getUserFacingError(error);
   const { dataset_name: datasetName } = useParams<{

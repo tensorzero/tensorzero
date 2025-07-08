@@ -26,6 +26,7 @@ import {
 } from "./common";
 import { getConfig } from "../config/index.server";
 import { resolveInput } from "../resolve.server";
+import { logger } from "~/utils/logger";
 
 /**
  * Constructs a SELECT query for either the Chat or JSON dataset table.
@@ -543,7 +544,7 @@ export async function getDatapoint(
 async function parseDatapointRow(row: DatapointRow): Promise<ParsedDatasetRow> {
   const parsedInput = inputSchema.parse(JSON.parse(row.input));
   const config = await getConfig();
-  const functionConfig = config.functions[row.function_name];
+  const functionConfig = config.functions[row.function_name] || null;
   const resolvedInput = await resolveInput(parsedInput, functionConfig);
   if ("tool_params" in row) {
     // Chat inference row
@@ -634,7 +635,7 @@ export async function staleDatapoint(
       },
     });
   } catch (error) {
-    console.error(`Error staling datapoint ${datapoint_id}:`, error);
+    logger.error(`Error staling datapoint ${datapoint_id}:`, error);
     throw error;
   }
 }

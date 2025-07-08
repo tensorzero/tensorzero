@@ -42,8 +42,8 @@ async def test_async_basic_inference_old_model_format_and_headers():
     )
     usage = result.usage
     assert usage.prompt_tokens == 10
-    assert usage.completion_tokens == 10
-    assert usage.total_tokens == 20
+    assert usage.completion_tokens == 1
+    assert usage.total_tokens == 11
     assert result.choices[0].finish_reason == "stop"
 
 

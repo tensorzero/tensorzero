@@ -45,7 +45,9 @@ pub mod mixture_of_n;
 
 /// Holds a particular variant implementation, plus additional top-level configuration
 /// that is applicable to any variant type.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct VariantInfo {
     pub inner: VariantConfig,
     pub timeouts: TimeoutsConfig,
@@ -147,8 +149,9 @@ pub struct ModelUsedInfo {
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
-    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub cached: bool,
+    // These responses will get added into the final inference result (after `collect_chunks` finishes)
+    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
 }
 
 pub trait Variant {
@@ -636,14 +639,12 @@ async fn infer_model_request(
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, args.model_name);
     let raw_content = model_inference_result.output.clone();
-    let usage = model_inference_result.actual_usage();
     let model_inference_results = vec![model_inference_result];
 
     args.function
         .prepare_response(
             args.inference_config.ids.inference_id,
             raw_content,
-            usage,
             model_inference_results,
             args.inference_config,
             args.inference_params,
@@ -749,13 +750,13 @@ mod tests {
     use crate::error::ErrorDetails;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::{
-        ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role,
+        ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role, Usage,
     };
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
     use crate::providers::dummy::{
-        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_USAGE, DUMMY_JSON_RESPONSE_RAW,
+        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW,
         DUMMY_STREAMING_RESPONSE,
     };
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -1104,12 +1105,18 @@ mod tests {
         let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
+        assert_eq!(
+            inference_result.usage_considering_cached(),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 // The DummyProvider returns DUMMY_INFER_RESPONSE_CONTENT by default
                 let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
                 assert_eq!(chat_result.content, expected_content);
-                assert_eq!(chat_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(chat_result.model_inference_results.len(), 1);
                 assert_eq!(
                     &*chat_result.model_inference_results[0].model_name,
@@ -1213,6 +1220,13 @@ mod tests {
         let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
+        assert_eq!(
+            inference_result.usage_considering_cached(),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         match inference_result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(
@@ -1220,7 +1234,6 @@ mod tests {
                     Some(DUMMY_JSON_RESPONSE_RAW.to_string())
                 );
                 assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
-                assert_eq!(json_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
                     &*json_result.model_inference_results[0].model_name,
@@ -1410,12 +1423,18 @@ mod tests {
         let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
+        assert_eq!(
+            inference_result.usage_considering_cached(),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 // The DummyProvider returns DUMMY_INFER_RESPONSE_CONTENT by default
                 let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
                 assert_eq!(chat_result.content, expected_content);
-                assert_eq!(chat_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(chat_result.model_inference_results.len(), 1);
                 assert_eq!(
                     &*chat_result.model_inference_results[0].model_name,

@@ -1,4 +1,4 @@
-import type { MetricConfig } from "~/utils/config/metric";
+import type { FeedbackConfig } from "~/utils/config/feedback";
 import { useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 
@@ -12,12 +12,12 @@ import {
   CommandList,
 } from "../ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import MetricBadges from "./MetricBadges";
+import FeedbackBadges from "~/components/feedback/FeedbackBadges";
 import clsx from "clsx";
 
 interface MetricSelectorProps {
   // The metrics are a record of metric name to metric config.
-  metrics: Record<string, MetricConfig>;
+  metrics: { [x: string]: FeedbackConfig | undefined };
   selectedMetric: string | undefined; // Allow undefined for placeholder
   onMetricChange: (metric: string) => void;
   showLevelBadges?: boolean;
@@ -99,10 +99,12 @@ export default function MetricSelector({
                       />
                       <span>{metricName}</span>
                     </div>
-                    <MetricBadges
-                      metric={metricConfig}
-                      showLevel={showLevelBadges}
-                    />
+                    {metricConfig && (
+                      <FeedbackBadges
+                        metric={metricConfig}
+                        showLevel={showLevelBadges}
+                      />
+                    )}
                   </CommandItem>
                 ))}
               </CommandGroup>

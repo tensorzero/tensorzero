@@ -202,10 +202,22 @@ impl ClickHouseConnectionInfo {
         &self,
         query: String,
         parameters: &HashMap<&str, &str>,
-    ) -> Result<String, Error> {
+    ) -> Result<ClickHouseResponse, Error> {
         match self {
-            Self::Disabled => Ok("".to_string()),
-            Self::Mock { .. } => Ok("".to_string()),
+            Self::Disabled => Ok(ClickHouseResponse {
+                response: "".to_string(),
+                metadata: ClickHouseResponseMetadata {
+                    read_rows: 0,
+                    written_rows: 0,
+                },
+            }),
+            Self::Mock { .. } => Ok(ClickHouseResponse {
+                response: "".to_string(),
+                metadata: ClickHouseResponseMetadata {
+                    read_rows: 0,
+                    written_rows: 0,
+                },
+            }),
             Self::Production {
                 database_url,
                 client,
@@ -225,7 +237,7 @@ impl ClickHouseConnectionInfo {
                 database_url
                     .query_pairs_mut()
                     .append_pair("alter_sync", "2");
-                let response = client
+                let res = client
                     .post(database_url)
                     .body(query)
                     .send()
@@ -235,16 +247,44 @@ impl ClickHouseConnectionInfo {
                             message: DisplayOrDebugGateway::new(e).to_string(),
                         })
                     })?;
-                let status = response.status();
+                let status = res.status();
 
-                let response_body = response.text().await.map_err(|e| {
+                // Get the ClickHouse summary info from the headers
+                let metadata = if let Some(summary) = res.headers().get("x-clickhouse-summary") {
+                    // NOTE: X-Clickhouse-Summary is a ClickHouse-specific header that contains information about the query execution.
+                    // It is not formally specified in the ClickHouse documentation so we only warn if it isn't working but won't error here.
+                    let summary_str = summary.to_str().map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseQuery {
+                            message: format!("Failed to parse x-clickhouse-summary header: {e}"),
+                        })
+                    })?;
+
+                    serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(
+                        |e| {
+                            Error::new(ErrorDetails::ClickHouseQuery {
+                                message: format!("Failed to deserialize x-clickhouse-summary: {e}"),
+                            })
+                        },
+                    )?
+                } else {
+                    tracing::warn!("No x-clickhouse-summary header found in ClickHouse response");
+                    ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    }
+                };
+
+                let response_body = res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
                         message: DisplayOrDebugGateway::new(e).to_string(),
                     })
                 })?;
 
                 match status {
-                    reqwest::StatusCode::OK => Ok(response_body),
+                    reqwest::StatusCode::OK => Ok(ClickHouseResponse {
+                        response: response_body,
+                        metadata,
+                    }),
                     _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
                         message: response_body,
                     })),
@@ -253,7 +293,10 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn run_query_synchronous_no_params(&self, query: String) -> Result<String, Error> {
+    pub async fn run_query_synchronous_no_params(
+        &self,
+        query: String,
+    ) -> Result<ClickHouseResponse, Error> {
         self.run_query_synchronous(query, &HashMap::default()).await
     }
 
@@ -350,8 +393,8 @@ impl ClickHouseConnectionInfo {
 
     pub async fn create_database(&self) -> Result<(), Error> {
         match self {
-            Self::Disabled => Ok(()),
-            Self::Mock { .. } => Ok(()),
+            Self::Disabled => {}
+            Self::Mock { .. } => {}
             Self::Production {
                 database_url,
                 database,
@@ -396,13 +439,36 @@ impl ClickHouseConnectionInfo {
                 })?;
 
                 match status {
-                    reqwest::StatusCode::OK => Ok(()),
-                    _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
-                        message: response_body,
-                    })),
+                    reqwest::StatusCode::OK => {}
+                    _ => {
+                        return Err(Error::new(ErrorDetails::ClickHouseQuery {
+                            message: response_body,
+                        }))
+                    }
                 }
             }
         }
+        // Note - we do *not* run this as a normal migration
+        // We decided to add this table after we had already created lots of migrations.
+        // We create this table immediately after creating the database, so that
+        // we can insert rows into it when running migrations
+        self.run_query_synchronous_no_params(
+            r#"CREATE TABLE IF NOT EXISTS TensorZeroMigration (
+                migration_id UInt32,
+                migration_name String,
+                gateway_version String,
+                gateway_git_sha String,
+                applied_at DateTime64(6, 'UTC') DEFAULT now(),
+                execution_time_ms UInt64,
+                extra_data Nullable(String)
+            )
+            ENGINE = MergeTree()
+            PRIMARY KEY (migration_id)"#
+                .to_string(),
+        )
+        .await
+        .map(|_| ())?;
+        Ok(())
     }
 
     pub async fn list_inferences(
@@ -417,14 +483,17 @@ impl ClickHouseConnectionInfo {
             .collect();
         let response = self.run_query_synchronous(sql, &params_map).await?;
         let inferences = response
+            .response
             .trim()
             .lines()
             .map(|line| {
-                serde_json::from_str::<StoredInference>(line).map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to deserialize response: {e:?}"),
+                serde_json::from_str::<query_builder::ClickHouseStoredInference>(line)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseQuery {
+                            message: format!("Failed to deserialize response: {e:?}"),
+                        })
                     })
-                })
+                    .and_then(|inference| inference.try_into())
             })
             .collect::<Result<Vec<StoredInference>, Error>>()?;
         Ok(inferences)
@@ -622,8 +691,10 @@ pub struct ClickHouseResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct ClickHouseResponseMetadata {
+    #[serde(default)]
     #[serde(deserialize_with = "deserialize_u64_from_str")]
     pub read_rows: u64,
+    #[serde(default)]
     #[serde(deserialize_with = "deserialize_u64_from_str")]
     pub written_rows: u64,
 }

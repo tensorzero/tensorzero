@@ -1,10 +1,10 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
-import { getConfigPath } from "./config/index.server";
 import {
   EvaluationErrorSchema,
   type DisplayEvaluationError,
 } from "./evaluations";
+import { logger } from "~/utils/logger";
 import { getEnv } from "./env.server";
 /**
  * Get the path to the evaluations binary from environment variables.
@@ -12,6 +12,9 @@ import { getEnv } from "./env.server";
  */
 function getEvaluationsPath(): string {
   return getEnv().TENSORZERO_EVALUATIONS_PATH || "evaluations";
+}
+function getConfigPath(): string {
+  return getEnv().TENSORZERO_UI_CONFIG_PATH;
 }
 
 export type InferenceCacheSetting = "on" | "off" | "read_only" | "write_only";
@@ -141,7 +144,7 @@ export function runEvaluation(
         }
         // We're ignoring other types of output that don't match these patterns
       } catch {
-        console.warn(`Bad JSON line: ${line}`);
+        logger.warn(`Bad JSON line: ${line}`);
       }
     };
 

@@ -25,6 +25,7 @@ pub async fn test_simple_query_json_function() {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
+        assert!(json_inference.dispreferred_outputs.is_empty());
     }
 }
 
@@ -33,9 +34,9 @@ pub async fn test_simple_query_chat_function() {
     let client = make_embedded_gateway().await;
     let opts = ListInferencesParams {
         function_name: "write_haiku",
-        variant_name: Some("better_prompt_haiku_3_5"),
+        variant_name: None,
         filters: None,
-        output_source: InferenceOutputSource::Inference,
+        output_source: InferenceOutputSource::Demonstration,
         limit: Some(3),
         offset: Some(3),
         format: ClickhouseFormat::JsonEachRow,
@@ -47,7 +48,7 @@ pub async fn test_simple_query_chat_function() {
             panic!("Expected a Chat inference");
         };
         assert_eq!(chat_inference.function_name, "write_haiku");
-        assert_eq!(chat_inference.variant_name, "better_prompt_haiku_3_5");
+        assert_eq!(chat_inference.dispreferred_outputs.len(), 1);
     }
 }
 
@@ -75,6 +76,7 @@ pub async fn test_simple_query_with_float_filter() {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
+        assert!(json_inference.dispreferred_outputs.is_empty());
     }
 }
 
@@ -98,6 +100,7 @@ pub async fn test_demonstration_output_source() {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
+        assert_eq!(json_inference.dispreferred_outputs.len(), 1);
     }
 }
 
@@ -124,6 +127,7 @@ pub async fn test_boolean_metric_filter() {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
+        assert!(json_inference.dispreferred_outputs.is_empty());
     }
 }
 
@@ -160,6 +164,7 @@ pub async fn test_and_filter_multiple_float_metrics() {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
+        assert!(json_inference.dispreferred_outputs.is_empty());
     }
 }
 
@@ -200,6 +205,7 @@ async fn test_or_filter_mixed_metrics() {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
+        assert!(json_inference.dispreferred_outputs.is_empty());
     }
 }
 
