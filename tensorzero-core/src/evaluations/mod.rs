@@ -20,7 +20,9 @@ use crate::{
     jsonschema_util::StaticJSONSchema,
     tool::create_implicit_tool_call_config,
     variant::{
-        best_of_n_sampling::{BestOfNSamplingConfig, EvaluatorConfig as OnlineEvaluatorConfig},
+        best_of_n_sampling::{
+            BestOfNEvaluatorConfig as OnlineEvaluatorConfig, BestOfNSamplingConfig,
+        },
         chain_of_thought::ChainOfThoughtConfig,
         chat_completion::ChatCompletionConfig,
         dicl::DiclConfig,

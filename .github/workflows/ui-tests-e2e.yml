@@ -28,15 +28,11 @@ jobs:
       - name: Setup Playwright
         run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
 
-      - name: Download `gateway` container
+      - name: Download container images
         uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
         with:
-          name: build-gateway-container
-
-      - name: Download `ui` container
-        uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
-        with:
-          name: build-ui-container
+          pattern: build-*-container
+          merge-multiple: true
 
       - name: Load `gateway` and `ui` containers
         run: |
@@ -139,15 +135,11 @@ jobs:
           path: |
             ./ui/fixtures/s3-fixtures
 
-      - name: Download `gateway` container
+      - name: Download container images
         uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
         with:
-          name: build-gateway-container
-
-      - name: Download `ui` container
-        uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
-        with:
-          name: build-ui-container
+          pattern: build-*-container
+          merge-multiple: true
 
       - name: Load `gateway` and `ui` containers
         run: |
@@ -182,7 +174,7 @@ jobs:
         env:
           TENSORZERO_CI: 1
         continue-on-error: true
-        run: pnpm ui:test:e2e --grep-invert "fine-tune on image"
+        run: pnpm ui:test:e2e --grep-invert "fine-tune on image|fine-tune with a mocked Fireworks server"
 
       - name: Restart UI container with native SFT flag
         working-directory: ui
@@ -195,8 +187,7 @@ jobs:
         env:
           TENSORZERO_CI: 1
         continue-on-error: true
-        # TODO: remove the filtering once we support native SFT for Fireworks
-        run: pnpm ui:test:e2e --grep "tuning" --grep "openai"
+        run: pnpm ui:test:e2e --grep "tuning"
 
       - name: Print Docker Compose logs
         if: always()

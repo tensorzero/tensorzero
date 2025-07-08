@@ -1,8 +1,10 @@
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
 import type { AnalysisData } from "~/routes/optimization/supervised-fine-tuning/SFTAnalysis";
 import type { ParsedInferenceExample } from "../clickhouse/curation";
-import type { ProviderType } from "../config/models";
+import type { ProviderConfig } from "tensorzero-node";
 import type { OptimizerJobHandle } from "tensorzero-node";
+
+type ProviderType = ProviderConfig["type"];
 
 export function splitValidationData(
   inferences: ParsedInferenceExample[],

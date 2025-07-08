@@ -44,7 +44,7 @@ impl TensorZeroClient {
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let job_handle_str = serde_json::to_string(&job_handle).map_err(|e| {
-            napi::Error::from_reason(format!("Failed to serialize job handle: {}", e))
+            napi::Error::from_reason(format!("Failed to serialize job handle: {e}"))
         })?;
         Ok(job_handle_str)
     }
@@ -135,5 +135,18 @@ impl TensorZeroClient {
         let config_str =
             serde_json::to_string(&config).map_err(|e| napi::Error::from_reason(e.to_string()))?;
         Ok(config_str)
+    }
+
+    #[napi]
+    pub async fn stale_dataset(&self, dataset_name: String) -> Result<String, napi::Error> {
+        let result = self
+            .client
+            .stale_dataset(dataset_name)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let result_str = serde_json::to_string(&result).map_err(|e| {
+            napi::Error::from_reason(format!("Failed to serialize stale dataset result: {e}"))
+        })?;
+        Ok(result_str)
     }
 }

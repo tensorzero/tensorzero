@@ -5,7 +5,8 @@ import httpx
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
-    RenderedStoredInference,
+    Datapoint,
+    RenderedSample,
     ResolvedInput,
     ResolvedInputMessage,
     StoredInference,
@@ -23,7 +24,6 @@ from .types import (
     ChatInferenceDatapointInput,  # DEPRECATED
     ChatInferenceResponse,
     ContentBlock,
-    Datapoint,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
     ExtraBody,
@@ -65,6 +65,14 @@ from .types import (
     Usage,
 )
 
+RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample instead
+# Type aliases to preserve backward compatibility with main
+ChatDatapoint = Datapoint.Chat
+JsonDatapoint = Datapoint.Json
+
+ChatInferenceOutput = t.List[ContentBlock]
+
+
 __all__ = [
     "AndFilter",
     "AndNode",  # DEPRECATED
@@ -73,6 +81,7 @@ __all__ = [
     "BaseTensorZeroGateway",
     "BooleanMetricFilter",
     "BooleanMetricNode",  # DEPRECATED
+    "ChatDatapoint",
     "ChatDatapointInsert",
     "ChatInferenceDatapointInput",  # DEPRECATED
     "ChatInferenceResponse",
@@ -95,6 +104,7 @@ __all__ = [
     "StoredInference",
     "InferenceInput",
     "InferenceResponse",
+    "JsonDatapoint",
     "JsonDatapointInsert",
     "JsonInferenceDatapointInput",  # DEPRECATED
     "JsonInferenceOutput",
@@ -106,7 +116,8 @@ __all__ = [
     "OrNode",  # DEPRECATED
     "patch_openai_client",
     "RawText",
-    "RenderedStoredInference",
+    "RenderedStoredInference",  # DEPRECATED
+    "RenderedSample",
     "System",
     "TensorZeroError",
     "TensorZeroGateway",
