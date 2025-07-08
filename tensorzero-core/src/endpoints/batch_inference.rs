@@ -677,7 +677,7 @@ pub async fn write_poll_batch_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_request: &BatchRequestRow<'a>,
     response: PollBatchInferenceResponse,
-    config: &Config<'a>,
+    config: &Config,
 ) -> Result<PollInferenceResponse, Error> {
     match response {
         PollBatchInferenceResponse::Pending {
@@ -780,7 +780,7 @@ pub async fn write_completed_batch_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_request: &'a BatchRequestRow<'a>,
     mut response: ProviderBatchInferenceResponse,
-    config: &'a Config<'a>,
+    config: &Config,
 ) -> Result<Vec<InferenceResponse>, Error> {
     let inference_ids: Vec<Uuid> = response.elements.keys().copied().collect();
     let batch_model_inferences = get_batch_inferences(

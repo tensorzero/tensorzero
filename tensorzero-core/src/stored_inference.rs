@@ -574,7 +574,7 @@ pub fn render_stored_sample<T: StoredSample>(
 /// Resolves images in place.
 pub async fn reresolve_input_for_fine_tuning(
     input: &mut ResolvedInput,
-    config: &Config<'static>,
+    config: &Config,
 ) -> Result<(), Error> {
     let mut file_fetch_tasks = Vec::new();
 

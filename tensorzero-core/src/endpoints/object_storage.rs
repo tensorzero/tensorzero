@@ -55,7 +55,7 @@ pub async fn get_object_handler(
 /// However, if the provider requires authentication, the gateway must have the correct credentials
 /// set as environment variables.
 pub async fn get_object(
-    config: &Config<'_>,
+    config: &Config,
     storage_path: StoragePath,
 ) -> Result<ObjectResponse, Error> {
     // Use the existing object store if it matches the requested kind, so

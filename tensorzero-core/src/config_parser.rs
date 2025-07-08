@@ -46,7 +46,7 @@ pub fn skip_credential_validation() -> bool {
 #[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub struct Config<'c> {
+pub struct Config {
     pub gateway: GatewayConfig,
     pub models: ModelTable,                    // model name => model config
     pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
@@ -55,7 +55,7 @@ pub struct Config<'c> {
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     #[serde(skip)]
-    pub templates: TemplateConfig<'c>,
+    pub templates: TemplateConfig<'static>,
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
     pub optimizers: HashMap<String, OptimizerInfo>,
@@ -394,15 +394,15 @@ impl MetricConfigLevel {
     }
 }
 
-impl<'c> Config<'c> {
-    pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
+impl Config {
+    pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config, Error> {
         Self::load_from_path_optional_verify_credentials(config_path, true).await
     }
 
     pub async fn load_from_path_optional_verify_credentials(
         config_path: &Path,
         validate_credentials: bool,
-    ) -> Result<Config<'c>, Error> {
+    ) -> Result<Config, Error> {
         let config_table = match UninitializedConfig::read_toml_config(config_path)? {
             Some(table) => table,
             None => {
@@ -440,7 +440,7 @@ impl<'c> Config<'c> {
         Ok(config)
     }
 
-    async fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config<'c>, Error> {
+    async fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config, Error> {
         if table.is_empty() {
             tracing::info!("Config file is empty, so only default functions will be available.")
         }

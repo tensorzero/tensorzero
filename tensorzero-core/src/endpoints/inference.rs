@@ -198,7 +198,7 @@ pub struct InferenceIds {
     )
 )]
 pub async fn inference(
-    config: Arc<Config<'static>>,
+    config: Arc<Config>,
     http_client: &reqwest::Client,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
@@ -563,7 +563,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
 
 fn create_stream(
     function: Arc<FunctionConfig>,
-    config: Arc<Config<'static>>,
+    config: Arc<Config>,
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
@@ -825,7 +825,7 @@ async fn write_file(
 
 async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    config: &Config<'_>,
+    config: &Config,
     input: ResolvedInput,
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
