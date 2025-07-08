@@ -55,7 +55,8 @@ function EvaluationForm({
   let isLoading = false;
   let function_name = null;
   if (selectedEvaluationName) {
-    function_name = config.evaluations[selectedEvaluationName]?.function_name;
+    function_name =
+      config.evaluations[selectedEvaluationName]?.function_name ?? null;
   }
   const { count: datasetCount, isLoading: datasetLoading } =
     useDatasetCountFetcher(selectedDatasetName, function_name);
@@ -172,10 +173,12 @@ function EvaluationForm({
             if (!selectedEvaluationName) return null;
 
             const evaluation_function =
-              config.evaluations[selectedEvaluationName].function_name;
-            const variant_names = Object.keys(
-              config.functions[evaluation_function].variants,
-            );
+              config.evaluations[selectedEvaluationName];
+            if (!evaluation_function) return null;
+            const function_config =
+              config.functions[evaluation_function.function_name];
+            if (!function_config) return null;
+            const variant_names = Object.keys(function_config.variants);
 
             return variant_names.map((variant_name) => (
               <SelectItem key={variant_name} value={variant_name}>

@@ -16,7 +16,7 @@ import { TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { Tooltip } from "~/components/ui/tooltip";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import { useConfig } from "~/context/config";
-import { formatMetricSummaryValue } from "~/utils/config/metric";
+import { formatMetricSummaryValue } from "~/utils/config/feedback";
 import { TableItemShortUuid } from "~/components/ui/TableItems";
 import KVChip from "~/components/ui/KVChip";
 import MetricValue from "~/components/metric/MetricValue";
@@ -99,20 +99,17 @@ export default function DynamicEvaluationRunEpisodesTable({
                       ? episode.feedback_values[metricIndex]
                       : null;
                   const metricConfig = config.metrics[metricName];
-                  const metricType = metricConfig.type;
                   return (
                     <TableCell key={metricName} className="text-center">
                       <div className="flex justify-center">
-                        {metricValue !== null ? (
+                        {metricValue !== null && metricConfig ? (
                           <MetricValue
                             value={metricValue}
-                            metricType={metricType}
-                            optimize={
-                              metricType === "float" || metricType === "boolean"
-                                ? metricConfig.optimize
-                                : "max" // Default to max for non-float/boolean metrics (this won't matter for comments/demonstrations)
+                            metricType={metricConfig.type}
+                            optimize={metricConfig.optimize}
+                            cutoff={
+                              metricConfig.type === "boolean" ? 0.5 : undefined
                             }
-                            cutoff={metricType === "boolean" ? 0.5 : undefined}
                             isHumanFeedback={false}
                           />
                         ) : (
@@ -174,25 +171,27 @@ function MetricHeader({
             )}
           </div>
         </TooltipTrigger>
-        <TooltipContent side="top" className="p-3">
-          <div className="space-y-1 text-left text-xs">
-            <div>
-              <span className="font-medium">Type:</span>
-              <span className="ml-2 font-medium">{metricConfig.type}</span>
+        {metricConfig && (
+          <TooltipContent side="top" className="p-3">
+            <div className="space-y-1 text-left text-xs">
+              <div>
+                <span className="font-medium">Type:</span>
+                <span className="ml-2 font-medium">{metricConfig.type}</span>
+              </div>
+              <div>
+                {(metricConfig.type === "float" ||
+                  metricConfig.type === "boolean") && (
+                  <div>
+                    <span className="font-medium">Optimize:</span>
+                    <span className="ml-2 font-medium">
+                      {metricConfig.optimize}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
-            <div>
-              {(metricConfig.type === "float" ||
-                metricConfig.type === "boolean") && (
-                <div>
-                  <span className="font-medium">Optimize:</span>
-                  <span className="ml-2 font-medium">
-                    {metricConfig.optimize}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        </TooltipContent>
+          </TooltipContent>
+        )}
       </Tooltip>
     </TooltipProvider>
   );

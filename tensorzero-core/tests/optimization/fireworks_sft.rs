@@ -1,4 +1,4 @@
-use crate::{optimization_test_case, OptimizationTestCase};
+use crate::{optimization_test_case, use_mock_inference_provider, OptimizationTestCase};
 use tensorzero_core::optimization::{
     fireworks_sft::UninitializedFireworksSFTConfig, OptimizerInfo, UninitializedOptimizerConfig,
     UninitializedOptimizerInfo,
@@ -21,7 +21,11 @@ impl OptimizationTestCase for FireworksSFTTestCase {
                 model: "accounts/fireworks/models/llama-v3p1-8b-instruct".to_string(),
                 account_id: "viraj-ebfe5a".to_string(),
                 credentials: None,
-                api_base: Some("http://localhost:3030/fireworks/".parse().unwrap()),
+                api_base: if use_mock_inference_provider() {
+                    Some("http://localhost:3030/fireworks/".parse().unwrap())
+                } else {
+                    None
+                },
             }),
         }
         .load()
