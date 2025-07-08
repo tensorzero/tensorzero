@@ -6,6 +6,11 @@ import httpx
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
     Datapoint,
+    FireworksSFTConfig,
+    OpenAISFTConfig,
+    OptimizationJobHandle,
+    OptimizationJobInfo,
+    OptimizationJobStatus,
     RenderedSample,
     ResolvedInput,
     ResolvedInputMessage,
@@ -70,6 +75,7 @@ RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample inste
 ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
+OptimizationConfig = t.Union[OpenAISFTConfig, FireworksSFTConfig]
 ChatInferenceOutput = t.List[ContentBlock]
 
 
@@ -114,6 +120,12 @@ __all__ = [
     "NotNode",  # DEPRECATED
     "OrFilter",
     "OrNode",  # DEPRECATED
+    "OptimizationJobHandle",
+    "OptimizationJobInfo",
+    "OptimizationJobStatus",
+    "OpenAISFTConfig",
+    "FireworksSFTConfig",
+    "OptimizationConfig",
     "patch_openai_client",
     "RawText",
     "RenderedStoredInference",  # DEPRECATED

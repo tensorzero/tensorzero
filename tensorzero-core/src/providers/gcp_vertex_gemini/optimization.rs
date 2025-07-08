@@ -14,7 +14,7 @@ use crate::{
     inference::types::ContentBlock,
     model::CredentialLocation,
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
-    optimization::{OptimizerOutput, OptimizerStatus},
+    optimization::{OptimizationJobInfo, OptimizerOutput},
     providers::gcp_vertex_gemini::PROVIDER_TYPE,
     stored_inference::RenderedSample,
 };
@@ -130,7 +130,7 @@ pub fn convert_to_optimizer_status(
     location: String,
     project_id: String,
     credential_location: CredentialLocation,
-) -> Result<OptimizerStatus, Error> {
+) -> Result<OptimizationJobInfo, Error> {
     let estimated_finish: Option<DateTime<Utc>> = None;
 
     let trained_tokens: Option<u64> = job.tuning_data_statistics.map(|stats| {
@@ -139,25 +139,25 @@ pub fn convert_to_optimizer_status(
             .total_billable_token_count
     });
     Ok(match job.state {
-        GCPVertexGeminiFineTuningJobStatus::JobStateUnspecified => OptimizerStatus::Pending {
+        GCPVertexGeminiFineTuningJobStatus::JobStateUnspecified => OptimizationJobInfo::Pending {
             message: "Job State Unspecified".to_string(),
             estimated_finish,
             trained_tokens,
             error: job.error,
         },
-        GCPVertexGeminiFineTuningJobStatus::JobStateQueued => OptimizerStatus::Pending {
+        GCPVertexGeminiFineTuningJobStatus::JobStateQueued => OptimizationJobInfo::Pending {
             message: "Job State Queued".to_string(),
             estimated_finish,
             trained_tokens,
             error: job.error,
         },
-        GCPVertexGeminiFineTuningJobStatus::JobStatePending => OptimizerStatus::Pending {
+        GCPVertexGeminiFineTuningJobStatus::JobStatePending => OptimizationJobInfo::Pending {
             message: "Job State Pending".to_string(),
             estimated_finish,
             trained_tokens,
             error: job.error,
         },
-        GCPVertexGeminiFineTuningJobStatus::JobStateRunning => OptimizerStatus::Pending {
+        GCPVertexGeminiFineTuningJobStatus::JobStateRunning => OptimizationJobInfo::Pending {
             message: "Running".to_string(),
             estimated_finish,
             trained_tokens,
@@ -191,7 +191,7 @@ pub fn convert_to_optimizer_status(
                 timeouts: None,
                 discard_unknown_chunks: false,
             };
-            OptimizerStatus::Completed {
+            OptimizationJobInfo::Completed {
                 output: OptimizerOutput::Model(UninitializedModelConfig {
                     routing: vec![model_name.clone().into()],
                     providers: HashMap::from([(model_name.clone().into(), model_provider)]),
@@ -199,38 +199,40 @@ pub fn convert_to_optimizer_status(
                 }),
             }
         }
-        GCPVertexGeminiFineTuningJobStatus::JobStateFailed => OptimizerStatus::Failed {
+        GCPVertexGeminiFineTuningJobStatus::JobStateFailed => OptimizationJobInfo::Failed {
             message: "Failed".to_string(),
             error: job.error,
         },
-        GCPVertexGeminiFineTuningJobStatus::JobStateCancelling => OptimizerStatus::Failed {
+        GCPVertexGeminiFineTuningJobStatus::JobStateCancelling => OptimizationJobInfo::Failed {
             message: "Cancelling".to_string(),
             error: job.error,
         },
-        GCPVertexGeminiFineTuningJobStatus::JobStateCancelled => OptimizerStatus::Failed {
+        GCPVertexGeminiFineTuningJobStatus::JobStateCancelled => OptimizationJobInfo::Failed {
             message: "Cancelled".to_string(),
             error: job.error,
         },
-        GCPVertexGeminiFineTuningJobStatus::JobStatePaused => OptimizerStatus::Pending {
+        GCPVertexGeminiFineTuningJobStatus::JobStatePaused => OptimizationJobInfo::Pending {
             message: "Paused".to_string(),
             estimated_finish,
             trained_tokens,
             error: job.error,
         },
-        GCPVertexGeminiFineTuningJobStatus::JobStateExpired => OptimizerStatus::Failed {
+        GCPVertexGeminiFineTuningJobStatus::JobStateExpired => OptimizationJobInfo::Failed {
             message: "Expired".to_string(),
             error: job.error,
         },
-        GCPVertexGeminiFineTuningJobStatus::JobStateUpdating => OptimizerStatus::Pending {
+        GCPVertexGeminiFineTuningJobStatus::JobStateUpdating => OptimizationJobInfo::Pending {
             message: "Updating".to_string(),
             estimated_finish,
             trained_tokens,
             error: job.error,
         },
-        GCPVertexGeminiFineTuningJobStatus::JobStatePartiallySucceeded => OptimizerStatus::Failed {
-            message: "Partially Succeeded".to_string(),
-            error: job.error,
-        },
+        GCPVertexGeminiFineTuningJobStatus::JobStatePartiallySucceeded => {
+            OptimizationJobInfo::Failed {
+                message: "Partially Succeeded".to_string(),
+                error: job.error,
+            }
+        }
     })
 }
 
@@ -369,7 +371,7 @@ mod tests {
         .unwrap();
         assert!(matches!(
             status,
-            OptimizerStatus::Completed {
+            OptimizationJobInfo::Completed {
                 output: OptimizerOutput::Model(_),
             }
         ));
@@ -402,7 +404,7 @@ mod tests {
         .unwrap();
         assert!(matches!(
             status,
-            OptimizerStatus::Completed {
+            OptimizationJobInfo::Completed {
                 output: OptimizerOutput::Model(_),
             }
         ));
@@ -428,7 +430,7 @@ mod tests {
             credential_location.clone(),
         )
         .unwrap();
-        assert!(matches!(status, OptimizerStatus::Pending { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "failed" status
         let failed = json!({
@@ -451,7 +453,7 @@ mod tests {
             credential_location.clone(),
         )
         .unwrap();
-        assert!(matches!(status, OptimizerStatus::Failed { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Failed { .. }));
 
         // Test for "queued" status
         let queued = json!({
@@ -474,7 +476,7 @@ mod tests {
             credential_location.clone(),
         )
         .unwrap();
-        assert!(matches!(status, OptimizerStatus::Pending { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "pending" status
         let pending = json!({
@@ -497,7 +499,7 @@ mod tests {
             credential_location.clone(),
         )
         .unwrap();
-        assert!(matches!(status, OptimizerStatus::Pending { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "pending" status with tuned model but no endpoint
         let pending_with_model_no_endpoint = json!({
@@ -526,7 +528,7 @@ mod tests {
             credential_location.clone(),
         )
         .unwrap();
-        assert!(matches!(status, OptimizerStatus::Pending { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "cancelled" status
         let cancelled = json!({
@@ -549,7 +551,7 @@ mod tests {
             credential_location.clone(),
         )
         .unwrap();
-        assert!(matches!(status, OptimizerStatus::Failed { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Failed { .. }));
 
         // Test for "paused" status
         let paused = json!({
@@ -572,7 +574,7 @@ mod tests {
             credential_location.clone(),
         )
         .unwrap();
-        assert!(matches!(status, OptimizerStatus::Pending { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "expired" status
         let expired = json!({
@@ -595,7 +597,7 @@ mod tests {
             credential_location.clone(),
         )
         .unwrap();
-        assert!(matches!(status, OptimizerStatus::Failed { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Failed { .. }));
 
         // Test for "updating" status
         let updating = json!({
@@ -618,7 +620,7 @@ mod tests {
             credential_location.clone(),
         )
         .unwrap();
-        assert!(matches!(status, OptimizerStatus::Pending { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "partially succeeded" status
         let partially_succeeded = json!({
@@ -642,7 +644,7 @@ mod tests {
             credential_location.clone(),
         )
         .unwrap();
-        assert!(matches!(status, OptimizerStatus::Failed { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Failed { .. }));
 
         // Test for "succeeded" status but missing tuned_model - should error
         let succeeded_missing_model = json!({

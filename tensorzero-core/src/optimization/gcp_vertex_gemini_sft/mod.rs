@@ -1,3 +1,5 @@
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -5,7 +7,7 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model::{build_creds_caching_default, CredentialLocation},
-    optimization::{JobHandle, Optimizer, OptimizerStatus},
+    optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::gcp_vertex_gemini::{
         default_api_key_location,
         optimization::{
@@ -110,8 +112,9 @@ impl UninitializedGCPVertexGeminiSFTConfig {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct GCPVertexGeminiSFTJobHandle {
     pub job_id: String,
     pub job_url: Url,
@@ -119,6 +122,13 @@ pub struct GCPVertexGeminiSFTJobHandle {
     pub credential_location: Option<CredentialLocation>,
     pub region: String,
     pub project_id: String,
+}
+
+impl std::fmt::Display for GCPVertexGeminiSFTJobHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 impl Optimizer for GCPVertexGeminiSFTConfig {
@@ -279,7 +289,7 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
         &self,
         client: &reqwest::Client,
         credentials: &InferenceCredentials,
-    ) -> Result<OptimizerStatus, Error> {
+    ) -> Result<OptimizationJobInfo, Error> {
         let gcp_credentials = build_creds_caching_default(
             self.credential_location.clone(),
             default_api_key_location(),
