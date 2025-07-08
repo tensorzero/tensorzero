@@ -7,10 +7,10 @@
 **TensorZero is an open-source stack for _industrial-grade LLM applications_:**
 
 - **Gateway:** access every LLM provider through a unified API, built for performance (<1ms p99 latency)
-- **Observability:** store inferences and feedback in your database, available programmatically or in the UI 
+- **Observability:** store inferences and feedback in your database, available programmatically or in the UI
 - **Optimization:** collect metrics and human feedback to optimize prompts, models, and inference strategies
 - **Evaluations:** benchmark individual inferences or end-to-end workflows using heuristics, LLM judges, etc.
-- **Experimentation:** ship with confidence with built-in A/B testing, routing, fallbacks, retries, etc. 
+- **Experimentation:** ship with confidence with built-in A/B testing, routing, fallbacks, retries, etc.
 
 Take what you need, adopt incrementally, and complement with other tools.
 
@@ -111,12 +111,16 @@ Take what you need, adopt incrementally, and complement with other tools.
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-anthropic">GCP Vertex AI Anthropic</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-gemini">GCP Vertex AI Gemini</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/google-ai-studio-gemini">Google AI Studio (Gemini API)</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/groq">Groq</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/hyperbolic">Hyperbolic</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/mistral">Mistral</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openai">OpenAI</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/together">Together</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openrouter">OpenRouter</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/sglang">SGLang</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/tgi">TGI</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/together">Together AI</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/vllm">vLLM</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/xai">xAI</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/xai">xAI (Grok)</a></b></li>
       </ul>
       <p>
         <em>
