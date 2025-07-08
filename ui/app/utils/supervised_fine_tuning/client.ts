@@ -1,6 +1,4 @@
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
-import { OpenAISFTJob } from "./openai";
-import { FireworksSFTJob } from "./fireworks";
 import { SFTJob, type SFTJobStatus } from "./common";
 import { TensorZeroClient } from "tensorzero-node";
 import type {
@@ -28,23 +26,7 @@ export async function getNativeTensorZeroClient(): Promise<TensorZeroClient> {
 }
 
 export function launch_sft_job(data: SFTFormValues): Promise<SFTJob> {
-  const useNativeSFT = getEnv().TENSORZERO_UI_FF_USE_NATIVE_SFT === 1;
-  if (useNativeSFT) {
-    return launch_sft_job_native(data);
-  } else {
-    return launch_sft_job_ts(data);
-  }
-}
-
-function launch_sft_job_ts(data: SFTFormValues): Promise<SFTJob> {
-  switch (data.model.provider) {
-    case "openai":
-      return OpenAISFTJob.from_form_data(data);
-    case "fireworks":
-      return FireworksSFTJob.from_form_data(data);
-    default:
-      throw new Error("Invalid provider");
-  }
+  return launch_sft_job_native(data);
 }
 
 class NativeSFTJob extends SFTJob {
