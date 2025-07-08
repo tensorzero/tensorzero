@@ -286,8 +286,8 @@ pub struct GCPVertexGeminiSupervisedRow<'a> {
     tools: Vec<GCPVertexGeminiSFTTool<'a>>,
 }
 
-pub async fn upload_rows_to_gcp_object_store<'a>(
-    rows: &[GCPVertexGeminiSupervisedRow<'a>],
+pub async fn upload_rows_to_gcp_object_store(
+    rows: &[GCPVertexGeminiSupervisedRow<'_>],
     gs_url: &str,
     credentials: &GCPVertexCredentials,
     dynamic_api_keys: &InferenceCredentials,
