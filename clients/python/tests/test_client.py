@@ -322,7 +322,7 @@ async def test_async_thought_input(async_client: AsyncTensorZeroGateway):
     )
     assert isinstance(result, ChatInferenceResponse)
     assert len(result.content) == 1
-    assert result.content[0].type == "text"
+    assert isinstance(result.content[0], Text)
     assert (
         result.content[0].text
         == '{"system":null,"messages":[{"role":"user","content":[{"type":"thought","text":"my_first_thought","signature":"my_first_signature"},{"type":"thought","text":"my_second_thought","signature":"my_second_signature"}]}]}'
