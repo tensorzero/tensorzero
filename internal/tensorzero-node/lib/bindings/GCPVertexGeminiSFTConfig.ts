@@ -2,6 +2,9 @@
 
 export type GCPVertexGeminiSFTConfig = {
   model: string;
+  bucket_name: string;
+  project_id: string;
+  region: string;
   learning_rate_multiplier: number | null;
   adapter_size: number | null;
   n_epochs: number | null;
@@ -12,8 +15,5 @@ export type GCPVertexGeminiSFTConfig = {
   service_account: string | null;
   kms_key_name: string | null;
   tuned_model_display_name: string | null;
-  bucket_name: string;
   bucket_path_prefix: string | null;
-  project_id: string;
-  region: string;
 };

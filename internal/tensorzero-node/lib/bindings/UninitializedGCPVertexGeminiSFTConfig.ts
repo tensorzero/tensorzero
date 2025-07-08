@@ -2,19 +2,18 @@
 
 export type UninitializedGCPVertexGeminiSFTConfig = {
   model: string;
+  bucket_name: string;
+  project_id: string;
+  region: string;
   learning_rate_multiplier: number | null;
   adapter_size: number | null;
   n_epochs: number | null;
   export_last_checkpoint_only: boolean | null;
   credentials: string | null;
-  credential_location: string | null;
   api_base: string | null;
   seed: bigint | null;
   service_account: string | null;
   kms_key_name: string | null;
   tuned_model_display_name: string | null;
-  bucket_name: string;
   bucket_path_prefix: string | null;
-  project_id: string;
-  region: string;
 };
