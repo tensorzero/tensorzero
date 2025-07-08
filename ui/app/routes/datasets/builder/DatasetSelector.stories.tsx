@@ -30,6 +30,11 @@ const mockDatasets = [
     count: 15420,
     lastUpdated: new Date(Date.now() - 1000 * 60 * 5).toISOString(), // 5 minutes ago
   },
+  {
+    name: "long_dataset_name_that_should_still_be_displayed_gracefully_somehow",
+    count: 1,
+    lastUpdated: new Date(Date.now()).toISOString(), // now
+  },
 ];
 
 const meta = {
@@ -119,6 +124,39 @@ export const DisallowCreation: Story = {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
     const queryClient = new QueryClient();
     queryClient.setQueryData(["DATASETS_COUNT"], mockDatasets);
+
+    return (
+      <QueryClientProvider client={queryClient}>
+        <DatasetSelector
+          {...args}
+          selected={selected}
+          onSelect={(dataset, isNew) => {
+            updateArgs({ selected: dataset });
+            console.log(`Selected: ${dataset}, isNew: ${isNew}`);
+          }}
+        />
+      </QueryClientProvider>
+    );
+  },
+};
+
+// TODO: we should handle extremely long lists (1000+) of datasets gracefully (e.g. truncate what we render)
+export const ManyDatasets: Story = {
+  args: {
+    allowCreation: true,
+    placeholder: "Select a dataset",
+  },
+  render: function Render(args) {
+    const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
+    const queryClient = new QueryClient();
+    const repeatedMockDatasets = Array.from({ length: 100 }, (_, i) => ({
+      name: `test_dataset_${i + 1}`,
+      count: i + 1,
+      lastUpdated: new Date(
+        Date.now() - 1000 * 60 * 60 * (i + 1),
+      ).toISOString(),
+    }));
+    queryClient.setQueryData(["DATASETS_COUNT"], repeatedMockDatasets);
 
     return (
       <QueryClientProvider client={queryClient}>

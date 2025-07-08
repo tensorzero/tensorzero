@@ -131,7 +131,11 @@ export function DatasetSelector({
             {/* TODO Naming/character constraints/disallow typing certain characters? */}
             <CommandInput
               placeholder={
-                allowCreation ? "Create or find dataset..." : "Find dataset..."
+                allowCreation
+                  ? recentlyUpdatedDatasets.length > 0
+                    ? "Create or find a dataset..."
+                    : "Create a new dataset..."
+                  : "Find a dataset..."
               }
               value={inputValue}
               onValueChange={setInputValue}
@@ -148,73 +152,83 @@ export function DatasetSelector({
                   No datasets found.
                 </CommandEmpty>
 
-                <CommandGroup>
-                  {/* Sometimes create new will be sorted to the top/middle depending upon how close it matches */}
-                  {allowCreation && inputValue.trim() && (
-                    <CommandItem
-                      value={`create-${inputValue.trim()}`}
-                      onSelect={() => {
-                        onSelect(inputValue.trim(), true);
-                        setInputValue("");
-                        setOpen(false);
-                      }}
-                      className="flex items-center justify-between"
-                    >
-                      <div className="flex items-center truncate">
-                        <TablePlus className="mr-2 h-4 w-4 text-blue-600" />
+                {
+                  // If creation is allowed...
+                  allowCreation &&
+                    // ...and the user has typed something...
+                    inputValue.trim() &&
+                    // ...and the dataset doesn't exist in the list of recently updated datasets...
+                    !recentlyUpdatedDatasets.some(
+                      (dataset) =>
+                        dataset.name.toLowerCase() ===
+                        inputValue.trim().toLowerCase(),
+                    ) && (
+                      // ...then show the "New dataset" group
+                      <CommandGroup heading="New dataset">
+                        <CommandItem
+                          value={`create-${inputValue.trim()}`}
+                          onSelect={() => {
+                            onSelect(inputValue.trim(), true);
+                            setInputValue("");
+                            setOpen(false);
+                          }}
+                          className="flex items-center justify-between"
+                        >
+                          <div className="flex items-center truncate">
+                            <TablePlus className="mr-2 h-4 w-4 text-blue-600" />
+                            <span className="text-fg-primary truncate font-mono text-sm">
+                              {inputValue.trim()}
+                            </span>
+                          </div>
+                        </CommandItem>
+                      </CommandGroup>
+                    )
+                }
 
-                        <span>
-                          Create{" "}
-                          <span className="text-fg-primary font-mono text-sm font-bold">
-                            {inputValue.trim()}
+                {recentlyUpdatedDatasets.length > 0 && (
+                  <CommandGroup heading={allowCreation && "Existing datasets"}>
+                    {recentlyUpdatedDatasets.map((dataset) => (
+                      <CommandItem
+                        key={dataset.name}
+                        value={dataset.name}
+                        onSelect={() => {
+                          onSelect(dataset.name, false);
+                          setInputValue("");
+                          setOpen(false);
+                        }}
+                        className="group flex w-full items-center gap-2"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          {selected === dataset.name ? (
+                            <TableCheck size={16} className="text-green-700" />
+                          ) : (
+                            <Table size={16} className="text-fg-muted" />
+                          )}
+                          <span
+                            className={clsx(
+                              "group-hover:text-fg-primary truncate font-mono",
+                              selected === dataset.name
+                                ? "font-medium"
+                                : "font-normal",
+                            )}
+                          >
+                            {dataset.name}
                           </span>
-                          ...
-                        </span>
-                      </div>
-                    </CommandItem>
-                  )}
-
-                  {recentlyUpdatedDatasets.map((dataset) => (
-                    <CommandItem
-                      key={dataset.name}
-                      value={dataset.name}
-                      onSelect={() => {
-                        onSelect(dataset.name, false);
-                        setInputValue("");
-                        setOpen(false);
-                      }}
-                      className="group flex w-full items-center gap-2"
-                    >
-                      <div className="flex min-w-0 flex-1 items-center gap-2">
-                        {selected === dataset.name ? (
-                          <TableCheck size={16} className="text-green-700" />
-                        ) : (
-                          <Table size={16} className="text-fg-muted" />
-                        )}
+                        </div>
                         <span
                           className={clsx(
-                            "group-hover:text-fg-primary truncate font-mono",
+                            "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
                             selected === dataset.name
-                              ? "font-medium"
-                              : "font-normal",
+                              ? "text-fg-secondary font-medium"
+                              : "text-fg-tertiary font-normal",
                           )}
                         >
-                          {dataset.name}
+                          {dataset.count.toLocaleString()}
                         </span>
-                      </div>
-                      <span
-                        className={clsx(
-                          "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
-                          selected === dataset.name
-                            ? "text-fg-secondary font-medium"
-                            : "text-fg-tertiary font-normal",
-                        )}
-                      >
-                        {dataset.count.toLocaleString()}
-                      </span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
               </CommandList>
             )}
           </Command>
