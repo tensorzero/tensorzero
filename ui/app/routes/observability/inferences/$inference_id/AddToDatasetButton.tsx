@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button } from "~/components/ui/button";
+import { Button, ButtonIcon } from "~/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -28,6 +28,12 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from "~/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 
 export interface InferenceDatasetButtonProps {
   // Each dataset has a name, row count, and last updated timestamp.
@@ -64,7 +70,7 @@ export function AddToDatasetButton({
   };
 
   return (
-    <>
+    <TooltipProvider>
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
@@ -97,47 +103,24 @@ export function AddToDatasetButton({
               </div>
             ) : (
               <>
-                <AddToDataset className="h-4 w-4 text-fg-tertiary" />
+                <ButtonIcon as={AddToDataset} variant="tertiary" />
                 Add to dataset
               </>
             )}
-            <ChevronDown className="h-4 w-4 text-fg-tertiary" />
+            <ButtonIcon as={ChevronDown} variant="tertiary" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-80 p-0">
           <Command>
             <CommandInput
-              placeholder="Enter dataset name..."
+              autoFocus
+              placeholder="Create or find dataset..."
               value={inputValue}
               onValueChange={setInputValue}
               className="h-9"
             />
             <CommandList>
-              <CommandEmpty className="px-4 py-2 text-sm">
-                No datasets found.
-              </CommandEmpty>
-              <CommandGroup heading="New Dataset">
-                <CommandItem
-                  onSelect={() => {
-                    const trimmed = inputValue.trim();
-                    if (trimmed) {
-                      setSelectedDataset(trimmed);
-                      setInputValue("");
-                      setOutputDialogOpen(true); // open alert dialog
-                    }
-                  }}
-                  className="flex items-center justify-between"
-                >
-                  <div className="flex items-center">
-                    <Plus className="mr-2 h-4 w-4 text-blue-500" />
-                    <span>{inputValue.trim() || "Start typing..."}</span>
-                  </div>
-                  <Badge variant="outline" className="bg-blue-50 text-blue-500">
-                    Create New
-                  </Badge>
-                </CommandItem>
-              </CommandGroup>
-              <CommandGroup heading="Existing Datasets">
+              <CommandGroup heading="Existing datasets">
                 {sortedDatasets
                   .filter((d) =>
                     d.dataset_name
@@ -154,15 +137,24 @@ export function AddToDatasetButton({
                       }}
                       className="flex items-center justify-between"
                     >
-                      <div className="flex items-center">
+                      <div className="flex min-w-0 flex-1 items-center">
                         <Check
-                          className={`mr-2 h-4 w-4 ${
+                          className={`mr-2 h-4 w-4 flex-shrink-0 ${
                             selectedDataset === dataset.dataset_name
                               ? "opacity-100"
                               : "opacity-0"
                           }`}
                         />
-                        <span>{dataset.dataset_name}</span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="truncate">
+                              {dataset.dataset_name}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{dataset.dataset_name}</p>
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
                       <Badge variant="secondary">
                         {dataset.count.toLocaleString()} rows
@@ -170,6 +162,31 @@ export function AddToDatasetButton({
                     </CommandItem>
                   ))}
               </CommandGroup>
+
+              {inputValue.trim() && (
+                <CommandGroup heading="New dataset">
+                  <CommandItem
+                    onSelect={() => {
+                      const trimmed = inputValue.trim();
+                      if (trimmed) {
+                        setSelectedDataset(trimmed);
+                        setInputValue("");
+                        setOutputDialogOpen(true); // open alert dialog
+                      }
+                    }}
+                    className="flex items-center justify-between"
+                  >
+                    <div className="flex items-center">
+                      <Plus className="mr-2 h-4 w-4 text-blue-500" />
+                      Create “{inputValue}” dataset...
+                    </div>
+                  </CommandItem>
+                </CommandGroup>
+              )}
+
+              <CommandEmpty className="px-4 py-2 text-sm">
+                No datasets found.
+              </CommandEmpty>
             </CommandList>
           </Command>
         </DropdownMenuContent>
@@ -207,6 +224,6 @@ export function AddToDatasetButton({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </TooltipProvider>
   );
 }

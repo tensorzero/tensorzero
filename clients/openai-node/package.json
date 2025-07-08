@@ -16,18 +16,17 @@
   "author": "TensorZero",
   "license": "Apache-2.0",
   "dependencies": {
-    "openai": "^4.86.2",
+    "openai": "^4.104.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.22.0",
-    "@types/node": "^22.13.10",
+    "@eslint/js": "^9.29.0",
+    "@types/node": "^22.15.33",
     "@types/uuid": "^10.0.0",
-    "eslint": "^9.22.0",
-    "prettier": "^3.5.3",
+    "eslint": "^9.29.0",
+    "prettier": "^3.6.1",
     "typescript": "^5.8.2",
-    "typescript-eslint": "^8.26.0",
-    "vitest": "^3.0.9"
-  },
-  "packageManager": "pnpm@10.6.1"
+    "typescript-eslint": "^8.35.0",
+    "vitest": "^3.2.4"
+  }
 }

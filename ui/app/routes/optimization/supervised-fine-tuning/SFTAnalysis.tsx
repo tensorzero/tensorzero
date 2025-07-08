@@ -1,5 +1,11 @@
 import { AlertTriangleIcon } from "lucide-react";
-import { FirstExample } from "./FirstExample";
+import {
+  BasicInfoItem,
+  BasicInfoItemContent,
+  BasicInfoItemTitle,
+  BasicInfoLayout,
+} from "~/components/layout/BasicInfoLayout";
+import Chip from "~/components/ui/Chip";
 import { type SFTJobStatus } from "~/utils/supervised_fine_tuning/common";
 
 interface Message {
@@ -40,123 +46,60 @@ export interface AnalysisData {
   tokenLimit: number;
 }
 
-interface Props {
-  status: SFTJobStatus;
-}
+const StatisticItem: React.FC<{
+  label: string;
+  value: number;
+}> = ({ label, value }) => (
+  <BasicInfoItem>
+    <BasicInfoItemTitle>{label}</BasicInfoItemTitle>
+    <BasicInfoItemContent>
+      <Chip label={value.toString()} font="mono" />
+    </BasicInfoItemContent>
+  </BasicInfoItem>
+);
 
-export function SFTAnalysis({ status }: Props) {
+export function SFTAnalysis({ status }: { status: SFTJobStatus }) {
   if (status.status === "idle") return null;
 
   const analysisData = status.analysisData;
   if (!analysisData) return null;
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-medium">Dataset Analysis</h3>
+    <>
+      <section className="flex flex-row gap-8">
+        <BasicInfoLayout>
+          <h4>Examples</h4>
+          <StatisticItem label="Total" value={analysisData.numExamples} />
+          <StatisticItem
+            label="Missing system messages"
+            value={analysisData.missingSystemCount}
+          />
+          <StatisticItem
+            label="Missing user messages"
+            value={analysisData.missingUserCount}
+          />
+          <StatisticItem label="Truncated" value={analysisData.tooLongCount} />
+        </BasicInfoLayout>
 
-      {analysisData.firstExample && (
-        <FirstExample messages={analysisData.firstExample} />
-      )}
+        <BasicInfoLayout>
+          <h4>Messages per example</h4>
+          <StatisticItem label="Min" value={analysisData.messageCounts.min} />
+          <StatisticItem label="Max" value={analysisData.messageCounts.max} />
+          <StatisticItem label="Mean" value={analysisData.messageCounts.mean} />
+          <StatisticItem
+            label="Median"
+            value={analysisData.messageCounts.median}
+          />
+          <StatisticItem label="p5" value={analysisData.messageCounts.p5} />
+          <StatisticItem label="p95" value={analysisData.messageCounts.p95} />
+        </BasicInfoLayout>
+      </section>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-lg bg-muted p-4">
-          <h4 className="mb-2 font-medium">Basic Statistics</h4>
-          <ul className="space-y-1">
-            <li className="">
-              <code className="text-sm">
-                Total examples: {analysisData.numExamples}
-              </code>
-            </li>
-            <li>
-              <code className="text-sm">
-                Missing system messages: {analysisData.missingSystemCount}
-              </code>
-            </li>
-            <li>
-              <code className="text-sm">
-                Missing user messages: {analysisData.missingUserCount}
-              </code>
-            </li>
-          </ul>
-        </div>
-
-        <div className="rounded-lg bg-muted p-4">
-          <h4 className="mb-2 font-medium">Messages per Example</h4>
-          <ul className="space-y-1">
-            <li>
-              <code className="text-sm">
-                Min: {analysisData.messageCounts.min} / Max:{" "}
-                {analysisData.messageCounts.max}
-              </code>
-            </li>
-            <li>
-              <code className="text-sm">
-                Mean: {analysisData.messageCounts.mean.toFixed(2)} / Median:{" "}
-                {analysisData.messageCounts.median}
-              </code>
-            </li>
-            <li>
-              <code className="text-sm">
-                p5: {analysisData.messageCounts.p5} / p95:{" "}
-                {analysisData.messageCounts.p95}
-              </code>
-            </li>
-          </ul>
-        </div>
-
-        <div className="rounded-lg bg-muted p-4">
-          <h4 className="mb-2 font-medium">Total Tokens per Example</h4>
-          <ul className="space-y-1">
-            <li>
-              <code className="text-sm">
-                Min: {analysisData.tokenCounts.min} / Max:{" "}
-                {analysisData.tokenCounts.max}
-              </code>
-            </li>
-            <li>
-              <code className="text-sm">
-                Mean: {analysisData.tokenCounts.mean.toFixed(2)} / Median:{" "}
-                {analysisData.tokenCounts.median}
-              </code>
-            </li>
-            <li>
-              <code className="text-sm">
-                p5: {analysisData.tokenCounts.p5} / p95:{" "}
-                {analysisData.tokenCounts.p95}
-              </code>
-            </li>
-          </ul>
-        </div>
-
-        <div className="rounded-lg bg-muted p-4">
-          <h4 className="mb-2 font-medium">Assistant Tokens per Example</h4>
-          <ul className="space-y-1">
-            <li>
-              <code className="text-sm">
-                Min: {analysisData.assistantTokenCounts.min} / Max:{" "}
-                {analysisData.assistantTokenCounts.max}
-              </code>
-            </li>
-            <li>
-              <code className="text-sm">
-                Mean: {analysisData.assistantTokenCounts.mean.toFixed(2)} /
-                Median: {analysisData.assistantTokenCounts.median}
-              </code>
-            </li>
-            <li>
-              <code className="text-sm">
-                p5: {analysisData.assistantTokenCounts.p5} / p95:{" "}
-                {analysisData.assistantTokenCounts.p95}
-              </code>
-            </li>
-          </ul>
-        </div>
-      </div>
-
+      {/* TODO Reusable component for this? */}
       {analysisData.tooLongCount > 0 && (
         <div className="rounded border-l-4 border-yellow-400 bg-yellow-50 p-4">
           <div className="flex">
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               <AlertTriangleIcon className="size-5 text-yellow-400" />
             </div>
             <div className="ml-3">
@@ -170,6 +113,6 @@ export function SFTAnalysis({ status }: Props) {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

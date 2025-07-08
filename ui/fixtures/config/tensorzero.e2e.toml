@@ -1,3 +1,6 @@
+[gateway]
+debug = true
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   MODELS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -33,6 +36,17 @@ model_name = "ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.json_success_no_input_schema]
+type = "json"
+output_schema = "functions/json_success_no_input_schema/output_schema.json"
+
+[functions.json_success_no_input_schema.variants.test]
+type = "chat_completion"
+weight = 1
+model = "dummy::json"
+max_tokens = 100
+json_mode = "strict"
 
 [functions.extract_entities]
 type = "json"
@@ -119,6 +133,20 @@ weight = 1
 model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "functions/ask_question/baseline/system_template.minijinja"
 
+[functions.ask_question.variants."gpt-4.1-nano"]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-4.1-nano-2025-04-14"
+system_template = "functions/ask_question/baseline/system_template.minijinja"
+json_mode = "strict"
+
+[functions.ask_question.variants."gpt-4.1-mini"]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-4.1-mini-2025-04-14"
+system_template = "functions/ask_question/baseline/system_template.minijinja"
+json_mode = "strict"
+
 [functions.answer_question]
 type = "chat"
 system_schema = "functions/answer_question/system_schema.json"
@@ -137,6 +165,102 @@ type = "chat"
 [functions.unleash_kraken.variants.baseline]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
+
+[functions.image_judger]
+type = "chat"
+
+[functions.image_judger.variants.honest_answer]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+
+[functions.multi_hop_rag_agent]
+type = "chat"
+tools = ["think", "search_wikipedia", "load_wikipedia_page", "answer_question"]
+tool_choice = "required"
+parallel_tool_calls = true
+
+[functions.multi_hop_rag_agent.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
+retries = { num_retries = 3, max_delay_s = 10 }
+
+[functions.multi_hop_rag_agent.variants."gpt-4.1-mini"]
+type = "chat_completion"
+model = "openai::gpt-4.1-mini"
+system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
+retries = { num_retries = 3, max_delay_s = 10 }
+
+[functions.multi_hop_rag_agent.variants."gemini-2.5-flash"]
+type = "chat_completion"
+model = "google_ai_studio_gemini::gemini-2.5-flash-preview-04-17"
+system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
+retries = { num_retries = 3, max_delay_s = 10 }
+
+[functions.multi_hop_rag_agent.variants."claude-3.5-haiku"]
+type = "chat_completion"
+model = "anthropic::claude-3-5-haiku-20241022"
+system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
+retries = { num_retries = 3, max_delay_s = 10 }
+
+[functions.compact_context]
+type = "chat"
+system_schema = "functions/compact_context/system_schema.json"
+
+[functions.compact_context.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_template = "functions/compact_context/baseline/system_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+
+[functions.compact_context.variants."gpt-4.1-nano"]
+type = "chat_completion"
+model = "openai::gpt-4.1-nano"
+system_template = "functions/compact_context/baseline/system_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+
+[functions.compact_context.variants."gemini-2.5-flash"]
+type = "chat_completion"
+model = "google_ai_studio_gemini::gemini-2.5-flash-preview-04-17"
+system_template = "functions/compact_context/baseline/system_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+
+[functions.judge_answer]
+type = "json"
+system_schema = "functions/judge_answer/system_schema.json"
+user_schema = "functions/judge_answer/user_schema.json"
+output_schema = "functions/judge_answer/output_schema.json"
+
+[functions.judge_answer.variants."gpt-4.1-mini"]
+type = "experimental_chain_of_thought"
+model = "openai::gpt-4.1-mini"
+system_template = "functions/judge_answer/gpt-4.1-mini/system_template.minijinja"
+user_template = "functions/judge_answer/gpt-4.1-mini/user_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   TOOLS                                    │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[tools.think]
+description = "Think about the question and the information you have gathered so far. This is a good time to plan your next steps."
+parameters = "tools/think.json"
+strict = true
+
+[tools.search_wikipedia]
+description = "Search Wikipedia for pages that match the query. Returns a list of page titles."
+parameters = "tools/search_wikipedia.json"
+strict = true
+
+[tools.load_wikipedia_page]
+description = "Load a Wikipedia page. Returns the page content, or an error if the page does not exist."
+parameters = "tools/load_wikipedia_page.json"
+strict = true
+
+[tools.answer_question]
+description = "End the search process and answer a question. Returns the answer to the question."
+parameters = "tools/answer_question.json"
+strict = true
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
@@ -192,54 +316,115 @@ type = "float"
 level = "episode"
 optimize = "min"
 
+[metrics.elapsed_ms]
+type = "float"
+level = "episode"
+optimize = "min"
+
+[metrics.goated]
+type = "boolean"
+level = "episode"
+optimize = "max"
+
+[metrics.judge_score]
+type = "float"
+level = "episode"
+optimize = "max"
+
+[metrics.num_iterations]
+type = "float"
+level = "episode"
+optimize = "min"
+
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │                                  EVALS                                     │
+# │                                  EVALUATIONS                               │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[evals.entity_extraction]
+[evaluations.entity_extraction]
+type = "static"
 function_name = "extract_entities"
 dataset_name = "foo"
 
-[evals.entity_extraction.evaluators.exact_match]
+[evaluations.entity_extraction.evaluators.exact_match]
 type = "exact_match"
 cutoff = 0.6
 
-[evals.entity_extraction.evaluators.count_sports]
+[evaluations.entity_extraction.evaluators.count_sports]
 type = "llm_judge"
 output_type = "float"
 optimize = "min"
 include = { reference_output = false }
 cutoff = 0.5
 
-[evals.entity_extraction.evaluators.count_sports.variants.mini]
+[evaluations.entity_extraction.evaluators.count_sports.variants.mini]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 active = true
-system_instructions = "evals/entity_extraction/count_sports/system_instructions.txt"
+system_instructions = "evaluations/entity_extraction/count_sports/system_instructions.txt"
 json_mode = "strict"
 temperature = 0.1
 
-[evals.haiku]
+[evaluations.haiku]
+type = "static"
 function_name = "write_haiku"
 dataset_name = "foo"
 
-[evals.haiku.evaluators.exact_match]
+[evaluations.haiku.evaluators.exact_match]
 type = "exact_match"
 
-[evals.haiku.evaluators.topic_starts_with_f]
+[evaluations.haiku.evaluators.topic_starts_with_f]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "min"
 include = { reference_output = false }
 cutoff = 0.5
 
-[evals.haiku.evaluators.topic_starts_with_f.variants.mini]
+[evaluations.haiku.evaluators.topic_starts_with_f.variants.mini]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 active = true
-system_instructions = "evals/haiku/topic_starts_with_f/system_instructions.txt"
+system_instructions = "evaluations/haiku/topic_starts_with_f/system_instructions.txt"
 json_mode = "strict"
 temperature = 0
+
+[evaluations.images]
+type = "static"
+function_name = "image_judger"
+
+[evaluations.images.evaluators.exact_match]
+type = "exact_match"
+
+[evaluations.images.evaluators.honest_answer]
+type = "llm_judge"
+input_format = "messages"
+output_type = "boolean"
+optimize = "max"
+include = { reference_output = false }
+cutoff = 0.2
+
+[evaluations.images.evaluators.honest_answer.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_instructions = "evaluations/images/honest_answer/system_instructions.txt"
+temperature = 0
+json_mode = "strict"
+
+[evaluations.images.evaluators.matches_reference]
+type = "llm_judge"
+input_format = "messages"
+output_type = "boolean"
+optimize = "max"
+include = { reference_output = true }
+cutoff = 0.5
+
+[evaluations.images.evaluators.matches_reference.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_instructions = "evaluations/images/matches_reference/system_instructions.txt"
+temperature = 0
+json_mode = "strict"
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                               OBJECT_STORAGE                               │

@@ -72,7 +72,7 @@ class ToolCallConfig(BaseModel):
     tool choice strategy, and whether tool calls can be parallel.
     """
 
-    tools_available: Optional[List[ToolConfig]] = Field(default_factory=list)
+    tools_available: Optional[List[ToolConfig]] = Field(default_factory=list)  # type: ignore
     tool_choice: Optional[ToolChoice] = None
     parallel_tool_calls: Optional[bool] = False
 

@@ -5,11 +5,13 @@ on:
     branches: ["main"]
 
 jobs:
-  # We don't want to run live-tests on PRs, so we use a dummy job to satisfy branch protection checks
-  live-tests:
+  # See 'ci/README.md' at the repository root for more details.
+  merge-checks-buildkite:
     runs-on: ubuntu-latest
-
+    steps:
+      - run: echo "This is a dummy job to satisfy branch protection checks"
+  check-all-live-tests-passed:
+    runs-on: ubuntu-latest
     timeout-minutes: 5
-
     steps:
       - run: echo "This is a dummy job to satisfy branch protection checks"

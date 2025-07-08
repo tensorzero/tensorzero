@@ -1,29 +1,7 @@
-import { parse } from "smol-toml";
-import { promises as fs } from "fs";
-import { Config, GatewayConfig } from ".";
-import { MetricConfigSchema, type MetricConfig } from "./metric";
-import {
-  DEFAULT_FUNCTION_NAME,
-  getDefaultFunctionWithVariants,
-  RawFunctionConfigSchema,
-} from "./function.server";
-import { z } from "zod";
-import { EmbeddingModelConfigSchema, ModelConfigSchema } from "./models";
-import { ToolConfigSchema } from "./tool";
-import type { FunctionConfig } from "./function";
-import type { EvalConfig } from "./evals";
-import { RawEvalConfigSchema } from "./evals.server";
+import { getNativeTensorZeroClient } from "../supervised_fine_tuning/client";
+import type { Config } from "tensorzero-node";
 
-const DEFAULT_CONFIG_PATH = "config/tensorzero.toml";
-const ENV_CONFIG_PATH = process.env.TENSORZERO_UI_CONFIG_PATH;
 const CACHE_TTL_MS = 1000 * 60; // 1 minute
-
-export function getConfigPath() {
-  if (ENV_CONFIG_PATH) {
-    return ENV_CONFIG_PATH;
-  }
-  return DEFAULT_CONFIG_PATH;
-}
 
 /*
 Config Context provider:
@@ -49,61 +27,10 @@ after a new variant is used.
 We will likely address this with some form of query library down the line.
 */
 
-export async function loadConfig(config_path?: string): Promise<Config> {
-  // If the config_path was provided (via the env var)
-  if (config_path) {
-    try {
-      // Check if the file exists
-      await fs.access(config_path);
-    } catch {
-      throw new Error(`Configuration file not found at ${config_path}`);
-    }
-  } else {
-    // If the env var is not set, try the default location.
-    try {
-      await fs.access(DEFAULT_CONFIG_PATH);
-      config_path = DEFAULT_CONFIG_PATH;
-      console.info(`Found default config at ${DEFAULT_CONFIG_PATH}`);
-    } catch {
-      console.warn(
-        `Config file not found at ${DEFAULT_CONFIG_PATH}. Using blank config. Tip: Set the \`TENSORZERO_UI_CONFIG_PATH\` environment variable to use a different path.`,
-      );
-      // Return a blank config if no file is available.
-      return {
-        gateway: { disable_observability: false },
-        models: {},
-        embedding_models: {},
-        functions: {},
-        metrics: {},
-        tools: {},
-        evals: {},
-      };
-    }
-  }
-
-  // At this point, config_path is guaranteed to point to an existing file.
-  const tomlContent = await fs.readFile(config_path, "utf-8");
-  const parsedConfig = parse(tomlContent);
-  const validatedConfig = RawConfig.parse(parsedConfig);
-
-  const loadedConfig = await validatedConfig.load(config_path);
-
-  // Add demonstration metric to the config
-  loadedConfig.metrics = {
-    ...loadedConfig.metrics,
-    demonstration: {
-      type: "demonstration" as const,
-      level: "inference" as const,
-    },
-  };
-
-  // Add default function to the config
-  loadedConfig.functions = {
-    ...loadedConfig.functions,
-    [DEFAULT_FUNCTION_NAME]: await getDefaultFunctionWithVariants(),
-  };
-
-  return loadedConfig;
+export async function loadConfig(): Promise<Config> {
+  const tensorZeroClient = await getNativeTensorZeroClient();
+  const config = await tensorZeroClient.getConfig();
+  return config;
 }
 
 interface ConfigCache {
@@ -121,65 +48,8 @@ export async function getConfig() {
   }
 
   // Cache is invalid or doesn't exist, reload it
-  const freshConfig = await loadConfig(ENV_CONFIG_PATH);
+  const freshConfig = await loadConfig();
 
   configCache = { data: freshConfig, timestamp: now };
   return freshConfig;
 }
-
-export const RawConfig = z
-  .object({
-    gateway: GatewayConfig.optional().default({}),
-    models: z.record(z.string(), ModelConfigSchema).optional().default({}),
-    embedding_models: z
-      .record(z.string(), EmbeddingModelConfigSchema)
-      .optional()
-      .default({}),
-    functions: z
-      .record(z.string(), RawFunctionConfigSchema)
-      .optional()
-      .default({}),
-    metrics: z.record(z.string(), MetricConfigSchema).optional().default({}),
-    tools: z.record(z.string(), ToolConfigSchema).optional().default({}),
-    evals: z.record(z.string(), RawEvalConfigSchema).optional().default({}),
-  })
-  .transform((raw) => {
-    const config = { ...raw };
-    return {
-      ...config,
-      load: async function (config_path: string): Promise<Config> {
-        const loadedMetrics: Record<string, MetricConfig> = {};
-        const loadedFunctions: Record<string, FunctionConfig> = {};
-        const loadedEvals: Record<string, EvalConfig> = {};
-        for (const [key, evalItem] of Object.entries(config.evals)) {
-          const { evalConfig, functionConfigs, metricConfigs } =
-            await evalItem.load(config_path, key, config.functions);
-          loadedEvals[key] = evalConfig;
-          for (const [funcKey, funcConfig] of Object.entries(functionConfigs)) {
-            loadedFunctions[funcKey] = funcConfig;
-          }
-          for (const [metricKey, metricConfig] of Object.entries(
-            metricConfigs,
-          )) {
-            loadedMetrics[metricKey] = metricConfig;
-          }
-        }
-        for (const [key, func] of Object.entries(config.functions)) {
-          loadedFunctions[key] = await func.load(config_path);
-        }
-        for (const [key, metric] of Object.entries(config.metrics)) {
-          loadedMetrics[key] = metric;
-        }
-        return {
-          gateway: config.gateway,
-          models: config.models,
-          embedding_models: config.embedding_models,
-          functions: loadedFunctions,
-          metrics: loadedMetrics,
-          tools: config.tools,
-          evals: loadedEvals,
-        };
-      },
-    };
-  });
-export type RawConfig = z.infer<typeof RawConfig>;

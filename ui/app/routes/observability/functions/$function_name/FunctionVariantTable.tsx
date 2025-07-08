@@ -6,14 +6,15 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
 import type { VariantCounts } from "~/utils/clickhouse/function";
-import { formatDate } from "~/utils/date";
 import { VariantLink } from "~/components/function/variant/VariantLink";
+import { TableItemTime } from "~/components/ui/TableItems";
 
 type VariantCountsWithMetadata = VariantCounts & {
   type: string;
-  weight: number;
+  weight: number | null;
 };
 
 export default function FunctionVariantTable({
@@ -36,14 +37,7 @@ export default function FunctionVariantTable({
       </TableHeader>
       <TableBody>
         {variant_counts.length === 0 ? (
-          <TableRow className="hover:bg-bg-primary">
-            <TableCell
-              colSpan={5}
-              className="px-3 py-8 text-center text-fg-muted"
-            >
-              No variants found
-            </TableCell>
-          </TableRow>
+          <TableEmptyState message="No variants found" />
         ) : (
           variant_counts.map((variant_count) => (
             <TableRow
@@ -55,7 +49,7 @@ export default function FunctionVariantTable({
                   variantName={variant_count.variant_name}
                   functionName={function_name}
                 >
-                  <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                     {variant_count.variant_name}
                   </code>
                 </VariantLink>
@@ -66,7 +60,7 @@ export default function FunctionVariantTable({
               <TableCell>{variant_count.weight}</TableCell>
               <TableCell>{variant_count.count}</TableCell>
               <TableCell>
-                {formatDate(new Date(variant_count.last_used))}
+                <TableItemTime timestamp={variant_count.last_used} />
               </TableCell>
             </TableRow>
           ))

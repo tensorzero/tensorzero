@@ -1,12 +1,12 @@
-#![allow(clippy::expect_used, clippy::print_stdout)]
+#![expect(clippy::expect_used, clippy::print_stdout)]
 
 use std::{io::Write, path::PathBuf};
 
 use tensorzero::{
-    ClientBuilder, ClientBuilderMode, ClientInferenceParams, ContentBlockChunk, InferenceOutput,
-    InferenceResponseChunk, Input, InputMessage, InputMessageContent, Role,
+    ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput, ClientInputMessage,
+    ClientInputMessageContent, ContentBlockChunk, InferenceOutput, InferenceResponseChunk, Role,
 };
-use tensorzero_internal::inference::types::TextKind;
+use tensorzero_core::inference::types::TextKind;
 use tokio_stream::StreamExt;
 
 use clap::Parser;
@@ -50,6 +50,7 @@ async fn main() {
             config_file: Some(config_file),
             clickhouse_url: std::env::var("TENSORZERO_CLICKHOUSE_URL").ok(),
             timeout: None,
+            verify_credentials: true,
         }),
         (Some(_), Some(_)) => {
             std::process::exit(1);
@@ -69,10 +70,10 @@ async fn main() {
         .inference(ClientInferenceParams {
             function_name: Some(args.function_name),
             stream: Some(args.streaming),
-            input: Input {
-                messages: vec![InputMessage {
+            input: ClientInput {
+                messages: vec![ClientInputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
                         arguments: input,
                     })],
                 }],

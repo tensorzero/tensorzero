@@ -1,0 +1,83 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.multi_hop_rag_agent]
+type = "chat"
+tools = ["think", "search_wikipedia", "load_wikipedia_page", "answer_question"]
+tool_choice = "required"
+parallel_tool_calls = true
+
+[functions.multi_hop_rag_agent.variants."gpt-4.1-mini"]
+type = "chat_completion"
+model = "openai::gpt-4.1-mini"
+system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
+
+[functions.multi_hop_rag_agent.variants."claude-3.5-haiku"]
+type = "chat_completion"
+model = "anthropic::claude-3-5-haiku-20241022"
+system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
+
+[functions.compact_context]
+type = "chat"
+system_schema = "functions/compact_context/system_schema.json"
+
+[functions.compact_context.variants."gpt-4.1-mini"]
+type = "chat_completion"
+model = "openai::gpt-4.1-mini"
+system_template = "functions/compact_context/baseline/system_template.minijinja"
+
+[functions.compact_context.variants."claude-3.5-haiku"]
+type = "chat_completion"
+model = "anthropic::claude-3-5-haiku-20241022"
+system_template = "functions/compact_context/baseline/system_template.minijinja"
+
+[functions.judge_answer]
+type = "json"
+system_schema = "functions/judge_answer/system_schema.json"
+user_schema = "functions/judge_answer/user_schema.json"
+output_schema = "functions/judge_answer/output_schema.json"
+
+[functions.judge_answer.variants."gpt-4.1-mini"]
+type = "experimental_chain_of_thought"
+model = "openai::gpt-4.1-mini"
+system_template = "functions/judge_answer/gpt-4.1-mini/system_template.minijinja"
+user_template = "functions/judge_answer/gpt-4.1-mini/user_template.minijinja"
+json_mode = "strict"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   TOOLS                                    │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[tools.think]
+description = "Think about the question and the information you have gathered so far. This is a good time to plan your next steps."
+parameters = "tools/think.json"
+strict = true
+
+[tools.search_wikipedia]
+description = "Search Wikipedia for pages that match the query. Returns a list of page titles."
+parameters = "tools/search_wikipedia.json"
+strict = true
+
+[tools.load_wikipedia_page]
+description = "Load a Wikipedia page. Returns the page content, or an error if the page does not exist."
+parameters = "tools/load_wikipedia_page.json"
+strict = true
+
+[tools.answer_question]
+description = "End the search process and answer a question. Returns the answer to the question."
+parameters = "tools/answer_question.json"
+strict = true
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+[metrics.judge_score]
+type = "float"
+level = "episode"
+optimize = "max"
+
+[metrics.num_iterations]
+type = "float"
+level = "episode"
+optimize = "min"

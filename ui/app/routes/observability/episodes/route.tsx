@@ -2,7 +2,7 @@ import {
   queryEpisodeTable,
   queryEpisodeTableBounds,
   countEpisodes,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import EpisodesTable from "./EpisodesTable";
 import { data, isRouteErrorResponse, useNavigate } from "react-router";
@@ -13,6 +13,7 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -44,20 +45,6 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
   const { episodes, pageSize, bounds, totalCount } = loaderData;
   const navigate = useNavigate();
-
-  if (episodes.length === 0) {
-    return (
-      <PageLayout>
-        <PageHeader heading="Episodes" count={totalCount} />
-        <SectionLayout>
-          <EpisodeSearchBar />
-          <div className="py-8 text-center text-gray-500">
-            No episodes found
-          </div>
-        </SectionLayout>
-      </PageLayout>
-    );
-  }
 
   const topEpisode = episodes[0];
   const bottomEpisode = episodes[episodes.length - 1];
@@ -100,7 +87,7 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

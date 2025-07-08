@@ -13,12 +13,22 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import { Toaster } from "~/components/ui/toaster";
+import { useToast } from "~/hooks/use-toast";
+import { useEffect } from "react";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
   const url = new URL(request.url);
   const pageSize = Number(url.searchParams.get("pageSize")) || 15;
   const offset = Number(url.searchParams.get("offset")) || 0;
+  const rowsAddedParam = url.searchParams.get("rowsAdded");
+  const rowsSkippedParam = url.searchParams.get("rowsSkipped");
+  const rowsAdded = rowsAddedParam !== null ? Number(rowsAddedParam) : null;
+  const rowsSkipped =
+    rowsSkippedParam !== null ? Number(rowsSkippedParam) : null;
+
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
@@ -33,13 +43,28 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!count_info) {
     throw data("Dataset not found", { status: 404 });
   }
-  return { rows, count_info, pageSize, offset };
+  return { rows, count_info, pageSize, offset, rowsAdded, rowsSkipped };
 }
 
 export default function DatasetDetailPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { rows, count_info, pageSize, offset } = loaderData;
+  const { rows, count_info, pageSize, offset, rowsAdded, rowsSkipped } =
+    loaderData;
+  const { toast } = useToast();
+
+  // Use useEffect to show toast only after component mounts
+  useEffect(() => {
+    if (rowsAdded !== null) {
+      toast({
+        title: "Dataset Updated",
+        description: `Added ${rowsAdded} rows to the dataset. Skipped ${rowsSkipped} duplicate rows.`,
+      });
+    }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowsAdded, toast]);
+
   const navigate = useNavigate();
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -51,6 +76,7 @@ export default function DatasetDetailPage({
     searchParams.set("offset", String(offset - pageSize));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
+
   return (
     <PageLayout>
       <PageHeader heading="Dataset" name={count_info.dataset_name} />
@@ -64,12 +90,13 @@ export default function DatasetDetailPage({
           disableNext={offset + pageSize >= count_info.count}
         />
       </SectionLayout>
+      <Toaster />
     </PageLayout>
   );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

@@ -5,7 +5,6 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
-  useLoaderData,
 } from "react-router";
 
 import { ConfigProvider } from "./context/config";
@@ -15,7 +14,8 @@ import { getConfig } from "./utils/config/index.server";
 import { AppSidebar } from "./components/layout/app.sidebar";
 import { SidebarProvider } from "./components/ui/sidebar";
 import { ContentLayout } from "./components/layout/ContentLayout";
-import { startPeriodicCleanup } from "./utils/evals.server";
+import { startPeriodicCleanup } from "./utils/evaluations.server";
+import { ReactQueryProvider } from "./providers/react-query";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -36,7 +36,7 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export async function loader() {
-  // Initialize eval cleanup when the app loads
+  // Initialize evaluation cleanup when the app loads
   startPeriodicCleanup();
   return await getConfig();
 }
@@ -60,20 +60,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function App() {
-  const config = useLoaderData<typeof loader>();
-
+export default function App({ loaderData: config }: Route.ComponentProps) {
   return (
-    <ConfigProvider value={config}>
-      <SidebarProvider>
-        <div className="fixed inset-0 flex">
-          <AppSidebar />
-          <ContentLayout>
-            <Outlet />
-          </ContentLayout>
-        </div>
-      </SidebarProvider>
-    </ConfigProvider>
+    <ReactQueryProvider>
+      <ConfigProvider value={config}>
+        <SidebarProvider>
+          <div className="fixed inset-0 flex">
+            <AppSidebar />
+            <ContentLayout>
+              <Outlet />
+            </ContentLayout>
+          </div>
+        </SidebarProvider>
+      </ConfigProvider>
+    </ReactQueryProvider>
   );
 }
 

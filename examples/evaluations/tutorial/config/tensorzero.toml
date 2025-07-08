@@ -1,0 +1,71 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.write_haiku]
+type = "chat"
+user_schema = "functions/write_haiku/user_schema.json"
+
+[functions.write_haiku.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+user_template = "functions/write_haiku/user_template.minijinja"
+
+[functions.write_haiku.variants.gpt_4o]
+type = "chat_completion"
+model = "openai::gpt-4o"
+user_template = "functions/write_haiku/user_template.minijinja"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   EVALS                                    │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[evaluations.haiku_eval]
+type = "static"
+function_name = "write_haiku"
+
+[evaluations.haiku_eval.evaluators.exact_match]
+type = "exact_match"
+
+[evaluations.haiku_eval.evaluators.valid_haiku]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+cutoff = 0.95
+
+[evaluations.haiku_eval.evaluators.valid_haiku.variants.gpt_4o_mini_judge]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_instructions = "evaluations/haiku_eval/valid_haiku/system_instructions.txt"
+json_mode = "strict"
+active = true
+
+[evaluations.haiku_eval.evaluators.valid_haiku.variants.gpt_4o_judge]
+type = "chat_completion"
+model = "openai::gpt-4o"
+system_instructions = "evaluations/haiku_eval/valid_haiku/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.haiku_eval.evaluators.metaphor_count]
+type = "llm_judge"
+output_type = "float"
+optimize = "max"
+cutoff = 1
+
+[evaluations.haiku_eval.evaluators.metaphor_count.variants.gpt_4o_mini_judge]
+type = "experimental_chain_of_thought"
+model = "openai::gpt-4o-mini"
+system_instructions = "evaluations/haiku_eval/metaphor_count/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.haiku_eval.evaluators.compare_haikus]
+type = "llm_judge"
+include = { reference_output = true }
+output_type = "boolean"
+optimize = "max"
+
+[evaluations.haiku_eval.evaluators.compare_haikus.variants.gpt_4o_mini_judge]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_instructions = "evaluations/haiku_eval/compare_haikus/system_instructions.txt"
+json_mode = "strict"

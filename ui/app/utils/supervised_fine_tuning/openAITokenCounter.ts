@@ -2,9 +2,10 @@
 // Reference: https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken
 
 import { encoding_for_model, get_encoding } from "tiktoken";
-import type { TiktokenModel } from "tiktoken";
+import type { Tiktoken, TiktokenModel } from "tiktoken";
 import { MODEL_TOKEN_LIMITS, CURRENT_MODEL_VERSIONS } from "./constants";
 import type { OpenAIMessage, ToolFunction } from "./types";
+import { logger } from "~/utils/logger";
 
 /**
  * Converts model name to tiktoken model name
@@ -71,10 +72,10 @@ export function getModelTokenLimit(model: string): number {
  * @param model Model name
  * @returns Tiktoken encoding
  */
-function getEncodingForModel(model: string) {
+export function getEncodingForModel(model: string) {
   const tiktokenModel = convertToTiktokenModel(model);
   if (!tiktokenModel) {
-    console.warn(`Unknown model: ${model}, using o200k_base`);
+    logger.warn(`Unknown model: ${model}, using o200k_base`);
     return get_encoding("o200k_base");
   }
   return encoding_for_model(tiktokenModel);
@@ -89,9 +90,8 @@ function getEncodingForModel(model: string) {
 export function getTokensFromMessages(
   messages: OpenAIMessage[],
   model: string,
+  enc: Tiktoken,
 ): number {
-  const enc = getEncodingForModel(model);
-
   const tokens_per_message = 3;
   const tokens_per_name = 1;
 
@@ -101,7 +101,7 @@ export function getTokensFromMessages(
       model as (typeof CURRENT_MODEL_VERSIONS)[number],
     )
   ) {
-    console.warn(
+    logger.warn(
       `Warning: ${model} is not a current version. Using default token counts.`,
     );
   }
@@ -120,7 +120,6 @@ export function getTokensFromMessages(
   }
   num_tokens += 3; // every reply is primed with <|start|>assistant<|message|>
 
-  enc.free();
   return num_tokens;
 }
 
@@ -135,6 +134,7 @@ export function getTokensForTools(
   functions: ToolFunction[],
   messages: OpenAIMessage[],
   model: string,
+  enc: Tiktoken,
 ): number {
   let func_init = 0;
   let prop_init = 0;
@@ -162,8 +162,6 @@ export function getTokensForTools(
       `getTokensForTools() is not implemented for model ${model}`,
     );
   }
-
-  const enc = getEncodingForModel(model);
 
   let func_token_count = 0;
   if (functions.length > 0) {
@@ -207,9 +205,7 @@ export function getTokensForTools(
     func_token_count += func_end;
   }
 
-  enc.free();
-
-  const messagesTokenCount = getTokensFromMessages(messages, model);
+  const messagesTokenCount = getTokensFromMessages(messages, model, enc);
   return messagesTokenCount + func_token_count;
 }
 
@@ -221,10 +217,8 @@ export function getTokensForTools(
  */
 export function countAssistantTokens(
   messages: OpenAIMessage[],
-  model: string,
+  enc: Tiktoken,
 ): number {
-  const enc = getEncodingForModel(model);
-
   let assistantTokens = 0;
   for (const message of messages) {
     if (message.role === "assistant") {
@@ -260,7 +254,6 @@ export function countAssistantTokens(
     }
   }
 
-  enc.free();
   return assistantTokens;
 }
 

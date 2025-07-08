@@ -1,29 +1,34 @@
 import { z } from "zod";
-import type { MetricConfig, MetricConfigOptimize } from "../config/metric";
+import type { MetricConfigOptimize } from "tensorzero-node";
 import {
   contentBlockOutputSchema,
+  CountSchema,
   getInferenceTableName,
   InferenceJoinKey,
   InferenceTableName,
   inputSchema,
   jsonInferenceOutputSchema,
 } from "./common";
-import { clickhouseClient } from "./client.server";
-import type { FunctionConfig } from "../config/function";
-import { getComparisonOperator } from "../config/metric";
+import type { JsonInferenceOutput } from "./common";
+import { getClickhouseClient } from "./client.server";
+import type { FunctionConfig } from "tensorzero-node";
+import { getComparisonOperator, type FeedbackConfig } from "../config/feedback";
 import {
   getInferenceJoinKey,
+  parsedChatExampleSchema,
+  parsedJsonInferenceExampleSchema,
   type InferenceExample,
   type ParsedChatInferenceExample,
   type ParsedInferenceExample,
   type ParsedJsonInferenceExample,
 } from "./curation";
+import { logger } from "~/utils/logger";
 
 export async function countFeedbacksForMetric(
   function_name: string,
   function_config: FunctionConfig,
   metric_name: string,
-  metric_config: MetricConfig,
+  metric_config: FeedbackConfig,
 ): Promise<number | null> {
   const inference_table_name = getInferenceTableName(function_config);
   switch (metric_config.type) {
@@ -61,7 +66,7 @@ export async function countCuratedInferences(
   function_name: string,
   function_config: FunctionConfig,
   metric_name: string,
-  metric_config: MetricConfig,
+  metric_config: FeedbackConfig,
   threshold: number,
 ) {
   const inference_table_name = getInferenceTableName(function_config);
@@ -102,7 +107,7 @@ export async function getCuratedInferences(
   function_name: string,
   function_config: FunctionConfig,
   metric_name: string | null,
-  metric_config: MetricConfig | null,
+  metric_config: FeedbackConfig | null,
   threshold: number,
   max_samples?: number,
 ) {
@@ -160,14 +165,14 @@ async function queryAllInferencesForFunction(
   max_samples: number | undefined,
 ): Promise<ParsedInferenceExample[]> {
   const limitClause = max_samples ? `LIMIT ${max_samples}` : "";
-  const query = `SELECT * FROM ${inference_table_name} WHERE function_name = {function_name:String} ${limitClause}`;
-  const resultSet = await clickhouseClient.query({
+  const query = `SELECT variant_name, input, output, episode_id  FROM ${inference_table_name} WHERE function_name = {function_name:String} ${limitClause}`;
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { function_name },
   });
   const rows = await resultSet.json<InferenceExample>();
-  return parseInferenceExamples(rows, inference_table_name);
+  return parseInferenceExamples(rows, inference_table_name, function_name);
 }
 
 // Generic function to handle both boolean and float metric queries
@@ -229,7 +234,7 @@ async function queryCuratedMetricData(
       ${limitClause}
     `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -239,7 +244,7 @@ async function queryCuratedMetricData(
     },
   });
   const rows = await resultSet.json<InferenceExample>();
-  return parseInferenceExamples(rows, inference_table_name);
+  return parseInferenceExamples(rows, inference_table_name, function_name);
 }
 
 // Generic function to count metric data
@@ -290,7 +295,7 @@ async function countMetricData(
         i.function_name = {function_name:String}
     `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -300,7 +305,8 @@ async function countMetricData(
     },
   });
   const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 async function queryDemonstrationDataForFunction(
@@ -331,7 +337,7 @@ async function queryDemonstrationDataForFunction(
       ${limitClause}
     `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -339,7 +345,7 @@ async function queryDemonstrationDataForFunction(
     },
   });
   const rows = await resultSet.json<InferenceExample>();
-  return parseInferenceExamples(rows, inference_table_name);
+  return parseInferenceExamples(rows, inference_table_name, function_name);
 }
 
 export async function countDemonstrationDataForFunction(
@@ -363,7 +369,7 @@ export async function countDemonstrationDataForFunction(
         i.function_name = {function_name:String}
     `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -371,24 +377,70 @@ export async function countDemonstrationDataForFunction(
     },
   });
   const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 function parseInferenceExamples(
   rows: InferenceExample[],
   tableName: string,
+  function_name: string,
 ): ParsedChatInferenceExample[] | ParsedJsonInferenceExample[] {
   if (tableName === "ChatInference") {
-    return rows.map((row) => ({
+    const processedRows = rows.map((row) => ({
       ...row,
       input: inputSchema.parse(JSON.parse(row.input)),
       output: z.array(contentBlockOutputSchema).parse(JSON.parse(row.output)),
     })) as ParsedChatInferenceExample[];
+    const parsedRows = processedRows.map((row) =>
+      parsedChatExampleSchema.parse(row),
+    );
+    return parsedRows;
   } else {
-    return rows.map((row) => ({
-      ...row,
-      input: inputSchema.parse(JSON.parse(row.input)),
-      output: jsonInferenceOutputSchema.parse(JSON.parse(row.output)),
-    })) as ParsedJsonInferenceExample[];
+    const processedRows = rows.map((row) => {
+      if (function_name.startsWith("tensorzero::llm_judge::")) {
+        row.output = handle_llm_judge_output(row.output);
+      }
+      return {
+        ...row,
+        input: inputSchema.parse(JSON.parse(row.input)),
+        output: jsonInferenceOutputSchema.parse(JSON.parse(row.output)),
+      };
+    }) as ParsedJsonInferenceExample[];
+    const parsedRows = processedRows.map((row) =>
+      parsedJsonInferenceExampleSchema.parse(row),
+    );
+    return parsedRows;
   }
+}
+
+/**
+ * When we first introduced LLM Judges, we included the thinking section in the output.
+ * We have since removed it, but we need to handle the old data.
+ * So, we transform any old LLM Judge outputs to the new format by removing the thinking section from the
+ * parsed and raw outputs.
+ */
+export function handle_llm_judge_output(output: string) {
+  let parsed: JsonInferenceOutput;
+  try {
+    parsed = JSON.parse(output);
+  } catch (e) {
+    logger.warn("Error parsing LLM Judge output", e);
+    // Don't do anything if the output failed to parse
+    return output;
+  }
+  if (!parsed.parsed) {
+    // if the output failed to parse don't do anything
+    return output;
+  }
+  if (parsed.parsed.thinking) {
+    // there is a thinking section that needs to be removed in the parsed and raw outputs
+    delete parsed.parsed.thinking;
+    const output = {
+      parsed: parsed.parsed,
+      raw: JSON.stringify(parsed.parsed),
+    };
+    return JSON.stringify(output);
+  }
+  return JSON.stringify(parsed);
 }

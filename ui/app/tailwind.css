@@ -1,34 +1,210 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-:root {
-  --font-weight-thin: 100;
-  --font-weight-light: 300;
-  --font-weight-normal: 450;
-  --font-weight-medium: 500;
-  --font-weight-semibold: 620;
-  --font-weight-bold: 700;
-  --font-weight-black: 900;
-}
+@plugin 'tailwindcss-animate';
 
-html,
-body {
-  @apply bg-background dark:bg-background;
-  font-weight: var(--font-weight-normal);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-  @media (prefers-color-scheme: dark) {
-    color-scheme: dark;
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans:
+    Geist, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+  --font-mono:
+    Geist Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --font-weight-thin: var(--font-weight-thin);
+  --font-weight-light: var(--font-weight-light);
+  --font-weight-normal: var(--font-weight-normal);
+  --font-weight-medium: var(--font-weight-medium);
+  --font-weight-semibold: var(--font-weight-semibold);
+  --font-weight-bold: var(--font-weight-bold);
+  --font-weight-black: var(--font-weight-black);
+
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-md: 1rem;
+  --text-md--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: 2.25rem;
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: 2.5rem;
+  --text-5xl: 3rem;
+  --text-5xl--line-height: 1;
+  --text-6xl: 3.75rem;
+  --text-6xl--line-height: 1;
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --color-background: hsl(var(--background-primary));
+
+  --color-bg: hsl(var(--background-primary));
+  --color-bg-primary: hsl(var(--background-primary));
+  --color-bg-secondary: hsl(var(--background-secondary));
+  --color-bg-tertiary: hsl(var(--background-tertiary));
+  --color-bg-muted: hsl(var(--background-muted));
+  --color-bg-hover: hsl(var(--background-hover));
+  --color-bg-type-chat: hsl(var(--emerald-100));
+  --color-bg-type-json: hsl(var(--blue-100));
+
+  --color-foreground: hsl(var(--foreground-primary));
+
+  --color-fg: hsl(var(--foreground-primary));
+  --color-fg-primary: hsl(var(--foreground-primary));
+  --color-fg-secondary: hsl(var(--foreground-secondary));
+  --color-fg-tertiary: hsl(var(--foreground-tertiary));
+  --color-fg-muted: hsl(var(--foreground-muted));
+  --color-fg-type-chat: hsl(var(--emerald-600));
+  --color-fg-type-json: hsl(var(--blue-600));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  --color-sidebar: hsl(var(--sidebar-background));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --color-emerald-50: hsl(var(--emerald-50));
+  --color-emerald-100: hsl(var(--emerald-100));
+  --color-emerald-200: hsl(var(--emerald-200));
+  --color-emerald-300: hsl(var(--emerald-300));
+  --color-emerald-400: hsl(var(--emerald-400));
+  --color-emerald-500: hsl(var(--emerald-500));
+  --color-emerald-600: hsl(var(--emerald-600));
+  --color-emerald-700: hsl(var(--emerald-700));
+  --color-emerald-800: hsl(var(--emerald-800));
+  --color-emerald-900: hsl(var(--emerald-900));
+
+  --color-blue-50: hsl(var(--blue-50));
+  --color-blue-100: hsl(var(--blue-100));
+  --color-blue-200: hsl(var(--blue-200));
+  --color-blue-300: hsl(var(--blue-300));
+  --color-blue-400: hsl(var(--blue-400));
+  --color-blue-500: hsl(var(--blue-500));
+  --color-blue-600: hsl(var(--blue-600));
+  --color-blue-700: hsl(var(--blue-700));
+  --color-blue-800: hsl(var(--blue-800));
+  --color-blue-900: hsl(var(--blue-900));
+
+  --color-purple-50: hsl(var(--purple-50));
+  --color-purple-100: hsl(var(--purple-100));
+  --color-purple-200: hsl(var(--purple-200));
+  --color-purple-300: hsl(var(--purple-300));
+  --color-purple-400: hsl(var(--purple-400));
+  --color-purple-500: hsl(var(--purple-500));
+  --color-purple-600: hsl(var(--purple-600));
+  --color-purple-700: hsl(var(--purple-700));
+  --color-purple-800: hsl(var(--purple-800));
+  --color-purple-900: hsl(var(--purple-900));
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
   }
 }
 
-::selection {
-  @apply bg-orange-200 text-gray-900;
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
 }
-::-moz-selection {
-  @apply bg-orange-200 text-gray-900;
+
+@layer utilities {
+  :root {
+    --font-weight-thin: 100;
+    --font-weight-light: 300;
+    --font-weight-normal: 450;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 620;
+    --font-weight-bold: 700;
+    --font-weight-black: 900;
+  }
+
+  html,
+  body {
+    @apply bg-background dark:bg-background;
+    font-weight: var(--font-weight-normal);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    @media (prefers-color-scheme: dark) {
+      color-scheme: dark;
+    }
+  }
+
+  ::selection {
+    @apply bg-orange-200 text-gray-900;
+  }
+  ::-moz-selection {
+    @apply bg-orange-200 text-gray-900;
+  }
 }
 
 @layer base {
@@ -109,6 +285,17 @@ body {
     --blue-700: 208 72% 16%;
     --blue-800: 208 80% 12%;
     --blue-900: 208 86% 8%;
+
+    --purple-50: 260 32% 93%;
+    --purple-100: 260 33% 90%;
+    --purple-200: 260 34% 88%;
+    --purple-300: 260 36% 80%;
+    --purple-400: 260 38% 68%;
+    --purple-500: 260 40% 56%;
+    --purple-600: 260 56% 48%;
+    --purple-700: 260 72% 36%;
+    --purple-800: 260 80% 24%;
+    --purple-900: 260 88% 16%;
   }
 
   .dark {
@@ -155,18 +342,47 @@ body {
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
   }
 }
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
+@layer components {
+  .CodeBlock {
+    &:where([data-show-line-numbers]) {
+      --_line-number-width: --spacing(8);
+      &:where([data-padded]) {
+        --_line-number-width: --spacing(13);
+      }
+    }
+
+    &:where([data-show-line-numbers]) code {
+      counter-reset: line;
+    }
+
+    &:where([data-show-line-numbers]) .line {
+      counter-increment: line;
+
+      &::before {
+        display: block;
+        content: counter(line);
+        position: sticky;
+        flex: 0 0 var(--_line-number-width);
+        align-self: flex-start;
+        color: theme(--color-fg-muted);
+        left: 0;
+        width: var(--_line-number-width);
+        padding-right: --spacing(3);
+        text-align: right;
+        user-select: none;
+        font-family: theme(--font-mono);
+        background: theme(--color-bg-primary);
+        @media (width <= theme(--breakpoint-sm)) {
+          display: none;
+        }
+      }
+    }
   }
 }

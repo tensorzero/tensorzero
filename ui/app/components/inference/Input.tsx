@@ -1,19 +1,25 @@
 import { Card, CardContent } from "~/components/ui/card";
 import type {
-  Input,
   InputMessageContent,
-  ResolvedImageContent,
-  ResolvedInput,
-  ResolvedInputMessage,
-  ResolvedInputMessageContent,
+  DisplayInput,
+  DisplayInputMessage,
+  DisplayInputMessageContent,
 } from "~/utils/clickhouse/common";
 import { SystemContent } from "./SystemContent";
 import { useEffect, useState } from "react";
 import { SkeletonImage } from "./SkeletonImage";
+import ImageBlock from "./ImageBlock";
+
+/**
+ * This component is only used for the datapoint page.
+ * It will be phased out in favor of the InputSnippet component.
+ * We currently need it for the datapoint page because the InputSnippet component
+ * does not support editing.
+ */
 
 // Base interface with just the common required properties
 interface BaseInputProps {
-  input: ResolvedInput;
+  input: DisplayInput;
 }
 
 // For when isEditing is not provided (default behavior)
@@ -27,7 +33,7 @@ interface DefaultInputProps extends BaseInputProps {
 interface EditableInputProps extends BaseInputProps {
   isEditing: boolean;
   onSystemChange: (system: string | object) => void;
-  onMessagesChange: (messages: ResolvedInputMessage[]) => void;
+  onMessagesChange: (messages: DisplayInputMessage[]) => void;
 }
 
 type InputProps = DefaultInputProps | EditableInputProps;
@@ -40,7 +46,7 @@ export default function Input({
 }: InputProps) {
   const handleMessageChange = (
     index: number,
-    updatedMessage: ResolvedInputMessage,
+    updatedMessage: DisplayInputMessage,
   ) => {
     const updatedMessages = [...input.messages];
     updatedMessages[index] = updatedMessage;
@@ -81,7 +87,7 @@ export default function Input({
 }
 
 interface BaseMessageProps {
-  message: ResolvedInputMessage;
+  message: DisplayInputMessage;
 }
 
 interface DefaultMessageProps extends BaseMessageProps {
@@ -91,21 +97,21 @@ interface DefaultMessageProps extends BaseMessageProps {
 
 interface EditableMessageProps extends BaseMessageProps {
   isEditing: boolean;
-  onMessageChange: (message: ResolvedInputMessage) => void;
+  onMessageChange: (message: DisplayInputMessage) => void;
 }
 
 type MessageProps = DefaultMessageProps | EditableMessageProps;
 
 function Message({ message, isEditing, onMessageChange }: MessageProps) {
   const handleContentChange = (
-    updatedContent: ResolvedInputMessage["content"],
+    updatedContent: DisplayInputMessage["content"],
   ) => {
     onMessageChange?.({ ...message, content: updatedContent });
   };
 
   return (
     <div className="space-y-1">
-      <div className="text-md font-medium capitalize text-slate-600 dark:text-slate-400">
+      <div className="text-md font-medium text-slate-600 capitalize dark:text-slate-400">
         {message.role}
       </div>
       <MessageContent
@@ -118,7 +124,7 @@ function Message({ message, isEditing, onMessageChange }: MessageProps) {
 }
 
 interface BaseMessageContentProps {
-  content: ResolvedInputMessage["content"];
+  content: DisplayInputMessage["content"];
 }
 
 interface DefaultMessageContentProps extends BaseMessageContentProps {
@@ -128,7 +134,7 @@ interface DefaultMessageContentProps extends BaseMessageContentProps {
 
 interface EditableMessageContentProps extends BaseMessageContentProps {
   isEditing: boolean;
-  onContentChange: (content: ResolvedInputMessage["content"]) => void;
+  onContentChange: (content: DisplayInputMessage["content"]) => void;
 }
 
 type MessageContentProps =
@@ -142,7 +148,7 @@ function MessageContent({
 }: MessageContentProps) {
   const handleBlockChange = (
     index: number,
-    updatedBlock: ResolvedInputMessageContent,
+    updatedBlock: DisplayInputMessageContent,
   ) => {
     const updatedContent = [...content];
     updatedContent[index] = updatedBlock;
@@ -152,9 +158,42 @@ function MessageContent({
     <div className="space-y-2">
       {content.map((block, index) => {
         switch (block.type) {
-          case "text":
+          case "structured_text":
             return (
-              <TextBlock
+              <StructuredTextBlock
+                key={index}
+                block={block}
+                isEditing={isEditing ?? false}
+                onContentChange={(updatedBlock) =>
+                  handleBlockChange(index, updatedBlock)
+                }
+              />
+            );
+          case "unstructured_text":
+            return (
+              <UnstructuredTextBlock
+                key={index}
+                block={block}
+                isEditing={isEditing ?? false}
+                onContentChange={(updatedBlock) =>
+                  handleBlockChange(index, updatedBlock)
+                }
+              />
+            );
+          case "missing_function_text":
+            return (
+              <MissingFunctionTextBlock
+                key={index}
+                block={block}
+                isEditing={isEditing ?? false}
+                onContentChange={(updatedBlock) =>
+                  handleBlockChange(index, updatedBlock)
+                }
+              />
+            );
+          case "raw_text":
+            return (
+              <RawTextBlock
                 key={index}
                 block={block}
                 isEditing={isEditing ?? false}
@@ -185,12 +224,22 @@ function MessageContent({
                 }
               />
             );
-          case "image":
-            return <ImageBlock key={index} image={block} />;
-          case "image_error":
+          case "file":
+            if (block.file.mime_type.startsWith("image/")) {
+              return <ImageBlock key={index} image={block} />;
+            } else {
+              return (
+                <div key={index}>
+                  <SkeletonImage
+                    error={`Unsupported file type: ${block.file.mime_type}`}
+                  />
+                </div>
+              );
+            }
+          case "file_error":
             return (
               <div key={index}>
-                <SkeletonImage error={true} />
+                <SkeletonImage error="Failed to retrieve image." />
               </div>
             );
           default:
@@ -201,19 +250,23 @@ function MessageContent({
   );
 }
 
-// TextBlock Component
-interface TextBlockProps {
-  block: Extract<InputMessageContent, { type: "text" }>;
+// StructuredTextBlock Component
+// Allows the user to edit structured text arguments
+interface StructuredTextBlockProps {
+  block: Extract<DisplayInputMessageContent, { type: "structured_text" }>;
   isEditing?: boolean;
   onContentChange?: (
-    block: Extract<InputMessageContent, { type: "text" }>,
+    block: Extract<DisplayInputMessageContent, { type: "structured_text" }>,
   ) => void;
 }
 
-function TextBlock({ block, isEditing, onContentChange }: TextBlockProps) {
-  const [isObject, setIsObject] = useState(typeof block.value === "object");
+function StructuredTextBlock({
+  block,
+  isEditing,
+  onContentChange,
+}: StructuredTextBlockProps) {
   const [displayValue, setDisplayValue] = useState(
-    isObject ? JSON.stringify(block.value, null, 2) : block.value,
+    JSON.stringify(block.arguments, null, 2),
   );
   const [jsonError, setJsonError] = useState<string | null>(null);
 
@@ -222,23 +275,15 @@ function TextBlock({ block, isEditing, onContentChange }: TextBlockProps) {
       const newValue = e.target.value;
       setDisplayValue(newValue);
 
-      if (isObject) {
-        try {
-          const parsedValue = JSON.parse(newValue);
-          setIsObject(typeof parsedValue === "object");
-          setJsonError(null);
-          onContentChange({
-            type: "text",
-            value: parsedValue,
-          });
-        } catch {
-          setJsonError("Invalid JSON format");
-        }
-      } else {
+      try {
+        const parsedValue = JSON.parse(newValue);
+        setJsonError(null);
         onContentChange({
-          type: "text",
-          value: newValue,
+          type: "structured_text",
+          arguments: parsedValue,
         });
+      } catch {
+        setJsonError("Invalid JSON format");
       }
     }
   };
@@ -266,10 +311,132 @@ function TextBlock({ block, isEditing, onContentChange }: TextBlockProps) {
   return (
     <pre className="whitespace-pre-wrap">
       <code className="text-sm">
-        {typeof block.value === "object"
-          ? JSON.stringify(block.value, null, 2)
-          : block.value}
+        {JSON.stringify(block.arguments, null, 2)}
       </code>
+    </pre>
+  );
+}
+
+// UnstructuredTextBlock Component
+// Allows the user to edit unstructured text
+interface UnstructuredTextBlockProps {
+  block: Extract<DisplayInputMessageContent, { type: "unstructured_text" }>;
+  isEditing?: boolean;
+  onContentChange?: (
+    block: Extract<DisplayInputMessageContent, { type: "unstructured_text" }>,
+  ) => void;
+}
+
+function UnstructuredTextBlock({
+  block,
+  isEditing,
+  onContentChange,
+}: UnstructuredTextBlockProps) {
+  if (isEditing) {
+    return (
+      <div className="w-full">
+        <textarea
+          className={`w-full rounded border bg-white p-2 font-mono text-sm dark:bg-slate-800`}
+          value={block.text}
+          onChange={(e) =>
+            onContentChange?.({
+              type: "unstructured_text",
+              text: e.target.value,
+            })
+          }
+          rows={3}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <pre className="whitespace-pre-wrap">
+      <code className="text-sm">{block.text}</code>
+    </pre>
+  );
+}
+
+// MissingFunctionTextBlock Component
+// For now this will behave like an unstructured text block
+// TODO: show nice warning in UI for this
+interface MissingFunctionTextBlockProps {
+  block: Extract<DisplayInputMessageContent, { type: "missing_function_text" }>;
+  isEditing?: boolean;
+  onContentChange?: (
+    block: Extract<
+      DisplayInputMessageContent,
+      { type: "missing_function_text" }
+    >,
+  ) => void;
+}
+
+function MissingFunctionTextBlock({
+  block,
+  isEditing,
+  onContentChange,
+}: MissingFunctionTextBlockProps) {
+  if (isEditing) {
+    return (
+      <div className="w-full">
+        <textarea
+          className={`w-full rounded border bg-white p-2 font-mono text-sm dark:bg-slate-800`}
+          value={block.value}
+          onChange={(e) =>
+            onContentChange?.({
+              type: "missing_function_text",
+              value: e.target.value,
+            })
+          }
+          rows={3}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <pre className="whitespace-pre-wrap">
+      <code className="text-sm">{block.value}</code>
+    </pre>
+  );
+}
+
+// RawTextBlock Component
+// Allows the user to edit raw text
+interface RawTextBlockProps {
+  block: Extract<DisplayInputMessageContent, { type: "raw_text" }>;
+  isEditing?: boolean;
+  onContentChange?: (
+    block: Extract<DisplayInputMessageContent, { type: "raw_text" }>,
+  ) => void;
+}
+
+function RawTextBlock({
+  block,
+  isEditing,
+  onContentChange,
+}: RawTextBlockProps) {
+  if (isEditing) {
+    return (
+      <div className="w-full">
+        <textarea
+          className={`w-full rounded border bg-white p-2 font-mono text-sm dark:bg-slate-800`}
+          value={block.value}
+          onChange={(e) =>
+            onContentChange?.({
+              type: "raw_text",
+              value: e.target.value,
+            })
+          }
+          rows={3}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <pre className="whitespace-pre-wrap">
+      <code className="text-sm">{block.value}</code>
     </pre>
   );
 }
@@ -387,22 +554,6 @@ function ToolResultBlock({
     <div className="rounded bg-slate-100 p-2 dark:bg-slate-800">
       <div className="font-medium">Result from: {block.name}</div>
       <pre className="mt-1 text-sm">{block.result}</pre>
-    </div>
-  );
-}
-
-function ImageBlock({ image }: { image: ResolvedImageContent }) {
-  return (
-    <div className="w-60 rounded bg-slate-100 p-2 text-xs text-slate-300">
-      <div className="mb-2">Image</div>
-      <a
-        href={image.image.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        download={"tensorzero_" + image.storage_path.path}
-      >
-        <img src={image.image.url} alt="Image" />
-      </a>
     </div>
   );
 }

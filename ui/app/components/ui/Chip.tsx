@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router";
+import clsx from "clsx";
 import {
   Tooltip,
   TooltipTrigger,
@@ -18,7 +19,7 @@ interface ChipProps {
   iconBg?: string;
 }
 
-export const Chip: React.FC<ChipProps> = ({
+const Chip: React.FC<ChipProps> = ({
   label,
   icon,
   secondaryLabel,
@@ -29,23 +30,33 @@ export const Chip: React.FC<ChipProps> = ({
   iconBg = "bg-none",
 }) => {
   const baseClasses =
-    "inline-flex items-center text-sm text-fg-primary py-1 px-2 gap-1.5 rounded-md";
-  const hoverClasses = link ? "hover:bg-bg-hover cursor-pointer" : "";
+    "inline-flex text-sm text-fg-primary py-1 px-0 md:px-2 gap-1.5 rounded-md whitespace-nowrap overflow-hidden";
+  const hoverClasses = link ? "md:hover:bg-bg-hover cursor-pointer" : "";
   const fontClasses = font === "mono" ? "font-mono" : "font-sans";
-  const combinedClasses = `${baseClasses} ${hoverClasses} ${fontClasses} ${className}`;
+  const combinedClasses = clsx(
+    baseClasses,
+    hoverClasses,
+    fontClasses,
+    className,
+  );
 
   const content = (
     <>
       {icon && (
         <div
-          className={`${iconBg} ml-[-2px] flex size-5 items-center justify-center rounded-sm`}
+          className={clsx(
+            iconBg,
+            "flex size-5 flex-shrink-0 items-center justify-center rounded-sm md:ml-[-2px]",
+          )}
         >
           {icon}
         </div>
       )}
-      <span className="text-fg-primary">{label}</span>
+      <span className="text-fg-primary truncate">{label}</span>
       {secondaryLabel && (
-        <span className="pl-0.5 text-fg-tertiary">{secondaryLabel}</span>
+        <span className="text-fg-tertiary truncate pl-0.5">
+          {secondaryLabel}
+        </span>
       )}
     </>
   );
@@ -58,20 +69,18 @@ export const Chip: React.FC<ChipProps> = ({
     <div className={combinedClasses}>{content}</div>
   );
 
-  if (tooltip) {
-    return (
-      <TooltipProvider>
-        <Tooltip delayDuration={100}>
-          <TooltipTrigger asChild>{chipContent}</TooltipTrigger>
-          <TooltipContent className="border border-border bg-bg-secondary text-fg-primary shadow-lg">
-            {tooltip}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  return chipContent;
+  return tooltip ? (
+    <TooltipProvider>
+      <Tooltip delayDuration={100}>
+        <TooltipTrigger asChild>{chipContent}</TooltipTrigger>
+        <TooltipContent className="border-border bg-bg-secondary text-fg-primary border shadow-lg">
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  ) : (
+    chipContent
+  );
 };
 
 export default Chip;

@@ -1,5 +1,6 @@
-import { Link } from "react-router";
+import { Link, type RouteHandle } from "react-router";
 import { Card } from "~/components/ui/card";
+import { PageLayout } from "~/components/layout/PageLayout";
 import {
   Inferences,
   Episodes,
@@ -12,41 +13,53 @@ import {
   Globe,
   Documentation,
   Dataset,
-  Evaluation,
+  GridCheck,
+  SequenceChecks,
 } from "~/components/icons/Icons";
 import {
   countInferencesByFunction,
   countEpisodes,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import { getConfig } from "~/utils/config/index.server";
-import { useLoaderData } from "react-router";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
-import { countTotalEvalRuns } from "~/utils/clickhouse/evaluations.server";
+import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import { useConfig } from "~/context/config";
+import type { Route } from "./+types/index";
+import {
+  countDynamicEvaluationProjects,
+  countDynamicEvaluationRuns,
+} from "~/utils/clickhouse/dynamic_evaluations.server";
 
-const FF_ENABLE_DATASETS =
-  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
+export const handle: RouteHandle = {
+  hideBreadcrumbs: true,
+};
 
-interface FeatureCardProps {
+interface DirectoryCardProps {
   source: string;
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   description: string;
 }
 
-function FeatureCard({
+function DirectoryCard({
   source,
   icon: Icon,
   title,
   description,
-}: FeatureCardProps) {
+}: DirectoryCardProps) {
   return (
     <Link to={source} className="block">
-      <Card className="hover:border-border-hover group h-full rounded-xl border-[1px] border-border hover:shadow-[0_0_0_4px_rgba(0,0,0,0.05)]">
-        <div className="p-6">
-          <Icon className="mb-8 h-4 w-4 text-fg-secondary transition-colors group-hover:text-foreground" />
-          <h3 className="text-lg font-medium">{title}</h3>
-          <p className="text-xs text-fg-secondary">{description}</p>
+      <Card className="group border-border hover:border-border-hover flex w-full flex-row items-center gap-3 rounded-xl border p-4 hover:shadow-[0_0_0_3px_rgba(0,0,0,0.05)]">
+        <div className="bg-bg-tertiary h-8 w-8 rounded-lg p-2">
+          <Icon className="text-fg-secondary group-hover:text-fg-primary transition-colors" />
+        </div>
+        <div className="flex w-full flex-col overflow-hidden">
+          <h3 className="text-fg-primary overflow-hidden text-sm font-medium text-ellipsis whitespace-nowrap">
+            {title}
+          </h3>
+          <p className="text-fg-secondary overflow-hidden text-xs text-ellipsis whitespace-nowrap">
+            {description}
+          </p>
         </div>
       </Card>
     </Link>
@@ -61,9 +74,14 @@ interface FooterLinkProps {
 
 function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
   return (
-    <Link to={source} className="group flex w-fit items-center">
-      <Icon className="mr-2 h-4 w-4 text-fg-muted transition-colors group-hover:text-fg-secondary" />
-      <span className="text-fg-secondary transition-colors group-hover:text-fg-primary">
+    <Link
+      to={source}
+      className="group flex w-fit items-center"
+      rel="noopener noreferrer"
+      target="_blank"
+    >
+      <Icon className="text-fg-muted group-hover:text-fg-secondary mr-2 h-4 w-4 transition-colors" />
+      <span className="text-fg-secondary group-hover:text-fg-primary transition-colors">
         {children}
       </span>
     </Link>
@@ -71,161 +89,177 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
 }
 
 export async function loader() {
-  const countsInfo = await countInferencesByFunction();
-  const config = await getConfig();
+  const [
+    countsInfo,
+    config,
+    numEpisodes,
+    datasetCounts,
+    numEvaluationRuns,
+    numDynamicEvaluationRuns,
+    numDynamicEvaluationRunProjects,
+  ] = await Promise.all([
+    countInferencesByFunction(),
+    getConfig(),
+    countEpisodes(),
+    getDatasetCounts(),
+    countTotalEvaluationRuns(),
+    countDynamicEvaluationRuns(),
+    countDynamicEvaluationProjects(),
+  ]);
   const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
   const numFunctions = Object.keys(config.functions).length;
-  const numEpisodes = await countEpisodes();
-  const datasetCounts = await getDatasetCounts();
   const numDatasets = datasetCounts.length;
-  const numEvalRuns = await countTotalEvalRuns();
 
   return {
     totalInferences,
     numFunctions,
     numEpisodes,
     numDatasets,
-    numEvalRuns,
+    numEvaluationRuns,
+    numDynamicEvaluationRuns,
+    numDynamicEvaluationRunProjects,
   };
 }
 
-export default function Home() {
+export default function Home({ loaderData }: Route.ComponentProps) {
   const {
     totalInferences,
     numFunctions,
     numEpisodes,
     numDatasets,
-    numEvalRuns,
-  } = useLoaderData<typeof loader>();
+    numEvaluationRuns,
+    numDynamicEvaluationRuns,
+    numDynamicEvaluationRunProjects,
+  } = loaderData;
   const config = useConfig();
-  const numEvals = Object.keys(config.evals).length;
+  const numEvaluations = Object.keys(config.evaluations).length;
 
   return (
-    <div className="flex flex-col">
-      <div className="container mx-auto my-16 max-w-[960px]">
-        <div id="observability" className="mb-16">
-          <h2 className="mb-1 text-2xl font-medium">Observability</h2>
-          <p className="mb-6 max-w-[640px] text-sm text-fg-tertiary">
-            Monitor metrics across models and prompts and debug individual API
-            calls.
-          </p>
-          <div className="grid gap-6 md:grid-cols-3">
-            <FeatureCard
-              source="/observability/inferences"
-              icon={Inferences}
-              title="Inferences"
-              description={`${totalInferences.toLocaleString()} inferences`}
-            />
-            <FeatureCard
-              source="/observability/episodes"
-              icon={Episodes}
-              title="Episodes"
-              description={`${numEpisodes.toLocaleString()} episodes`}
-            />
-            <FeatureCard
-              source="/observability/functions"
-              icon={Functions}
-              title="Functions"
-              description={`${numFunctions} functions`}
-            />
+    <PageLayout>
+      <div className="mx-auto flex w-full max-w-240 flex-col gap-12">
+        <h1 className="text-2xl font-medium">Dashboard</h1>
+        <div className="grid w-full grid-cols-1 gap-x-6 gap-y-12 md:grid-cols-2 lg:grid-cols-3">
+          <div id="observability" className="flex w-full flex-col gap-2">
+            <h2 className="text-md text-fg-secondary font-medium">
+              Observability
+            </h2>
+            <div className="flex flex-col gap-2">
+              <DirectoryCard
+                source="/observability/inferences"
+                icon={Inferences}
+                title="Inferences"
+                description={`${totalInferences.toLocaleString()} inferences`}
+              />
+              <DirectoryCard
+                source="/observability/episodes"
+                icon={Episodes}
+                title="Episodes"
+                description={`${numEpisodes.toLocaleString()} episodes`}
+              />
+              <DirectoryCard
+                source="/observability/functions"
+                icon={Functions}
+                title="Functions"
+                description={`${numFunctions} functions`}
+              />
+            </div>
           </div>
-        </div>
 
-        <div id="optimization" className="mb-16">
-          <h2 className="mb-1 text-2xl font-medium">Optimization</h2>
-          <p className="mb-6 max-w-[640px] text-sm text-fg-tertiary">
-            Optimize your prompts, models, and inference strategies.
-          </p>
-          <div className="grid gap-6 md:grid-cols-3">
-            <FeatureCard
-              source="/optimization/supervised-fine-tuning"
-              icon={SupervisedFineTuning}
-              title="Supervised Fine-tuning"
-              description={`${numFunctions} functions`}
-            />
+          <div id="optimization" className="flex w-full flex-col gap-2">
+            <h2 className="text-md text-fg-secondary font-medium">
+              Optimization
+            </h2>
+            <div className="flex flex-col gap-2">
+              <DirectoryCard
+                source="/optimization/supervised-fine-tuning"
+                icon={SupervisedFineTuning}
+                title="Supervised Fine-tuning"
+                description={`${numFunctions} functions`}
+              />
+            </div>
           </div>
-        </div>
 
-        {FF_ENABLE_DATASETS && (
-          <div id="workflows" className="mb-12">
-            <h2 className="mb-1 text-2xl font-medium">Workflows</h2>
-            <p className="mb-6 max-w-[640px] text-sm text-fg-tertiary">
-              Manage your LLM engineering workflows.
-            </p>
-            <div className="grid gap-6 md:grid-cols-3">
-              <FeatureCard
+          <div id="workflows" className="flex w-full flex-col gap-2">
+            <h2 className="text-md text-fg-secondary font-medium">Workflows</h2>
+            <div className="flex flex-col gap-2">
+              <DirectoryCard
                 source="/datasets"
                 icon={Dataset}
                 title="Datasets"
                 description={`${numDatasets} datasets`}
               />
-              <FeatureCard
+              <DirectoryCard
                 source="/evaluations"
-                icon={Evaluation}
-                title="Evaluations"
-                description={`${numEvals} evaluations, ${numEvalRuns} runs`}
+                icon={GridCheck}
+                title="Static Evaluations"
+                description={`${numEvaluations} evaluations, ${numEvaluationRuns} runs`}
+              />
+              <DirectoryCard
+                source="/dynamic_evaluations"
+                icon={SequenceChecks}
+                title="Dynamic Evaluations"
+                description={`${numDynamicEvaluationRunProjects} projects, ${numDynamicEvaluationRuns} runs`}
               />
             </div>
           </div>
-        )}
+        </div>
 
-        <div className="mt-16 border-t border-gray-200 pt-16">
-          <div className="grid gap-8 md:grid-cols-3">
-            <div>
-              <h3 className="mb-4 text-sm text-fg-secondary">Learn more</h3>
-              <div className="flex flex-col gap-3">
-                <FooterLink
-                  source="https://www.tensorzero.com/docs"
-                  icon={Documentation}
-                >
-                  Documentation
-                </FooterLink>
-                <FooterLink
-                  source="https://github.com/tensorzero/tensorzero"
-                  icon={GitHub}
-                >
-                  GitHub
-                </FooterLink>
-              </div>
+        <div className="border-border my-4 w-full border-t"></div>
+
+        <div className="grid w-full grid-cols-1 gap-x-6 gap-y-12 md:grid-cols-2 lg:grid-cols-3">
+          <div className="w-full">
+            <h3 className="text-fg-tertiary mb-4 text-sm font-medium">
+              Learn more
+            </h3>
+            <div className="flex flex-col gap-3">
+              <FooterLink
+                source="https://www.tensorzero.com/docs"
+                icon={Documentation}
+              >
+                Documentation
+              </FooterLink>
+              <FooterLink
+                source="https://github.com/tensorzero/tensorzero"
+                icon={GitHub}
+              >
+                GitHub
+              </FooterLink>
             </div>
-
-            <div>
-              <h3 className="mb-4 text-sm text-fg-secondary">Ask a question</h3>
-              <div className="flex flex-col gap-3">
-                <FooterLink
-                  source="https://www.tensorzero.com/slack"
-                  icon={Slack}
-                >
-                  Slack
-                </FooterLink>
-                <FooterLink
-                  source="https://www.tensorzero.com/discord"
-                  icon={Discord}
-                >
-                  Discord
-                </FooterLink>
-              </div>
+          </div>
+          <div className="w-full">
+            <h3 className="text-fg-tertiary mb-4 text-sm font-medium">
+              Ask a question
+            </h3>
+            <div className="flex flex-col gap-3">
+              <FooterLink
+                source="https://www.tensorzero.com/slack"
+                icon={Slack}
+              >
+                Slack
+              </FooterLink>
+              <FooterLink
+                source="https://www.tensorzero.com/discord"
+                icon={Discord}
+              >
+                Discord
+              </FooterLink>
             </div>
-
-            <div>
-              <h3 className="mb-4 text-sm text-fg-secondary">
-                Explore TensorZero
-              </h3>
-              <div className="flex flex-col gap-3">
-                <FooterLink source="https://www.tensorzero.com/" icon={Globe}>
-                  Website
-                </FooterLink>
-                <FooterLink
-                  source="https://www.tensorzero.com/blog"
-                  icon={Blog}
-                >
-                  Blog
-                </FooterLink>
-              </div>
+          </div>
+          <div className="w-full">
+            <h3 className="text-fg-tertiary mb-4 text-sm font-medium">
+              Explore TensorZero
+            </h3>
+            <div className="flex flex-col gap-3">
+              <FooterLink source="https://www.tensorzero.com/" icon={Globe}>
+                Website
+              </FooterLink>
+              <FooterLink source="https://www.tensorzero.com/blog" icon={Blog}>
+                Blog
+              </FooterLink>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </PageLayout>
   );
 }

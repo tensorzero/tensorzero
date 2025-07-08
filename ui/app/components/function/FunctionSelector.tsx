@@ -1,5 +1,5 @@
 import type { Control, Path } from "react-hook-form";
-import { Config } from "~/utils/config";
+import type { Config } from "tensorzero-node";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import {
   Select,
@@ -48,6 +48,9 @@ export function FunctionSelector<T extends Record<string, unknown>>({
                   if (hide_default_function && name === "tensorzero::default") {
                     return null;
                   }
+                  if (!fn) {
+                    return null;
+                  }
                   return (
                     <SelectItem key={name} value={name}>
                       <div className="flex w-full items-center justify-between">
@@ -61,7 +64,7 @@ export function FunctionSelector<T extends Record<string, unknown>>({
                 })}
               </SelectContent>
             </Select>
-            <div className="text-sm text-muted-foreground">
+            <div className="text-muted-foreground text-sm">
               Inferences:{" "}
               {field.value ? (
                 <span className="font-medium">

@@ -8,13 +8,14 @@ import {
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { useConfig } from "~/context/config";
-import { MetricSelector } from "~/components/metric/MetricSelector";
+import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 import { useFetcher } from "react-router";
 import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import OutputSourceSelector from "./OutputSourceSelector";
 import { DatasetCountDisplay } from "./DatasetCountDisplay";
+import { logger } from "~/utils/logger";
 
 export function DatasetBuilderForm({
   dataset_counts,
@@ -49,10 +50,10 @@ export function DatasetBuilderForm({
 
   const watchedFields = useWatch({
     control: form.control,
-    name: ["function", "metric_name", "threshold"] as const,
+    name: ["function", "metric_name", "threshold", "dataset"] as const,
   });
 
-  const [functionName, metricName, threshold] = watchedFields;
+  const [functionName, metricName, threshold, selectedDataset] = watchedFields;
   const counts = useCountFetcher({
     functionName: functionName ?? undefined,
     metricName: metricName ?? undefined,
@@ -62,14 +63,16 @@ export function DatasetBuilderForm({
     const metricConfig = config.metrics[metricName ?? ""];
     form.setValue("metric_config", metricConfig ? metricConfig : undefined);
     const functionType = config.functions[functionName ?? ""]?.type;
-    form.setValue("type", functionType);
+    if (functionType) {
+      form.setValue("type", functionType);
+    }
   }, [metricName, functionName, config, form]);
 
   // Handle form submission response
   useEffect(() => {
     if (formFetcher.data) {
       if (formFetcher.data.errors) {
-        console.error("Form submission error:", formFetcher.data.errors);
+        logger.error("Form submission error:", formFetcher.data.errors);
         setSubmissionPhase("idle");
         form.setError("root", {
           type: "submit",
@@ -93,7 +96,7 @@ export function DatasetBuilderForm({
       formFetcher.submit(submitData, { method: "POST" });
       setSubmissionPhase("submitting");
     } catch (error) {
-      console.error("Submission error:", error);
+      logger.error("Submission error:", error);
       setSubmissionPhase("idle");
     }
   };
@@ -133,14 +136,14 @@ export function DatasetBuilderForm({
             inferenceCount={counts.inferenceCount}
             config={config}
           />
-          <MetricSelector<DatasetBuilderFormValues>
+          <CurationMetricSelector<DatasetBuilderFormValues>
             control={form.control}
             name="metric_name"
             functionFieldName="function"
             feedbackCount={counts.feedbackCount}
             curatedInferenceCount={counts.curatedInferenceCount}
             config={config}
-            removeDemonstrations={true}
+            addDemonstrations={false}
           />
           <OutputSourceSelector control={form.control} />
         </div>
@@ -153,7 +156,8 @@ export function DatasetBuilderForm({
           disabled={
             submissionPhase !== "idle" ||
             countToInsert === null ||
-            countToInsert === 0
+            countToInsert === 0 ||
+            !selectedDataset
           }
           onClick={() => {
             if (submissionPhase === "complete") {

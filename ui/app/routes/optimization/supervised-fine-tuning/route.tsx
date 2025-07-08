@@ -1,17 +1,15 @@
-import { data, type MetaFunction } from "react-router";
+import { data, type RouteHandle } from "react-router";
 import { useEffect, useState } from "react";
-import { SFTFormValuesSchema } from "./types";
 import type {
   SFTJob,
   SFTJobStatus,
 } from "~/utils/supervised_fine_tuning/common";
 import { useRevalidator } from "react-router";
 import { redirect } from "react-router";
-import { launch_sft_job } from "~/utils/supervised_fine_tuning/client";
 import { useConfig } from "~/context/config";
 import {
-  dump_model_config,
-  get_fine_tuned_model_config,
+  dump_provider_config,
+  get_fine_tuned_provider_config,
 } from "~/utils/config/models";
 import type { Route } from "./+types/route";
 import FineTuningStatus from "./FineTuningStatus";
@@ -22,15 +20,13 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import { SFTFormValuesSchema } from "./types";
+import { launch_sft_job } from "~/utils/supervised_fine_tuning/client";
+import { Badge } from "~/components/ui/badge";
+import { ModelBadge } from "~/components/model/ModelBadge";
 
-export const meta: MetaFunction = () => {
-  return [
-    { title: "TensorZero Supervised Fine-Tuning UI" },
-    {
-      name: "description",
-      content: "Supervised Fine-Tuning Optimization UI",
-    },
-  ];
+export const handle: RouteHandle = {
+  crumb: () => ["Supervised Fine-Tuning"],
 };
 
 // Mutable store mapping job IDs to their info
@@ -70,7 +66,6 @@ export async function action({ request }: Route.ActionArgs) {
   if (!serializedFormData || typeof serializedFormData !== "string") {
     throw new Error("Form data must be provided");
   }
-
   const jsonData = JSON.parse(serializedFormData);
   const validatedData = SFTFormValuesSchema.parse(jsonData);
   let job;
@@ -92,11 +87,90 @@ export async function action({ request }: Route.ActionArgs) {
   );
 }
 
-// Renders the fine-tuning form and status info.
-export default function SupervisedFineTuning({
-  loaderData,
-}: Route.ComponentProps) {
+type LoaderData = Route.ComponentProps["loaderData"];
+
+function SupervisedFineTuningImpl(
+  props: LoaderData & {
+    status: "running" | "completed" | "idle";
+  },
+) {
   const config = useConfig();
+  const revalidator = useRevalidator();
+
+  const [submissionPhase, setSubmissionPhase] = useState<
+    "idle" | "submitting" | "pending" | "complete"
+  >("idle");
+
+  // If running, periodically poll for updates on the job
+  useEffect(() => {
+    if (props.status === "running") {
+      setSubmissionPhase("pending");
+      const interval = setInterval(
+        () => {
+          revalidator.revalidate();
+        },
+        navigator.userAgent === "TensorZeroE2E" ? 500 : 10000,
+      );
+      return () => {
+        clearInterval(interval);
+      };
+    }
+  }, [props, revalidator]);
+
+  const finalResult =
+    props.status === "completed"
+      ? dump_provider_config(
+          props.result,
+          get_fine_tuned_provider_config(props.result, props.modelProvider),
+        )
+      : null;
+  if (finalResult && submissionPhase !== "complete") {
+    setSubmissionPhase("complete");
+  }
+
+  return props.status === "idle" ? (
+    <PageLayout>
+      <PageHeader heading="Supervised Fine-Tuning" />
+      <SectionLayout>
+        <SFTForm
+          config={config}
+          submissionPhase={submissionPhase}
+          setSubmissionPhase={setSubmissionPhase}
+        />
+      </SectionLayout>
+    </PageLayout>
+  ) : (
+    <PageLayout>
+      <PageHeader
+        label="Supervised Fine-Tuning Job"
+        heading={props.formData.jobId}
+      >
+        <div className="flex items-center gap-2">
+          <Badge
+            variant={
+              props.status === "running"
+                ? "default"
+                : props.status === "completed"
+                  ? "secondary"
+                  : "destructive"
+            }
+          >
+            {props.status}
+          </Badge>
+          <ModelBadge provider={props.modelProvider} />
+        </div>
+      </PageHeader>
+
+      <FineTuningStatus status={props} />
+
+      <SFTResult finalResult={finalResult} />
+    </PageLayout>
+  );
+}
+
+// Renders the fine-tuning form and status info.
+export default function SupervisedFineTuning(props: Route.ComponentProps) {
+  const { loaderData } = props;
   if (loaderData.status === "error") {
     return (
       <PageLayout>
@@ -107,48 +181,5 @@ export default function SupervisedFineTuning({
       </PageLayout>
     );
   }
-  const status = loaderData;
-  const revalidator = useRevalidator();
-
-  const [submissionPhase, setSubmissionPhase] = useState<
-    "idle" | "submitting" | "pending" | "complete"
-  >("idle");
-
-  // If running, periodically poll for updates on the job
-  useEffect(() => {
-    if (status.status === "running") {
-      setSubmissionPhase("pending");
-      const interval = setInterval(() => {
-        revalidator.revalidate();
-      }, 10000);
-      return () => clearInterval(interval);
-    }
-  }, [status, revalidator]);
-
-  const finalResult =
-    status.status === "completed"
-      ? dump_model_config(
-          get_fine_tuned_model_config(status.result, status.modelProvider),
-        )
-      : null;
-  if (finalResult && submissionPhase !== "complete") {
-    setSubmissionPhase("complete");
-  }
-
-  return (
-    <PageLayout>
-      <PageHeader heading="Supervised Fine-Tuning" />
-      <SectionLayout>
-        {status.status === "idle" && (
-          <SFTForm
-            config={config}
-            submissionPhase={submissionPhase}
-            setSubmissionPhase={setSubmissionPhase}
-          />
-        )}
-        <FineTuningStatus status={status} />
-        <SFTResult finalResult={finalResult} />
-      </SectionLayout>
-    </PageLayout>
-  );
+  return <SupervisedFineTuningImpl {...loaderData} />;
 }

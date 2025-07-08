@@ -8,6 +8,9 @@ import { defineConfig, devices } from "@playwright/test";
 // import path from 'path';
 // dotenv.config({ path: path.resolve(__dirname, '.env') });
 
+const useUIDocker =
+  process.env.TENSORZERO_PLAYWRIGHT_NO_WEBSERVER || process.env.TENSORZERO_CI;
+
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
@@ -21,25 +24,29 @@ export default defineConfig({
   retries: process.env.TENSORZERO_CI ? 2 : 0,
   /* Opt out of parallel tests on CI. */
   workers: process.env.TENSORZERO_CI ? 1 : undefined,
+  /* Fail immediately while we're debugging the CI issue */
+  maxFailures: process.env.TENSORZERO_CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: "html",
+  reporter: process.env.TENSORZERO_CI ? [["list"], ["github"]] : [["dot"]],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: process.env.TENSORZERO_CI
-      ? "http://localhost:4000"
-      : "http://localhost:5173",
+    baseURL: useUIDocker ? "http://localhost:4000" : "http://localhost:5173",
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: "on",
-    video: "on-first-retry",
+    // video: "on-first-retry",
+    video: "on",
   },
 
   /* Configure projects for major browsers */
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1920, height: 1080 },
+      },
     },
 
     // {
@@ -74,7 +81,7 @@ export default defineConfig({
   ],
 
   /* Run your local dev server before starting the tests if not in CI */
-  webServer: process.env.TENSORZERO_CI
+  webServer: useUIDocker
     ? undefined
     : {
         command: "pnpm run dev",

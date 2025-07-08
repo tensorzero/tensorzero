@@ -2,11 +2,10 @@ import {
   data,
   isRouteErrorResponse,
   redirect,
-  useLoaderData,
   useNavigate,
   useSearchParams,
 } from "react-router";
-import type { LoaderFunctionArgs } from "react-router";
+import type { LoaderFunctionArgs, RouteHandle } from "react-router";
 import BasicInfo from "./VariantBasicInfo";
 import VariantTemplate from "./VariantTemplate";
 import { useConfig } from "~/context/config";
@@ -17,7 +16,7 @@ import {
   countInferencesForVariant,
   queryInferenceTableBoundsByVariantName,
   queryInferenceTableByVariantName,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import {
   getVariantPerformances,
   type TimeWindowUnit,
@@ -35,6 +34,11 @@ import {
   SectionsGroup,
   SectionHeader,
 } from "~/components/layout/PageLayout";
+import { logger } from "~/utils/logger";
+
+export const handle: RouteHandle = {
+  crumb: (match) => ["Variants", match.params.variant_name!],
+};
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { function_name, variant_name } = params;
@@ -77,7 +81,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const metricsWithFeedbackPromise = queryMetricsWithFeedback({
     function_name,
     inference_table: getInferenceTableName(function_config),
-    metrics: config.metrics,
     variant_name,
   });
 
@@ -119,7 +122,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   };
 }
 
-export default function VariantDetails() {
+export default function VariantDetails({ loaderData }: Route.ComponentProps) {
   const {
     function_name,
     variant_name,
@@ -128,7 +131,7 @@ export default function VariantDetails() {
     inference_bounds,
     variant_performances,
     metricsWithFeedback,
-  } = useLoaderData<typeof loader>();
+  } = loaderData;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const config = useConfig();
@@ -142,8 +145,8 @@ export default function VariantDetails() {
       },
     );
   }
-  const variant_config = function_config.variants[variant_name];
-  if (!variant_config) {
+  const variant_info = function_config.variants[variant_name];
+  if (!variant_info) {
     throw new Response(
       "Variant not found. This likely means there is data in ClickHouse from an old TensorZero config.",
       {
@@ -205,7 +208,7 @@ export default function VariantDetails() {
       <SectionsGroup>
         <SectionLayout>
           <BasicInfo
-            variantConfig={variant_config}
+            variantConfig={variant_info.inner}
             function_name={function_name}
             function_type={function_type}
           />
@@ -230,7 +233,7 @@ export default function VariantDetails() {
 
         <SectionLayout>
           <SectionHeader heading="Templates" />
-          <VariantTemplate variantConfig={variant_config} />
+          <VariantTemplate variantConfig={variant_info.inner} />
         </SectionLayout>
 
         <SectionLayout>
@@ -257,7 +260,7 @@ export default function VariantDetails() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

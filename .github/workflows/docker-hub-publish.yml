@@ -1,11 +1,13 @@
-# This workflow builds and pushes the gateway and ui docker images to Docker Hub
+# This workflow builds and pushes the gateway, ui, and evaluations docker images to Docker Hub
 # when we tag a release.
 name: Publish docker images
 
 on:
   workflow_dispatch:
   release:
-    types: [published]
+    types: [released]
+  push:
+    branches: ["main"]
 
 env:
   DOCKERHUB_USER: tensorzero
@@ -22,10 +24,16 @@ jobs:
           - runner: ubuntu-24.04-arm
             target: linux/arm64
         container:
-          - name: ui
-            context: ./ui
-          - name: gateway
-            context: .
+          # Set the container name to a '-dev' name when this workflow is invoked by a push event
+          # Otherwise, use the unsuffixed name (which will be invoked by a release or manual dispatch)
+          # Unfortunately, we can't use 'env' in 'strategy.matrix'
+          - name: ${{ github.event_name == 'push' && 'ui-dev' || 'ui' }}
+            path: ui
+          - name: ${{ github.event_name == 'push' && 'gateway-dev' || 'gateway' }}
+            path: gateway
+          - name: ${{ github.event_name == 'push' && 'evaluations-dev' || 'evaluations' }}
+            path: evaluations
+
     permissions:
       packages: write
       contents: read
@@ -60,8 +68,10 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           platforms: ${{ matrix.platform.target }}
-          context: ${{ matrix.container.context }}
-          file: ./${{ matrix.container.name }}/Dockerfile
+          file: ./${{ matrix.container.path }}/Dockerfile
+          # This is required to make '.git' available in the build context:
+          # https://github.com/docker/build-push-action/issues/513#issuecomment-987951050
+          context: .
           push: true
           provenance: mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
@@ -87,10 +97,9 @@ jobs:
     strategy:
       matrix:
         container:
-          - name: ui
-            context: ./ui
-          - name: gateway
-            context: .
+          - name: ${{ github.event_name == 'push' && 'ui-dev' || 'ui' }}
+          - name: ${{ github.event_name == 'push' && 'gateway-dev' || 'gateway' }}
+          - name: ${{ github.event_name == 'push' && 'evaluations-dev' || 'evaluations' }}
     runs-on: ubuntu-latest
     needs:
       - build
@@ -116,8 +125,12 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}
+          flavor: |
+            latest=false
           tags: |
-            type=ref,event=tag
+            type=ref,event=tag,
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.prerelease == false }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests

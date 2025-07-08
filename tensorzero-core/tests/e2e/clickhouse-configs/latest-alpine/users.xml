@@ -1,0 +1,9 @@
+<clickhouse>
+    <profiles>
+        <default>
+            <!-- Disable this check by setting min and max to the same value, as we intentionally generate lots of load in `test_concurrent_clickhouse_migrations` -->
+            <min_os_cpu_wait_time_ratio_to_throw>2</min_os_cpu_wait_time_ratio_to_throw>
+            <max_os_cpu_wait_time_ratio_to_throw>2</max_os_cpu_wait_time_ratio_to_throw>
+        </default>
+    </profiles>
+</clickhouse>

@@ -20,7 +20,9 @@ interface DefaultOutputProps extends BaseOutputProps {
 // For when isEditing is explicitly provided
 interface EditableOutputProps extends BaseOutputProps {
   isEditing: boolean;
-  onOutputChange: (output: JsonInferenceOutput | ContentBlockOutput[]) => void;
+  onOutputChange: (
+    output: JsonInferenceOutput | ContentBlockOutput[] | null,
+  ) => void;
 }
 
 type OutputProps = DefaultOutputProps | EditableOutputProps;
@@ -100,7 +102,7 @@ function TextBlock({ block, isEditing, onBlockChange }: TextBlockProps) {
 
   if (isEditing) {
     return (
-      <div className="rounded-md bg-muted p-4">
+      <div className="bg-muted rounded-md p-4">
         <Badge className="mb-2">Text</Badge>
         <textarea
           className="w-full rounded border border-slate-300 bg-white p-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800"
@@ -113,9 +115,9 @@ function TextBlock({ block, isEditing, onBlockChange }: TextBlockProps) {
   }
 
   return (
-    <div className="rounded-md bg-muted p-4">
+    <div className="bg-muted rounded-md p-4">
       <Badge className="mb-2">Text</Badge>
-      <pre className="overflow-x-auto whitespace-pre-wrap break-words">
+      <pre className="overflow-x-auto break-words whitespace-pre-wrap">
         <code className="text-sm">{block.text}</code>
       </pre>
     </div>
@@ -166,7 +168,7 @@ function OutputToolCallBlock({
 
   if (isEditing) {
     return (
-      <div className="rounded-md bg-muted p-4">
+      <div className="bg-muted rounded-md p-4">
         <Badge className="mb-2">Tool: {block.name}</Badge>
         <textarea
           className={`w-full rounded border bg-white p-2 font-mono text-sm ${
@@ -186,9 +188,9 @@ function OutputToolCallBlock({
   }
 
   return (
-    <div className="rounded-md bg-muted p-4">
+    <div className="bg-muted rounded-md p-4">
       <Badge className="mb-2">Tool: {block.name}</Badge>
-      <pre className="overflow-x-auto whitespace-pre-wrap break-words">
+      <pre className="overflow-x-auto break-words whitespace-pre-wrap">
         <code className="text-sm">
           {JSON.stringify(block.arguments, null, 2)}
         </code>
@@ -201,7 +203,7 @@ function OutputToolCallBlock({
 interface JsonOutputProps {
   output: JsonInferenceOutput;
   isEditing?: boolean;
-  onOutputChange?: (output: JsonInferenceOutput) => void;
+  onOutputChange?: (output: JsonInferenceOutput | null) => void; // null is used if the output is not valid JSON
 }
 
 function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
@@ -229,7 +231,7 @@ function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
         });
       } catch {
         setJsonError("Invalid JSON format");
-        // We won't even attempt to update the raw value if it's invalid
+        onOutputChange(null);
       }
     }
   };
@@ -237,16 +239,16 @@ function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
   return (
     <div className="space-y-4">
       {output.parsed && (
-        <div className="rounded-md bg-muted p-4">
+        <div className="bg-muted rounded-md p-4">
           <Badge className="mb-2">Parsed Output</Badge>
-          <pre className="overflow-x-auto whitespace-pre-wrap break-words">
+          <pre className="overflow-x-auto break-words whitespace-pre-wrap">
             <code className="text-sm">
               {JSON.stringify(output.parsed, null, 2)}
             </code>
           </pre>
         </div>
       )}
-      <div className="rounded-md bg-muted p-4">
+      <div className="bg-muted rounded-md p-4">
         <Badge className="mb-2">Raw Output</Badge>
         {isEditing ? (
           <div>
@@ -265,7 +267,7 @@ function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
             )}
           </div>
         ) : (
-          <pre className="overflow-x-auto whitespace-pre-wrap break-words">
+          <pre className="overflow-x-auto break-words whitespace-pre-wrap">
             <code className="text-sm">{output.raw}</code>
           </pre>
         )}
@@ -317,7 +319,9 @@ export function OutputContent({
   isEditing,
   onOutputChange,
 }: OutputProps) {
-  const handleJsonOutputChange = (updatedOutput: JsonInferenceOutput) => {
+  const handleJsonOutputChange = (
+    updatedOutput: JsonInferenceOutput | null,
+  ) => {
     if (onOutputChange) {
       onOutputChange(updatedOutput);
     }

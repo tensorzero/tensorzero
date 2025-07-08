@@ -1,0 +1,7 @@
+[functions.clickhouse_copilot]
+type = "chat"
+
+[functions.clickhouse_copilot.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4.1-mini-2025-04-14"
+system_template = "functions/clickhouse_copilot/baseline/system.txt"

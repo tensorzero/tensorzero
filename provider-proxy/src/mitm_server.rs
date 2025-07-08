@@ -1,5 +1,5 @@
-//! Code is from https://github.com/hatoo/http-mitm-proxy/blob/7c8c3bde77173af6385d5d0ffaea6105498df1ff/src/lib.rs (MIT-licensed)
-#![allow(clippy::panic, clippy::unwrap_used)]
+//! Code is based on https://github.com/hatoo/http-mitm-proxy/blob/7c8c3bde77173af6385d5d0ffaea6105498df1ff/src/lib.rs (MIT-licensed)
+#![expect(clippy::unwrap_used)]
 
 use crate::tls::{generate_cert, CertifiedKeyDer};
 use http_body_util::{combinators::BoxBody, BodyExt, Empty};
@@ -41,7 +41,7 @@ impl<C> MitmProxy<C> {
 
 impl<C> MitmProxy<C>
 where
-    C: Borrow<rcgen::CertifiedKey> + Send + Sync + 'static,
+    C: Borrow<rcgen::Issuer<'static, rcgen::KeyPair>> + Send + Sync + 'static,
 {
     /// Bind to a socket address and return a future that runs the proxy server.
     /// URL for requests that passed to service are full URL including scheme.

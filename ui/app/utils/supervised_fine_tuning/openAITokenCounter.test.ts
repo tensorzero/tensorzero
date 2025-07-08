@@ -15,6 +15,7 @@ import {
   countAssistantTokens,
   getSimpleTokenCount,
   getModelTokenLimit,
+  getEncodingForModel,
 } from "./openAITokenCounter";
 import { CURRENT_MODEL_VERSIONS } from "./constants";
 import type { OpenAIMessage, ToolFunction } from "./types";
@@ -35,7 +36,11 @@ describe("openAITokenCounter", () => {
         { role: "user", content: "Hello!" },
         { role: "assistant", content: "Hi there! How can I help you today?" },
       ];
-      const count = getTokensFromMessages(messages, "gpt-3.5-turbo");
+      const count = getTokensFromMessages(
+        messages,
+        "gpt-3.5-turbo",
+        getEncodingForModel("gpt-3.5-turbo"),
+      );
       expect(count).toBeGreaterThan(0);
     });
 
@@ -43,13 +48,21 @@ describe("openAITokenCounter", () => {
       const messages: OpenAIMessage[] = [
         { role: "assistant", content: "Hello", name: "AI" },
       ];
-      const count = getTokensFromMessages(messages, "gpt-4");
+      const count = getTokensFromMessages(
+        messages,
+        "gpt-4",
+        getEncodingForModel("gpt-4"),
+      );
       expect(count).toBeGreaterThan(4); // base(3) + content + name + name_tax(1)
     });
 
     it("should handle empty messages", () => {
       const messages: OpenAIMessage[] = [];
-      const count = getTokensFromMessages(messages, "gpt-3.5-turbo");
+      const count = getTokensFromMessages(
+        messages,
+        "gpt-3.5-turbo",
+        getEncodingForModel("gpt-3.5-turbo"),
+      );
       expect(count).toBe(3); // priming tokens
     });
   });
@@ -81,13 +94,23 @@ describe("openAITokenCounter", () => {
       const messages: OpenAIMessage[] = [
         { role: "user", content: "What's the weather?" },
       ];
-      const count = getTokensForTools([sampleFunction], messages, "gpt-4");
+      const count = getTokensForTools(
+        [sampleFunction],
+        messages,
+        "gpt-4",
+        getEncodingForModel("gpt-4"),
+      );
       expect(count).toBeGreaterThan(0);
     });
 
     it("should handle empty functions array", () => {
       const messages: OpenAIMessage[] = [{ role: "user", content: "Hello" }];
-      const count = getTokensForTools([], messages, "gpt-4");
+      const count = getTokensForTools(
+        [],
+        messages,
+        "gpt-4",
+        getEncodingForModel("gpt-4"),
+      );
       expect(count).toBeGreaterThan(0);
     });
   });
@@ -100,7 +123,10 @@ describe("openAITokenCounter", () => {
         { role: "user", content: "How are you?" },
         { role: "assistant", content: "I'm doing well, thanks!" },
       ];
-      const count = countAssistantTokens(messages, "gpt-3.5-turbo");
+      const count = countAssistantTokens(
+        messages,
+        getEncodingForModel("gpt-3.5-turbo"),
+      );
       expect(count).toBeGreaterThan(0);
     });
 
@@ -114,7 +140,10 @@ describe("openAITokenCounter", () => {
           },
         },
       ];
-      const count = countAssistantTokens(messages, "gpt-4");
+      const count = countAssistantTokens(
+        messages,
+        getEncodingForModel("gpt-4"),
+      );
       expect(count).toBeGreaterThan(3); // base tokens + function call tokens
     });
 
@@ -134,7 +163,10 @@ describe("openAITokenCounter", () => {
           ],
         },
       ];
-      const count = countAssistantTokens(messages, "gpt-4");
+      const count = countAssistantTokens(
+        messages,
+        getEncodingForModel("gpt-4"),
+      );
       expect(count).toBeGreaterThan(3); // base tokens + tool call tokens
     });
   });
@@ -222,7 +254,11 @@ describe("openAITokenCounter", () => {
       "should match OpenAI API token count for %s",
       async (model) => {
         // Calculate tokens using our function
-        const calculatedTokens = getTokensFromMessages(example_messages, model);
+        const calculatedTokens = getTokensFromMessages(
+          example_messages,
+          model,
+          getEncodingForModel(model),
+        );
 
         // Convert messages to OpenAI API format
         const apiMessages: ChatCompletionMessageParam[] = example_messages.map(
@@ -328,6 +364,7 @@ describe("openAITokenCounter", () => {
           example_tools,
           example_messages,
           model,
+          getEncodingForModel(model),
         );
 
         // Convert messages to OpenAI API format

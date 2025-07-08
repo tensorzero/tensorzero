@@ -2,10 +2,8 @@ import { z } from "zod";
 import {
   contentBlockOutputSchema,
   jsonInferenceOutputSchema,
-  resolvedInputSchema,
+  displayInputSchema,
 } from "./common";
-import type { ParsedInferenceRow } from "./inference";
-import { v7 as uuid } from "uuid";
 
 /**
  * Schema representing a fully-qualified row in the Chat Inference dataset.
@@ -24,6 +22,7 @@ export const ChatInferenceDatapointRowSchema = z
     is_deleted: z.boolean().default(false),
     updated_at: z.string().datetime().default(new Date().toISOString()),
     staled_at: z.string().datetime().nullable(),
+    source_inference_id: z.string().uuid().nullable(),
   })
   .strict();
 export type ChatInferenceDatapointRow = z.infer<
@@ -47,6 +46,7 @@ export const JsonInferenceDatapointRowSchema = z
     is_deleted: z.boolean().default(false),
     updated_at: z.string().datetime(),
     staled_at: z.string().datetime().nullable(),
+    source_inference_id: z.string().uuid().nullable(),
   })
   .strict();
 export type JsonInferenceDatapointRow = z.infer<
@@ -68,7 +68,7 @@ export const ParsedChatInferenceDatapointRowSchema =
     output: true,
     tool_params: true,
   }).extend({
-    input: resolvedInputSchema,
+    input: displayInputSchema,
     output: z.array(contentBlockOutputSchema).optional(),
     tool_params: z.record(z.string(), z.unknown()).optional(),
     tags: z.record(z.string(), z.string()),
@@ -83,7 +83,7 @@ export const ParsedJsonInferenceDatapointRowSchema =
     output: true,
     output_schema: true,
   }).extend({
-    input: resolvedInputSchema,
+    input: displayInputSchema,
     output: jsonInferenceOutputSchema.optional(),
     output_schema: z.record(z.string(), z.unknown()),
   });
@@ -136,7 +136,8 @@ export const DatapointInsertSchema = z.union([
 export type DatapointInsert = z.infer<typeof DatapointInsertSchema>;
 
 /**
- * Schema defining the allowed query parameters for selecting rows from the dataset.
+ * Schema defining the allowed query parameters for selecting rows from the ChatInference or JsonInference tables
+ * to be added to a dataset.
  */
 export const DatasetQueryParamsSchema = z.object({
   inferenceType: z.enum(["chat", "json"]),
@@ -178,41 +179,3 @@ export const DatasetDetailRowSchema = z.object({
 });
 
 export type DatasetDetailRow = z.infer<typeof DatasetDetailRowSchema>;
-
-/**
- * Converts a ParsedInferenceRow to a ParsedDatasetRow format.
- * This is useful when you want to convert inference data into a dataset-compatible format.
- * Generates a fresh UUIDv7 for the datapoint to avoid collisions when the same inference
- * is added to multiple datasets.
- */
-export function inferenceRowToDatasetRow(
-  inference: ParsedInferenceRow,
-  dataset_name: string,
-): ParsedDatasetRow {
-  const baseFields = {
-    dataset_name,
-    function_name: inference.function_name,
-    id: uuid(), // Generate a fresh UUIDv7 instead of using the inference ID
-    episode_id: inference.episode_id,
-    input: inference.input,
-    tags: inference.tags,
-    auxiliary: JSON.stringify({}),
-    is_deleted: false,
-    updated_at: new Date().toISOString(),
-    staled_at: null,
-  };
-
-  if (inference.function_type === "chat") {
-    return {
-      ...baseFields,
-      output: inference.output,
-      tool_params: inference.tool_params,
-    };
-  } else {
-    return {
-      ...baseFields,
-      output: inference.output,
-      output_schema: inference.output_schema,
-    };
-  }
-}

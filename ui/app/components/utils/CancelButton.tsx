@@ -1,5 +1,11 @@
 import { X } from "lucide-react";
 import { Button } from "~/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 
 interface CancelButtonProps {
   onClick: () => void;
@@ -8,8 +14,22 @@ interface CancelButtonProps {
 
 export function CancelButton({ onClick, className }: CancelButtonProps) {
   return (
-    <Button variant="ghost" size="icon" onClick={onClick} className={className}>
-      <X className="h-4 w-4" />
-    </Button>
+    <TooltipProvider>
+      <Tooltip delayDuration={100}>
+        <TooltipTrigger asChild>
+          <Button
+            variant="outline"
+            size="iconSm"
+            onClick={onClick}
+            className={className}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Cancel</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
