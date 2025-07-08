@@ -2,7 +2,7 @@ import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning
 import type { AnalysisData } from "~/routes/optimization/supervised-fine-tuning/SFTAnalysis";
 import type { ParsedInferenceExample } from "../clickhouse/curation";
 import type { ProviderConfig } from "tensorzero-node";
-import type { OptimizerJobHandle } from "tensorzero-node";
+import type { OptimizationJobHandle } from "tensorzero-node";
 
 type ProviderType = ProviderConfig["type"];
 
@@ -78,7 +78,7 @@ export abstract class SFTJob {
   }
 
   /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
-  static from_job_handle(jobHandle: OptimizerJobHandle): SFTJob {
+  static from_job_handle(jobHandle: OptimizationJobHandle): SFTJob {
     throw new Error(
       "Child class must implement fromFormData or from_job_handle",
     );

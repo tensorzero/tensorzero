@@ -6,8 +6,8 @@ import { TensorZeroClient } from "tensorzero-node";
 import type {
   InferenceFilterTreeNode,
   InferenceOutputSource,
-  OptimizerJobHandle,
-  OptimizerStatus,
+  OptimizationJobHandle,
+  OptimizationJobInfo,
   UninitializedOptimizerInfo,
 } from "tensorzero-node";
 import { getConfig } from "~/utils/config/index.server";
@@ -48,10 +48,10 @@ function launch_sft_job_ts(data: SFTFormValues): Promise<SFTJob> {
 }
 
 class NativeSFTJob extends SFTJob {
-  private jobStatus: OptimizerStatus | "created";
+  private jobStatus: OptimizationJobInfo | "created";
   private provider: "openai" | "fireworks" | "mistral";
   constructor(
-    public jobHandle: OptimizerJobHandle,
+    public jobHandle: OptimizationJobHandle,
     public formData: SFTFormValues,
   ) {
     super();
@@ -62,7 +62,7 @@ class NativeSFTJob extends SFTJob {
   }
 
   static from_job_handle_with_form_data(
-    jobHandle: OptimizerJobHandle,
+    jobHandle: OptimizationJobHandle,
     formData: SFTFormValues,
   ): NativeSFTJob {
     return new NativeSFTJob(jobHandle, formData);
@@ -74,7 +74,7 @@ class NativeSFTJob extends SFTJob {
         status: "idle",
       };
     }
-    switch (this.jobStatus.type) {
+    switch (this.jobStatus.status) {
       case "pending":
         return {
           status: "running",

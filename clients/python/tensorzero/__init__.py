@@ -5,11 +5,26 @@ import httpx
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
+    BestOfNSamplingConfig,
+    ChainOfThoughtConfig,
+    ChatCompletionConfig,
+    Config,
     Datapoint,
+    DiclConfig,
+    FireworksSFTConfig,
+    FunctionConfigChat,
+    FunctionConfigJson,
+    FunctionsConfig,
+    MixtureOfNConfig,
+    OpenAISFTConfig,
+    OptimizationJobHandle,
+    OptimizationJobInfo,
+    OptimizationJobStatus,
     RenderedSample,
     ResolvedInput,
     ResolvedInputMessage,
     StoredInference,
+    VariantsConfig,
 )
 from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
@@ -70,6 +85,7 @@ RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample inste
 ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
+OptimizationConfig = t.Union[OpenAISFTConfig, FireworksSFTConfig]
 ChatInferenceOutput = t.List[ContentBlock]
 
 
@@ -85,6 +101,7 @@ __all__ = [
     "ChatDatapointInsert",
     "ChatInferenceDatapointInput",  # DEPRECATED
     "ChatInferenceResponse",
+    "Config",
     "ContentBlock",
     "Datapoint",
     "DynamicEvaluationRunEpisodeResponse",
@@ -96,6 +113,15 @@ __all__ = [
     "FinishReason",
     "FloatMetricFilter",
     "FloatMetricNode",  # DEPRECATED
+    "FunctionsConfig",
+    "FunctionConfigChat",
+    "FunctionConfigJson",
+    "VariantsConfig",
+    "ChatCompletionConfig",
+    "BestOfNSamplingConfig",
+    "DiclConfig",
+    "MixtureOfNConfig",
+    "ChainOfThoughtConfig",
     "ImageBase64",
     "ImageUrl",
     "InferenceChunk",
@@ -114,6 +140,12 @@ __all__ = [
     "NotNode",  # DEPRECATED
     "OrFilter",
     "OrNode",  # DEPRECATED
+    "OptimizationJobHandle",
+    "OptimizationJobInfo",
+    "OptimizationJobStatus",
+    "OpenAISFTConfig",
+    "FireworksSFTConfig",
+    "OptimizationConfig",
     "patch_openai_client",
     "RawText",
     "RenderedStoredInference",  # DEPRECATED
