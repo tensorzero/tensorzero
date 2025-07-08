@@ -200,7 +200,6 @@ pub async fn inference(
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
 ) -> Result<InferenceOutput, Error> {
-    tracing::debug!("inference params: {:?}", config);
     let span = tracing::Span::current();
     if let Some(function_name) = &params.function_name {
         span.record("function_name", function_name);
