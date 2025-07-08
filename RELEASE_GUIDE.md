@@ -116,4 +116,4 @@ Make sure to merge every PR with the `merge-on-release` label.
 
 ## Release Notes
 
-Make sure to tag a release in the GitHub repository.
+Make sure to create a tag and release in the GitHub repository.
