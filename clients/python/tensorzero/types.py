@@ -122,6 +122,7 @@ class ToolCall(ContentBlock):
 class Thought(ContentBlock):
     text: str
     type: str = "thought"
+    signature: Optional[str] = None
 
 
 @dataclass
@@ -278,6 +279,7 @@ class ThoughtChunk(ContentBlockChunk):
     id: str
     text: str
     type: str = "thought"
+    signature: Optional[str] = None
 
 
 @dataclass
