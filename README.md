@@ -85,7 +85,7 @@ Take what you need, adopt incrementally, and complement with other tools.
 - [x] Access every major LLM provider (API or self-hosted) through a single unified API
 - [x] Infer with streaming, tool use, structured generation (JSON mode), batch, multimodal (VLMs), file inputs, caching, etc.
 - [x] Define prompt templates and schemas to enforce a consistent, typed interface between your application and the LLMs
-- [x] Satisfy extreme throughput and latency needs, thanks to Rust: <1ms p99 latency overhead at 10k+ QPS
+- [x] Satisfy extreme throughput and latency needs, thanks to 🦀 Rust: <1ms p99 latency overhead at 10k+ QPS
 - [x] Integrate using our Python client, any OpenAI SDK or OpenAI-compatible client, or our HTTP API (use any programming language)
 - [x] Ensure high availability with routing, retries, fallbacks, load balancing, granular timeouts, etc.
 - [ ] Soon: embeddings; real-time voice
