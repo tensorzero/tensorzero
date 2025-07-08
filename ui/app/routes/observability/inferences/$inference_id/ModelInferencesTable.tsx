@@ -11,6 +11,7 @@ import {
 import { Sheet, SheetContent } from "~/components/ui/sheet";
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
 import { ModelInferenceItem } from "./ModelInferenceItem";
+import { TableItemShortUuid } from "~/components/ui/TableItems";
 
 interface ModelInferencesTableProps {
   modelInferences: ParsedModelInferenceRow[];
@@ -48,9 +49,7 @@ export function ModelInferencesTable({
                 onClick={() => handleRowClick(inference)}
               >
                 <TableCell className="max-w-[200px]">
-                  <span className="block overflow-hidden font-mono text-ellipsis whitespace-nowrap">
-                    {inference.id}
-                  </span>
+                  <TableItemShortUuid id={inference.id} />
                 </TableCell>
                 <TableCell className="max-w-[200px]">
                   <span className="block overflow-hidden font-mono text-ellipsis whitespace-nowrap">
@@ -64,7 +63,7 @@ export function ModelInferencesTable({
       </Table>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="bg-bg-secondary w-full overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+        <SheetContent className="bg-bg-secondary overflow-y-auto p-0">
           {selectedInference && (
             <ModelInferenceItem inference={selectedInference} />
           )}

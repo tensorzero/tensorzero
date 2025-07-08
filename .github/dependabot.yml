@@ -3,21 +3,21 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
     labels: []
     open-pull-requests-limit: 0 # only send security updates
 
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
     labels: []
     open-pull-requests-limit: 0 # only send security updates
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
     labels: []
     open-pull-requests-limit: 0 # only send security updates
 
@@ -26,8 +26,9 @@ updates:
     schedule:
       # This schedule does not affect security updates: https://docs.github.com/en/code-security/dependabot/dependabot-security-updates/customizing-dependabot-security-prs#about-customizing-pull-requests-for-security-updates
       interval: "weekly"
+    labels: []
     groups:
       rust-dependencies:
         patterns:
           - "*"
-    open-pull-requests-limit: 1 # This does not affect the security update pr limit
+    open-pull-requests-limit: 1 # This does not affect the security update PR limit

@@ -3,11 +3,11 @@
 use serde_json::json;
 use tensorzero::{
     input_handling::resolved_input_to_client_input, ClientBuilder, ClientBuilderMode,
-    ClientInferenceParams, ClientInput, ClientInputMessageContent, Image,
+    ClientInferenceParams, ClientInput, ClientInputMessageContent, File,
 };
 
 use reqwest::Url;
-use tensorzero_internal::inference::types::{ImageKind, ResolvedInput};
+use tensorzero_core::inference::types::ResolvedInput;
 
 lazy_static::lazy_static! {
     static ref GATEWAY_URL: String = std::env::var("GATEWAY_URL").unwrap_or("http://localhost:3000".to_string());
@@ -66,7 +66,7 @@ async fn test_conversion() {
     .build_http()
     .unwrap();
     // Taken from the database and contains an image
-    let input = json!({"messages":[{"role":"user","content":[{"type":"text","value":"What kind of animal is in this image?"},{"type":"image","image":{"url":"https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png","mime_type":"image/png"},"storage_path":{"kind":{"type":"s3_compatible","bucket_name":"tensorzero-e2e-test-images","region":"us-east-1","endpoint":null,"allow_http":null,"prefix":""},"path":"observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"}}]}]});
+    let input = json!({"messages":[{"role":"user","content":[{"type":"text","value":"What kind of animal is in this image?"},{"type":"image","image":{"url":"https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png","mime_type":"image/png"},"storage_path":{"kind":{"type":"s3_compatible","bucket_name":"tensorzero-e2e-test-images","region":"us-east-1","endpoint":null,"allow_http":null,"prefix":""},"path":"observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"}}]}]});
     let resolved_input: ResolvedInput = serde_json::from_value(input).unwrap();
     let client_input = resolved_input_to_client_input(resolved_input, &client)
         .await
@@ -77,11 +77,11 @@ async fn test_conversion() {
         client_input.messages[0].content[0],
         ClientInputMessageContent::Text(_)
     ));
-    let ClientInputMessageContent::Image(Image::Base64 { mime_type, data }) =
+    let ClientInputMessageContent::File(File::Base64 { mime_type, data }) =
         &client_input.messages[0].content[1]
     else {
-        panic!("Expected image");
+        panic!("Expected file");
     };
-    assert_eq!(mime_type, &ImageKind::Png);
+    assert_eq!(mime_type, &mime::IMAGE_PNG);
     assert!(!data.is_empty());
 }

@@ -4,7 +4,8 @@ test("should show the evaluation result page", async ({ page }) => {
   await page.goto(
     "/evaluations/entity_extraction/01939a16-b258-71e1-a467-183001c1952c?evaluation_run_ids=0196368f-19bd-7082-a677-1c0bf346ff24%2C0196368e-53a8-7e82-a88d-db7086926d81",
   );
-  await expect(page.getByText("Datapoint")).toBeVisible();
+
+  await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
   await expect(page.getByText("gpt4o_mini_initial_prompt")).toHaveCount(2);
   await expect(page.getByText("gpt4o_initial_prompt")).toHaveCount(2);
 
@@ -28,6 +29,8 @@ test("should be able to add float feedback from the evaluation datapoint result 
   await page.locator('div[role="dialog"]').waitFor({
     state: "visible",
   });
+  // sleep for 500ms
+  await page.waitForTimeout(500);
 
   // Fill in the float value
   // Generate a random float between 0 and 1 with 3 decimal places
@@ -35,7 +38,8 @@ test("should be able to add float feedback from the evaluation datapoint result 
   await page
     .getByRole("spinbutton", { name: /Value/i })
     .fill(randomFloat.toString());
-
+  // sleep for 500ms
+  await page.waitForTimeout(500);
   // Click on the "Save" button
   await page.locator('button[type="submit"]').click();
 

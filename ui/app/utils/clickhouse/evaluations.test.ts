@@ -2,12 +2,12 @@ import { describe, expect, test } from "vitest";
 import {
   countDatapointsForEvaluation,
   countTotalEvaluationRuns,
-  getEvaluationResults,
   getEvaluationRunInfo,
   getEvaluationRunInfos,
   getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
   getEvaluationStatistics,
+  getEvaluationResults,
   searchEvaluationRuns,
 } from "./evaluations.server";
 import type { ChatEvaluationResultWithVariant } from "./evaluations";
@@ -346,16 +346,16 @@ describe("getEvaluationStatistics", () => {
     expect(statistics[2].metric_name).toBe(
       "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match",
     );
-    expect(statistics[2].datapoint_count).toBe(41);
-    expect(statistics[2].mean_metric).toBeCloseTo(0.5122);
+    expect(statistics[2].datapoint_count).toBe(42);
+    expect(statistics[2].mean_metric).toBeCloseTo(0.524);
     expect(statistics[2].stderr_metric).toBeCloseTo(0.08);
 
     expect(statistics[3].evaluation_run_id).toBe(evaluation_run_id2);
     expect(statistics[3].metric_name).toBe(
       "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports",
     );
-    expect(statistics[3].datapoint_count).toBe(41);
-    expect(statistics[3].mean_metric).toBeCloseTo(0.7805);
+    expect(statistics[3].datapoint_count).toBe(42);
+    expect(statistics[3].mean_metric).toBeCloseTo(0.762);
     expect(statistics[3].stderr_metric).toBeCloseTo(0.0665);
   });
 });
@@ -498,9 +498,11 @@ describe("getEvaluationsForDatapoint", () => {
     expect(second_evaluation.metric_value).toBe("true");
     expect(second_evaluation.input.messages).toHaveLength(1);
     const second_evaluation_input = second_evaluation.input;
-    if (second_evaluation_input.messages[0].content[0].type === "text") {
+    if (
+      second_evaluation_input.messages[0].content[0].type === "structured_text"
+    ) {
       expect(
-        second_evaluation_input.messages[0].content[0].value,
+        second_evaluation_input.messages[0].content[0].arguments,
       ).toStrictEqual({
         topic: "sheet",
       });
@@ -569,14 +571,14 @@ describe("getEvaluationRunInfosForDatapoint", () => {
 
   test("should return correct evaluation run info for ragged haiku datapoint", async () => {
     const evaluationRunInfos = await getEvaluationRunInfosForDatapoint(
-      "01963691-7489-74b3-837f-e386de14c5f9",
+      "0196374a-d03f-7420-9da5-1561cba71ddb",
       "write_haiku",
     );
 
     const expected = {
-      evaluation_run_id: "01963691-9d3c-7793-a8be-3937ebb849c1",
+      evaluation_run_id: "0196374b-04a3-7013-9049-e59ed5fe3f74",
       variant_name: "better_prompt_haiku_3_5",
-      most_recent_inference_date: "2025-04-14T23:10:35Z",
+      most_recent_inference_date: "2025-04-15T02:33:05Z",
     };
     expect(evaluationRunInfos).toHaveLength(1); // Ensure exactly one item
     expect(evaluationRunInfos).toEqual(expect.arrayContaining([expected]));

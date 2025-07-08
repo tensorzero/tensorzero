@@ -10,10 +10,24 @@ interface SnippetLayoutProps {
 
 export function SnippetLayout({ children }: SnippetLayoutProps) {
   return (
-    <div className="border-border bg-bg-primary w-full rounded-lg border">
+    <div className="bg-bg-primary border-border w-full rounded-lg border">
       {children}
     </div>
   );
+}
+
+// Heading component
+interface SnippetHeadingProps {
+  heading: string;
+}
+
+export function SnippetHeading({ heading }: SnippetHeadingProps) {
+  return <h3 className="px-5 pt-5 pb-1 text-lg font-medium">{heading}</h3>;
+}
+
+// Divider component
+export function SnippetDivider() {
+  return <div className="border-border h-px w-full border-t" />;
 }
 
 // Content component
@@ -46,7 +60,7 @@ export function SnippetContent({
   }, [children, maxHeight]);
 
   return (
-    <div className="relative overflow-hidden rounded-b-lg">
+    <div className="relative overflow-hidden">
       <div
         ref={contentRef}
         style={
@@ -55,7 +69,7 @@ export function SnippetContent({
             : {}
         }
         className={clsx(
-          "relative space-y-4",
+          "py-3",
           !expanded &&
             needsExpansion &&
             maxHeight !== "Content" &&
@@ -66,7 +80,7 @@ export function SnippetContent({
       </div>
 
       {needsExpansion && !expanded && maxHeight !== "Content" && (
-        <div className="from-bg-primary absolute right-0 bottom-0 left-0 flex justify-center bg-gradient-to-t to-transparent pt-8 pb-4">
+        <div className="from-bg-primary absolute right-0 bottom-0 left-0 flex justify-center rounded-b-lg bg-gradient-to-t to-transparent pt-8 pb-4">
           <Button variant="outline" size="sm" onClick={() => setExpanded(true)}>
             Show more
           </Button>
@@ -78,11 +92,36 @@ export function SnippetContent({
 
 // Message component
 interface SnippetMessageProps {
-  children: ReactNode;
+  variant?: "default" | "input";
+  children?: ReactNode;
+  role?: string;
 }
 
-export function SnippetMessage({ children }: SnippetMessageProps) {
-  return <div className="space-y-2">{children}</div>;
+export function SnippetMessage({
+  variant = "default",
+  children,
+  role,
+}: SnippetMessageProps) {
+  // Input variant - contains role and children
+  if (variant === "input") {
+    return (
+      <div className="flex w-full flex-col gap-2 px-5 py-2">
+        <div className="text-sm font-medium text-purple-600 capitalize">
+          {role}
+        </div>
+        <div className="border-border flex w-full flex-col gap-4 border-l pl-4">
+          {children}
+        </div>
+      </div>
+    );
+  }
+
+  // Default variant - simple wrapper with padding
+  return (
+    <div className="flex w-full flex-col gap-4 overflow-hidden px-5 py-2">
+      {children}
+    </div>
+  );
 }
 
 // Tab components

@@ -1,10 +1,9 @@
-use axum::extract::Request;
+use axum::extract::{DefaultBodyLimit, Request};
 use axum::http::HeaderValue;
 use axum::middleware::Next;
 use axum::response::Response;
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::Router;
-use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use clap::Parser;
 use mimalloc::MiMalloc;
 use std::fmt::Display;
@@ -13,14 +12,16 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::signal;
+use tower_http::trace::{DefaultOnFailure, TraceLayer};
+use tracing::Level;
 
-use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
-use tensorzero_internal::config_parser::Config;
-use tensorzero_internal::endpoints;
-use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_internal::error;
-use tensorzero_internal::gateway_util;
-use tensorzero_internal::observability::{self, LogFormat};
+use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::config_parser::Config;
+use tensorzero_core::endpoints;
+use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
+use tensorzero_core::error;
+use tensorzero_core::gateway_util;
+use tensorzero_core::observability::{self, LogFormat, RouterExt};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -82,10 +83,11 @@ async fn main() {
     let args = Args::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
-    let otel_handle =
-        observability::setup_logs(true, args.log_format).expect_pretty("Failed to set up logs");
+    let delayed_log_config = observability::setup_observability(args.log_format)
+        .await
+        .expect_pretty("Failed to set up logs");
 
-    let git_sha = tensorzero_internal::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
+    let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
 
@@ -129,7 +131,14 @@ async fn main() {
         Arc::new(Config::default())
     };
 
-    // Note - we only enable OTLP after config file parsing/loading is complete,
+    if config.gateway.debug {
+        delayed_log_config
+            .delayed_debug_logs
+            .enable_debug()
+            .expect_pretty("Failed to enable debug logs");
+    }
+
+    // Note: We only enable OTLP after config file parsing/loading is complete,
     // so that the config file can control whether OTLP is enabled or not.
     // This means that any tracing spans created before this point will not be exported to OTLP.
     // For now, this is fine, as we only ever export spans for inference/batch/feedback requests,
@@ -141,16 +150,31 @@ async fn main() {
         if std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT").is_err() {
             // This makes it easier to run the gateway in local development and CI
             if cfg!(feature = "e2e_tests") {
-                tracing::warn!("Running without explicit `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` env var in e2e tests mode")
+                tracing::warn!("Running without explicit `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` environment variable in e2e tests mode.");
             } else {
-                tracing::error!("[gateway.export.otlp.traces] has `enabled = true`, but env var `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`)");
+                tracing::error!("The `gateway.export.otlp.traces.enabled` configuration option is `true`, but environment variable `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`).");
                 std::process::exit(1);
             }
         }
-        otel_handle
-            .enable_otel()
-            .expect_pretty("Failed to enable OpenTelemetry");
+
+        match delayed_log_config.delayed_otel {
+            Ok(delayed_otel) => {
+                delayed_otel
+                    .enable_otel()
+                    .expect_pretty("Failed to enable OpenTelemetry");
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Could not enable OpenTelemetry export due to previous error: `{e}`. Exiting."
+                );
+                std::process::exit(1);
+            }
+        }
         tracing::info!("Enabled OpenTelemetry OTLP export");
+    } else if let Err(e) = delayed_log_config.delayed_otel {
+        tracing::warn!(
+            "[gateway.export.otlp.traces.enabled]  is `false`, so ignoring OpenTelemetry error: `{e}`"
+        );
     }
 
     // Initialize AppState
@@ -172,7 +196,7 @@ async fn main() {
     // Set debug mode
     error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");
 
-    let router = Router::new()
+    let api_routes = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
         .route(
             "/batch_inference",
@@ -191,18 +215,35 @@ async fn main() {
             post(endpoints::openai_compatible::inference_handler),
         )
         .route("/feedback", post(endpoints::feedback::feedback_handler))
-        // Everything above these two layers has OpenTelemetry tracing enabled
-        .layer(OtelInResponseLayer)
-        .layer(OtelAxumLayer::default())
+        // Everything above this layer has OpenTelemetry tracing enabled
+        // Note - we do *not* attach a `OtelInResponseLayer`, as this seems to be incorrect according to the W3C Trace Context spec
+        // (the only response header is `traceresponse` for a completed trace)
+        .apply_otel_http_trace_layer()
         // Everything below the Otel layers does not have OpenTelemetry tracing enabled
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
         .route(
-            "/internal/datasets/{dataset}/datapoints",
-            post(endpoints::datasets::create_datapoint_handler),
+            "/datasets/{dataset_name}/datapoints/bulk",
+            post(endpoints::datasets::bulk_insert_datapoints_handler),
         )
         .route(
-            "/internal/datasets/{dataset}/datapoints/{id}",
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            delete(endpoints::datasets::delete_datapoint_handler),
+        )
+        .route(
+            "/datasets/{dataset_name}/datapoints",
+            get(endpoints::datasets::list_datapoints_handler),
+        )
+        .route(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            get(endpoints::datasets::get_datapoint_handler),
+        )
+        .route(
+            "/internal/datasets/{dataset_name}/datapoints",
+            post(endpoints::datasets::insert_from_existing_datapoint_handler),
+        )
+        .route(
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
             put(endpoints::datasets::update_datapoint_handler),
         )
         .route(
@@ -220,9 +261,31 @@ async fn main() {
         .route(
             "/metrics",
             get(move || std::future::ready(metrics_handle.render())),
-        )
+        );
+
+    let base_path = config.gateway.base_path.as_deref().unwrap_or("/");
+    if !base_path.starts_with("/") {
+        tracing::error!("[gateway.base_path] must start with a `/` : `{base_path}`");
+        std::process::exit(1);
+    }
+    let base_path = base_path.trim_end_matches("/");
+
+    // The path was just `/` (or multiple slashes)
+    let router = if base_path.is_empty() {
+        Router::new().merge(api_routes)
+    } else {
+        Router::new().nest(base_path, api_routes)
+    };
+
+    let router = router
         .fallback(endpoints::fallback::handle_404)
         .layer(axum::middleware::from_fn(add_version_header))
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
+        // Note - this is intentionally *not* used by our OTEL exporter (it creates a span without any `http.` or `otel.` fields)
+        // This is only used to output request/response information to our logs
+        // OTEL exporting is done by the `OtelAxumLayer` above, which is only enabled for certain routes (and includes much more information)
+        // We log failed requests messages at 'DEBUG', since we already have our own error-logging code,
+        .layer(TraceLayer::new_for_http().on_failure(DefaultOnFailure::new().level(Level::DEBUG)))
         .with_state(app_state);
 
     // Bind to the socket address specified in the config, or default to 0.0.0.0:3000
@@ -245,6 +308,10 @@ async fn main() {
             std::process::exit(1);
         }
     };
+    // This will give us the chosen port if the user specified a port of 0
+    let actual_bind_address = listener
+        .local_addr()
+        .expect_pretty("Failed to get bind address from listener");
 
     let config_path_pretty = if let Some(path) = &config_path {
         format!("config file `{}`", path.to_string_lossy())
@@ -253,7 +320,7 @@ async fn main() {
     };
 
     tracing::info!(
-        "TensorZero Gateway is listening on {bind_address} with {config_path_pretty} and observability {observability_enabled_pretty}.",
+        "TensorZero Gateway is listening on {actual_bind_address} with {config_path_pretty} and observability {observability_enabled_pretty} and base path `{base_path}`",
     );
 
     axum::serve(listener, router)

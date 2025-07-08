@@ -7,7 +7,8 @@ import {
   SupervisedFineTuning,
   Documentation,
   Dataset,
-  Evaluation,
+  GridCheck,
+  SequenceChecks,
 } from "~/components/icons/Icons";
 import { useSidebar } from "~/components/ui/sidebar";
 import { useActivePath } from "~/hooks/use-active-path";
@@ -82,9 +83,14 @@ const navigation: NavigationSection[] = [
         icon: Dataset,
       },
       {
-        title: "Evaluations",
+        title: "Static Evaluations",
         url: "/evaluations",
-        icon: Evaluation,
+        icon: GridCheck,
+      },
+      {
+        title: "Dynamic Evaluations",
+        url: "/dynamic_evaluations",
+        icon: SequenceChecks,
       },
     ],
   },

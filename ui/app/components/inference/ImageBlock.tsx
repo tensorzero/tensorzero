@@ -1,16 +1,16 @@
-import type { ResolvedImageContent } from "~/utils/clickhouse/common";
+import type { ResolvedFileContent } from "~/utils/clickhouse/common";
 
-export default function ImageBlock({ image }: { image: ResolvedImageContent }) {
+export default function ImageBlock({ image }: { image: ResolvedFileContent }) {
   return (
     <div className="w-60 rounded bg-slate-100 p-2 text-xs text-slate-300">
       <div className="mb-2">Image</div>
       <a
-        href={image.image.url}
+        href={image.file.dataUrl}
         target="_blank"
         rel="noopener noreferrer"
         download={"tensorzero_" + image.storage_path.path}
       >
-        <img src={image.image.url} alt="Image" />
+        <img src={image.file.dataUrl} alt="Image" />
       </a>
     </div>
   );

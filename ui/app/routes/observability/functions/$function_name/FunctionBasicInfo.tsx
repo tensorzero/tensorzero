@@ -1,4 +1,4 @@
-import type { FunctionConfig } from "~/utils/config/function";
+import type { FunctionConfig } from "tensorzero-node";
 import {
   BasicInfoLayout,
   BasicInfoItem,

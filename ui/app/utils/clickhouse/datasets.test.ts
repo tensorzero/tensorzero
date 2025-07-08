@@ -7,6 +7,7 @@ import {
 import {
   countDatapointsForDatasetFunction,
   countRowsForDataset,
+  getAdjacentDatapointIds,
   getDatapoint,
   getDatasetCounts,
   getDatasetRows,
@@ -17,6 +18,7 @@ import {
 } from "./datasets.server";
 import { expect, test, describe } from "vitest";
 import { v7 as uuid } from "uuid";
+import { getClickhouseClient } from "./client.server";
 
 describe("countRowsForDataset", () => {
   test("returns the correct number of rows for a specific function", async () => {
@@ -363,8 +365,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "Is it a living thing?",
+                type: "unstructured_text",
+                text: "Is it a living thing?",
               },
             ],
             role: "user",
@@ -372,8 +374,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "no.",
+                type: "unstructured_text",
+                text: "no.",
               },
             ],
             role: "assistant",
@@ -381,8 +383,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "Is it commonly found indoors?",
+                type: "unstructured_text",
+                text: "Is it commonly found indoors?",
               },
             ],
             role: "user",
@@ -390,8 +392,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "no.",
+                type: "unstructured_text",
+                text: "no.",
               },
             ],
             role: "assistant",
@@ -399,8 +401,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "Is it a natural object, like a rock or tree?",
+                type: "unstructured_text",
+                text: "Is it a natural object, like a rock or tree?",
               },
             ],
             role: "user",
@@ -408,8 +410,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "yes.",
+                type: "unstructured_text",
+                text: "yes.",
               },
             ],
             role: "assistant",
@@ -467,8 +469,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: {
+                type: "structured_text",
+                arguments: {
                   topic: "upward",
                 },
               },
@@ -513,7 +515,14 @@ describe("datapoint operations", () => {
       input: {
         messages: [
           {
-            content: [{ type: "text", value: "Write a haiku about testing" }],
+            content: [
+              {
+                type: "structured_text",
+                arguments: {
+                  topic: "testing",
+                },
+              },
+            ],
             role: "user" as const,
           },
         ],
@@ -595,8 +604,8 @@ describe("datapoint operations", () => {
           {
             content: [
               {
-                type: "text",
-                value: "Extract entities from: John visited Paris",
+                type: "unstructured_text",
+                text: "Extract entities from: John visited Paris",
               },
             ],
             role: "user" as const,
@@ -693,7 +702,10 @@ describe("datapoint operations", () => {
         messages: [
           {
             content: [
-              { type: "text", value: "Write a haiku about duplicates" },
+              {
+                type: "unstructured_text",
+                text: "Write a haiku about duplicates",
+              },
             ],
             role: "user" as const,
           },
@@ -889,5 +901,60 @@ describe("insertDatapoint", () => {
         source_inference_id: null,
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe("getAdjacentDatapointIds", () => {
+  test("returns the correct adjacent datapoint ids", async () => {
+    const adjacentIds = await getAdjacentDatapointIds(
+      "foo",
+      "01934fc5-ea98-71f0-8191-9fd88f34c28b",
+    );
+    expect(adjacentIds).toEqual({
+      next_id: "0193514c-ec40-7911-ad63-460bb9c861e1",
+      previous_id: "01934fbc-3250-7571-ad38-041f27ffa3f9",
+    });
+  });
+
+  test("returns null for next_id if there is no next datapoint", async () => {
+    const resultSet = await getClickhouseClient().query({
+      query: `SELECT uint_to_uuid(max(id_uint)) as id FROM
+      ( SELECT toUInt128(id) as id_uint FROM ChatInferenceDatapoint WHERE dataset_name={dataset_name:String} AND staled_at IS NULL
+       UNION ALL
+       SELECT toUInt128(id) as id_uint FROM JsonInferenceDatapoint WHERE dataset_name={dataset_name:String} AND staled_at IS NULL
+      ) LIMIT 1`,
+      format: "JSON",
+      query_params: { dataset_name: "foo" },
+    });
+    const lastFooDatapointId = await resultSet.json<{ id: string }>();
+    const adjacentIds = await getAdjacentDatapointIds(
+      "foo",
+      lastFooDatapointId.data[0].id,
+    );
+    expect(adjacentIds).toEqual({
+      previous_id: "0196374a-d03f-7420-9da5-1561cba71ddb",
+      next_id: null,
+    });
+  });
+
+  test("returns null for previous_id if there is no previous datapoint", async () => {
+    const resultSet = await getClickhouseClient().query({
+      query: `SELECT uint_to_uuid(min(id_uint)) as id FROM
+      ( SELECT toUInt128(id) as id_uint FROM ChatInferenceDatapoint WHERE dataset_name={dataset_name:String} AND staled_at IS NULL
+       UNION ALL
+       SELECT toUInt128(id) as id_uint FROM JsonInferenceDatapoint WHERE dataset_name={dataset_name:String} AND staled_at IS NULL
+      ) LIMIT 1`,
+      format: "JSON",
+      query_params: { dataset_name: "foo" },
+    });
+    const firstFooDatapointId = await resultSet.json<{ id: string }>();
+    const adjacentIds = await getAdjacentDatapointIds(
+      "foo",
+      firstFooDatapointId.data[0].id,
+    );
+    expect(adjacentIds).toEqual({
+      previous_id: null,
+      next_id: "01934ef3-d558-79d3-896e-c5d9fb89103d",
+    });
   });
 });

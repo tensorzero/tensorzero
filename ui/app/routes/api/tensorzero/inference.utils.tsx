@@ -10,6 +10,7 @@ import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { resolvedInputToTensorZeroInput } from "./inference";
+import { logger } from "~/utils/logger";
 
 interface InferenceActionError {
   message: string;
@@ -144,7 +145,7 @@ export function useInferenceActionFetcher() {
 
   React.useEffect(() => {
     if (context.error?.caught) {
-      console.error("Error processing response:", context.error.caught);
+      logger.error("Error processing response:", context.error.caught);
     }
   }, [context.error]);
 
@@ -179,11 +180,14 @@ export function prepareInferenceActionRequest(
     request = prepareDefaultFunctionRequest(args.resource, args.variant);
   } else {
     const tensorZeroInput = resolvedInputToTensorZeroInput(args.resource.input);
+    const extra_body =
+      args.source === "inference" ? args.resource.extra_body : undefined;
     request = {
       function_name: args.resource.function_name,
       input: tensorZeroInput,
       variant_name: args.variant,
       dryrun: true,
+      extra_body,
     };
   }
 
