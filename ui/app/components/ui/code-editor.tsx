@@ -98,7 +98,12 @@ function detectLanguage(content: string): Language {
   return "text";
 }
 
-const DEFAULT_WORD_WRAP_LANGUAGES: Language[] = ["text", "jinja2", "markdown"];
+const DEFAULT_WORD_WRAP_LANGUAGES: Language[] = [
+  "text",
+  "json",
+  "jinja2",
+  "markdown",
+];
 
 export const CodeEditor: React.FC<CodeEditorProps> = ({
   value = "",
