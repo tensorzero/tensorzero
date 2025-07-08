@@ -14,7 +14,6 @@ interface Env {
   TENSORZERO_CLICKHOUSE_URL: string;
   TENSORZERO_UI_CONFIG_PATH: string;
   TENSORZERO_GATEWAY_URL: string;
-  TENSORZERO_UI_FF_USE_NATIVE_SFT: 1 | 0;
   TENSORZERO_EVALUATIONS_PATH: string;
   OPENAI_BASE_URL: string | null;
   FIREWORKS_BASE_URL: string | null;
@@ -56,8 +55,6 @@ export function getEnv(): Env {
     TENSORZERO_GATEWAY_URL,
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || null,
     FIREWORKS_BASE_URL: process.env.FIREWORKS_BASE_URL || null,
-    TENSORZERO_UI_FF_USE_NATIVE_SFT:
-      process.env.TENSORZERO_UI_FF_USE_NATIVE_SFT === "1" ? 1 : 0,
     TENSORZERO_EVALUATIONS_PATH:
       process.env.TENSORZERO_EVALUATIONS_PATH || "evaluations",
     FIREWORKS_ACCOUNT_ID: process.env.FIREWORKS_ACCOUNT_ID || null,
