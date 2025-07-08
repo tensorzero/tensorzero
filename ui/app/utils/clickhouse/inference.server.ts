@@ -12,7 +12,7 @@ import {
   inputSchema,
 } from "./common";
 import { data } from "react-router";
-import type { FunctionConfig } from "../config/function";
+import type { FunctionConfig } from "tensorzero-node";
 import { getClickhouseClient } from "./client.server";
 import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
 import {
@@ -489,7 +489,7 @@ async function parseInferenceRow(
 ): Promise<ParsedInferenceRow> {
   const input = inputSchema.parse(JSON.parse(row.input));
   const config = await getConfig();
-  const functionConfig = config.functions[row.function_name];
+  const functionConfig = config.functions[row.function_name] || null;
   const resolvedInput = await resolveInput(input, functionConfig);
   const extra_body = row.extra_body ? JSON.parse(row.extra_body) : undefined;
   if (row.function_type === "chat") {

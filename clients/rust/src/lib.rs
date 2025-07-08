@@ -10,13 +10,14 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_core::config_parser::MetricConfig;
+use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
 use tensorzero_core::evaluations::EvaluationConfig;
 use tensorzero_core::function::FunctionConfig;
-pub use tensorzero_core::optimization::{OptimizerJobHandle, OptimizerStatus};
+pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
     config_parser::Config,
@@ -752,6 +753,33 @@ impl Client {
         }
     }
 
+    /// Stales all datapoints in a dataset that have not been staled yet.
+    /// This is a soft deletion, so evaluation runs will still refer to it.
+    /// Returns the number of datapoints that were staled as {num_staled_datapoints: u64}.
+    pub async fn stale_dataset(
+        &self,
+        dataset_name: String,
+    ) -> Result<StaleDatasetResponse, TensorZeroError> {
+        let ClientMode::EmbeddedGateway { gateway, timeout } = &self.mode else {
+            return Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            });
+        };
+        with_embedded_timeout(*timeout, async {
+            tensorzero_core::endpoints::datasets::stale_dataset(
+                &gateway.state.clickhouse_connection_info,
+                &dataset_name,
+            )
+            .await
+            .map_err(err_to_http)
+        })
+        .await
+    }
+
     /// Query the Clickhouse database for inferences.
     ///
     /// This function is only available in EmbeddedGateway mode.
@@ -819,7 +847,7 @@ impl Client {
     pub async fn experimental_launch_optimization(
         &self,
         params: tensorzero_core::endpoints::optimization::LaunchOptimizationParams,
-    ) -> Result<OptimizerJobHandle, TensorZeroError> {
+    ) -> Result<OptimizationJobHandle, TensorZeroError> {
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 // TODO: do we want this?
@@ -845,7 +873,7 @@ impl Client {
     pub async fn experimental_launch_optimization_workflow(
         &self,
         params: LaunchOptimizationWorkflowParams,
-    ) -> Result<OptimizerJobHandle, TensorZeroError> {
+    ) -> Result<OptimizationJobHandle, TensorZeroError> {
         let ClientMode::EmbeddedGateway { gateway, timeout } = &self.mode else {
             return Err(TensorZeroError::Other {
                 source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
@@ -871,8 +899,8 @@ impl Client {
     /// Poll an optimization job for status.
     pub async fn experimental_poll_optimization(
         &self,
-        job_handle: OptimizerJobHandle,
-    ) -> Result<OptimizerStatus, TensorZeroError> {
+        job_handle: OptimizationJobHandle,
+    ) -> Result<OptimizationJobInfo, TensorZeroError> {
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {

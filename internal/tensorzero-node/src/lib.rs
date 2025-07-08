@@ -1,7 +1,7 @@
 #![deny(clippy::all)]
 use std::{path::Path, time::Duration};
 
-use tensorzero::{Client, ClientBuilder, ClientBuilderMode, OptimizerJobHandle};
+use tensorzero::{Client, ClientBuilder, ClientBuilderMode, OptimizationJobHandle};
 
 #[macro_use]
 extern crate napi_derive;
@@ -54,7 +54,7 @@ impl TensorZeroClient {
         &self,
         job_handle: String,
     ) -> Result<String, napi::Error> {
-        let job_handle: OptimizerJobHandle = serde_json::from_str(&job_handle)
+        let job_handle: OptimizationJobHandle = serde_json::from_str(&job_handle)
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let info = self
             .client
@@ -135,5 +135,18 @@ impl TensorZeroClient {
         let config_str =
             serde_json::to_string(&config).map_err(|e| napi::Error::from_reason(e.to_string()))?;
         Ok(config_str)
+    }
+
+    #[napi]
+    pub async fn stale_dataset(&self, dataset_name: String) -> Result<String, napi::Error> {
+        let result = self
+            .client
+            .stale_dataset(dataset_name)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let result_str = serde_json::to_string(&result).map_err(|e| {
+            napi::Error::from_reason(format!("Failed to serialize stale dataset result: {e}"))
+        })?;
+        Ok(result_str)
     }
 }
