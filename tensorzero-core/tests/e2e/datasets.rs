@@ -1505,6 +1505,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
     let episode_id = Uuid::parse_str(episode_id).unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
 
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 
@@ -1514,7 +1515,10 @@ async fn test_datapoint_insert_output_inherit_chat() {
         )))
         .json(&json!({
             "inference_id": inference_id,
-            "output": "inherit"
+            "output": "inherit",
+            "function_name": "basic_test",
+            "variant_name": variant_name,
+            "episode_id": episode_id,
         }))
         .send()
         .await
@@ -1606,6 +1610,7 @@ async fn test_datapoint_insert_output_none_chat() {
     let episode_id = Uuid::parse_str(episode_id).unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
 
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 
@@ -1615,7 +1620,10 @@ async fn test_datapoint_insert_output_none_chat() {
         )))
         .json(&json!({
             "inference_id": inference_id,
-            "output": "none"
+            "output": "none",
+            "function_name": "basic_test",
+            "variant_name": variant_name,
+            "episode_id": episode_id,
         }))
         .send()
         .await
@@ -1690,8 +1698,11 @@ async fn test_datapoint_create_bad_name() {
         .unwrap();
     assert!(response.status().is_success());
     let response_json = response.json::<Value>().await.unwrap();
+    let episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id = Uuid::parse_str(episode_id).unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
 
     let dataset_name = "builder";
 
@@ -1701,7 +1712,10 @@ async fn test_datapoint_create_bad_name() {
         )))
         .json(&json!({
             "inference_id": inference_id,
-            "output": "none"
+            "output": "none",
+            "function_name": "basic_test",
+            "variant_name": variant_name,
+            "episode_id": episode_id,
         }))
         .send()
         .await
@@ -1719,9 +1733,10 @@ async fn test_datapoint_create_bad_name() {
 async fn test_datapoint_insert_output_demonstration_chat() {
     let clickhouse = get_clickhouse().await;
     let client = Client::new();
+    let function_name = "basic_test";
     // Run inference (standard, no dryrun) to get an episode_id.
     let inference_payload = json!({
-        "function_name": "basic_test",
+        "function_name": function_name,
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": "Hello, world!"}]
@@ -1741,6 +1756,7 @@ async fn test_datapoint_insert_output_demonstration_chat() {
     let episode_id = Uuid::parse_str(episode_id).unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
 
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 
@@ -1767,7 +1783,10 @@ async fn test_datapoint_insert_output_demonstration_chat() {
         )))
         .json(&json!({
             "inference_id": inference_id,
-            "output": "demonstration"
+            "output": "demonstration",
+            "function_name": function_name,
+            "variant_name": variant_name,
+            "episode_id": episode_id,
         }))
         .send()
         .await
@@ -1853,6 +1872,7 @@ async fn test_datapoint_insert_output_inherit_json() {
     let episode_id = Uuid::parse_str(episode_id).unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
 
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 
@@ -1862,7 +1882,10 @@ async fn test_datapoint_insert_output_inherit_json() {
         )))
         .json(&json!({
             "inference_id": inference_id,
-            "output": "inherit"
+            "output": "inherit",
+            "function_name": "json_success",
+            "variant_name": variant_name,
+            "episode_id": episode_id,
         }))
         .send()
         .await
@@ -1960,6 +1983,7 @@ async fn test_datapoint_insert_output_none_json() {
     let episode_id = Uuid::parse_str(episode_id).unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
 
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 
@@ -1969,7 +1993,10 @@ async fn test_datapoint_insert_output_none_json() {
         )))
         .json(&json!({
             "inference_id": inference_id,
-            "output": "none"
+            "output": "none",
+            "function_name": "json_success",
+            "variant_name": variant_name,
+            "episode_id": episode_id,
         }))
         .send()
         .await
@@ -2048,6 +2075,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
     let episode_id = Uuid::parse_str(episode_id).unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
 
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 
@@ -2074,7 +2102,10 @@ async fn test_datapoint_insert_output_demonstration_json() {
         )))
         .json(&json!({
             "inference_id": inference_id,
-            "output": "demonstration"
+            "output": "demonstration",
+            "function_name": "json_success",
+            "variant_name": variant_name,
+            "episode_id": episode_id,
         }))
         .send()
         .await
@@ -2142,7 +2173,10 @@ async fn test_missing_inference_id() {
         ))
         .json(&json!({
             "inference_id": fake_inference_id,
-            "output": "inherit"
+            "output": "inherit",
+            "function_name": "basic_test",
+            "variant_name": "test",
+            "episode_id": Uuid::now_v7(),
         }))
         .send()
         .await
@@ -2177,8 +2211,11 @@ async fn test_datapoint_missing_demonstration() {
         .unwrap();
     assert!(response.status().is_success());
     let response_json = response.json::<Value>().await.unwrap();
+    let episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id = Uuid::parse_str(episode_id).unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
 
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 
@@ -2188,7 +2225,10 @@ async fn test_datapoint_missing_demonstration() {
         )))
         .json(&json!({
             "inference_id": inference_id,
-            "output": "demonstration"
+            "output": "demonstration",
+            "function_name": "json_success",
+            "variant_name": variant_name,
+            "episode_id": episode_id,
         }))
         .send()
         .await

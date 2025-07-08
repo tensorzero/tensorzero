@@ -1,3 +1,4 @@
+use crate::function::FunctionConfigType;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
@@ -107,56 +108,64 @@ pub enum TaggedInferenceDatabaseInsert {
 }
 
 async fn query_inference_for_datapoint(
+    config: &Config,
     clickhouse: &ClickHouseConnectionInfo,
     inference_id: Uuid,
+    function_name: &str,
+    variant_name: &str,
+    episode_id: Uuid,
 ) -> Result<TaggedInferenceDatabaseInsert, Error> {
-    let result = clickhouse
-        .run_query_synchronous(
-            r#"
-            SELECT
-  uint_to_uuid(i.id_uint) AS id,
-
-  -- Common columns (pick via IF)
-  IF(i.function_type = 'chat', c.function_name, j.function_name) AS function_name,
-  IF(i.function_type = 'chat', c.variant_name,   j.variant_name)   AS variant_name,
-  IF(i.function_type = 'chat', c.episode_id,     j.episode_id)     AS episode_id,
-  IF(i.function_type = 'chat', c.input,          j.input)          AS input,
-  IF(i.function_type = 'chat', c.output,         j.output)         AS output,
-
-  -- Chat-specific columns
-  IF(i.function_type = 'chat', c.tool_params, '') AS tool_params,
-
-  -- Inference params (common name in the union)
-  IF(i.function_type = 'chat', c.inference_params, j.inference_params) AS inference_params,
-
-  -- Processing time
-  IF(i.function_type = 'chat', c.processing_time_ms, j.processing_time_ms) AS processing_time_ms,
-
-  -- JSON-specific columns
-  IF(i.function_type = 'json', j.output_schema, '') AS output_schema,
-  IF(i.function_type = 'json', j.auxiliary_content, '') AS auxiliary_content,
-
-  -- Timestamps & tags
-  IF(i.function_type = 'chat',
-   formatDateTime(c.timestamp, '%Y-%m-%dT%H:%i:%SZ'),
-   formatDateTime(j.timestamp, '%Y-%m-%dT%H:%i:%SZ')
-) AS timestamp,
-  IF(i.function_type = 'chat', c.tags,      j.tags)      AS tags,
-
-  -- Discriminator itself
-  i.function_type
-
-FROM InferenceById i FINAL
-LEFT JOIN ChatInference c
-  ON i.id_uint = toUInt128(c.id)
-LEFT JOIN JsonInference j
-  ON i.id_uint = toUInt128(j.id)
-WHERE uint_to_uuid(i.id_uint) = {id:String}
-FORMAT JSONEachRow;"#
-                .to_string(),
-            &HashMap::from([("id", inference_id.to_string().as_str())]),
-        )
-        .await?;
+    let function_type = config.get_function(function_name)?.config_type();
+    let result = match function_type {
+        FunctionConfigType::Chat => {
+            clickhouse
+                .run_query_synchronous(
+                    r#"
+                SELECT * EXCEPT(timestamp),
+                'chat' AS function_type,
+                formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                FROM ChatInference
+                    WHERE function_name = {function_name:String}
+                    AND variant_name = {variant_name:String}
+                    AND episode_id = {episode_id:String}
+                    AND id = {inference_id:String}
+                LIMIT 1
+                FORMAT JSONEachRow;"#
+                        .to_string(),
+                    &HashMap::from([
+                        ("function_name", function_name),
+                        ("variant_name", variant_name),
+                        ("episode_id", episode_id.to_string().as_str()),
+                        ("inference_id", inference_id.to_string().as_str()),
+                    ]),
+                )
+                .await?
+        }
+        FunctionConfigType::Json => {
+            clickhouse
+                .run_query_synchronous(
+                    r#"
+                SELECT * EXCEPT(timestamp),
+                'json' AS function_type,
+                formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                FROM JsonInference
+                WHERE function_name = {function_name:String}
+                AND variant_name = {variant_name:String}
+                AND episode_id = {episode_id:String}
+                AND id = {inference_id:String}
+                LIMIT 1
+                FORMAT JSONEachRow;"#
+                        .to_string(),
+                    &HashMap::from([
+                        ("function_name", function_name),
+                        ("variant_name", variant_name),
+                        ("episode_id", episode_id.to_string().as_str()),
+                        ("inference_id", inference_id.to_string().as_str()),
+                    ]),
+                )
+                .await?
+        }
+    };
 
     if result.response.is_empty() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
@@ -174,20 +183,35 @@ FORMAT JSONEachRow;"#
 }
 
 async fn insert_from_existing(
+    config: &Config,
     clickhouse: &ClickHouseConnectionInfo,
     path_params: InsertPathParams,
     existing: &ExistingInferenceInfo,
 ) -> Result<Uuid, Error> {
-    let inference_data = query_inference_for_datapoint(clickhouse, existing.inference_id).await?;
+    let ExistingInferenceInfo {
+        function_name,
+        variant_name,
+        episode_id,
+        inference_id,
+        output,
+    } = existing;
+    let inference_data = query_inference_for_datapoint(
+        config,
+        clickhouse,
+        *inference_id,
+        function_name,
+        variant_name,
+        *episode_id,
+    )
+    .await?;
     let datapoint_id = Uuid::now_v7();
 
     match inference_data {
         TaggedInferenceDatabaseInsert::Json(inference) => {
-            let output = match existing.output {
+            let output = match output {
                 OutputKind::Inherit => Some(inference.output),
                 OutputKind::Demonstration => {
-                    let demonstration =
-                        query_demonstration(clickhouse, existing.inference_id, 1).await?;
+                    let demonstration = query_demonstration(clickhouse, *inference_id, 1).await?;
                     Some(serde_json::from_str(&demonstration.value).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
@@ -209,7 +233,7 @@ async fn insert_from_existing(
                 tags: Some(inference.tags),
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
-                source_inference_id: Some(existing.inference_id),
+                source_inference_id: Some(*inference_id),
                 staled_at: None,
             };
             let rows_written = put_deduped_json_datapoints(clickhouse, &[datapoint]).await?;
@@ -220,11 +244,10 @@ async fn insert_from_existing(
             }
         }
         TaggedInferenceDatabaseInsert::Chat(inference) => {
-            let output = match existing.output {
+            let output = match output {
                 OutputKind::Inherit => Some(inference.output),
                 OutputKind::Demonstration => {
-                    let demonstration =
-                        query_demonstration(clickhouse, existing.inference_id, 1).await?;
+                    let demonstration = query_demonstration(clickhouse, *inference_id, 1).await?;
                     Some(serde_json::from_str(&demonstration.value).map_err(|e| {
                         Error::new(ErrorDetails::InvalidRequest {
                             message: format!(
@@ -246,7 +269,7 @@ async fn insert_from_existing(
                 tags: Some(inference.tags),
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
-                source_inference_id: Some(existing.inference_id),
+                source_inference_id: Some(*inference_id),
                 staled_at: None,
             };
             let rows_written = put_deduped_chat_datapoints(clickhouse, &[datapoint]).await?;
@@ -279,6 +302,7 @@ pub async fn insert_from_existing_datapoint_handler(
 ) -> Result<Json<InsertDatapointResponse>, Error> {
     validate_dataset_name(&path_params.dataset_name)?;
     let datapoint_id = insert_from_existing(
+        &app_state.config,
         &app_state.clickhouse_connection_info,
         path_params,
         &existing_inference_info,
@@ -1043,6 +1067,9 @@ pub struct DeletePathParams {
 pub struct ExistingInferenceInfo {
     pub output: OutputKind,
     pub inference_id: Uuid,
+    pub function_name: String,
+    pub variant_name: String,
+    pub episode_id: Uuid,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1712,7 +1739,7 @@ mod test {
 
     #[test]
     fn test_deserialize_synthetic_json_datapoint() {
-        let json_str = r#"{"id":"0196368f-1ae8-7551-b5df-9a61593eb307","function_name":"extract_entities","variant_name":"gpt4o_mini_initial_prompt","episode_id":"0196368f-1ae8-7551-b5df-9a7df7e83048","input":"{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Mark Philippoussis ( Australia ) beat Andrei Olhovskiy ( Russia ) 6 - 3 6-4 6-2\"}]}]}","output":"{\"raw\":\"{\\n    \\\"person\\\": [\\\"Mark Philippoussis\\\", \\\"Andrei Olhovskiy\\\"],\\n    \\\"organization\\\": [],\\n    \\\"location\\\": [\\\"Australia\\\", \\\"Russia\\\"],\\n    \\\"miscellaneous\\\": [\\\"6 - 3\\\", \\\"6-4\\\", \\\"6-2\\\"]\\n}\",\"parsed\":{\"person\":[\"Mark Philippoussis\",\"Andrei Olhovskiy\"],\"organization\":[],\"location\":[\"Australia\",\"Russia\"],\"miscellaneous\":[\"6 - 3\",\"6-4\",\"6-2\"]}}","tool_params":"","inference_params":"{\"chat_completion\":{}}","processing_time_ms":12,"output_schema":"{\"$schema\":\"http:\/\/json-schema.org\/draft-07\/schema#\",\"type\":\"object\",\"properties\":{\"person\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"organization\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"location\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"miscellaneous\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},\"required\":[\"person\",\"organization\",\"location\",\"miscellaneous\"],\"additionalProperties\":false}","auxiliary_content":"","timestamp":"2025-04-14T23:07:50Z","tags":{"tensorzero::dataset_name":"foo","tensorzero::datapoint_id":"0193829b-cd48-7731-9df0-4e325119d96d","tensorzero::evaluation_name":"entity_extraction","tensorzero::evaluation_run_id":"0196368f-19bd-7082-a677-1c0bf346ff24"},"function_type":"json"}"#;
+        let json_str = r#"{"id":"0196368f-1ae8-7551-b5df-9a61593eb307","function_name":"extract_entities","variant_name":"gpt4o_mini_initial_prompt","episode_id":"0196368f-1ae8-7551-b5df-9a7df7e83048","input":"{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Mark Philippoussis ( Australia ) beat Andrei Olhovskiy ( Russia ) 6 - 3 6-4 6-2\"}]}]}","output":"{\"raw\":\"{\\n    \\\"person\\\": [\\\"Mark Philippoussis\\\", \\\"Andrei Olhovskiy\\\"],\\n    \\\"organization\\\": [],\\n    \\\"location\\\": [\\\"Australia\\\", \\\"Russia\\\"],\\n    \\\"miscellaneous\\\": [\\\"6 - 3\\\", \\\"6-4\\\", \\\"6-2\\\"]\\n}\",\"parsed\":{\"person\":[\"Mark Philippoussis\",\"Andrei Olhovskiy\"],\"organization\":[],\"location\":[\"Australia\",\"Russia\"],\"miscellaneous\":[\"6 - 3\",\"6-4\",\"6-2\"]}}","tool_params":"","inference_params":"{\"chat_completion\":{}}","processing_time_ms":12,"output_schema":"{\"$schema\":\"http:\/\/json-schema.org\/draft-07\/schema#\",\"type\":\"object\",\"properties\":{\"person\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"organization\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"location\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"miscellaneous\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},\"required\":[\"person\",\"organization\",\"location\",\"miscellaneous\"],\"additionalProperties\":false}","auxiliary_content":"","timestamp":"2025-04-14T23:07:50Z","tags":{"tensorzero::dataset_name":"foo","tensorzero::datapoint_id":"0193829b-cd48-7731-9df0-4e325119d96d","tensorzero::evaluation_name":"entity_extraction","tensorzero::evaluation_run_id":"0196368f-19bd-7082-a677-1c0bf346ff24"},"function_type":"json","extra_body":"[]"}"#;
         let _: TaggedInferenceDatabaseInsert = serde_json::from_str(json_str).unwrap();
     }
 }
