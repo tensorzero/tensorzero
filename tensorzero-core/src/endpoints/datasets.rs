@@ -111,8 +111,8 @@ async fn query_inference_for_datapoint(
     config: &Config<'_>,
     clickhouse: &ClickHouseConnectionInfo,
     inference_id: Uuid,
-    function_name: String,
-    variant_name: String,
+    function_name: &str,
+    variant_name: &str,
     episode_id: Uuid,
 ) -> Result<TaggedInferenceDatabaseInsert, Error> {
     let function_type = config.get_function(&function_name)?.config_type();
@@ -128,7 +128,7 @@ async fn query_inference_for_datapoint(
                     AND id = {inference_id:String}
                 LIMIT 1
                 FORMAT JSONEachRow;"#.to_string(),
-            &HashMap::from([("function_name", function_name.as_str()), ("variant_name", variant_name.as_str()), ("episode_id", episode_id.to_string().as_str()), ("inference_id", inference_id.to_string().as_str())])).await?
+            &HashMap::from([("function_name", function_name), ("variant_name", variant_name), ("episode_id", episode_id.to_string().as_str()), ("inference_id", inference_id.to_string().as_str())])).await?
         }
         FunctionConfigType::Json => {
             clickhouse.run_query_synchronous(r#"
@@ -141,11 +141,9 @@ async fn query_inference_for_datapoint(
                 AND id = {inference_id:String}
                 LIMIT 1
                 FORMAT JSONEachRow;"#.to_string(),
-            &HashMap::from([("function_name", function_name.as_str()), ("variant_name", variant_name.as_str()), ("episode_id", episode_id.to_string().as_str()), ("inference_id", inference_id.to_string().as_str())])).await?
+            &HashMap::from([("function_name", function_name), ("variant_name", variant_name), ("episode_id", episode_id.to_string().as_str()), ("inference_id", inference_id.to_string().as_str())])).await?
         }
     };
-
-
 
     if result.response.is_empty() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
@@ -168,25 +166,30 @@ async fn insert_from_existing(
     path_params: InsertPathParams,
     existing: &ExistingInferenceInfo,
 ) -> Result<Uuid, Error> {
-    let { function_name, variant_name, episode_id, inference_id, output } = existing;
-    let inference_data = query_inference_for_datapoint(
-        config,
-        clickhouse,
-        existing.inference_id,
+    let ExistingInferenceInfo {
         function_name,
         variant_name,
         episode_id,
+        inference_id,
+        output,
+    } = existing;
+    let inference_data = query_inference_for_datapoint(
+        config,
+        clickhouse,
+        *inference_id,
+        function_name,
+        variant_name,
+        *episode_id,
     )
     .await?;
     let datapoint_id = Uuid::now_v7();
 
     match inference_data {
         TaggedInferenceDatabaseInsert::Json(inference) => {
-            let output = match existing.output {
+            let output = match output {
                 OutputKind::Inherit => Some(inference.output),
                 OutputKind::Demonstration => {
-                    let demonstration =
-                        query_demonstration(clickhouse, existing.inference_id, 1).await?;
+                    let demonstration = query_demonstration(clickhouse, *inference_id, 1).await?;
                     Some(serde_json::from_str(&demonstration.value).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
@@ -208,7 +211,7 @@ async fn insert_from_existing(
                 tags: Some(inference.tags),
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
-                source_inference_id: Some(existing.inference_id),
+                source_inference_id: Some(*inference_id),
                 staled_at: None,
             };
             let rows_written = put_deduped_json_datapoints(clickhouse, &[datapoint]).await?;
@@ -219,11 +222,10 @@ async fn insert_from_existing(
             }
         }
         TaggedInferenceDatabaseInsert::Chat(inference) => {
-            let output = match existing.output {
+            let output = match output {
                 OutputKind::Inherit => Some(inference.output),
                 OutputKind::Demonstration => {
-                    let demonstration =
-                        query_demonstration(clickhouse, existing.inference_id, 1).await?;
+                    let demonstration = query_demonstration(clickhouse, *inference_id, 1).await?;
                     Some(serde_json::from_str(&demonstration.value).map_err(|e| {
                         Error::new(ErrorDetails::InvalidRequest {
                             message: format!(
@@ -245,7 +247,7 @@ async fn insert_from_existing(
                 tags: Some(inference.tags),
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
-                source_inference_id: Some(existing.inference_id),
+                source_inference_id: Some(*inference_id),
                 staled_at: None,
             };
             let rows_written = put_deduped_chat_datapoints(clickhouse, &[datapoint]).await?;
