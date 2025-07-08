@@ -9,7 +9,7 @@
 - **Gateway:** access every LLM provider through a unified API, built for performance (<1ms p99 latency)
 - **Observability:** store inferences and feedback in your database, available programmatically or in the UI
 - **Optimization:** collect metrics and human feedback to optimize prompts, models, and inference strategies
-- **Evaluations:** benchmark individual inferences or end-to-end workflows using heuristics, LLM judges, etc.
+- **Evaluation:** benchmark individual inferences or end-to-end workflows using heuristics, LLM judges, etc.
 - **Experimentation:** ship with confidence with built-in A/B testing, routing, fallbacks, retries, etc.
 
 Take what you need, adopt incrementally, and complement with other tools.
@@ -42,7 +42,7 @@ Take what you need, adopt incrementally, and complement with other tools.
 <table>
   <tr>
     <td width="30%" valign="top"><b>What is TensorZero?</b></td>
-    <td width="70%" valign="top">TensorZero is an open-source stack for industrial-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluations, and experimentation.</td>
+    <td width="70%" valign="top">TensorZero is an open-source stack for industrial-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluation, and experimentation.</td>
   </tr>
   <tr>
     <td width="30%" valign="top"><b>How is TensorZero different from other LLM frameworks?</b></td>
@@ -300,7 +300,7 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 
 - [x] Store inferences and feedback (metrics, human edits, etc.) in your own database
 - [x] Dive into individual inferences or high-level aggregate patterns using the TensorZero UI or programmatically
-- [x] Build datasets for optimization, evaluations, and other workflows
+- [x] Build datasets for optimization, evaluation, and other workflows
 - [x] Replay historical inferences with new prompts, models, inference strategies, etc.
 - [x] Export OpenTelemetry (OTLP) traces to your favorite general-purpose observability tool
 - [ ] Soon: AI-assisted debugging and root cause analysis; AI-assisted data labeling
@@ -396,9 +396,9 @@ _More coming soon..._
 
 <br>
 
-### 📊 LLM Evaluations
+### 📊 LLM Evaluation
 
-> **Compare prompts, models, and inference strategies using TensorZero Evaluations &mdash; with support for heuristics and LLM judges.**
+> **Compare prompts, models, and inference strategies using evaluations powered by heuristics and LLM judges.**
 
 - [x] Evaluate individual inferences with _static evaluations_ powered by heuristics or LLM judges (&approx; unit tests for LLMs)
 - [x] Evaluate end-to-end workflows with _dynamic evaluations_ with complete flexibility (&approx; integration tests for LLMs)
