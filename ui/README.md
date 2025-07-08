@@ -23,7 +23,6 @@ The instructions below assume you're using the provided setup with fixture data.
 4. Launch the TensorZero Gateway and ClickHouse with `docker compose -f fixtures/docker-compose.yml up`.
 5. Set the UI environment variables in the shell (not `.env`). See `./.env.example` for reference.
 6. Run `pnpm` scripts from the root of the repository to start the app:
-
    - Run `pnpm install` to install the dependencies.
    - Run `pnpm ui:dev` to start the development server. Optionally, enable the feature flags to try out new features:
 
