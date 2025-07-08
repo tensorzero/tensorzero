@@ -62,7 +62,7 @@ export function SnippetContent({
       </div>
 
       {needsExpansion && !expanded && maxHeight !== "Content" && (
-        <div className="from-bg-primary absolute right-0 bottom-0 left-0 flex justify-center rounded-b-lg bg-gradient-to-t to-transparent pt-8 pb-4">
+        <div className="from-bg-primary absolute right-0 bottom-0 left-0 flex justify-center bg-gradient-to-t to-transparent pt-8 pb-4">
           <Button variant="outline" size="sm" onClick={() => setExpanded(true)}>
             Show more
           </Button>
@@ -72,36 +72,36 @@ export function SnippetContent({
   );
 }
 
-// Message component
 interface SnippetMessageProps {
-  variant?: "default" | "input";
   children?: ReactNode;
-  role?: string;
+  role?: "system" | "user" | "assistant";
 }
 
-export function SnippetMessage({
-  variant = "default",
-  children,
-  role,
-}: SnippetMessageProps) {
-  // Input variant - contains role and children
-  if (variant === "input") {
-    return (
-      <div className="flex w-full flex-col gap-1">
-        <div className="text-sm font-medium text-purple-600 capitalize">
-          {role}
-        </div>
-        <div className="border-border flex w-full flex-col gap-4 border-l pl-2">
-          {children}
-        </div>
-      </div>
-    );
-  }
+const snippetMessageLabel = cva("text-sm font-medium capitalize", {
+  variants: {
+    role: {
+      system: "text-purple-500",
+      assistant: "text-emerald-500",
+      user: "text-blue-500",
+    },
+  },
+});
 
-  // Default variant - simple wrapper with padding
+const snippetMessage = cva("flex w-full flex-col gap-4 border-l-2 pl-2", {
+  variants: {
+    role: {
+      system: "border-purple-200",
+      assistant: "border-emerald-200",
+      user: "border-blue-200",
+    },
+  },
+});
+
+export function SnippetMessage({ children, role }: SnippetMessageProps) {
   return (
-    <div className="flex w-full flex-col gap-4 overflow-hidden px-5 py-2">
-      {children}
+    <div className="flex w-full flex-col gap-1">
+      <div className={snippetMessageLabel({ role })}>{role}</div>
+      <div className={snippetMessage({ role })}>{children}</div>
     </div>
   );
 }

@@ -545,11 +545,6 @@ export const BadToolInput: Story = {
             type: "unstructured_text",
             text: 'Compact Research Summary: Do Adolescents Associate with "Cliques" on a Large or Small Scale?\n\nKey Findings:\n1. Scale of Clique Association:\n- Cliques typically consist of 5-6 people\n- Most adolescents fall into three categories:\n  a) Group members (less than half of school population)\n  b) Liaisons (connect across multiple groups)\n  c) Isolates (few or no close peer relationships)\n\n2. Prevalence:\n- Cliques are extremely common during adolescence\n- Form in early adolescence (girls around 11, boys around 13-14)\n- Present across different demographics, ethnicities, and socioeconomic backgrounds\n\n3. Characteristics:\n- Most cliques are homogeneous in:\n  - Age\n  - Gender\n  - Race\n  - Social status\n  - Socioeconomic background\n\n4. Duration and Stability:\n- Cliques are relatively stable, losing about one-third of members per year\n- Membership type (group member, liaison, isolate) is more consistent than specific clique membership\n- Typically dissolve by late adolescence, replaced by dating relationships\n\n5. Demographic Factors:\n- Strongly influenced by:\n  - School environment\n  - Shared interests\n  - Orientation toward school/teen culture\n  - Potential antisocial behaviors\n\nConclusion: Adolescents do associate with cliques on a moderate to large scale, with most students belonging to some form of social group during their teenage years.',
           },
-        ],
-      },
-      {
-        role: "assistant",
-        content: [
           {
             type: "tool_call",
             name: "think",

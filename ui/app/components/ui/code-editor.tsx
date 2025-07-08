@@ -23,7 +23,6 @@ import {
   ClipboardIcon,
 } from "lucide-react";
 import type { JsonValue } from "tensorzero-node";
-import clsx from "clsx";
 
 export type Language = "json" | "markdown" | "jinja2" | "text";
 
@@ -188,7 +187,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   }, [language, wordWrap, readOnly]);
 
   return (
-    <div className={cn("group relative rounded-sm", className)}>
+    // `min-width: 0` If within a grid parent, prevent editor from overflowing its grid cell and force horizontal scrolling
+    <div className={cn("group relative min-w-0 rounded-sm", className)}>
       <div className="absolute top-1 right-1 z-10 flex gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
         {isCopyAvailable && (
           <Button

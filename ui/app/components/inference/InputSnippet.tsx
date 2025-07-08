@@ -95,23 +95,12 @@ function renderContentBlock(block: DisplayInputMessageContent, index: number) {
   }
 }
 
-function renderMessage(message: DisplayInputMessage) {
-  return (
-    <SnippetMessage variant="input" role={message.role}>
-      {message.content.map(
-        (block: DisplayInputMessageContent, blockIndex: number) =>
-          renderContentBlock(block, blockIndex),
-      )}
-    </SnippetMessage>
-  );
-}
-
 export default function InputSnippet({ system, messages }: InputSnippetProps) {
   return (
     <SnippetLayout>
       {system && (
         <SnippetContent>
-          <SnippetMessage role="System">
+          <SnippetMessage role="system">
             {typeof system === "object" ? (
               <ParameterizedMessage parameters={system} />
             ) : (
@@ -126,7 +115,9 @@ export default function InputSnippet({ system, messages }: InputSnippetProps) {
           <EmptyMessage message="No input messages" />
         ) : (
           messages.map((message, messageIndex) => (
-            <div key={messageIndex}>{renderMessage(message)}</div>
+            <SnippetMessage role={message.role} key={messageIndex}>
+              {message.content.map(renderContentBlock)}
+            </SnippetMessage>
           ))
         )}
       </SnippetContent>

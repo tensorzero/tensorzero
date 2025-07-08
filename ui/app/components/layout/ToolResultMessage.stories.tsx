@@ -7,6 +7,13 @@ const meta = {
   parameters: {
     layout: "padded",
   },
+  decorators: [
+    (Story) => (
+      <div className="max-w-md">
+        <Story />
+      </div>
+    ),
+  ],
 } satisfies Meta<typeof ToolResultMessage>;
 
 export default meta;

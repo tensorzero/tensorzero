@@ -124,7 +124,7 @@ export function ParameterizedMessage({ parameters }: { parameters?: unknown }) {
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label
-        text="Template parameters"
+        text="Template arguments"
         icon={<BlocksIcon className="text-fg-muted h-3 w-3" />}
       />
       <CodeEditor allowedLanguages={["json"]} value={formattedJson} readOnly />
@@ -146,18 +146,18 @@ function ToolDetails({
   const formattedPayload = useFormattedJson(payload);
 
   return (
-    <div className="border-border bg-bg-tertiary/50 grid grid-flow-row grid-cols-[min-content_1fr] grid-rows-[repeat(3,min-content)] place-content-center gap-x-4 gap-y-2 rounded-sm px-3 py-2">
-      <p className="text-fg-secondary text-xs font-medium">Name</p>
-      <p className="self-center truncate text-sm">{name}</p>
+    <div className="border-border bg-bg-tertiary/50 grid grid-flow-row grid-cols-[min-content_1fr] grid-rows-[repeat(3,min-content)] place-content-center gap-x-4 gap-y-1 rounded-sm px-3 py-2 text-xs">
+      <p className="text-fg-secondary font-medium">Name</p>
+      <p className="self-center truncate font-mono text-[0.6875rem]">{name}</p>
 
-      <p className="text-fg-secondary text-xs font-medium">ID</p>
-      <p className="self-center truncate font-mono text-sm">{id}</p>
+      <p className="text-fg-secondary font-medium">ID</p>
+      <p className="self-center truncate font-mono text-[0.6875rem]">{id}</p>
 
-      <p className="text-fg-secondary text-xs font-medium">{payloadLabel}</p>
+      <p className="text-fg-secondary font-medium">{payloadLabel}</p>
       <CodeEditor
         value={formattedPayload}
         allowedLanguages={["json"]}
-        className="bg-white"
+        className="bg-bg-secondary"
         readOnly
       />
     </div>
