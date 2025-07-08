@@ -19,10 +19,9 @@ use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
-use crate::function::{
-    FunctionConfig, FunctionConfigChat, FunctionConfigChatPyClass, FunctionConfigJson,
-    FunctionConfigJsonPyClass,
-};
+use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
+#[cfg(feature = "pyo3")]
+use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
 use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -772,6 +771,7 @@ pub struct ConfigPyClass {
     inner: Arc<Config>,
 }
 
+#[cfg(feature = "pyo3")]
 impl ConfigPyClass {
     pub fn new(config: Arc<Config>) -> Self {
         Self { inner: config }
@@ -795,6 +795,7 @@ pub struct FunctionsConfigPyClass {
     inner: HashMap<String, Arc<FunctionConfig>>,
 }
 
+#[cfg(feature = "pyo3")]
 #[pymethods]
 impl FunctionsConfigPyClass {
     fn __len__(&self) -> usize {

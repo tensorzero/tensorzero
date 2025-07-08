@@ -673,9 +673,9 @@ pub async fn write_batch_request_row(
 ///
 /// Note: only call this function if the batch was Pending prior to being polled.
 /// We don't need to poll if the batch is failed or completed because the status will not change.
-pub async fn write_poll_batch_inference<'a>(
+pub async fn write_poll_batch_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    batch_request: &BatchRequestRow<'a>,
+    batch_request: &BatchRequestRow<'_>,
     response: PollBatchInferenceResponse,
     config: &Config,
 ) -> Result<PollInferenceResponse, Error> {
