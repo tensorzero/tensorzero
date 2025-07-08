@@ -1,7 +1,11 @@
 #[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::serialize_to_dict;
+#[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyKeyError;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::IntoPyObjectExt;
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -69,6 +73,39 @@ impl FunctionConfigPyClass {
     #[getter]
     fn get_type(&self) -> FunctionConfigType {
         self.inner.config_type()
+    }
+
+    #[getter]
+    fn get_variants(&self) -> VariantsConfigPyClass {
+        VariantsConfigPyClass {
+            inner: self.inner.variants().clone(),
+        }
+    }
+
+    #[getter]
+    fn get_system_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .system_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+    #[getter]
+    fn get_user_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .user_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+
+    #[getter]
+    fn get_assistant_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .assistant_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
     }
 }
 
