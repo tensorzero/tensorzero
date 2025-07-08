@@ -139,18 +139,18 @@ async fn test_config_from_toml_table_valid() {
                     assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
                     assert_eq!(chat_config.weight, Some(1.0));
                     assert_eq!(
-                        *chat_config.system_template.as_ref().unwrap(),
-                        PathWithContents {
-                            // We don't use a real path for programmatically generated templates
-                            // Instead we use this handle and then the same in minijinja
-                            path: PathBuf::from(
-                                "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
-                            ),
-                            contents:
-                                "Return True if there is NSFW content in this generation.\n\n"
-                                    .to_string(),
-                        }
-                    );
+                            *chat_config.system_template.as_ref().unwrap(),
+                            PathWithContents {
+                                // We don't use a real path for programmatically generated templates
+                                // Instead we use this handle and then the same in minijinja
+                                path: PathBuf::from(
+                                    "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
+                                ),
+                                contents:
+                                    "Return True if there is NSFW content in this generation.\n\n"
+                                        .to_string(),
+                            }
+                        );
                     assert_eq!(chat_config.json_mode, Some(JsonMode::ImplicitTool));
                 }
                 _ => panic!("Expected a chat completion variant"),
@@ -404,12 +404,12 @@ async fn test_config_from_toml_table_missing_credentials() {
         .await
         .unwrap_err();
     assert_eq!(
-        error,
-        Error::new(ErrorDetails::Config {
-            message: "models.dummy.providers.bad_credentials: Invalid api_key_location for Dummy provider"
-                .to_string()
-        })
-    );
+            error,
+            Error::new(ErrorDetails::Config {
+                message: "models.dummy.providers.bad_credentials: Invalid api_key_location for Dummy provider"
+                    .to_string()
+            })
+        );
 }
 
 /// Ensure that the config parsing fails when referencing a nonexistent function
@@ -633,22 +633,22 @@ async fn test_config_system_schema_does_not_exist() {
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::JsonSchema {
-            message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-        }.into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::JsonSchema {
+                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            }.into()
+        );
     let mut sample_config = get_sample_valid_config();
     sample_config["functions"]["templates_with_variables_json"]["system_schema"] =
         "non_existent_file.json".into();
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::JsonSchema {
-            message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-        }.into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::JsonSchema {
+                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            }.into()
+        );
 }
 
 /// Ensure that the config loading fails when the user schema does not exist
@@ -660,22 +660,22 @@ async fn test_config_user_schema_does_not_exist() {
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::JsonSchema {
-            message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-        }.into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::JsonSchema {
+                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            }.into()
+        );
     let mut sample_config = get_sample_valid_config();
     sample_config["functions"]["templates_with_variables_json"]["user_schema"] =
         "non_existent_file.json".into();
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::JsonSchema {
-            message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-        }.into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::JsonSchema {
+                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            }.into()
+        );
 }
 
 /// Ensure that the config loading fails when the assistant schema does not exist
@@ -687,22 +687,22 @@ async fn test_config_assistant_schema_does_not_exist() {
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::JsonSchema {
-            message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-        }.into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::JsonSchema {
+                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            }.into()
+        );
     let mut sample_config = get_sample_valid_config();
     sample_config["functions"]["templates_with_variables_json"]["assistant_schema"] =
         "non_existent_file.json".into();
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::JsonSchema {
-            message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-        }.into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::JsonSchema {
+                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            }.into()
+        );
 }
 
 /// Ensure that the config loading fails when the system schema is missing but is needed
@@ -721,11 +721,11 @@ async fn test_config_system_schema_is_needed() {
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::Config {
-            message: "`functions.templates_with_variables_chat.variants.variant_with_variables.system_template`: template needs variables: [message] but only `system_text` is allowed when template has no schema".to_string()
-        }.into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.system_template`: template needs variables: [message] but only `system_text` is allowed when template has no schema".to_string()
+            }.into()
+        );
     let mut sample_config = get_sample_valid_config();
     sample_config["functions"]["templates_with_variables_json"]
         .as_table_mut()
@@ -734,11 +734,11 @@ async fn test_config_system_schema_is_needed() {
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::Config {
-            message: "`functions.templates_with_variables_json.variants.variant_with_variables.system_template`: template needs variables: [message] but only `system_text` is allowed when template has no schema".to_string()
-        }.into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.system_template`: template needs variables: [message] but only `system_text` is allowed when template has no schema".to_string()
+            }.into()
+        );
 }
 
 /// Ensure that the config loading fails when the user schema is missing but is needed
@@ -756,11 +756,11 @@ async fn test_config_user_schema_is_needed() {
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::Config {
-            message: "`functions.templates_with_variables_chat.variants.variant_with_variables.user_template`: template needs variables: [message] but only `user_text` is allowed when template has no schema".to_string()
-        }.into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.user_template`: template needs variables: [message] but only `user_text` is allowed when template has no schema".to_string()
+            }.into()
+        );
 
     let mut sample_config = get_sample_valid_config();
     sample_config["functions"]["templates_with_variables_json"]
@@ -770,11 +770,11 @@ async fn test_config_user_schema_is_needed() {
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::Config {
-            message: "`functions.templates_with_variables_json.variants.variant_with_variables.user_template`: template needs variables: [message] but only `user_text` is allowed when template has no schema".to_string()
-        }.into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.user_template`: template needs variables: [message] but only `user_text` is allowed when template has no schema".to_string()
+            }.into()
+        );
 }
 
 /// Ensure that the config loading fails when the assistant schema is missing but is needed
@@ -793,11 +793,11 @@ async fn test_config_assistant_schema_is_needed() {
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::Config {
-            message: "`functions.templates_with_variables_chat.variants.variant_with_variables.assistant_template`: template needs variables: [message] but only `assistant_text` is allowed when template has no schema".to_string()
-        }.into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.assistant_template`: template needs variables: [message] but only `assistant_text` is allowed when template has no schema".to_string()
+            }.into()
+        );
     let mut sample_config = get_sample_valid_config();
     sample_config["functions"]["templates_with_variables_json"]
         .as_table_mut()
@@ -806,11 +806,11 @@ async fn test_config_assistant_schema_is_needed() {
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::Config {
-            message: "`functions.templates_with_variables_json.variants.variant_with_variables.assistant_template`: template needs variables: [message] but only `assistant_text` is allowed when template has no schema".to_string()
-        }.into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.assistant_template`: template needs variables: [message] but only `assistant_text` is allowed when template has no schema".to_string()
+            }.into()
+        );
 }
 
 /// Ensure that config loading fails when a nonexistent candidate is specified in a variant
@@ -886,12 +886,12 @@ async fn test_config_validate_variant_template_nonexistent() {
     let result = Config::load_from_toml(config, base_path).await;
 
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::Config {
-            message: "Failed to read file at nonexistent_template: No such file or directory (os error 2)".to_string()
-        }
-        .into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message: "Failed to read file at nonexistent_template: No such file or directory (os error 2)".to_string()
+            }
+            .into()
+        );
 }
 
 /// Ensure that the config validation fails when an evaluation points at a nonexistent function
@@ -903,14 +903,14 @@ async fn test_config_validate_evaluation_function_nonexistent() {
     let result = Config::load_from_toml(config, base_path).await;
 
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::Config {
-            message:
-                "Function `nonexistent_function` not found (referenced in `[evaluations.evaluation1]`)"
-                    .to_string()
-        }
-        .into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message:
+                    "Function `nonexistent_function` not found (referenced in `[evaluations.evaluation1]`)"
+                        .to_string()
+            }
+            .into()
+        );
 }
 
 /// Ensure that the config validation fails when an evaluation name contains `::`
@@ -928,14 +928,14 @@ async fn test_config_validate_evaluation_name_contains_double_colon() {
     let result = Config::load_from_toml(config, base_path).await;
 
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::Config {
-            message:
-                "evaluation names cannot contain \"::\" (referenced in `[evaluations.bad::evaluation]`)"
-                    .to_string()
-        }
-        .into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message:
+                    "evaluation names cannot contain \"::\" (referenced in `[evaluations.bad::evaluation]`)"
+                        .to_string()
+            }
+            .into()
+        );
 }
 
 /// Ensure that the config validation fails when a function has a tool that does not exist in the tools section
@@ -952,11 +952,11 @@ async fn test_config_validate_function_nonexistent_tool() {
     let result = Config::load_from_toml(config, base_path).await;
 
     assert_eq!(
-        result.unwrap_err(),
-        ErrorDetails::Config {
-            message: "`functions.generate_draft.tools`: tool `non_existent_tool` is not present in the config".to_string()
-        }.into()
-    );
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message: "`functions.generate_draft.tools`: tool `non_existent_tool` is not present in the config".to_string()
+            }.into()
+        );
 }
 
 /// Ensure that the config validation fails when a function name starts with `tensorzero::`
@@ -1032,12 +1032,12 @@ async fn test_config_validate_model_name_tensorzero_prefix() {
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(config, base_path).await;
     assert_eq!(
-        result.unwrap_err(),
-        Error::new(ErrorDetails::Config {
-            message: "Failed to load models: Model name 'tensorzero::bad_model' contains a reserved prefix"
-                .to_string()
-        })
-    );
+            result.unwrap_err(),
+            Error::new(ErrorDetails::Config {
+                message: "Failed to load models: Model name 'tensorzero::bad_model' contains a reserved prefix"
+                    .to_string()
+            })
+        );
 }
 
 /// Ensure that the config validation fails when an embedding model name starts with `tensorzero::`
@@ -1059,13 +1059,13 @@ async fn test_config_validate_embedding_model_name_tensorzero_prefix() {
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(config, base_path).await;
     assert_eq!(
-            result.unwrap_err(),
-            Error::new(ErrorDetails::Config {
-                message:
-                    "Failed to load embedding models: Embedding model name 'tensorzero::bad_embedding_model' contains a reserved prefix"
-                        .to_string()
-            })
-        );
+                result.unwrap_err(),
+                Error::new(ErrorDetails::Config {
+                    message:
+                        "Failed to load embedding models: Embedding model name 'tensorzero::bad_embedding_model' contains a reserved prefix"
+                            .to_string()
+                })
+            );
 }
 
 /// Ensure that the config validation fails when a tool name starts with `tensorzero::`
@@ -1111,9 +1111,9 @@ async fn test_config_validate_chat_function_json_mode() {
     // Check that the config is rejected, since `generate_draft` is not a json function
     let err_msg = result.unwrap_err().to_string();
     assert!(
-        err_msg.contains("JSON mode is not supported for variant `openai_promptA` (parent function is a chat function)"),
-        "Unexpected error message: {err_msg}"
-    );
+            err_msg.contains("JSON mode is not supported for variant `openai_promptA` (parent function is a chat function)"),
+            "Unexpected error message: {err_msg}"
+        );
 }
 
 /// If you also want to confirm a variant name starting with `tensorzero::` fails
@@ -1226,47 +1226,47 @@ async fn test_get_all_templates() {
         .to_string()
     );
     assert_eq!(
-        *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja")
-        .unwrap(),
-        include_str!(
-            "../../fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
-        ).to_string()
-    );
+            *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../../fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
+            ).to_string()
+        );
     assert_eq!(
-        *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja")
-        .unwrap(),
-        include_str!(
-            "../../fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
-        ).to_string()
-    );
+            *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../../fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
+            ).to_string()
+        );
     assert_eq!(
-        *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja")
-        .unwrap(),
-        include_str!(
-            "../../fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
-        ).to_string()
-    );
+            *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../../fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
+            ).to_string()
+        );
     assert_eq!(
-        *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja")
-        .unwrap(),
-        include_str!(
-            "../../fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
-        ).to_string()
-    );
+            *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../../fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
+            ).to_string()
+        );
     assert_eq!(
-        *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja")
-        .unwrap(),
-        include_str!(
-            "../../fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
-        ).to_string()
-    );
+            *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../../fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
+            ).to_string()
+        );
     assert_eq!(
-                *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja")
-                .unwrap(),
-                include_str!(
-                    "../../fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
-                ).to_string()
-            );
+                    *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja")
+                    .unwrap(),
+                    include_str!(
+                        "../../fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
+                    ).to_string()
+                );
 
     assert_eq!(
         *templates
@@ -1350,15 +1350,15 @@ async fn test_get_all_templates() {
 #[tokio::test]
 async fn test_load_bad_extra_body_delete() {
     let config_str = r#"
-    [functions.bash_assistant]
-    type = "chat"
+        [functions.bash_assistant]
+        type = "chat"
 
-    [functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219]
-    type = "chat_completion"
-    model = "anthropic::claude-3-7-sonnet-20250219"
-    max_tokens = 2048
-    extra_body = [{ pointer = "/invalid-field-should-be-deleted", delete = false }]
-    "#;
+        [functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219]
+        type = "chat_completion"
+        model = "anthropic::claude-3-7-sonnet-20250219"
+        max_tokens = 2048
+        extra_body = [{ pointer = "/invalid-field-should-be-deleted", delete = false }]
+        "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let err = Config::load_from_toml(config, base_path.clone())
@@ -1382,7 +1382,7 @@ max_tokens = 2048
 [functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219.extra_body]
 tools = [{ type = "bash_20250124", name = "bash" }]
 thinking = { type = "enabled", budget_tokens = 1024 }
-    "#;
+        "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let err = Config::load_from_toml(config, base_path.clone())
@@ -1395,28 +1395,28 @@ thinking = { type = "enabled", budget_tokens = 1024 }
 #[tokio::test]
 async fn test_config_load_shorthand_models_only() {
     let config_str = r#"
-    # ┌────────────────────────────────────────────────────────────────────────────┐
-    # │                                  GENERAL                                   │
-    # └────────────────────────────────────────────────────────────────────────────┘
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                                  GENERAL                                   │
+        # └────────────────────────────────────────────────────────────────────────────┘
 
-    [gateway]
-    bind_address = "0.0.0.0:3000"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
 
 
-    # ┌────────────────────────────────────────────────────────────────────────────┐
-    # │                                 FUNCTIONS                                  │
-    # └────────────────────────────────────────────────────────────────────────────┘
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                                 FUNCTIONS                                  │
+        # └────────────────────────────────────────────────────────────────────────────┘
 
-    [functions.generate_draft]
-    type = "chat"
-    system_schema = "fixtures/config/functions/generate_draft/system_schema.json"
+        [functions.generate_draft]
+        type = "chat"
+        system_schema = "fixtures/config/functions/generate_draft/system_schema.json"
 
-    [functions.generate_draft.variants.openai_promptA]
-    type = "chat_completion"
-    weight = 0.9
-    model = "openai::gpt-3.5-turbo"
-    system_template = "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-    "#;
+        [functions.generate_draft.variants.openai_promptA]
+        type = "chat_completion"
+        weight = 0.9
+        model = "openai::gpt-3.5-turbo"
+        system_template = "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
+        "#;
     env::set_var("OPENAI_API_KEY", "sk-something");
     env::set_var("ANTHROPIC_API_KEY", "sk-something");
     env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
@@ -1444,12 +1444,12 @@ async fn test_empty_config() {
 #[tokio::test]
 async fn test_invalid_toml() {
     let config_str = r#"
-    [models.my-model]
-    routing = ["dummy"]
+        [models.my-model]
+        routing = ["dummy"]
 
-    [models.my-model]
-    routing = ["other"]
-    "#;
+        [models.my-model]
+        routing = ["other"]
+        "#;
 
     let tmpfile = NamedTempFile::new().unwrap();
     std::fs::write(tmpfile.path(), config_str).unwrap();
@@ -1468,22 +1468,22 @@ async fn test_invalid_toml() {
 #[tokio::test]
 async fn test_model_provider_unknown_field() {
     let config_str = r#"
-    # ┌────────────────────────────────────────────────────────────────────────────┐
-    # │                                  GENERAL                                   │
-    # └────────────────────────────────────────────────────────────────────────────┘
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                                  GENERAL                                   │
+        # └────────────────────────────────────────────────────────────────────────────┘
 
-    [gateway]
-    bind_address = "0.0.0.0:3000"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
 
-    [functions]
+        [functions]
 
-    [models.my-model]
-    routing = ["dummy"]
+        [models.my-model]
+        routing = ["dummy"]
 
-    [models.my-model.providers.dummy]
-    type = "dummy"
-    my_bad_key = "foo"
-    "#;
+        [models.my-model.providers.dummy]
+        type = "dummy"
+        my_bad_key = "foo"
+        "#;
 
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -1509,17 +1509,17 @@ fn get_sample_valid_config() -> toml::Table {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_bedrock_err_no_auto_detect_region() {
     let config_str = r#"
-    [gateway]
-    bind_address = "0.0.0.0:3000"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
 
 
-    [models."my-model"]
-    routing = ["aws-bedrock"]
+        [models."my-model"]
+        routing = ["aws-bedrock"]
 
-    [models.my-model.providers.aws-bedrock]
-    type = "aws_bedrock"
-    model_id = "anthropic.claude-3-haiku-20240307-v1:0"
-    "#;
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -1541,17 +1541,17 @@ async fn test_bedrock_err_auto_detect_region_no_aws_credentials() {
     std::env::remove_var("AWS_DEFAULT_REGION");
 
     let config_str = r#"
-    [gateway]
-    bind_address = "0.0.0.0:3000"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
 
-    [models."my-model"]
-    routing = ["aws-bedrock"]
+        [models."my-model"]
+        routing = ["aws-bedrock"]
 
-    [models.my-model.providers.aws-bedrock]
-    type = "aws_bedrock"
-    model_id = "anthropic.claude-3-haiku-20240307-v1:0"
-    allow_auto_detect_region = true
-    "#;
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        allow_auto_detect_region = true
+        "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -1568,26 +1568,26 @@ async fn test_bedrock_err_auto_detect_region_no_aws_credentials() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_bedrock_region_and_allow_auto() {
     let config_str = r#"
-    [gateway]
-    bind_address = "0.0.0.0:3000"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
 
-    [functions.basic_test]
-    type = "chat"
+        [functions.basic_test]
+        type = "chat"
 
-    [functions.basic_test.variants.test]
-    type = "chat_completion"
-    weight = 1
-    model = "my-model"
+        [functions.basic_test.variants.test]
+        type = "chat_completion"
+        weight = 1
+        model = "my-model"
 
-    [models."my-model"]
-    routing = ["aws-bedrock"]
+        [models."my-model"]
+        routing = ["aws-bedrock"]
 
-    [models.my-model.providers.aws-bedrock]
-    type = "aws_bedrock"
-    model_id = "anthropic.claude-3-haiku-20240307-v1:0"
-    allow_auto_detect_region = true
-    region = "us-east-2"
-    "#;
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        allow_auto_detect_region = true
+        region = "us-east-2"
+        "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -1615,11 +1615,11 @@ async fn test_config_missing_filesystem_object_store() {
     write!(
         &tempfile,
         r#"
-        [object_storage]
-        type = "filesystem"
-        path = "/fake-tensorzero-path/other-path"
+            [object_storage]
+            type = "filesystem"
+            path = "/fake-tensorzero-path/other-path"
 
-        [functions]"#
+            [functions]"#
     )
     .unwrap();
     let err = Config::load_and_verify_from_path(tempfile.path())
@@ -1627,9 +1627,9 @@ async fn test_config_missing_filesystem_object_store() {
         .unwrap_err()
         .to_string();
     assert!(
-        err.contains("Failed to create filesystem object store: path does not exist: /fake-tensorzero-path/other-path"),
-        "Unexpected error message: {err}"
-    );
+            err.contains("Failed to create filesystem object store: path does not exist: /fake-tensorzero-path/other-path"),
+            "Unexpected error message: {err}"
+        );
 }
 
 #[traced_test]
@@ -1643,12 +1643,12 @@ async fn test_config_load_invalid_s3_creds() {
     write!(
         &tempfile,
         r#"
-        [object_storage]
-        type = "s3_compatible"
-        bucket_name = "tensorzero-fake-bucket"
-        region = "us-east-1"
+            [object_storage]
+            type = "s3_compatible"
+            bucket_name = "tensorzero-fake-bucket"
+            region = "us-east-1"
 
-        [functions]"#
+            [functions]"#
     )
     .unwrap();
     let err = Config::load_and_verify_from_path(tempfile.path())
@@ -1672,12 +1672,12 @@ async fn test_config_blocked_s3_http_endpoint_default() {
     write!(
         &tempfile,
         r#"
-        [object_storage]
-        type = "s3_compatible"
-        bucket_name = "tensorzero-fake-bucket"
-        region = "us-east-1"
-        endpoint = "http://tensorzero.invalid"
-        [functions]"#
+            [object_storage]
+            type = "s3_compatible"
+            bucket_name = "tensorzero-fake-bucket"
+            region = "us-east-1"
+            endpoint = "http://tensorzero.invalid"
+            [functions]"#
     )
     .unwrap();
     let err = Config::load_and_verify_from_path(tempfile.path())
@@ -1707,13 +1707,13 @@ async fn test_config_blocked_s3_http_endpoint_override() {
     write!(
         &tempfile,
         r#"
-        [object_storage]
-        type = "s3_compatible"
-        bucket_name = "tensorzero-fake-bucket"
-        region = "us-east-1"
-        endpoint = "http://tensorzero.invalid"
-        allow_http = false
-        [functions]"#
+            [object_storage]
+            type = "s3_compatible"
+            bucket_name = "tensorzero-fake-bucket"
+            region = "us-east-1"
+            endpoint = "http://tensorzero.invalid"
+            allow_http = false
+            [functions]"#
     )
     .unwrap();
     let err = Config::load_and_verify_from_path(tempfile.path())
@@ -1745,13 +1745,13 @@ async fn test_config_s3_allow_http_config() {
     write!(
         &tempfile,
         r#"
-        [object_storage]
-        type = "s3_compatible"
-        bucket_name = "tensorzero-fake-bucket"
-        region = "us-east-1"
-        endpoint = "http://tensorzero.invalid"
-        allow_http = true
-        [functions]"#
+            [object_storage]
+            type = "s3_compatible"
+            bucket_name = "tensorzero-fake-bucket"
+            region = "us-east-1"
+            endpoint = "http://tensorzero.invalid"
+            allow_http = true
+            [functions]"#
     )
     .unwrap();
     let err = Config::load_and_verify_from_path(tempfile.path())
@@ -1786,12 +1786,12 @@ async fn test_config_s3_allow_http_env_var() {
     write!(
         &tempfile,
         r#"
-        [object_storage]
-        type = "s3_compatible"
-        bucket_name = "tensorzero-fake-bucket"
-        region = "us-east-1"
-        endpoint = "http://tensorzero.invalid"
-        [functions]"#
+            [object_storage]
+            type = "s3_compatible"
+            bucket_name = "tensorzero-fake-bucket"
+            region = "us-east-1"
+            endpoint = "http://tensorzero.invalid"
+            [functions]"#
     )
     .unwrap();
     let err = Config::load_and_verify_from_path(tempfile.path())
@@ -1813,49 +1813,49 @@ async fn test_config_s3_allow_http_env_var() {
 #[tokio::test]
 async fn test_deprecated_missing_json_mode() {
     let config_str = r#"
-    [gateway]
-    bind_address = "0.0.0.0:3000"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
 
-    [functions.basic_test]
-    type = "json"
+        [functions.basic_test]
+        type = "json"
 
-    [functions.basic_test.variants.good_variant]
-    type = "chat_completion"
-    model = "my-model"
-    json_mode = "off"
+        [functions.basic_test.variants.good_variant]
+        type = "chat_completion"
+        model = "my-model"
+        json_mode = "off"
 
-    [functions.basic_test.variants.test]
-    type = "chat_completion"
-    model = "my-model"
+        [functions.basic_test.variants.test]
+        type = "chat_completion"
+        model = "my-model"
 
-    [functions.basic_test.variants.dicl]
-    type = "experimental_dynamic_in_context_learning"
-    model = "my-model"
-    embedding_model = "openai::text-embedding-3-small"
-    k = 3
-    max_tokens = 100
+        [functions.basic_test.variants.dicl]
+        type = "experimental_dynamic_in_context_learning"
+        model = "my-model"
+        embedding_model = "openai::text-embedding-3-small"
+        k = 3
+        max_tokens = 100
 
-    [functions.basic_test.variants.mixture_of_n_variant]
-    type = "experimental_mixture_of_n"
-    candidates = ["test"]
+        [functions.basic_test.variants.mixture_of_n_variant]
+        type = "experimental_mixture_of_n"
+        candidates = ["test"]
 
-    [functions.basic_test.variants.mixture_of_n_variant.fuser]
-    model = "my-model"
+        [functions.basic_test.variants.mixture_of_n_variant.fuser]
+        model = "my-model"
 
-    [functions.basic_test.variants.best_of_n_variant]
-    type = "experimental_best_of_n_sampling"
-    candidates = ["test"]
+        [functions.basic_test.variants.best_of_n_variant]
+        type = "experimental_best_of_n_sampling"
+        candidates = ["test"]
 
-    [functions.basic_test.variants.best_of_n_variant.evaluator]
-    model = "my-model"
+        [functions.basic_test.variants.best_of_n_variant.evaluator]
+        model = "my-model"
 
-    [models."my-model"]
-    routing = ["openai"]
+        [models."my-model"]
+        routing = ["openai"]
 
-    [models.my-model.providers.openai]
-    type = "openai"
-    model_name = "gpt-4o-mini-2024-07-18"
-    "#;
+        [models.my-model.providers.openai]
+        type = "openai"
+        model_name = "gpt-4o-mini-2024-07-18"
+        "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -1875,14 +1875,14 @@ async fn test_deprecated_missing_json_mode() {
 #[tokio::test]
 async fn test_config_load_optional_credentials_validation() {
     let config_str = r#"
-    [models."my-model"]
-    routing = ["openai"]
+        [models."my-model"]
+        routing = ["openai"]
 
-    [models.my-model.providers.openai]
-    type = "openai"
-    model_name = "gpt-4o-mini-2024-07-18"
-    api_key_location = "path::/not/a/path"
-    "#;
+        [models.my-model.providers.openai]
+        type = "openai"
+        model_name = "gpt-4o-mini-2024-07-18"
+        api_key_location = "path::/not/a/path"
+        "#;
 
     let tmpfile = NamedTempFile::new().unwrap();
     std::fs::write(tmpfile.path(), config_str).unwrap();
@@ -1903,20 +1903,20 @@ async fn test_config_load_optional_credentials_validation() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_gcp_no_endpoint_and_model() {
     let config_str = r#"
-    [gateway]
-    bind_address = "0.0.0.0:3000"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
 
 
-    [models."my-model"]
-    routing = ["gcp-vertex-gemini"]
+        [models."my-model"]
+        routing = ["gcp-vertex-gemini"]
 
-    [models.my-model.providers.gcp-vertex-gemini]
-    type = "gcp_vertex_gemini"
-    location = "us-central1"
-    project_id = "test-project"
-    model_id = "gemini-2.0-flash-001"
-    endpoint_id = "4094940393049"
-    "#;
+        [models.my-model.providers.gcp-vertex-gemini]
+        type = "gcp_vertex_gemini"
+        location = "us-central1"
+        project_id = "test-project"
+        model_id = "gemini-2.0-flash-001"
+        endpoint_id = "4094940393049"
+        "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -1927,23 +1927,23 @@ async fn test_gcp_no_endpoint_and_model() {
 
     let err_msg = err.to_string();
     assert!(
-        err_msg
-            .contains("models.my-model.providers.gcp-vertex-gemini: Exactly one of model_id or endpoint_id must be provided"),
-        "Unexpected error message: {err_msg}"
-    );
+            err_msg
+                .contains("models.my-model.providers.gcp-vertex-gemini: Exactly one of model_id or endpoint_id must be provided"),
+            "Unexpected error message: {err_msg}"
+        );
 }
 
 #[tokio::test]
 async fn test_config_invalid_template_no_schema() {
     let config_str = r#"
-    [functions.no_schema]
-    type = "chat"
+        [functions.no_schema]
+        type = "chat"
 
-    [functions.no_schema.variants.invalid_system_template]
-    type = "chat_completion"
-    model = "dummy::echo_request_messages"
-    system_template = "fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-    "#;
+        [functions.no_schema.variants.invalid_system_template]
+        type = "chat_completion"
+        model = "dummy::echo_request_messages"
+        system_template = "fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+        "#;
 
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -1957,14 +1957,14 @@ async fn test_config_invalid_template_no_schema() {
 #[tokio::test]
 async fn deny_bad_timeout_fields() {
     let config = r#"
-[models.slow_with_timeout]
-routing = ["slow"]
+    [models.slow_with_timeout]
+    routing = ["slow"]
 
-[models.slow_with_timeout.providers.slow]
-type = "dummy"
-model = "good"
-timeouts = { bad_field = 1 }
-"#;
+    [models.slow_with_timeout.providers.slow]
+    type = "dummy"
+    model = "good"
+    timeouts = { bad_field = 1 }
+    "#;
     let config = toml::from_str(config).unwrap();
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let err = Config::load_from_toml(config, base_path.clone())
@@ -1972,22 +1972,22 @@ timeouts = { bad_field = 1 }
         .expect_err("Config should fail to load");
 
     assert_eq!(
-        err.to_string(),
-        "models.slow_with_timeout.providers.slow.timeouts.bad_field: unknown field `bad_field`, expected `non_streaming` or `streaming`"
-    );
+            err.to_string(),
+            "models.slow_with_timeout.providers.slow.timeouts.bad_field: unknown field `bad_field`, expected `non_streaming` or `streaming`"
+        );
 }
 
 #[tokio::test]
 async fn deny_bad_timeouts_non_streaming_field() {
     let config = r#"
-    [models.slow_with_timeout]
-    routing = ["slow"]
+        [models.slow_with_timeout]
+        routing = ["slow"]
 
-    [models.slow_with_timeout.providers.slow]
-    type = "dummy"
-    model = "good"
-    timeouts = { non_streaming = { unknown_field = 1000 } }
-    "#;
+        [models.slow_with_timeout.providers.slow]
+        type = "dummy"
+        model = "good"
+        timeouts = { non_streaming = { unknown_field = 1000 } }
+        "#;
     let config = toml::from_str(config).unwrap();
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let err = Config::load_from_toml(config, base_path.clone())
@@ -1995,22 +1995,22 @@ async fn deny_bad_timeouts_non_streaming_field() {
         .expect_err("Config should fail to load");
 
     assert_eq!(
-        err.to_string(),
-        "models.slow_with_timeout.providers.slow.timeouts.non_streaming.unknown_field: unknown field `unknown_field`, expected `total_ms`"
-    );
+            err.to_string(),
+            "models.slow_with_timeout.providers.slow.timeouts.non_streaming.unknown_field: unknown field `unknown_field`, expected `total_ms`"
+        );
 }
 
 #[tokio::test]
 async fn deny_bad_timeouts_streaming_field() {
     let config = r#"
-    [models.slow_with_timeout]
-    routing = ["slow"]
+        [models.slow_with_timeout]
+        routing = ["slow"]
 
-    [models.slow_with_timeout.providers.slow]
-    type = "dummy"
-    model = "good"
-    timeouts = { streaming = { unknown_field = 1000 } }
-    "#;
+        [models.slow_with_timeout.providers.slow]
+        type = "dummy"
+        model = "good"
+        timeouts = { streaming = { unknown_field = 1000 } }
+        "#;
     let config = toml::from_str(config).unwrap();
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let err = Config::load_from_toml(config, base_path.clone())
@@ -2018,7 +2018,7 @@ async fn deny_bad_timeouts_streaming_field() {
         .expect_err("Config should fail to load");
 
     assert_eq!(
-        err.to_string(),
-        "models.slow_with_timeout.providers.slow.timeouts.streaming.unknown_field: unknown field `unknown_field`, expected `ttft_ms`"
-    );
+            err.to_string(),
+            "models.slow_with_timeout.providers.slow.timeouts.streaming.unknown_field: unknown field `unknown_field`, expected `ttft_ms`"
+        );
 }
