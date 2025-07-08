@@ -108,7 +108,7 @@ pub enum TaggedInferenceDatabaseInsert {
 }
 
 async fn query_inference_for_datapoint(
-    config: &Config<'_>,
+    config: &Config,
     clickhouse: &ClickHouseConnectionInfo,
     inference_id: Uuid,
     function_name: &str,
@@ -183,7 +183,7 @@ async fn query_inference_for_datapoint(
 }
 
 async fn insert_from_existing(
-    config: &Config<'_>,
+    config: &Config,
     clickhouse: &ClickHouseConnectionInfo,
     path_params: InsertPathParams,
     existing: &ExistingInferenceInfo,
