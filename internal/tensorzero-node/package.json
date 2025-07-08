@@ -31,6 +31,7 @@
     "@types/node": "^20.19.1",
     "eslint": "^9.29.0",
     "prettier": "^3.6.1",
+    "prettier-plugin-tailwindcss": "^0.6.13",
     "typescript-eslint": "^8.35.0",
     "vitest": "^3.2.4"
   },
