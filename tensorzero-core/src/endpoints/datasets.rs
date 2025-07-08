@@ -514,7 +514,7 @@ pub async fn bulk_insert_datapoints_handler(
 pub async fn insert_datapoint(
     dataset_name: String,
     params: InsertDatapointParams,
-    config: &Config<'_>,
+    config: &Config,
     http_client: &Client,
     clickhouse: &ClickHouseConnectionInfo,
 ) -> Result<Vec<Uuid>, Error> {
