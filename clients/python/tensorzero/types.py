@@ -310,13 +310,15 @@ InferenceChunk = Union[ChatChunk, JsonChunk]
 class VariantExtraBody(TypedDict):
     variant_name: str
     pointer: str
-    value: Any
+    value: NotRequired[Any]
+    delete: NotRequired[bool]
 
 
 class ProviderExtraBody(TypedDict):
     model_provider_name: str
     pointer: str
-    value: Any
+    value: NotRequired[Any]
+    delete: NotRequired[bool]
 
 
 ExtraBody = Union[VariantExtraBody, ProviderExtraBody]
