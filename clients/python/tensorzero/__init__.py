@@ -7,6 +7,7 @@ from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGat
 from .tensorzero import (
     Datapoint,
     FireworksSFTConfig,
+    GCPVertexGeminiSFTConfig,
     OpenAISFTConfig,
     OptimizationJobHandle,
     OptimizationJobInfo,
@@ -123,8 +124,9 @@ __all__ = [
     "OptimizationJobHandle",
     "OptimizationJobInfo",
     "OptimizationJobStatus",
-    "OpenAISFTConfig",
     "FireworksSFTConfig",
+    "GCPVertexGeminiSFTConfig",
+    "OpenAISFTConfig",
     "OptimizationConfig",
     "patch_openai_client",
     "RawText",
