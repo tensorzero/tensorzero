@@ -118,30 +118,52 @@ async fn query_inference_for_datapoint(
     let function_type = config.get_function(function_name)?.config_type();
     let result = match function_type {
         FunctionConfigType::Chat => {
-            clickhouse.run_query_synchronous(r#"
+            clickhouse
+                .run_query_synchronous(
+                    r#"
                 SELECT * EXCEPT(timestamp),
-                'chat' AS function_type, formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                'chat' AS function_type,
+                formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp
                 FROM ChatInference
                     WHERE function_name = {function_name:String}
                     AND variant_name = {variant_name:String}
                     AND episode_id = {episode_id:String}
                     AND id = {inference_id:String}
                 LIMIT 1
-                FORMAT JSONEachRow;"#.to_string(),
-            &HashMap::from([("function_name", function_name), ("variant_name", variant_name), ("episode_id", episode_id.to_string().as_str()), ("inference_id", inference_id.to_string().as_str())])).await?
+                FORMAT JSONEachRow;"#
+                        .to_string(),
+                    &HashMap::from([
+                        ("function_name", function_name),
+                        ("variant_name", variant_name),
+                        ("episode_id", episode_id.to_string().as_str()),
+                        ("inference_id", inference_id.to_string().as_str()),
+                    ]),
+                )
+                .await?
         }
         FunctionConfigType::Json => {
-            clickhouse.run_query_synchronous(r#"
+            clickhouse
+                .run_query_synchronous(
+                    r#"
                 SELECT * EXCEPT(timestamp),
-                'json' AS function_type, formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                'json' AS function_type,
+                formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp
                 FROM JsonInference
                 WHERE function_name = {function_name:String}
                 AND variant_name = {variant_name:String}
                 AND episode_id = {episode_id:String}
                 AND id = {inference_id:String}
                 LIMIT 1
-                FORMAT JSONEachRow;"#.to_string(),
-            &HashMap::from([("function_name", function_name), ("variant_name", variant_name), ("episode_id", episode_id.to_string().as_str()), ("inference_id", inference_id.to_string().as_str())])).await?
+                FORMAT JSONEachRow;"#
+                        .to_string(),
+                    &HashMap::from([
+                        ("function_name", function_name),
+                        ("variant_name", variant_name),
+                        ("episode_id", episode_id.to_string().as_str()),
+                        ("inference_id", inference_id.to_string().as_str()),
+                    ]),
+                )
+                .await?
         }
     };
 
