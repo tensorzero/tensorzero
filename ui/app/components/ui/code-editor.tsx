@@ -149,13 +149,13 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   return (
     <div className={cn("group relative", className)}>
       {/* TODO: for focus-within to work properly, `DropdownMenu` cannot render with a portal or the buttons will disappear when the dropdown is open - best way to resolve? */}
-      <div className="absolute top-1 right-1 z-10 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
+      <div className="absolute top-1 right-1 z-10 flex gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
         {isCopyAvailable && (
           <Button
             variant="ghost"
-            size="sm"
+            size="iconSm"
             onClick={() => copy(value)}
-            className="flex h-6 w-6 p-3 text-xs"
+            className="h-6 w-6 p-3 text-xs"
             title={didCopy ? "Copied!" : "Copy to clipboard"}
           >
             {didCopy ? (
@@ -166,10 +166,10 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           </Button>
         )}
 
-        {/* TODO Style a custom variant for these buttons */}
+        {/* TODO Style a custom variant for these buttons - they don't match sizing/style of dropdown */}
         <Button
           variant={wordWrap ? "default" : "ghost"}
-          size="sm"
+          size="iconSm"
           onClick={() => setWordWrap((wrap) => !wrap)}
           aria-pressed={wordWrap}
           className="h-6 w-6 p-3 text-xs"
