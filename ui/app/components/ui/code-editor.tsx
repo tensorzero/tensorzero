@@ -228,8 +228,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           placeholder={placeholder}
           basicSetup={{
             // Line numbers
-            lineNumbers: showLineNumbers && language !== "text",
-            foldGutter: showLineNumbers && language !== "text",
+            lineNumbers: showLineNumbers,
+            foldGutter: showLineNumbers,
 
             // Read-only mode
             autocompletion: !readOnly,
