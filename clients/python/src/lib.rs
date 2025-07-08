@@ -36,8 +36,10 @@ use tensorzero_core::{
         ResolvedInput, ResolvedInputMessage,
     },
     optimization::{
-        fireworks_sft::UninitializedFireworksSFTConfig, openai_sft::UninitializedOpenAISFTConfig,
-        OptimizationJobInfoPyClass, OptimizationJobStatus, UninitializedOptimizerInfo,
+        fireworks_sft::UninitializedFireworksSFTConfig,
+        gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig,
+        openai_sft::UninitializedOpenAISFTConfig, OptimizationJobInfoPyClass,
+        OptimizationJobStatus, UninitializedOptimizerInfo,
     },
 };
 use tensorzero_core::{
@@ -84,6 +86,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<StoredInference>()?;
     m.add_class::<UninitializedOpenAISFTConfig>()?;
     m.add_class::<UninitializedFireworksSFTConfig>()?;
+    m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
     m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
