@@ -326,7 +326,7 @@ impl BaseTensorZeroGateway {
         serialize_to_dict(this.py(), params)
     }
 
-    fn get_config(&self) -> PyResult<ConfigPyClass> {
+    fn experimental_get_config(&self) -> PyResult<ConfigPyClass> {
         let config = self
             .client
             .get_config()
