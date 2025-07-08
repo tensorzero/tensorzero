@@ -128,11 +128,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   // Custom theme to remove dotted border and add focus styles
   const extensions = useMemo(() => {
     const customTheme = EditorView.theme({
-      ".cm-focused": {
+      "&.cm-focused": {
         outline: "none !important",
-      },
-      ".cm-editor": {
-        borderRadius: "0.375rem", // rounded-md
       },
     });
 
@@ -153,11 +150,10 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
   return (
     <div className={cn("group relative", className)}>
-      {/* TODO: for focus-within to work properly, `DropdownMenu` cannot render with a portal or the buttons will disappear when the dropdown is open - best way to resolve? */}
       <div className="absolute top-1 right-1 z-10 flex gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
         {isCopyAvailable && (
           <Button
-            variant="ghost"
+            variant="secondary"
             size="iconSm"
             onClick={() => copy(value)}
             className="h-6 w-6 p-3 text-xs"
@@ -171,9 +167,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           </Button>
         )}
 
-        {/* TODO Style a custom variant for these buttons - they don't match sizing/style of dropdown */}
         <Button
-          variant={wordWrap ? "default" : "ghost"}
+          variant={wordWrap ? "default" : "secondary"}
           size="iconSm"
           onClick={() => setWordWrap((wrap) => !wrap)}
           aria-pressed={wordWrap}
@@ -187,7 +182,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 className="h-6 gap-1 px-2 py-1 text-xs"
               >
@@ -240,6 +235,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             highlightActiveLine: !readOnly,
             highlightActiveLineGutter: !readOnly,
           }}
+          className="min-h-8"
         />
       </div>
     </div>
