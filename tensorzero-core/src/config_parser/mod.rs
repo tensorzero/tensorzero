@@ -791,7 +791,7 @@ impl ConfigPyClass {
 
 #[cfg(feature = "pyo3")]
 #[pyclass(mapping, name = "FunctionsConfig")]
-struct FunctionsConfigPyClass {
+pub struct FunctionsConfigPyClass {
     inner: HashMap<String, Arc<FunctionConfig>>,
 }
 

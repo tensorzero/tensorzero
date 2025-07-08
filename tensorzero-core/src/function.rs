@@ -177,7 +177,7 @@ impl FunctionConfigJsonPyClass {
 
 #[cfg(feature = "pyo3")]
 #[pyclass(mapping, name = "VariantsConfig")]
-struct VariantsConfigPyClass {
+pub struct VariantsConfigPyClass {
     pub inner: HashMap<String, Arc<VariantInfo>>,
 }
 
