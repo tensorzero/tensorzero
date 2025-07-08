@@ -5,7 +5,13 @@ import httpx
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
-    RenderedStoredInference,
+    Datapoint,
+    FireworksSFTConfig,
+    OpenAISFTConfig,
+    OptimizationJobHandle,
+    OptimizationJobInfo,
+    OptimizationJobStatus,
+    RenderedSample,
     ResolvedInput,
     ResolvedInputMessage,
     StoredInference,
@@ -14,14 +20,15 @@ from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
 from .types import (
-    AndNode,
+    AndFilter,
+    AndNode,  # DEPRECATED
     BaseTensorZeroError,
-    BooleanMetricNode,
+    BooleanMetricFilter,
+    BooleanMetricNode,  # DEPRECATED
     ChatDatapointInsert,
     ChatInferenceDatapointInput,  # DEPRECATED
     ChatInferenceResponse,
     ContentBlock,
-    Datapoint,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
     ExtraBody,
@@ -29,7 +36,8 @@ from .types import (
     FileBase64,
     FileUrl,
     FinishReason,
-    FloatMetricNode,
+    FloatMetricFilter,
+    FloatMetricNode,  # DEPRECATED
     ImageBase64,
     ImageUrl,
     InferenceChunk,
@@ -40,8 +48,10 @@ from .types import (
     JsonInferenceOutput,
     JsonInferenceResponse,
     Message,
-    NotNode,
-    OrNode,
+    NotFilter,
+    NotNode,  # DEPRECATED
+    OrFilter,
+    OrNode,  # DEPRECATED
     RawText,
     System,
     TensorZeroError,
@@ -60,12 +70,24 @@ from .types import (
     Usage,
 )
 
+RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample instead
+# Type aliases to preserve backward compatibility with main
+ChatDatapoint = Datapoint.Chat
+JsonDatapoint = Datapoint.Json
+
+OptimizationConfig = t.Union[OpenAISFTConfig, FireworksSFTConfig]
+ChatInferenceOutput = t.List[ContentBlock]
+
+
 __all__ = [
-    "AndNode",
+    "AndFilter",
+    "AndNode",  # DEPRECATED
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
     "BaseTensorZeroGateway",
-    "BooleanMetricNode",
+    "BooleanMetricFilter",
+    "BooleanMetricNode",  # DEPRECATED
+    "ChatDatapoint",
     "ChatDatapointInsert",
     "ChatInferenceDatapointInput",  # DEPRECATED
     "ChatInferenceResponse",
@@ -78,7 +100,8 @@ __all__ = [
     "FileBase64",
     "FileUrl",
     "FinishReason",
-    "FloatMetricNode",
+    "FloatMetricFilter",
+    "FloatMetricNode",  # DEPRECATED
     "ImageBase64",
     "ImageUrl",
     "InferenceChunk",
@@ -87,16 +110,26 @@ __all__ = [
     "StoredInference",
     "InferenceInput",
     "InferenceResponse",
+    "JsonDatapoint",
     "JsonDatapointInsert",
     "JsonInferenceDatapointInput",  # DEPRECATED
     "JsonInferenceOutput",
     "JsonInferenceResponse",
     "Message",
-    "NotNode",
-    "OrNode",
+    "NotFilter",
+    "NotNode",  # DEPRECATED
+    "OrFilter",
+    "OrNode",  # DEPRECATED
+    "OptimizationJobHandle",
+    "OptimizationJobInfo",
+    "OptimizationJobStatus",
+    "OpenAISFTConfig",
+    "FireworksSFTConfig",
+    "OptimizationConfig",
     "patch_openai_client",
     "RawText",
-    "RenderedStoredInference",
+    "RenderedStoredInference",  # DEPRECATED
+    "RenderedSample",
     "System",
     "TensorZeroError",
     "TensorZeroGateway",

@@ -7,7 +7,10 @@ pub struct CertifiedKeyDer {
     pub key_der: Vec<u8>,
 }
 
-pub fn generate_cert(host: String, root_cert: &rcgen::CertifiedKey) -> CertifiedKeyDer {
+pub fn generate_cert(
+    host: String,
+    root_cert: &rcgen::Issuer<'_, rcgen::KeyPair>,
+) -> CertifiedKeyDer {
     let mut cert_params = rcgen::CertificateParams::new(vec![host.clone()]).unwrap();
     cert_params
         .key_usages
@@ -26,9 +29,7 @@ pub fn generate_cert(host: String, root_cert: &rcgen::CertifiedKey) -> Certified
 
     let key_pair = rcgen::KeyPair::generate().unwrap();
 
-    let cert = cert_params
-        .signed_by(&key_pair, &root_cert.cert, &root_cert.key_pair)
-        .unwrap();
+    let cert = cert_params.signed_by(&key_pair, root_cert).unwrap();
 
     CertifiedKeyDer {
         cert_der: cert.der().to_vec(),

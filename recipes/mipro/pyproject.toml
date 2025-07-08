@@ -1,0 +1,19 @@
+[project]
+name = "tensorzero-recipes-mipro"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "clickhouse-connect",
+    "exceptiongroup",
+    "ipykernel",
+    "minijinja",
+    "openai",
+    "optuna",
+    "pandas",
+    "pydantic",
+    "seaborn",
+    "tensorzero",
+    "toml",
+    "tqdm",
+]

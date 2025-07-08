@@ -7,16 +7,16 @@ mod mitm_server;
 mod streaming_body_collector;
 mod tls;
 
+use std::future::Future;
 use std::io::Write;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::{fs::OpenOptions, future::Future};
 
 use anyhow::Context as _;
 use bytes::{Bytes, BytesMut};
-use clap::{ArgAction, Parser};
-use http::{HeaderName, HeaderValue};
+use clap::{Parser, ValueEnum};
+use http::{HeaderName, HeaderValue, Version};
 use http_body_util::{combinators::BoxBody, BodyExt, Full};
 use hyper::service::service_fn;
 use mitm_server::MitmProxy;
@@ -29,7 +29,7 @@ use tracing::level_filters::LevelFilter;
 
 const CACHE_HEADER_NAME: &str = "x-tensorzero-provider-proxy-cache";
 
-fn make_root_cert() -> rcgen::CertifiedKey {
+fn make_root_cert() -> rcgen::Issuer<'static, rcgen::KeyPair> {
     let mut param = rcgen::CertificateParams::default();
 
     param.distinguished_name = rcgen::DistinguishedName::new();
@@ -44,9 +44,7 @@ fn make_root_cert() -> rcgen::CertifiedKey {
     param.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
 
     let key_pair = rcgen::KeyPair::generate().unwrap();
-    let cert = param.self_signed(&key_pair).unwrap();
-
-    rcgen::CertifiedKey { cert, key_pair }
+    rcgen::Issuer::new(param, key_pair)
 }
 
 fn hash_value(request: &serde_json::Value) -> Result<String, anyhow::Error> {
@@ -65,6 +63,20 @@ fn save_cache_body(
     let path_str = path.to_string_lossy().into_owned();
     tracing::info!(path = path_str, "Finished processing request");
 
+    // None of our providers produce image/pdf responses, so this is good enough to exclude
+    // things like file fetching (which happen to use the proxied HTTP client in the gateway)
+    if let Some(content_type) = parts.headers.get(http::header::CONTENT_TYPE) {
+        if content_type.to_str().unwrap().starts_with("image/")
+            || content_type
+                .to_str()
+                .unwrap()
+                .starts_with("application/pdf")
+        {
+            tracing::info!("Skipping caching of response with content type {content_type:?}");
+            return Ok(());
+        }
+    }
+
     #[derive(Serialize)]
     #[serde(untagged)]
     enum BodyKind {
@@ -82,31 +94,25 @@ fn save_cache_body(
             .with_context(|| format!("Failed to serialize response for path {path_str}"))?;
     let json_str = serde_json::to_string(&json_response)
         .with_context(|| format!("Failed to stringify response for path {path_str}"))?;
-    // Open the file after we've constructed our json string, to avoid creating an empty
-    // file if we fail to serialize the response
-    match OpenOptions::new().write(true).create_new(true).open(&path) {
-        Ok(mut file) => {
-            file.write_all(json_str.as_bytes())
-                .with_context(|| format!("Failed to write to file for path {path_str}"))?;
-            file.write_all(b"\n").with_context(|| {
-                format!("Failed to write EOL newline to file for path {path_str}")
-            })?;
-            tracing::info!(path = path_str, "Wrote response to cache");
-            Ok(())
-        }
-        Err(e) => {
-            if e.kind() == std::io::ErrorKind::AlreadyExists {
-                // Log the error but otherwise continue on, as it's the client's fault
-                tracing::error!(
-                    path = path_str,
-                    "Cache file already exists - two duplicate requests were likely made in parallel"
-                );
-                Ok(())
-            } else {
-                Err(e).with_context(|| format!("Failed to open cache file for path {path_str}"))
-            }
-        }
-    }
+
+    // Write the cache response to a temporary file, and then atomically rename it to the final path.
+    // If we have multiple concurrent requests to the same path, one of them will win the race.
+    // This is fine for our use case, as it shouldn't matter which successful (by HTTP status code)
+    // response is cached.
+    let mut tmpfile = tempfile::NamedTempFile::new()
+        .with_context(|| format!("Failed to create tempfile for path {path_str}"))?;
+    tmpfile
+        .write_all(json_str.as_bytes())
+        .with_context(|| format!("Failed to write to file for path {path_str}"))?;
+    tmpfile
+        .write_all(b"\n")
+        .with_context(|| format!("Failed to write EOL newline to file for path {path_str}"))?;
+    tmpfile
+        .persist(&path)
+        .with_context(|| format!("Failed to rename tempfile to {path_str}"))?;
+
+    tracing::info!(path = path_str, "Wrote response to cache");
+    Ok(())
 }
 
 const HEADER_TRUE: HeaderValue = HeaderValue::from_static("true");
@@ -117,11 +123,11 @@ async fn check_cache<
     T: Future<Output = Result<hyper::Response<BoxBody<Bytes, E>>, anyhow::Error>>,
     F: FnOnce() -> T,
 >(
+    start_time: std::time::SystemTime,
     args: &Args,
-    request: &hyper::Request<Bytes>,
+    mut request: hyper::Request<Bytes>,
     missing: F,
 ) -> Result<hyper::Response<BoxBody<Bytes, E>>, anyhow::Error> {
-    let mut request = request.clone();
     request.extensions_mut().clear();
     let mut sanitized_header = false;
     if args.sanitize_bearer_auth {
@@ -177,7 +183,20 @@ async fn check_cache<
 
     let path = args.cache_path.join(filename);
     let path_str = path.to_string_lossy().into_owned();
-    let (mut resp, cache_hit) = if path.exists() {
+
+    let use_cache = || match args.mode {
+        CacheMode::ReadOnly => Ok::<_, anyhow::Error>(true),
+        CacheMode::ReadWrite => Ok(true),
+        CacheMode::ReadOldWriteNew => {
+            let file_mtime = std::fs::metadata(&path)
+                .with_context(|| format!("Failed to read cache file metadata for {path_str}"))?
+                .modified()
+                .with_context(|| format!("Failed to read cache file mtime for {path_str}"))?;
+            Ok(file_mtime <= start_time)
+        }
+    };
+
+    let (mut resp, cache_hit) = if path.exists() && use_cache()? {
         tracing::info!(sanitized_header, "Cache hit: {}", path_str);
         let path_str_clone = path_str.clone();
         let resp = tokio::task::spawn_blocking(move || {
@@ -217,7 +236,11 @@ async fn check_cache<
             // We need to clear the extensions in order to be able to serialize the response
             hyper_response.extensions_mut().clear();
 
-            let write = args.write;
+            let write = match args.mode {
+                CacheMode::ReadOnly => false,
+                CacheMode::ReadWrite => true,
+                CacheMode::ReadOldWriteNew => true,
+            };
 
             // Start streaming the response to the client, running the provided callback once the whole body has been received
             // This lets us forward streaming responses without needing to wait for the entire response, while
@@ -254,6 +277,20 @@ async fn check_cache<
     Ok(resp)
 }
 
+#[derive(ValueEnum, Clone, Debug)]
+pub enum CacheMode {
+    /// Only read from the cache, never write to it.
+    ReadOnly,
+    /// Read from the cache, and write to it when a cache miss occurs.
+    ReadWrite,
+    /// Read entries from the cache that were created before the provider-proxy start time.
+    /// Writes to the cache when a miss occurs, or if the cache entry was written after the provider-proxy start time
+    /// (e.g. by this instance)
+    /// This allows our e2e tests to retry when they get a bad response from the provider,
+    /// without provider-proxy serving the cached bad response.
+    ReadOldWriteNew,
+}
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Args {
@@ -271,10 +308,8 @@ pub struct Args {
     pub sanitize_aws_sigv4: bool,
     #[arg(long, default_value = "true")]
     pub sanitize_model_headers: bool,
-    /// Whether to write to the cache when a cache miss occurs.
-    /// If false, the proxy will still read existing entries from the cache, but not write new ones.
-    #[arg(long, action = ArgAction::Set, default_value_t = true, num_args = 1)]
-    pub write: bool,
+    #[arg(long, default_value = "read-old-write-new")]
+    pub mode: CacheMode,
 }
 
 fn find_duplicate_header(headers: &http::HeaderMap) -> Option<HeaderName> {
@@ -295,22 +330,25 @@ fn is_openrouter_request(uri: &http::Uri) -> bool {
 pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>) {
     use tracing_subscriber::EnvFilter;
 
-    tracing_subscriber::fmt()
+    #[expect(clippy::print_stderr)]
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::builder()
                 .with_default_directive(LevelFilter::INFO.into())
                 .from_env_lossy(),
         )
         .try_init()
-        .unwrap();
+        .inspect_err(|e| eprintln!("Failed to initialize tracing: {e}"));
+
+    let start_time = std::time::SystemTime::now();
 
     let args = Arc::new(args);
 
     std::fs::create_dir_all(&args.cache_path).expect("Failed to create cache directory");
 
-    rustls::crypto::ring::default_provider()
+    let _ = rustls::crypto::ring::default_provider()
         .install_default()
-        .expect("Failed to install rustls ring provider");
+        .inspect_err(|e| tracing::error!("Failed to install rustls ring provider: {e:?}"));
 
     let root_cert = make_root_cert();
 
@@ -375,11 +413,14 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
                         .with_context(|| "Failed to collect body")?
                         .to_bytes();
                     let bytes_request = hyper::Request::from_parts(parts, body_bytes);
-                    let response = check_cache(&args, &bytes_request, || async {
-                        let request: reqwest::Request =
-                            bytes_request.clone().try_into().with_context(|| {
+                    let response = check_cache(start_time, &args, bytes_request.clone(), || async {
+                        let mut request: reqwest::Request =
+                            bytes_request.try_into().with_context(|| {
                                 "Failed to convert Request from `hyper` to `reqwest`"
                             })?;
+                        // Don't explicitly request HTTP2 - let the connection upgrade if the
+                        // remote server supports it
+                        *request.version_mut() = Version::default();
                         Ok(http::Response::from(client.execute(request).await?).map(BoxBody::new))
                     })
                     .await?;

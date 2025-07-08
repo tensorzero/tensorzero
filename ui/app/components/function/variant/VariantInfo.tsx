@@ -1,11 +1,11 @@
 import { Code } from "~/components/ui/code";
-import type { VariantType } from "~/utils/config/variant";
+import type { VariantConfig } from "tensorzero-node";
 import { VariantLink } from "./VariantLink";
 
 type VariantInfoProps = {
   variantName: string;
   functionName: string;
-  variantType?: VariantType;
+  variantType?: VariantConfig["type"];
 };
 
 export function VariantInfo({
