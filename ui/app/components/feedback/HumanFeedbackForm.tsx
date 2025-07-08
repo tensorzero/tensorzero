@@ -9,7 +9,7 @@ import { Button } from "~/components/ui/button";
 import {
   filterMetricsByLevel,
   filterStaticEvaluationMetrics,
-} from "~/utils/config/metric";
+} from "~/utils/config/feedback";
 import BooleanFeedbackInput from "./BooleanFeedbackInput";
 import FloatFeedbackInput from "./FloatFeedbackInput";
 import CommentFeedbackInput from "./CommentFeedbackInput";

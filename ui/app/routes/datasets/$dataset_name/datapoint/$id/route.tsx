@@ -1,4 +1,4 @@
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, RouteHandle } from "react-router";
 import {
   data,
   isRouteErrorResponse,
@@ -25,7 +25,7 @@ import {
   staleDatapoint,
   getDatasetCounts,
 } from "~/utils/clickhouse/datasets.server";
-import { tensorZeroClient } from "~/utils/tensorzero.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import {
   PageHeader,
   PageLayout,
@@ -34,13 +34,14 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { DatapointActions } from "./DatapointActions";
-import type { ResolvedInputMessage } from "~/utils/clickhouse/common";
+import type { DisplayInputMessage } from "~/utils/clickhouse/common";
 import { getConfig } from "~/utils/config/index.server";
 import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
 import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
 } from "~/routes/api/tensorzero/inference.utils";
+import { logger } from "~/utils/logger";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -75,7 +76,14 @@ export async function action({ request }: ActionFunctionArgs) {
     ParsedDatasetRowSchema.parse(cleanedData);
   const config = await getConfig();
   const functionConfig = config.functions[parsedFormData.function_name];
-  const functionType = functionConfig?.type;
+  if (!functionConfig) {
+    return new Response(
+      `Failed to find function config for function ${parsedFormData.function_name}`,
+      { status: 400 },
+    );
+  }
+  const functionType = functionConfig.type;
+
   const action = formData.get("action");
   if (action === "delete") {
     await staleDatapoint(
@@ -127,7 +135,7 @@ export async function action({ request }: ActionFunctionArgs) {
           : {}),
         source_inference_id: parsedFormData.source_inference_id,
       };
-      const { id } = await tensorZeroClient.updateDatapoint(
+      const { id } = await getTensorZeroClient().updateDatapoint(
         parsedFormData.dataset_name,
         uuid(),
         datapoint,
@@ -143,7 +151,7 @@ export async function action({ request }: ActionFunctionArgs) {
         `/datasets/${parsedFormData.dataset_name}/datapoint/${id}`,
       );
     } catch (error) {
-      console.error("Error updating datapoint:", error);
+      logger.error("Error updating datapoint:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
@@ -151,6 +159,10 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   }
 }
+
+export const handle: RouteHandle = {
+  crumb: (match) => [match.params.id!],
+};
 
 export async function loader({
   params,
@@ -215,7 +227,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setInput({ ...input, system });
   };
 
-  const handleMessagesChange = (messages: ResolvedInputMessage[]) => {
+  const handleMessagesChange = (messages: DisplayInputMessage[]) => {
     setInput({ ...input, messages });
   };
 
@@ -415,7 +427,7 @@ function getUserFacingError(error: unknown): {
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   useEffect(() => {
-    console.error(error);
+    logger.error(error);
   }, [error]);
   const { heading, message } = getUserFacingError(error);
   const { dataset_name: datasetName } = useParams<{

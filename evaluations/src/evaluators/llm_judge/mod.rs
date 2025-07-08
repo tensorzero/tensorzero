@@ -6,15 +6,14 @@ use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     DynamicToolParams, File, InferenceOutput, InferenceParams, InferenceResponse, Role,
 };
-use tensorzero_internal::cache::CacheEnabledMode;
-use tensorzero_internal::endpoints::datasets::Datapoint;
-use tensorzero_internal::evaluations::{
+use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero_core::evaluations::{
     get_evaluator_metric_name, get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat,
     LLMJudgeOutputType,
 };
-use tensorzero_internal::inference::types::{
-    ContentBlockChatOutput, JsonInferenceOutput, TextKind,
-};
+use tensorzero_core::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, TextKind};
+use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
 use crate::helpers::{check_static_eval_human_feedback, get_cache_options};
@@ -52,6 +51,7 @@ pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub inference_cache: CacheEnabledMode,
 }
 
+#[instrument(skip(params), fields(datapoint_id = %params.datapoint.id(), evaluator_name = %params.evaluator_name))]
 pub async fn run_llm_judge_evaluator(
     params: RunLLMJudgeEvaluatorParams<'_>,
 ) -> Result<Option<LLMJudgeEvaluationResult>> {
@@ -66,6 +66,7 @@ pub async fn run_llm_judge_evaluator(
         input,
         inference_cache,
     } = params;
+    debug!("Checking for existing human feedback");
     if let Some(human_feedback) = check_static_eval_human_feedback(
         &clients.clickhouse_client,
         &get_evaluator_metric_name(evaluation_name, evaluator_name),
@@ -74,18 +75,27 @@ pub async fn run_llm_judge_evaluator(
     )
     .await?
     {
+        info!("Found existing human feedback, using that instead of LLM judge");
         return Ok(Some(LLMJudgeEvaluationResult {
             evaluator_inference_id: human_feedback.evaluator_inference_id,
             value: human_feedback.value,
             human_feedback: true,
         }));
     }
+    debug!("Preparing LLM judge input");
     let judge_input =
         match prepare_llm_judge_input(llm_judge_config, input, inference_response, datapoint)? {
-            Some(input) => input,
-            None => return Ok(None),
+            Some(input) => {
+                debug!("LLM judge input prepared successfully");
+                input
+            }
+            None => {
+                debug!("Cannot prepare LLM judge input, returning None");
+                return Ok(None);
+            }
         };
 
+    debug!("Making LLM judge inference request");
     let params = ClientInferenceParams {
         function_name: Some(get_llm_judge_function_name(evaluation_name, evaluator_name)),
         model_name: None,
@@ -417,16 +427,16 @@ mod tests {
     use serde_json::json;
     use tensorzero::File;
     use tensorzero::Role;
-    use tensorzero_internal::endpoints::datasets::ChatInferenceDatapoint;
-    use tensorzero_internal::endpoints::datasets::JsonInferenceDatapoint;
-    use tensorzero_internal::endpoints::inference::ChatInferenceResponse;
-    use tensorzero_internal::endpoints::inference::JsonInferenceResponse;
-    use tensorzero_internal::evaluations::LLMJudgeIncludeConfig;
-    use tensorzero_internal::evaluations::LLMJudgeOptimize;
-    use tensorzero_internal::inference::types::ResolvedInput;
-    use tensorzero_internal::inference::types::Usage;
-    use tensorzero_internal::tool::ToolCallInput;
-    use tensorzero_internal::{
+    use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
+    use tensorzero_core::endpoints::datasets::JsonInferenceDatapoint;
+    use tensorzero_core::endpoints::inference::ChatInferenceResponse;
+    use tensorzero_core::endpoints::inference::JsonInferenceResponse;
+    use tensorzero_core::evaluations::LLMJudgeIncludeConfig;
+    use tensorzero_core::evaluations::LLMJudgeOptimize;
+    use tensorzero_core::inference::types::ResolvedInput;
+    use tensorzero_core::inference::types::Usage;
+    use tensorzero_core::tool::ToolCallInput;
+    use tensorzero_core::{
         inference::types::{ContentBlockChatOutput, Text, Thought},
         tool::{ToolCallOutput, ToolResult},
     };

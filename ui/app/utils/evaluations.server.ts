@@ -1,28 +1,24 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
-import { getConfigPath } from "./config/index.server";
 import {
   EvaluationErrorSchema,
   type DisplayEvaluationError,
 } from "./evaluations";
+import { logger } from "~/utils/logger";
+import { getEnv } from "./env.server";
 /**
  * Get the path to the evaluations binary from environment variables.
  * Defaults to 'evaluations' if not specified.
  */
 function getEvaluationsPath(): string {
-  return process.env.TENSORZERO_EVALUATIONS_PATH || "evaluations";
+  return getEnv().TENSORZERO_EVALUATIONS_PATH || "evaluations";
+}
+function getConfigPath(): string {
+  return getEnv().TENSORZERO_UI_CONFIG_PATH;
 }
 
 export type InferenceCacheSetting = "on" | "off" | "read_only" | "write_only";
 
-function getGatewayURL(): string {
-  const gatewayURL = process.env.TENSORZERO_GATEWAY_URL;
-  // This error is thrown on startup in tensorzero.server.ts
-  if (!gatewayURL) {
-    throw new Error("TENSORZERO_GATEWAY_URL environment variable is not set");
-  }
-  return gatewayURL;
-}
 interface RunningEvaluationInfo {
   errors: DisplayEvaluationError[];
   variantName: string;
@@ -52,7 +48,7 @@ export function runEvaluation(
   inferenceCache: InferenceCacheSetting,
 ): Promise<EvaluationStartInfo> {
   const evaluationsPath = getEvaluationsPath();
-  const gatewayURL = getGatewayURL();
+  const gatewayURL = getEnv().TENSORZERO_GATEWAY_URL;
   // Construct the command to run the evaluations binary
   // Example: evaluations --gateway-url http://localhost:3000 --name entity_extraction --variant-name llama_8b_initial_prompt --concurrency 10 --format jsonl
   // We do not need special escaping for the evaluation name or variant name because
@@ -148,7 +144,7 @@ export function runEvaluation(
         }
         // We're ignoring other types of output that don't match these patterns
       } catch {
-        console.warn(`Bad JSON line: ${line}`);
+        logger.warn(`Bad JSON line: ${line}`);
       }
     };
 
