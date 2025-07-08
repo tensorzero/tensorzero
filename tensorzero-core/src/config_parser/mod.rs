@@ -2,6 +2,8 @@ use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
 #[cfg(feature = "pyo3")]
+use pyo3::exceptions::PyKeyError;
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -785,10 +787,12 @@ impl FunctionsConfigPyClass {
         self.inner.len()
     }
 
-    fn __getitem__(&self, function_name: &str) -> Option<FunctionConfigPyClass> {
-        self.inner
+    fn __getitem__(&self, function_name: &str) -> PyResult<FunctionConfigPyClass> {
+        let f = self
+            .inner
             .get(function_name)
-            .map(|f| FunctionConfigPyClass { inner: f.clone() })
+            .ok_or_else(|| PyKeyError::new_err(function_name.to_string()))?;
+        Ok(FunctionConfigPyClass { inner: f.clone() })
     }
 }
 

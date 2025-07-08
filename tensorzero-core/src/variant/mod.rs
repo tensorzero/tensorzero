@@ -2,6 +2,8 @@ use backon::ExponentialBuilder;
 use backon::Retryable;
 use futures::StreamExt;
 use itertools::izip;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
@@ -51,6 +53,12 @@ pub mod mixture_of_n;
 pub struct VariantInfo {
     pub inner: VariantConfig,
     pub timeouts: TimeoutsConfig,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "VariantInfo")]
+pub struct VariantInfoPyClass {
+    pub inner: Arc<VariantInfo>,
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]

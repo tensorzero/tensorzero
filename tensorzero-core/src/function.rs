@@ -1,4 +1,6 @@
 #[cfg(feature = "pyo3")]
+use pyo3::exceptions::PyKeyError;
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use serde::Serialize;
 use serde_json::Value;
@@ -21,7 +23,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
 use crate::variant::chat_completion::TemplateSchemaInfo;
-use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
+use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo, VariantInfoPyClass};
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -58,6 +60,38 @@ impl FunctionConfig {
             FunctionConfig::Chat(_) => "ChatInference",
             FunctionConfig::Json(_) => "JsonInference",
         }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl FunctionConfigPyClass {
+    #[getter]
+    fn get_type(&self) -> FunctionConfigType {
+        self.inner.config_type()
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(mapping, name = "VariantsConfig")]
+struct VariantsConfigPyClass {
+    pub inner: HashMap<String, Arc<VariantInfo>>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl VariantsConfigPyClass {
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn __getitem__(&self, key: &str) -> PyResult<VariantInfoPyClass> {
+        let v = self
+            .inner
+            .get(key)
+            .cloned()
+            .ok_or_else(|| PyKeyError::new_err(key.to_string()))?;
+        Ok(VariantInfoPyClass { inner: v })
     }
 }
 
