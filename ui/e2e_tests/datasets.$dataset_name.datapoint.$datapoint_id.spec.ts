@@ -40,21 +40,16 @@ test("should be able to add, edit and save a datapoint", async ({ page }) => {
   // Click on the Add to dataset button
   await page.getByText("Add to dataset").click();
 
-  // Wait for the dropdown to appear
-  await page.waitForTimeout(500);
-
-  // Find the CommandInput by its placeholder text
+  // Wait for the CommandInput by its placeholder text to be visible
   const commandInput = page.getByPlaceholder("Create or find dataset...");
   await commandInput.waitFor({ state: "visible" });
   await commandInput.fill(datasetName);
-  // Wait a moment for the filtered results to appear
-  await page.waitForTimeout(500);
 
-  // Click on the CommandItem that contains the dataset name
-  // Using a more flexible selector that looks for text containing "Create"
+  // Wait for the "Create" option to appear in the dropdown
   const createOption = page
     .locator("[cmdk-item]")
     .filter({ hasText: "Create" });
+  await createOption.waitFor({ state: "visible" });
   await createOption.click();
 
   // Click on the "Inference Output" button
