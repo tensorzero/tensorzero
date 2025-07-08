@@ -18,7 +18,7 @@ import {
 } from "./datasets.server";
 import { expect, test, describe } from "vitest";
 import { v7 as uuid } from "uuid";
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 
 describe("countRowsForDataset", () => {
   test("returns the correct number of rows for a specific function", async () => {
@@ -365,8 +365,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "Is it a living thing?",
+                type: "unstructured_text",
+                text: "Is it a living thing?",
               },
             ],
             role: "user",
@@ -374,8 +374,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "no.",
+                type: "unstructured_text",
+                text: "no.",
               },
             ],
             role: "assistant",
@@ -383,8 +383,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "Is it commonly found indoors?",
+                type: "unstructured_text",
+                text: "Is it commonly found indoors?",
               },
             ],
             role: "user",
@@ -392,8 +392,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "no.",
+                type: "unstructured_text",
+                text: "no.",
               },
             ],
             role: "assistant",
@@ -401,8 +401,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "Is it a natural object, like a rock or tree?",
+                type: "unstructured_text",
+                text: "Is it a natural object, like a rock or tree?",
               },
             ],
             role: "user",
@@ -410,8 +410,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "yes.",
+                type: "unstructured_text",
+                text: "yes.",
               },
             ],
             role: "assistant",
@@ -469,8 +469,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: {
+                type: "structured_text",
+                arguments: {
                   topic: "upward",
                 },
               },
@@ -515,7 +515,14 @@ describe("datapoint operations", () => {
       input: {
         messages: [
           {
-            content: [{ type: "text", value: "Write a haiku about testing" }],
+            content: [
+              {
+                type: "structured_text",
+                arguments: {
+                  topic: "testing",
+                },
+              },
+            ],
             role: "user" as const,
           },
         ],
@@ -597,8 +604,8 @@ describe("datapoint operations", () => {
           {
             content: [
               {
-                type: "text",
-                value: "Extract entities from: John visited Paris",
+                type: "unstructured_text",
+                text: "Extract entities from: John visited Paris",
               },
             ],
             role: "user" as const,
@@ -695,7 +702,10 @@ describe("datapoint operations", () => {
         messages: [
           {
             content: [
-              { type: "text", value: "Write a haiku about duplicates" },
+              {
+                type: "unstructured_text",
+                text: "Write a haiku about duplicates",
+              },
             ],
             role: "user" as const,
           },
@@ -907,7 +917,7 @@ describe("getAdjacentDatapointIds", () => {
   });
 
   test("returns null for next_id if there is no next datapoint", async () => {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query: `SELECT uint_to_uuid(max(id_uint)) as id FROM
       ( SELECT toUInt128(id) as id_uint FROM ChatInferenceDatapoint WHERE dataset_name={dataset_name:String} AND staled_at IS NULL
        UNION ALL
@@ -928,7 +938,7 @@ describe("getAdjacentDatapointIds", () => {
   });
 
   test("returns null for previous_id if there is no previous datapoint", async () => {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query: `SELECT uint_to_uuid(min(id_uint)) as id FROM
       ( SELECT toUInt128(id) as id_uint FROM ChatInferenceDatapoint WHERE dataset_name={dataset_name:String} AND staled_at IS NULL
        UNION ALL

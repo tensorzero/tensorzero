@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use serde_json::Value;
 use tensorzero::InferenceResponse;
-use tensorzero_internal::endpoints::datasets::Datapoint;
+use tensorzero_core::endpoints::datasets::Datapoint;
 use tracing::{debug, instrument, warn};
 
 #[instrument(skip(inference_response, datapoint), fields(datapoint_id = %datapoint.id()))]
@@ -69,7 +69,7 @@ mod tests {
     use super::*;
     use serde_json::json;
     use tensorzero::Role;
-    use tensorzero_internal::{
+    use tensorzero_core::{
         endpoints::{
             datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint},
             inference::{ChatInferenceResponse, JsonInferenceResponse},

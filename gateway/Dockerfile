@@ -7,13 +7,14 @@ WORKDIR /src
 RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
 
 COPY . .
+RUN git rev-parse HEAD
 
 ARG CARGO_BUILD_FLAGS=""
 
 RUN --mount=type=cache,id=tensorzero-gateway-release,sharing=shared,target=/usr/local/cargo/registry \
     --mount=type=cache,id=tensorzero-gateway-release,sharing=shared,target=/usr/local/cargo/git \
-    cargo build --release -p gateway $CARGO_BUILD_FLAGS && \
-    cp -r /src/target/release /release
+    cargo build --profile performance -p gateway $CARGO_BUILD_FLAGS && \
+    cp -r /src/target/performance /release
 
 # ========== base ==========
 

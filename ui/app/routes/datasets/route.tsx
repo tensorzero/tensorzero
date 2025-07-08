@@ -13,6 +13,7 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import { DatasetsActions } from "./DatasetsActions";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -57,7 +58,7 @@ export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

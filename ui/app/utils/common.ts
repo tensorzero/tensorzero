@@ -2,6 +2,18 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 /**
+ * A utility to check if the current environment is a browser. Type-checking
+ * `window` is not sufficient in some server runtimes (Deno, some test
+ * environments, etc.) so we use the more robust check that is consistent with
+ * React's internal logic.
+ */
+export const canUseDOM = !!(
+  typeof window !== "undefined" &&
+  window.document &&
+  window.document.createElement
+);
+
+/**
  * A helper function to merge class names conditionally, and deduplicating potentially conflicting
  * Tailwind classes. Note that deduplication can have a potentially significant performance overhead
  * for already slow-rendering components, and it is generally only useful in cases where a component
@@ -81,19 +93,12 @@ export function isErrorLike(error: unknown): error is ErrorLike {
   );
 }
 
-export class JSONParseError extends SyntaxError {}
-
-export class ServerRequestError extends Error {
-  statusCode: number;
-  constructor(message: string, statusCode: number) {
-    super(message);
-    this.name = "ServerRequestError";
-    this.statusCode = statusCode;
+export class JSONParseError extends SyntaxError {
+  constructor(
+    public message: string,
+    public cause?: unknown,
+  ) {
+    super(message, { cause });
+    this.name = "JSONParseError";
   }
-}
-
-export function isServerRequestError(
-  error: unknown,
-): error is ServerRequestError {
-  return isErrorLike(error) && error.name === "ServerRequestError";
 }
