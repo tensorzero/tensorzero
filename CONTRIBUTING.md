@@ -40,7 +40,7 @@ For larger changes, please communicate with us first to avoid duplicate work or 
 You can start a discussion (GitHub, Slack, or Discord) or open an issue as a starting point.
 The team will be happy to provide feedback and guidance.
 
-At this time, we don't assign issues to external contributors (in the past, most people we assigned issues to never submitted a PR).
+At this time, we don't assign issues to new external contributors (in the past, most people we assigned issues to never submitted a PR).
 Please submit a PR directly once you're ready to start working on an issue.
 
 > [!TIP]
