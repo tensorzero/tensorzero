@@ -8,5 +8,6 @@
       "type": "boolean"
     }
   },
-  "required": ["reasoning", "score"]
+  "required": ["reasoning", "score"],
+  "additionalProperties": false
 }

@@ -1,0 +1,3 @@
+Please return true if the generated answer chooses the same animal as the reference answer and false otherwise.
+Don't worry about if the input is correct.
+This is not an exact match so please just return true if the gestalt of the answer is the same.

@@ -1,0 +1,7 @@
+[project]
+name = "fixtures"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.10"
+# Unpin 'pandas' once they make a new release with musl-aarch64 wheels
+dependencies = ["parquet-tools", "pandas==2.2.3"]

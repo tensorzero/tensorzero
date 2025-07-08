@@ -7,7 +7,7 @@ import {
   DialogTrigger,
 } from "~/components/ui/dialog";
 import { Textarea } from "~/components/ui/textarea";
-import type { ChatCompletionConfig } from "~/utils/config/variant";
+import type { ChatCompletionConfig } from "tensorzero-node";
 
 interface TemplateDetailsDialogProps {
   variant: string;
@@ -38,7 +38,7 @@ export function TemplateDetailsDialog({
                 {variant && (
                   <>
                     <div className="space-y-2">
-                      <h4 className="font-medium leading-none">
+                      <h4 className="leading-none font-medium">
                         System Template
                       </h4>
                       {chatCompletionVariants[variant]?.system_template ? (
@@ -46,19 +46,19 @@ export function TemplateDetailsDialog({
                           readOnly
                           value={
                             chatCompletionVariants[variant]?.system_template
-                              ?.content
+                              ?.contents
                           }
                           className="h-[200px] resize-none"
                         />
                       ) : (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-muted-foreground text-sm">
                           No system template.
                         </p>
                       )}
                     </div>
 
                     <div className="space-y-2">
-                      <h4 className="font-medium leading-none">
+                      <h4 className="leading-none font-medium">
                         User Template
                       </h4>
                       {chatCompletionVariants[variant]?.user_template ? (
@@ -66,12 +66,12 @@ export function TemplateDetailsDialog({
                           readOnly
                           value={
                             chatCompletionVariants[variant]?.user_template
-                              ?.content
+                              ?.contents
                           }
                           className="h-[200px] resize-none"
                         />
                       ) : (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-muted-foreground text-sm">
                           No user template.
                         </p>
                       )}
@@ -80,7 +80,7 @@ export function TemplateDetailsDialog({
                 )}
 
                 <div className="space-y-2">
-                  <h4 className="font-medium leading-none">
+                  <h4 className="leading-none font-medium">
                     Assistant Template
                   </h4>
                   {chatCompletionVariants[variant]?.assistant_template ? (
@@ -88,12 +88,12 @@ export function TemplateDetailsDialog({
                       readOnly
                       value={
                         chatCompletionVariants[variant]?.assistant_template
-                          ?.content
+                          ?.contents
                       }
                       className="h-[200px] resize-none"
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-muted-foreground text-sm">
                       No assistant template.
                     </p>
                   )}

@@ -1,10 +1,10 @@
 services:
   clickhouse:
-    container_name: tensorzero-clickhouse-ui-tests
-    image: clickhouse/clickhouse-server:latest
-    tmpfs:
-      # So the fixtures aren't persisted between restarts of the containers and double-added
-      - /var/lib/clickhouse
+    image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
+    environment:
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: chpassword
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
@@ -13,33 +13,27 @@ services:
         soft: 262144
         hard: 262144
     healthcheck:
-      test:
-        [
-          "CMD",
-          "wget",
-          "--no-verbose",
-          "--tries=1",
-          "--spider",
-          "http://localhost:8123/ping",
-        ]
+      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
       start_period: 30s
       start_interval: 1s
       timeout: 1s
 
   gateway:
-    container_name: tensorzero-gateway-ui-tests
+    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
     build:
       context: ../..
-      dockerfile: Dockerfile
+      dockerfile: gateway/Dockerfile
       target: gateway
     volumes:
       - ./config:/app/config:ro
     environment:
-      - CLICKHOUSE_URL=http://tensorzero-clickhouse-ui-tests:8123/tensorzero
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
     env_file:
-      - ${ENV_FILE:-../.env}
+      - .env
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -53,19 +47,43 @@ services:
           "--spider",
           "http://localhost:3000/health",
         ]
-      start_period: 1s
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  mock-inference-provider:
+    build:
+      context: ../../
+      dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
+    environment:
+      RUST_LOG: debug
+    ports:
+      - "3030:3030"
+    healthcheck:
+      test: wget --spider --tries 1 http://localhost:3030/status
+      start_period: 30s
       start_interval: 1s
       timeout: 1s
 
   fixtures:
-    # NOTE: This is expected to quickly terminate with status code 0
-    container_name: tensorzero-fixtures-ui-tests
-    image: clickhouse/clickhouse-server:latest
+    build:
+      dockerfile: Dockerfile
     volumes:
-      - .:/fixtures:ro
+      - .:/fixtures
+      - ~/.aws:/root/.aws
     environment:
-      - CLICKHOUSE_HOST=tensorzero-clickhouse-ui-tests
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PASSWORD: chpassword
+      CLICKHOUSE_USER: chuser
     depends_on:
       gateway:
         condition: service_healthy
     command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
+    healthcheck:
+      test: ["CMD", "test", "-f", "/load_complete.marker"]
+      interval: 5s
+      timeout: 1s
+      retries: 48 # Retry for up to 4 minutes
+      start_interval: 1s
+      start_period: 300s # Give the script time to start

@@ -1,0 +1,1 @@
+You are a helpful and friendly {% include 'extra_templates/foo.minijinja' %} named {{ assistant_name }}

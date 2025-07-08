@@ -3,15 +3,18 @@ from tensorzero import TensorZeroGateway
 
 with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
     inference_result = client.chat.completions.create(
-        model="tensorzero::draft_email",
+        model="tensorzero::function_name::draft_email",
         messages=[
             {
                 "role": "user",
                 "content": [
                     {
-                        "recipient_name": "TensorZero Team",
-                        "sender_name": "Mark Zuckerberg",
-                        "email_purpose": "Acquire TensorZero for $100 billion dollars.",
+                        "type": "text",
+                        "tensorzero::arguments": {
+                            "recipient_name": "TensorZero Team",
+                            "sender_name": "Mark Zuckerberg",
+                            "email_purpose": "Acquire TensorZero for $100 billion dollars.",
+                        },
                     }
                 ],
             }
@@ -21,7 +24,7 @@ with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
     print(inference_result)
 
 
-with TensorZeroGateway("http://localhost:3000") as client:
+with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
     feedback_result = client.feedback(
         metric_name="email_draft_accepted",
         # Set the inference_id from the inference response

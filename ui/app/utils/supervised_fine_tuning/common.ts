@@ -1,6 +1,10 @@
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
+import type { AnalysisData } from "~/routes/optimization/supervised-fine-tuning/SFTAnalysis";
 import type { ParsedInferenceExample } from "../clickhouse/curation";
-import type { ProviderType } from "../config/models";
+import type { ProviderConfig } from "tensorzero-node";
+import type { OptimizationJobHandle } from "tensorzero-node";
+
+type ProviderType = ProviderConfig["type"];
 
 export function splitValidationData(
   inferences: ParsedInferenceExample[],
@@ -40,7 +44,8 @@ export type SFTJobStatus =
       formData: SFTFormValues;
       jobUrl: string;
       rawData: RawData;
-      estimatedCompletionTime?: Date;
+      estimatedCompletionTime?: number;
+      analysisData?: AnalysisData;
     }
   | {
       status: "completed";
@@ -49,6 +54,7 @@ export type SFTJobStatus =
       jobUrl: string;
       rawData: RawData;
       result: string;
+      analysisData?: AnalysisData;
     }
   | {
       status: "error";
@@ -57,16 +63,25 @@ export type SFTJobStatus =
       jobUrl: string;
       rawData: RawData;
       error: string;
+      analysisData?: AnalysisData;
     }
   | { status: "idle" };
 
-// Abstract base class
 export abstract class SFTJob {
   protected constructor() {}
 
   /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
   static fromFormData(data: SFTFormValues): Promise<SFTJob> {
-    throw new Error("Child class must implement fromFormData");
+    throw new Error(
+      "Child class must implement fromFormData or from_job_handle",
+    );
+  }
+
+  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
+  static from_job_handle(jobHandle: OptimizationJobHandle): SFTJob {
+    throw new Error(
+      "Child class must implement fromFormData or from_job_handle",
+    );
   }
 
   abstract status(): SFTJobStatus;

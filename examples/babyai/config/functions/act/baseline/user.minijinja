@@ -1,0 +1,17 @@
+Current Observation:
+{{ observation }}
+
+Only respond with a JSON object with the following schema:
+
+{
+  "thinking": "..."
+  "action": "..."
+}
+
+The "action" field is required and must always contain one of the above actions at a time and no other text.
+
+Example:
+
+User: a wall 4 steps forward
+a wall 3 steps left
+Agent: {"thinking": "Since there is a wall 4 steps forward and 3 steps to the left, the best action to take would be to turn right, allowing you to navigate without hitting the walls.", "action": "turn right"}

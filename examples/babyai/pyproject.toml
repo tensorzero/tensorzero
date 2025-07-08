@@ -1,0 +1,12 @@
+[project]
+name = "tensorzero-examples-babyai"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "altair",
+    "balrog @ git+ssh://git@github.com/balrog-ai/BALROG.git",
+    "ipykernel",
+    "pandas",
+    "tensorzero",
+]

@@ -5,15 +5,17 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
-  useLoaderData,
 } from "react-router";
 
 import { ConfigProvider } from "./context/config";
 import type { Route } from "./+types/root";
 import "./tailwind.css";
 import { getConfig } from "./utils/config/index.server";
-import { AppSidebar } from "./components/ui/sidebar/app.sidebar";
+import { AppSidebar } from "./components/layout/app.sidebar";
 import { SidebarProvider } from "./components/ui/sidebar";
+import { ContentLayout } from "./components/layout/ContentLayout";
+import { startPeriodicCleanup } from "./utils/evaluations.server";
+import { ReactQueryProvider } from "./providers/react-query";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -24,7 +26,7 @@ export const links: Route.LinksFunction = () => [
   },
   {
     rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
+    href: "https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&display=swap",
   },
   {
     rel: "icon",
@@ -34,6 +36,8 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export async function loader() {
+  // Initialize evaluation cleanup when the app loads
+  startPeriodicCleanup();
   return await getConfig();
 }
 
@@ -56,19 +60,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function App() {
-  const config = useLoaderData<typeof loader>();
+export default function App({ loaderData: config }: Route.ComponentProps) {
   return (
-    <ConfigProvider value={config}>
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full">
-          <AppSidebar />
-          <main className="flex-1 overflow-y-auto">
-            <Outlet />
-          </main>
-        </div>
-      </SidebarProvider>
-    </ConfigProvider>
+    <ReactQueryProvider>
+      <ConfigProvider value={config}>
+        <SidebarProvider>
+          <div className="fixed inset-0 flex">
+            <AppSidebar />
+            <ContentLayout>
+              <Outlet />
+            </ContentLayout>
+          </div>
+        </SidebarProvider>
+      </ConfigProvider>
+    </ReactQueryProvider>
   );
 }
 

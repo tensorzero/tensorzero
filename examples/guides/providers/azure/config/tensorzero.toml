@@ -12,7 +12,3 @@ type = "chat"
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
 model = "gpt_4o_mini_2024_07_18"
-
-# Disable observability to keep this example minimal (not recommended in production)
-[gateway]
-disable_observability = true

@@ -1,19 +1,20 @@
 import { useForm, useWatch } from "react-hook-form";
 import { useFetcher } from "react-router";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { v7 as uuid } from "uuid";
 import { type SFTFormValues, SFTFormValuesResolver } from "./types";
-import { FunctionSelector } from "./FunctionSelector";
-import { MetricSelector } from "./MetricSelector";
+import { FunctionSelector } from "~/components/function/FunctionSelector";
+import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { VariantSelector } from "./VariantSelector";
 import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import { Button } from "~/components/ui/button";
 import { Form } from "~/components/ui/form";
-import type { ChatCompletionConfig } from "~/utils/config/variant";
-import type { Config } from "~/utils/config";
-import type { CountsData } from "~/routes/api/curated_inferences/count.route";
+import type { ChatCompletionConfig, VariantInfo } from "tensorzero-node";
+import type { Config } from "tensorzero-node";
 import { models } from "./model_options";
+import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
+import { logger } from "~/utils/logger";
 
 export function SFTForm({
   config,
@@ -44,14 +45,22 @@ export function SFTForm({
     formState: { errors },
   } = form;
 
-  // Separate fetchers for counts and form submission
-  const countFetcher = useFetcher();
+  // Separate fetcher for form submission
   const formFetcher = useFetcher();
 
-  const watchedValues = useWatch({
+  const watchedFields = useWatch({
     control: form.control,
-    name: ["function", "metric", "threshold"],
+    name: ["function", "metric", "threshold"] as const,
   });
+
+  const [functionName, metricName, threshold] = watchedFields;
+  const counts = useCountFetcher({
+    functionName: functionName ?? undefined,
+    metricName: metricName ?? undefined,
+    threshold: threshold ?? undefined,
+  });
+  const isCuratedInferenceCountLow =
+    counts.curatedInferenceCount !== null && counts.curatedInferenceCount < 10;
 
   // Use formFetcher for submission errors
   const errorsOnSubmit = formFetcher.data?.errors;
@@ -61,32 +70,18 @@ export function SFTForm({
     }
   }, [errorsOnSubmit, setSubmissionPhase]);
 
-  const [counts, setCounts] = useState<CountsData>({
-    inferenceCount: null,
-    feedbackCount: null,
-    curatedInferenceCount: null,
-  });
-
-  // Update counts only from countFetcher
+  // Sets the max samples limit based on the number of curatedInferences (if available) or inferences (if available)
+  // This means it will change when the function is selected or the metric is changed to something that actually curates inferences (i.e. not None)
   useEffect(() => {
-    if (countFetcher.data && !countFetcher.data.errors) {
-      setCounts(countFetcher.data as CountsData);
+    if (counts.curatedInferenceCount !== null) {
+      form.setValue(
+        "maxSamples",
+        Math.min(100000, counts.curatedInferenceCount),
+      );
+    } else if (counts.inferenceCount !== null) {
+      form.setValue("maxSamples", Math.min(100000, counts.inferenceCount));
     }
-  }, [countFetcher.data]);
-
-  // Handle count fetching with countFetcher
-  useEffect(() => {
-    const [functionName, metricName, threshold] = watchedValues;
-
-    if (functionName) {
-      const params = new URLSearchParams();
-      params.set("function", functionName);
-      if (metricName) params.set("metric", metricName);
-      if (threshold) params.set("threshold", String(threshold));
-
-      countFetcher.load(`/api/curated_inferences/count?${params}`);
-    }
-  }, [watchedValues]);
+  }, [counts.curatedInferenceCount, counts.inferenceCount, form]);
 
   // Form submission using formFetcher
   const onSubmit = async (data: SFTFormValues) => {
@@ -97,7 +92,7 @@ export function SFTForm({
       formFetcher.submit(submitData, { method: "POST" });
       setSubmissionPhase("submitting");
     } catch (error) {
-      console.error("Submission error (likely a bug):", error);
+      logger.error("Submission error (likely a bug):", error);
     }
   };
 
@@ -113,25 +108,17 @@ export function SFTForm({
 
     const functionConfig = config.functions[selectedFunction];
     return Object.fromEntries(
-      Object.entries(functionConfig.variants || {}).filter(
-        (entry): entry is [string, ChatCompletionConfig] =>
-          entry[1].type === "chat_completion",
-      ),
+      Object.entries(functionConfig.variants || {})
+        .filter(
+          (entry): entry is [string, VariantInfo] =>
+            entry[1]?.inner.type === "chat_completion",
+        )
+        .map(([name, variant]) => [
+          name,
+          variant.inner as ChatCompletionConfig,
+        ]),
     );
   };
-
-  // Sets the max samples limit based on the number of curatedInferences (if available) or inferences (if available)
-  // This means it will change when the function is selected or the metric is changed to something that actually curates inferences (i.e. not None)
-  useEffect(() => {
-    if (counts.curatedInferenceCount !== null) {
-      form.setValue(
-        "maxSamples",
-        Math.min(100000, counts.curatedInferenceCount),
-      );
-    } else if (counts.inferenceCount !== null) {
-      form.setValue("maxSamples", Math.min(100000, counts.inferenceCount));
-    }
-  }, [counts.curatedInferenceCount, counts.inferenceCount, form]);
 
   function getButtonText() {
     switch (submissionPhase) {
@@ -147,7 +134,7 @@ export function SFTForm({
   }
 
   return (
-    <div className="mt-8">
+    <div className="mt-4">
       <Form {...form}>
         <form
           onSubmit={(e) => {
@@ -157,10 +144,12 @@ export function SFTForm({
         >
           <div className="space-y-6">
             <div className="flex flex-col gap-1">
-              <FunctionSelector
+              <FunctionSelector<SFTFormValues>
                 control={form.control}
+                name="function"
                 inferenceCount={counts.inferenceCount}
                 config={config}
+                hide_default_function={true}
               />
               {errors.function && (
                 <p className="text-xs text-red-500">
@@ -170,11 +159,14 @@ export function SFTForm({
             </div>
 
             <div className="flex flex-col">
-              <MetricSelector
+              <CurationMetricSelector<SFTFormValues>
                 control={form.control}
+                name="metric"
+                functionFieldName="function"
                 feedbackCount={counts.feedbackCount}
                 curatedInferenceCount={counts.curatedInferenceCount}
                 config={config}
+                addDemonstrations={true}
               />
 
               {errors.metric && (
@@ -205,7 +197,10 @@ export function SFTForm({
             />
           </div>
 
-          <Button type="submit" disabled={submissionPhase !== "idle"}>
+          <Button
+            type="submit"
+            disabled={submissionPhase !== "idle" || isCuratedInferenceCountLow}
+          >
             {getButtonText()}
           </Button>
           {errorsOnSubmit && (

@@ -29,7 +29,7 @@ export default function EpisodeSearchBar() {
   });
 
   const onSubmit = (data: FormValues) => {
-    navigate(`/observability/episode/${data.episodeId}`);
+    navigate(`/observability/episodes/${data.episodeId}`);
     form.reset();
   };
 
@@ -41,7 +41,7 @@ export default function EpisodeSearchBar() {
             control={form.control}
             name="episodeId"
             render={({ field }) => (
-              <FormItem className="flex-grow">
+              <FormItem className="grow">
                 <FormControl>
                   <Input
                     placeholder="00000000-0000-0000-0000-000000000000"

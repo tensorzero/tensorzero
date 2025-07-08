@@ -1,0 +1,5 @@
+error: TensorZeroDeserialize: Missing #[serde(tag = "...")] attribute
+ --> tests/ui/missing_tag.rs:2:6
+  |
+2 | enum Foo {
+  |      ^^^

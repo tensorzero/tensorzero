@@ -1,0 +1,17 @@
+# This is a simplified example for learning purposes. Do not use this in production.
+# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+
+services:
+  gateway:
+    image: tensorzero/gateway
+    volumes:
+      - ./config:/app/config:ro
+    command: --config-file /app/config/tensorzero.toml
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?Environment variable AWS_ACCESS_KEY_ID must be set.}
+      AWS_REGION: ${AWS_REGION:?Environment variable AWS_REGION must be set.}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?Environment variable AWS_SECRET_ACCESS_KEY must be set.}
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

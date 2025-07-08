@@ -1,17 +1,13 @@
-[models.gemini_1_5_flash_8b]
+[models.gemini_2_0_flash_lite]
 routing = ["google_ai_studio_gemini"]
 
-[models.gemini_1_5_flash_8b.providers.google_ai_studio_gemini]
+[models.gemini_2_0_flash_lite.providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
-model_name = "gemini-1.5-flash-8b"
+model_name = "gemini-2.0-flash-lite"
 
 [functions.my_function_name]
 type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "gemini_1_5_flash_8b"
-
-# Disable observability to keep this example minimal (not recommended in production)
-[gateway]
-disable_observability = true
+model = "gemini_2_0_flash_lite"

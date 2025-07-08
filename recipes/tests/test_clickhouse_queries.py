@@ -1,9 +1,11 @@
 import json
 import os
 from time import sleep
+from typing import Any, Dict
 from uuid import UUID
 
-from clickhouse_connect import get_client
+import pandas as pd
+from clickhouse_connect import get_client  # type: ignore
 from tensorzero.util import uuid7
 
 
@@ -17,10 +19,13 @@ def test_double_feedback_query() -> None:
     This test checks that the query works as expected.
     """
 
-    assert "CLICKHOUSE_URL" in os.environ, "CLICKHOUSE_URL environment variable not set"
-    client = get_client(dsn=os.environ["CLICKHOUSE_URL"])
+    assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, (
+        "TENSORZERO_CLICKHOUSE_URL environment variable not set"
+    )
+    client = get_client(dsn=os.environ["TENSORZERO_CLICKHOUSE_URL"])
+
     # Insert an Inference we can use to assign feedback to
-    inference = {
+    inference: Dict[str, Any] = {
         "id": str(uuid7()),
         "function_name": "test_function",
         "variant_name": "test_variant",
@@ -30,45 +35,53 @@ def test_double_feedback_query() -> None:
         "inference_parameters": {},
         "processing_time_ms": 100,
     }
-    query = f"""
+
+    query: str = f"""
     INSERT INTO ChatInference
     FORMAT JSONEachRow
     {json.dumps(inference)}
     """
-    client.query(query)
+
+    client.query(query)  # type: ignore
 
     # Insert a float feedback for the inference
-    first_feedback = {
+    first_feedback: Dict[str, Any] = {
         "target_id": inference["id"],
         "value": 1.0,
         "metric_name": "test_metric",
         "id": str(uuid7()),
     }
-    query = f"""
+
+    query: str = f"""
     INSERT INTO FloatMetricFeedback
     FORMAT JSONEachRow
     {json.dumps(first_feedback)}
     """
-    client.query(query)
+
+    client.query(query)  # type: ignore
+
     # Sleep to ensure the first feedback is recorded with a different timestamp
-    sleep(0.2)
+    # Since the granularity of the timestamp is 1 second, we need to sleep for more than 1 second
+    sleep(1.1)
 
     # Insert a second feedback for the inference
-    second_feedback = {
+    second_feedback: Dict[str, Any] = {
         "target_id": inference["id"],
         "value": 4.0,
         "metric_name": "test_metric",
         "id": str(uuid7()),
     }
-    query = f"""
+
+    query: str = f"""
     INSERT INTO FloatMetricFeedback
     FORMAT JSONEachRow
     {json.dumps(second_feedback)}
     """
-    client.query(query)
+
+    client.query(query)  # type: ignore
 
     # At this point we have a duplicate feedback for the inference. Let's test that the query we use in the recipes gets the later one.
-    query = """
+    query: str = """
     SELECT
         i.variant_name,
         i.input,
@@ -92,12 +105,15 @@ def test_double_feedback_query() -> None:
         i.function_name = 'test_function'
         AND i.id = %(inference_id)s
     """
+
     # NOTE: we add the last AND i.id = %(inference_id)s to ensure that the query is using the inference id we set above
     # and we can run the test multiple times without it failing
-    result = client.query_df(query, {"inference_id": inference["id"]})
-    assert len(result) == 1
-    assert result.iloc[0]["variant_name"] == "test_variant"
-    assert result.iloc[0]["input"] == "test_input"
-    assert result.iloc[0]["output"] == "test_output"
-    assert result.iloc[0]["value"] == 4.0
-    assert result.iloc[0]["episode_id"] == UUID(str(inference["episode_id"]))
+    result: pd.DataFrame = client.query_df(query, {"inference_id": inference["id"]})  # type: ignore
+    first_row = result.iloc[0]  # type: ignore
+
+    assert len(result) == 1  # type: ignore
+    assert first_row["variant_name"] == "test_variant"
+    assert first_row["input"] == "test_input"
+    assert first_row["output"] == "test_output"
+    assert first_row["value"] == 4.0
+    assert first_row["episode_id"] == UUID(str(inference["episode_id"]))

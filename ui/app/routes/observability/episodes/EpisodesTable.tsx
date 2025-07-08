@@ -5,8 +5,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
 import type { EpisodeByIdRow } from "~/utils/clickhouse/inference";
+import { TableItemShortUuid } from "~/components/ui/TableItems";
 
 export default function EpisodesTable({
   episodes,
@@ -41,30 +43,30 @@ export default function EpisodesTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {episodes.map((episode) => (
-            <TableRow key={episode.episode_id} id={episode.episode_id}>
-              <TableCell className="max-w-[200px] lg:max-w-none">
-                <a
-                  href={`/observability/episode/${episode.episode_id}`}
-                  className="block no-underline"
-                >
-                  <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                    {episode.episode_id}
-                  </code>
-                </a>
-              </TableCell>
-              <TableCell>{episode.count}</TableCell>
-              <TableCell className="max-w-[200px] lg:max-w-none">
-                <span className="block overflow-hidden text-ellipsis whitespace-nowrap">
-                  {formatTimeRange(
-                    new Date(episode.start_time),
-                    new Date(episode.end_time),
-                    episode.count,
-                  )}
-                </span>
-              </TableCell>
-            </TableRow>
-          ))}
+          {episodes.length === 0 ? (
+            <TableEmptyState message="No episodes found" />
+          ) : (
+            episodes.map((episode) => (
+              <TableRow key={episode.episode_id} id={episode.episode_id}>
+                <TableCell className="max-w-[200px] lg:max-w-none">
+                  <TableItemShortUuid
+                    id={episode.episode_id}
+                    link={`/observability/episodes/${episode.episode_id}`}
+                  />
+                </TableCell>
+                <TableCell>{episode.count}</TableCell>
+                <TableCell className="max-w-[200px] lg:max-w-none">
+                  <span className="block overflow-hidden text-ellipsis whitespace-nowrap">
+                    {formatTimeRange(
+                      new Date(episode.start_time),
+                      new Date(episode.end_time),
+                      episode.count,
+                    )}
+                  </span>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
         </TableBody>
       </Table>
     </div>

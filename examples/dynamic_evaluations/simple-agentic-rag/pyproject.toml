@@ -1,0 +1,13 @@
+[project]
+name = "tensorzero-examples-rag-retrieval-augmented-generation-simple-agentic-rag"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "ipykernel",
+    "jupyter",
+    "markdownify",
+    "tensorzero",
+    "tqdm>=4.67.1",
+    "wikipedia",
+]

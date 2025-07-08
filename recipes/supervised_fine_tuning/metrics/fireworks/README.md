@@ -1,7 +1,7 @@
 # TensorZero Recipe: Supervised Fine-Tuning with Fireworks
 
 The `fireworks.ipynb` notebook provides a step-by-step recipe to perform supervised fine-tuning with Fireworks based on data collected by the TensorZero Gateway.
-Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your notebook will run in and install `firectl` following the instructions in the notebook.
+Set `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero` in the shell your notebook will run in and install `firectl` following the instructions in the notebook.
 
 ## Setup
 

@@ -1,19 +1,24 @@
 from tensorzero import TensorZeroGateway
 
-with TensorZeroGateway("http://localhost:3000") as client:
+with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
     inference_result = client.inference(
         function_name="draft_email",
         input={
             "messages": [
                 {
                     "role": "user",
-                    "content": {
-                        "recipient_name": "TensorZero Team",
-                        "sender_name": "Mark Zuckerberg",
-                        "email_purpose": "Acquire TensorZero for $100 billion dollars.",
-                    },
+                    "content": [
+                        {
+                            "type": "text",
+                            "arguments": {
+                                "recipient_name": "TensorZero Team",
+                                "sender_name": "Mark Zuckerberg",
+                                "email_purpose": "Acquire TensorZero for $100 billion dollars.",
+                            },
+                        }
+                    ],
                 }
-            ]
+            ],
         },
     )
 

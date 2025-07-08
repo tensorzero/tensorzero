@@ -1,0 +1,15 @@
+[models.llama]
+routing = ["sglang"]
+
+[models.llama.providers.sglang]
+type = "sglang"
+api_base = "http://host.docker.internal:8080/v1/"  # for SGLang running locally on the host
+api_key_location = "none"  # by default, SGLang requires no API key
+model_name = "my-sglang-model"
+
+[functions.my_function_name]
+type = "chat"
+
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "llama"

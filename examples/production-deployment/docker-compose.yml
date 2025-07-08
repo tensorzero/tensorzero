@@ -1,20 +1,21 @@
 services:
   gateway:
-    container_name: tensorzero-gateway
     image: tensorzero/gateway
     volumes:
       - ./config:/app/config:ro
       - ${GCP_VERTEX_CREDENTIALS_PATH:-/dev/null}:/app/gcp-credentials.json:ro
+    command: --config-file /app/config/tensorzero.toml
     environment:
-      - GCP_VERTEX_CREDENTIALS_PATH=${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
-      - CLICKHOUSE_URL=${CLICKHOUSE_URL}
+      GCP_VERTEX_CREDENTIALS_PATH: ${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
     env_file:
       - ${ENV_FILE:-.env}
     ports:
       - "3000:3000"
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
-      test: wget --spider --tries 1 http://localhost:3000/status || exit 1
+      test: wget --spider --tries 1 http://localhost:3000/status
       interval: 15s
       timeout: 1s
       retries: 2

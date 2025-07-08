@@ -1,0 +1,58 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.act]
+type = "json"
+system_schema = "functions/act/system_schema.json"
+user_schema = "functions/act/user_schema.json"
+output_schema = "functions/act/output_schema.json"
+
+[functions.act.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "functions/act/baseline/system.minijinja"
+user_template = "functions/act/baseline/user.minijinja"
+json_mode = "on"
+
+[functions.act.variants.history]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "functions/act/history/system.minijinja"
+user_template = "functions/act/history/user.minijinja"
+json_mode = "on"
+
+[functions.act.variants.reasoning]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "functions/act/reasoning/system.minijinja"
+user_template = "functions/act/reasoning/user.minijinja"
+json_mode = "on"
+
+[functions.act.variants.history_and_reasoning]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "functions/act/history_and_reasoning/system.minijinja"
+user_template = "functions/act/history_and_reasoning/user.minijinja"
+json_mode = "on"
+
+# [functions.act.variants.history_and_reasoning_sft]
+# type = "chat_completion"
+# model = "openai::ft:gpt-4o-mini-2024-07-18:tensorzero::XXXXXXXX"
+# system_template = "functions/act/history_and_reasoning/system.minijinja"
+# user_template = "functions/act/history_and_reasoning/user.minijinja"
+# json_mode = "on"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.episode_return]
+level = "episode"
+optimize = "max"
+type = "float"
+
+[metrics.progression]
+level = "episode"
+optimize = "max"
+type = "float"

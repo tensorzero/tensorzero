@@ -1,8 +1,8 @@
 import { Badge } from "~/components/ui/badge";
-import type { ProviderType } from "~/utils/config/models";
+import type { ProviderConfig } from "tensorzero-node";
 
 interface ModelBadgeProps {
-  provider: ProviderType;
+  provider: ProviderConfig["type"];
 }
 
 export function ModelBadge({ provider }: ModelBadgeProps) {
@@ -17,7 +17,7 @@ export function ModelBadge({ provider }: ModelBadgeProps) {
   );
 }
 
-function formatProvider(provider: ProviderType): {
+function formatProvider(provider: ProviderConfig["type"]): {
   name: string;
   className: string;
 } {
@@ -34,9 +34,21 @@ function formatProvider(provider: ProviderType): {
         className:
           "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
       };
+    case "aws_sagemaker":
+      return {
+        name: "AWS Sagemaker",
+        className:
+          "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
+      };
     case "azure":
       return {
         name: "Azure",
+        className:
+          "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+      };
+    case "deepseek":
+      return {
+        name: "DeepSeek",
         className:
           "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
       };
@@ -67,6 +79,11 @@ function formatProvider(provider: ProviderType): {
         name: "Google AI Studio",
         className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
       };
+    case "groq":
+      return {
+        name: "Groq",
+        className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
+      };
     case "hyperbolic":
       return {
         name: "Hyperbolic",
@@ -81,6 +98,12 @@ function formatProvider(provider: ProviderType): {
     case "openai":
       return {
         name: "OpenAI",
+        className:
+          "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+      };
+    case "openrouter":
+      return {
+        name: "OpenRouter",
         className:
           "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
       };
