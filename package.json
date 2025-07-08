@@ -14,7 +14,7 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
-      "storybook-addon-remix-react-router"
+      "msw"
     ]
   }
 }
