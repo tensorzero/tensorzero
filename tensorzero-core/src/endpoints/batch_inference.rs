@@ -673,11 +673,11 @@ pub async fn write_batch_request_row(
 ///
 /// Note: only call this function if the batch was Pending prior to being polled.
 /// We don't need to poll if the batch is failed or completed because the status will not change.
-pub async fn write_poll_batch_inference<'a>(
+pub async fn write_poll_batch_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    batch_request: &BatchRequestRow<'a>,
+    batch_request: &BatchRequestRow<'_>,
     response: PollBatchInferenceResponse,
-    config: &Config<'a>,
+    config: &Config,
 ) -> Result<PollInferenceResponse, Error> {
     match response {
         PollBatchInferenceResponse::Pending {
@@ -780,7 +780,7 @@ pub async fn write_completed_batch_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_request: &'a BatchRequestRow<'a>,
     mut response: ProviderBatchInferenceResponse,
-    config: &'a Config<'a>,
+    config: &Config,
 ) -> Result<Vec<InferenceResponse>, Error> {
     let inference_ids: Vec<Uuid> = response.elements.keys().copied().collect();
     let batch_model_inferences = get_batch_inferences(

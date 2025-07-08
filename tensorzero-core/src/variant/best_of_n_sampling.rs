@@ -763,7 +763,7 @@ fn map_evaluator_to_actual_index(evaluator_idx: usize, skipped_indices: &[usize]
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, sync::Arc};
 
     use reqwest::Client;
     use uuid::Uuid;
@@ -1264,7 +1264,7 @@ mod tests {
         let function = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::from([(
                 "best_of_n_1".into(),
-                VariantInfo {
+                Arc::new(VariantInfo {
                     inner: VariantConfig::BestOfNSampling(BestOfNSamplingConfig {
                         candidates: vec![],
                         weight: None,
@@ -1274,7 +1274,7 @@ mod tests {
                         },
                     }),
                     timeouts: Default::default(),
-                },
+                }),
             )]),
             ..Default::default()
         });

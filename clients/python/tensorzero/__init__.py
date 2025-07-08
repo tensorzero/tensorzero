@@ -5,8 +5,17 @@ import httpx
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
+    BestOfNSamplingConfig,
+    ChainOfThoughtConfig,
+    ChatCompletionConfig,
+    Config,
     Datapoint,
+    DiclConfig,
     FireworksSFTConfig,
+    FunctionConfigChat,
+    FunctionConfigJson,
+    FunctionsConfig,
+    MixtureOfNConfig,
     OpenAISFTConfig,
     OptimizationJobHandle,
     OptimizationJobInfo,
@@ -15,6 +24,7 @@ from .tensorzero import (
     ResolvedInput,
     ResolvedInputMessage,
     StoredInference,
+    VariantsConfig,
 )
 from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
@@ -91,6 +101,7 @@ __all__ = [
     "ChatDatapointInsert",
     "ChatInferenceDatapointInput",  # DEPRECATED
     "ChatInferenceResponse",
+    "Config",
     "ContentBlock",
     "Datapoint",
     "DynamicEvaluationRunEpisodeResponse",
@@ -102,6 +113,15 @@ __all__ = [
     "FinishReason",
     "FloatMetricFilter",
     "FloatMetricNode",  # DEPRECATED
+    "FunctionsConfig",
+    "FunctionConfigChat",
+    "FunctionConfigJson",
+    "VariantsConfig",
+    "ChatCompletionConfig",
+    "BestOfNSamplingConfig",
+    "DiclConfig",
+    "MixtureOfNConfig",
+    "ChainOfThoughtConfig",
     "ImageBase64",
     "ImageUrl",
     "InferenceChunk",

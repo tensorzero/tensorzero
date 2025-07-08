@@ -1,6 +1,12 @@
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
+#[cfg(feature = "pyo3")]
+use pyo3::exceptions::PyKeyError;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::IntoPyObjectExt;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -14,6 +20,8 @@ use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
+#[cfg(feature = "pyo3")]
+use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
 use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -49,7 +57,7 @@ pub fn skip_credential_validation() -> bool {
 #[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub struct Config<'c> {
+pub struct Config {
     pub gateway: GatewayConfig,
     pub models: ModelTable,                    // model name => model config
     pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
@@ -58,7 +66,7 @@ pub struct Config<'c> {
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     #[serde(skip)]
-    pub templates: TemplateConfig<'c>,
+    pub templates: TemplateConfig<'static>,
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
     pub optimizers: HashMap<String, OptimizerInfo>,
@@ -397,15 +405,15 @@ impl MetricConfigLevel {
     }
 }
 
-impl<'c> Config<'c> {
-    pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
+impl Config {
+    pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config, Error> {
         Self::load_from_path_optional_verify_credentials(config_path, true).await
     }
 
     pub async fn load_from_path_optional_verify_credentials(
         config_path: &Path,
         validate_credentials: bool,
-    ) -> Result<Config<'c>, Error> {
+    ) -> Result<Config, Error> {
         let config_table = match UninitializedConfig::read_toml_config(config_path)? {
             Some(table) => table,
             None => {
@@ -443,7 +451,7 @@ impl<'c> Config<'c> {
         Ok(config)
     }
 
-    async fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config<'c>, Error> {
+    async fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config, Error> {
         if table.is_empty() {
             tracing::info!("Config file is empty, so only default functions will be available.")
         }
@@ -757,6 +765,63 @@ impl<'c> Config<'c> {
     }
 }
 
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "Config")]
+pub struct ConfigPyClass {
+    inner: Arc<Config>,
+}
+
+#[cfg(feature = "pyo3")]
+impl ConfigPyClass {
+    pub fn new(config: Arc<Config>) -> Self {
+        Self { inner: config }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ConfigPyClass {
+    #[getter]
+    fn get_functions(&self) -> FunctionsConfigPyClass {
+        FunctionsConfigPyClass {
+            inner: self.inner.functions.clone(),
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(mapping, name = "FunctionsConfig")]
+pub struct FunctionsConfigPyClass {
+    inner: HashMap<String, Arc<FunctionConfig>>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl FunctionsConfigPyClass {
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn __getitem__<'py>(
+        &self,
+        py: Python<'py>,
+        function_name: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let f = self
+            .inner
+            .get(function_name)
+            .ok_or_else(|| PyKeyError::new_err(function_name.to_string()))?;
+        match &**f {
+            FunctionConfig::Chat(_) => {
+                FunctionConfigChatPyClass { inner: f.clone() }.into_bound_py_any(py)
+            }
+            FunctionConfig::Json(_) => {
+                FunctionConfigJsonPyClass { inner: f.clone() }.into_bound_py_any(py)
+            }
+        }
+    }
+}
+
 /// A trait for loading configs with a base path
 pub trait LoadableConfig<T> {
     fn load<P: AsRef<Path>>(self, base_path: P) -> Result<T, Error>;
@@ -907,7 +972,7 @@ impl UninitializedFunctionConfig {
                 let variants = params
                     .variants
                     .into_iter()
-                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
+                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, Arc::new(v))))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
                 for (name, variant) in variants.iter() {
                     if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
@@ -954,7 +1019,7 @@ impl UninitializedFunctionConfig {
                 let variants = params
                     .variants
                     .into_iter()
-                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
+                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, Arc::new(v))))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
 
                 for (name, variant) in variants.iter() {

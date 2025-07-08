@@ -473,7 +473,7 @@ impl ClickHouseConnectionInfo {
 
     pub async fn list_inferences(
         &self,
-        config: &Config<'_>,
+        config: &Config,
         opts: &ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInference>, Error> {
         let (sql, params) = generate_list_inferences_sql(config, opts)?;
