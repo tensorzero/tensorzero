@@ -9,7 +9,7 @@ import { VariantSelector } from "./VariantSelector";
 import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import { Button } from "~/components/ui/button";
-import { Form } from "~/components/ui/form";
+import { Form, FormField, FormItem, FormLabel } from "~/components/ui/form";
 import type { ChatCompletionConfig, VariantInfo } from "tensorzero-node";
 import type { Config } from "tensorzero-node";
 import { models } from "./model_options";
@@ -144,13 +144,22 @@ export function SFTForm({
         >
           <div className="space-y-6">
             <div className="flex flex-col gap-1">
-              <FunctionSelector<SFTFormValues>
+              <FormField
                 control={form.control}
                 name="function"
-                inferenceCount={counts.inferenceCount}
-                config={config}
-                hide_default_function={true}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="sr-only">Function</FormLabel>
+                    <FunctionSelector
+                      selected={field.value}
+                      onSelect={field.onChange}
+                      functions={config.functions}
+                      hideDefaultFunction={true}
+                    />
+                  </FormItem>
+                )}
               />
+
               {errors.function && (
                 <p className="text-xs text-red-500">
                   {errors.function.message}

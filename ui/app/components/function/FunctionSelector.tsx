@@ -1,6 +1,3 @@
-import type { Control, Path } from "react-hook-form";
-import type { Config } from "tensorzero-node";
-import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import {
   Popover,
   PopoverContent,
@@ -19,142 +16,121 @@ import {
 } from "~/components/ui/command";
 import clsx from "clsx";
 import { getFunctionTypeIcon } from "~/utils/icon";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import type { FunctionConfig } from "tensorzero-node";
 
-type FunctionSelectorProps<T extends Record<string, unknown>> = {
-  control: Control<T>;
-  name: Path<T>;
-  inferenceCount: number | null;
-  config: Config;
-  hide_default_function?: boolean;
-};
+interface FunctionSelectorProps {
+  selected: string | null;
+  onSelect?: (functionName: string) => void;
+  functions: { [x: string]: FunctionConfig | undefined };
+  hideDefaultFunction?: boolean;
+}
 
-export function FunctionSelector<T extends Record<string, unknown>>({
-  control,
-  name,
-  config,
-  hide_default_function = false,
-}: FunctionSelectorProps<T>) {
+export function FunctionTypeIcon({ type }: { type: FunctionConfig["type"] }) {
+  const iconConfig = getFunctionTypeIcon(type);
+  return (
+    <div className={`${iconConfig.iconBg} rounded-sm p-0.5`}>
+      {iconConfig.icon}
+    </div>
+  );
+}
+
+export function FunctionSelector({
+  selected,
+  onSelect,
+  functions,
+  hideDefaultFunction = false,
+}: FunctionSelectorProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  const handleInputChange = (input: string) => {
-    setInputValue(input);
-  };
+  const functionEntries = useMemo(
+    () =>
+      Object.entries(functions).filter(
+        ([name]) => !(hideDefaultFunction && name === "tensorzero::default"),
+      ),
+    [functions, hideDefaultFunction],
+  );
 
-  const renderButtonContent = (fieldValue: string) => {
-    const currentFunctionName = fieldValue;
-    const selectedFn = currentFunctionName
-      ? config.functions[currentFunctionName]
-      : undefined;
-
-    if (selectedFn) {
-      const iconConfig = getFunctionTypeIcon(selectedFn.type);
-      return (
-        <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
-          <div className={`${iconConfig.iconBg} rounded-sm p-0.5`}>
-            {iconConfig.icon}
-          </div>
-          <span className="truncate text-sm">{fieldValue}</span>
-        </div>
-      );
-    } else {
-      return (
-        <div className="text-fg-muted flex items-center gap-x-2">
-          <Functions className="text-fg-muted h-4 w-4 shrink-0" />
-          <span className="text-fg-secondary flex text-sm">
-            Select a function
-          </span>
-        </div>
-      );
-    }
-  };
+  const selectedFn = selected ? functions[selected] : undefined;
 
   return (
-    <FormField
-      control={control}
-      name={name}
-      render={({ field }) => (
-        <FormItem className="flex flex-col gap-1">
-          <FormLabel className="sr-only">Function</FormLabel>
-          <div className="w-full space-y-2">
-            <Popover open={open} onOpenChange={setOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={open}
-                  className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border font-normal hover:cursor-pointer"
-                >
-                  <div className="min-w-0 flex-1">
-                    {renderButtonContent(field.value as string)}
-                  </div>
-                  <ChevronDown
-                    className={clsx(
-                      "text-fg-muted group-hover:text-fg-tertiary ml-2 h-4 w-4 shrink-0 transition duration-300 ease-out",
-                      open ? "-rotate-180" : "rotate-0",
-                    )}
-                  />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                className="w-[var(--radix-popover-trigger-width)] p-0"
-                align="start"
-              >
-                <Command>
-                  <CommandInput
-                    placeholder="Find a function..."
-                    value={inputValue}
-                    onValueChange={handleInputChange}
-                    className="h-9"
-                  />
-                  <CommandList>
-                    <CommandEmpty className="px-4 py-2 text-sm">
-                      No functions found.
-                    </CommandEmpty>
-                    <CommandGroup>
-                      {Object.entries(config.functions)
-                        .filter(([name]) => {
-                          const passesDefaultFilter =
-                            !hide_default_function ||
-                            name !== "tensorzero::default";
-                          const passesSearchFilter = name
-                            .toLowerCase()
-                            .includes(inputValue.toLowerCase());
-                          return passesDefaultFilter && passesSearchFilter;
-                        })
-                        .map(([name, fn]) => {
-                          const iconConfig = getFunctionTypeIcon(fn.type);
-                          return (
-                            <CommandItem
-                              key={name}
-                              value={name}
-                              onSelect={() => {
-                                field.onChange(name);
-                                setInputValue("");
-                                setOpen(false);
-                              }}
-                              className="group flex w-full items-center gap-2"
-                            >
-                              <div className="flex min-w-0 flex-1 items-center gap-2">
-                                <div
-                                  className={`${iconConfig.iconBg} rounded-sm p-0.5`}
-                                >
-                                  {iconConfig.icon}
-                                </div>
-                                <span className="truncate">{name}</span>
-                              </div>
-                            </CommandItem>
-                          );
-                        })}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-        </FormItem>
-      )}
-    />
+    // TODO Pass through classname here?
+    <div className="w-full space-y-2">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          {/* TODO We should have a button variant for comboboxes */}
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border px-3 font-normal hover:cursor-pointer"
+          >
+            <div className="min-w-0 flex-1">
+              {selectedFn ? (
+                <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
+                  <FunctionTypeIcon type={selectedFn.type} />
+                  <span className="truncate text-sm">{selected}</span>
+                </div>
+              ) : (
+                <div className="text-fg-muted flex items-center gap-x-2">
+                  <Functions className="text-fg-muted h-4 w-4 shrink-0" />
+                  <span className="text-fg-secondary flex text-sm">
+                    Select a function
+                  </span>
+                </div>
+              )}
+            </div>
+            <ChevronDown
+              className={clsx(
+                "text-fg-muted group-hover:text-fg-tertiary ml-2 h-4 w-4 shrink-0 transition duration-300 ease-out",
+                open ? "-rotate-180" : "rotate-0",
+              )}
+            />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          className="w-[var(--radix-popover-trigger-width)] p-0"
+          align="start"
+        >
+          <Command>
+            {/* `pl-1` to align input text with command item text so it's all neatly in a column */}
+            <CommandInput
+              placeholder="Find a function..."
+              value={inputValue}
+              onValueChange={setInputValue}
+              className="h-9 pl-1"
+            />
+
+            <CommandList>
+              <CommandEmpty className="flex items-center justify-center p-4 text-sm">
+                No functions found.
+              </CommandEmpty>
+
+              <CommandGroup>
+                {functionEntries.map(
+                  ([name, fn]) =>
+                    fn && (
+                      <CommandItem
+                        key={name}
+                        value={name}
+                        onSelect={() => {
+                          onSelect?.(name);
+                          setInputValue("");
+                          setOpen(false);
+                        }}
+                        className="flex items-center gap-2"
+                      >
+                        <FunctionTypeIcon type={fn.type} />
+                        <span className="truncate">{name}</span>
+                      </CommandItem>
+                    ),
+                )}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }
