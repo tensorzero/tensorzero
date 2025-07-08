@@ -2,6 +2,6 @@
 import type { FireworksSFTJobHandle } from "./FireworksSFTJobHandle";
 import type { OpenAISFTJobHandle } from "./OpenAISFTJobHandle";
 
-export type OptimizerJobHandle =
+export type OptimizationJobHandle =
   | ({ type: "openai_sft" } & OpenAISFTJobHandle)
   | ({ type: "fireworks_sft" } & FireworksSFTJobHandle);

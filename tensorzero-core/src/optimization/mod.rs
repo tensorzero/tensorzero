@@ -131,8 +131,6 @@ impl std::fmt::Display for OptimizationJobInfoPyClass {
 }
 
 #[derive(Debug, Serialize, PartialEq)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str, eq))]
 pub enum OptimizationJobStatus {
     Pending,

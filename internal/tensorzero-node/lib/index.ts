@@ -1,7 +1,7 @@
 import { createRequire } from "module";
 import {
-  OptimizerJobHandle,
-  OptimizerStatus,
+  OptimizationJobHandle,
+  OptimizationJobInfo,
   LaunchOptimizationWorkflowParams,
   FunctionConfig,
   MetricConfig,
@@ -46,7 +46,7 @@ export class TensorZeroClient {
 
   async experimentalLaunchOptimizationWorkflow(
     params: LaunchOptimizationWorkflowParams,
-  ): Promise<OptimizerJobHandle> {
+  ): Promise<OptimizationJobHandle> {
     const paramsString = JSON.stringify(params, (_key, value) =>
       typeof value === "bigint" ? value.toString() : value,
     );
@@ -54,16 +54,16 @@ export class TensorZeroClient {
       await this.nativeClient.experimentalLaunchOptimizationWorkflow(
         paramsString,
       );
-    return JSON.parse(jobHandleString) as OptimizerJobHandle;
+    return JSON.parse(jobHandleString) as OptimizationJobHandle;
   }
 
   async experimentalPollOptimization(
-    jobHandle: OptimizerJobHandle,
-  ): Promise<OptimizerStatus> {
+    jobHandle: OptimizationJobHandle,
+  ): Promise<OptimizationJobInfo> {
     const jobHandleString = JSON.stringify(jobHandle);
     const statusString =
       await this.nativeClient.experimentalPollOptimization(jobHandleString);
-    return JSON.parse(statusString) as OptimizerStatus;
+    return JSON.parse(statusString) as OptimizationJobInfo;
   }
 
   listFunctions(): string[] {

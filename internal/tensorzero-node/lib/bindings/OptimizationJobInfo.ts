@@ -2,7 +2,7 @@
 import type { OptimizerOutput } from "./OptimizerOutput";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type OptimizerStatus =
+export type OptimizationJobInfo =
   | {
       status: "pending";
       message: string;
