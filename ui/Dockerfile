@@ -59,33 +59,33 @@ WORKDIR /build/ui/app/utils/minijinja
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 RUN wasm-pack build --features console_error_panic_hook
 
-# ========== combined-rust-build-env ==========
+# ========== tensorzero-node-build-env ==========
 
-FROM chef AS combined-rust-build-env
+FROM rust:latest AS tensorzero-node-build-env
 
-# Install Node.js and pnpm for tensorzero-node build
-RUN apt-get update && apt-get install -y nodejs npm clang libc++-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm
 
+COPY . /build
+WORKDIR /build/internal/tensorzero-node
+
+RUN pnpm install --frozen-lockfile && pnpm run build
+
+
+# ========== evaluations-build-env ==========
+
+FROM chef AS evaluations-build-env
+
+RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /tensorzero
-
-# Copy cargo chef recipe and cook dependencies for all Rust crates
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
-
-# Copy source code
+RUN cargo chef cook --release -p evaluations --recipe-path recipe.json
 COPY . /tensorzero
 
 ARG CARGO_BUILD_FLAGS=""
 
-# Build evaluations binary and run ts-rs tests in a single stage
 RUN cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
-    cargo test --release --no-run && \
     cp -r /tensorzero/target/release /release
-
-# Build tensorzero-node bindings in the same stage
-WORKDIR /tensorzero/internal/tensorzero-node
-RUN pnpm install --frozen-lockfile && pnpm run build
 
 # ========== build-env ==========
 
@@ -96,10 +96,10 @@ WORKDIR /app
 # Copy dependencies from development-dependencies-env
 COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 COPY --from=development-dependencies-env /app/ui/node_modules* /app/ui/node_modules
-# Copy tensorzero-node binding from combined build stage
-COPY --from=combined-rust-build-env /tensorzero/internal/tensorzero-node/dist /app/internal/tensorzero-node/dist
-COPY --from=combined-rust-build-env /tensorzero/internal/tensorzero-node/index.cjs /app/internal/tensorzero-node/index.cjs
-COPY --from=combined-rust-build-env /tensorzero/internal/tensorzero-node/*linux*.node /app/internal/tensorzero-node/
+# Copy tensorzero-node binding
+COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/dist /app/internal/tensorzero-node/dist
+COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/index.cjs /app/internal/tensorzero-node/index.cjs
+COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/*linux*.node /app/internal/tensorzero-node/
 
 COPY . .
 
@@ -132,8 +132,8 @@ COPY --from=build-env /app/ui/build /app/ui/build
 COPY --from=build-env /app/internal/tensorzero-node/index.cjs /app/ui/build/index.cjs
 COPY --from=build-env /app/internal/tensorzero-node/*.node /app/ui/build/
 
-# Copy evaluations binary from combined build stage
-COPY --from=combined-rust-build-env /release/evaluations /usr/local/bin/evaluations
+# Copy evaluations binary
+COPY --from=evaluations-build-env /release/evaluations /usr/local/bin/evaluations
 
 # Copy entrypoint script
 # This script calls into the /app/ui directory using `pnpm --filter=tensorzero-ui run start`
