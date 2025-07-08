@@ -373,7 +373,7 @@ fn json_output_to_content_block_chat_output(
 /// and by resolving all network resources (e.g. images).
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RenderedSample {
     pub function_name: String,
     pub input: ModelInput,

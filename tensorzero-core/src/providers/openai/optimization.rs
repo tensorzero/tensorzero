@@ -12,7 +12,7 @@ use crate::{
     error::{Error, ErrorDetails},
     inference::types::ContentBlock,
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
-    optimization::{OptimizerOutput, OptimizerStatus},
+    optimization::{OptimizationJobInfo, OptimizerOutput},
     providers::openai::PROVIDER_TYPE,
     stored_inference::RenderedSample,
 };
@@ -228,24 +228,24 @@ pub struct OpenAIFineTuningJob {
     pub status: OpenAIFineTuningJobStatus,
 }
 
-pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<OptimizerStatus, Error> {
+pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<OptimizationJobInfo, Error> {
     let estimated_finish = job
         .estimated_finish
         .and_then(|unix_timestamp| DateTime::from_timestamp(unix_timestamp as i64, 0));
     Ok(match job.status {
-        OpenAIFineTuningJobStatus::ValidatingFiles => OptimizerStatus::Pending {
+        OpenAIFineTuningJobStatus::ValidatingFiles => OptimizationJobInfo::Pending {
             message: "Validating files".to_string(),
             estimated_finish,
             trained_tokens: job.trained_tokens,
             error: job.error,
         },
-        OpenAIFineTuningJobStatus::Queued => OptimizerStatus::Pending {
+        OpenAIFineTuningJobStatus::Queued => OptimizationJobInfo::Pending {
             message: "Queued".to_string(),
             estimated_finish,
             trained_tokens: job.trained_tokens,
             error: job.error,
         },
-        OpenAIFineTuningJobStatus::Running => OptimizerStatus::Pending {
+        OpenAIFineTuningJobStatus::Running => OptimizationJobInfo::Pending {
             message: "Running".to_string(),
             estimated_finish,
             trained_tokens: job.trained_tokens,
@@ -269,7 +269,7 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizer
                 timeouts: None,
                 discard_unknown_chunks: false,
             };
-            OptimizerStatus::Completed {
+            OptimizationJobInfo::Completed {
                 output: OptimizerOutput::Model(UninitializedModelConfig {
                     routing: vec![model_name.clone().into()],
                     providers: HashMap::from([(model_name.clone().into(), model_provider)]),
@@ -277,11 +277,11 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizer
                 }),
             }
         }
-        OpenAIFineTuningJobStatus::Failed => OptimizerStatus::Failed {
+        OpenAIFineTuningJobStatus::Failed => OptimizationJobInfo::Failed {
             message: "Failed".to_string(),
             error: job.error,
         },
-        OpenAIFineTuningJobStatus::Cancelled => OptimizerStatus::Failed {
+        OpenAIFineTuningJobStatus::Cancelled => OptimizationJobInfo::Failed {
             message: "Cancelled".to_string(),
             error: job.error,
         },
@@ -374,7 +374,7 @@ mod tests {
         let status = convert_to_optimizer_status(job).unwrap();
         assert!(matches!(
             status,
-            OptimizerStatus::Completed {
+            OptimizationJobInfo::Completed {
                 output: OptimizerOutput::Model(_),
             }
         ));
@@ -392,7 +392,7 @@ mod tests {
         let status = convert_to_optimizer_status(job).unwrap();
         assert!(matches!(
             status,
-            OptimizerStatus::Completed {
+            OptimizationJobInfo::Completed {
                 output: OptimizerOutput::Model(_),
             }
         ));
@@ -406,7 +406,7 @@ mod tests {
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(running).unwrap();
         let status = convert_to_optimizer_status(job).unwrap();
-        assert!(matches!(status, OptimizerStatus::Pending { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "failed" status
         let failed = json!({
@@ -417,7 +417,7 @@ mod tests {
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(failed).unwrap();
         let status = convert_to_optimizer_status(job).unwrap();
-        assert!(matches!(status, OptimizerStatus::Failed { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Failed { .. }));
 
         // Test for "validating_files" status
         let validating = json!({
@@ -428,7 +428,7 @@ mod tests {
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(validating).unwrap();
         let status = convert_to_optimizer_status(job).unwrap();
-        assert!(matches!(status, OptimizerStatus::Pending { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "queued" status
         let queued = json!({
@@ -439,7 +439,7 @@ mod tests {
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(queued).unwrap();
         let status = convert_to_optimizer_status(job).unwrap();
-        assert!(matches!(status, OptimizerStatus::Pending { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for unknown status - this should result in an error from convert_to_optimizer_status
         // as OpenAIFineTuningJobStatus deserialization would fail first if it's truly unknown.
