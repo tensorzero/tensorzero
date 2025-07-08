@@ -26,6 +26,7 @@ use python_helpers::{
 };
 use tensorzero_core::{
     clickhouse::ClickhouseFormat,
+    config_parser::ConfigPyClass,
     inference::types::{
         pyo3_helpers::{
             deserialize_from_pyobj, deserialize_from_stored_sample, serialize_to_dict,
@@ -298,6 +299,14 @@ impl BaseTensorZeroGateway {
             include_original_response.unwrap_or(false),
         )?;
         serialize_to_dict(this.py(), params)
+    }
+
+    fn get_config(&self) -> PyResult<ConfigPyClass> {
+        let config = self
+            .client
+            .get_config()
+            .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
+        Ok(ConfigPyClass::new(config))
     }
 }
 

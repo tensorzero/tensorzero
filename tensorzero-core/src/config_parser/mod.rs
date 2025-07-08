@@ -5,6 +5,8 @@ use object_store::{ObjectStore, PutPayload};
 use pyo3::exceptions::PyKeyError;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::IntoPyObjectExt;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -18,7 +20,8 @@ use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{
-    FunctionConfig, FunctionConfigChat, FunctionConfigJson, FunctionConfigPyClass,
+    FunctionConfig, FunctionConfigChat, FunctionConfigChatPyClass, FunctionConfigJson,
+    FunctionConfigJsonPyClass,
 };
 use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::StaticJSONSchema;
@@ -55,7 +58,6 @@ pub fn skip_credential_validation() -> bool {
 #[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Config {
     pub gateway: GatewayConfig,
     pub models: ModelTable,                    // model name => model config
@@ -765,12 +767,24 @@ impl Config {
 }
 
 #[cfg(feature = "pyo3")]
+#[pyclass(name = "Config")]
+pub struct ConfigPyClass {
+    inner: Arc<Config>,
+}
+
+impl ConfigPyClass {
+    pub fn new(config: Arc<Config>) -> Self {
+        Self { inner: config }
+    }
+}
+
+#[cfg(feature = "pyo3")]
 #[pymethods]
-impl Config {
+impl ConfigPyClass {
     #[getter]
     fn get_functions(&self) -> FunctionsConfigPyClass {
         FunctionsConfigPyClass {
-            inner: self.functions.clone(),
+            inner: self.inner.functions.clone(),
         }
     }
 }
@@ -787,12 +801,23 @@ impl FunctionsConfigPyClass {
         self.inner.len()
     }
 
-    fn __getitem__(&self, function_name: &str) -> PyResult<FunctionConfigPyClass> {
+    fn __getitem__<'py>(
+        &self,
+        py: Python<'py>,
+        function_name: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let f = self
             .inner
             .get(function_name)
             .ok_or_else(|| PyKeyError::new_err(function_name.to_string()))?;
-        Ok(FunctionConfigPyClass { inner: f.clone() })
+        match &**f {
+            FunctionConfig::Chat(_) => {
+                FunctionConfigChatPyClass { inner: f.clone() }.into_bound_py_any(py)
+            }
+            FunctionConfig::Json(_) => {
+                FunctionConfigJsonPyClass { inner: f.clone() }.into_bound_py_any(py)
+            }
+        }
     }
 }
 

@@ -1,7 +1,14 @@
 #[cfg(feature = "pyo3")]
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+#[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 #[cfg(feature = "pyo3")]
-use pyo3::exceptions::PyKeyError;
+use crate::variant::{
+    BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
+    DiclConfigPyClass, MixtureOfNConfigPyClass, VariantConfig,
+};
+#[cfg(feature = "pyo3")]
+use pyo3::exceptions::{PyKeyError, PyValueError};
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
@@ -27,7 +34,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
 use crate::variant::chat_completion::TemplateSchemaInfo;
-use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo, VariantInfoPyClass};
+use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -39,8 +46,14 @@ pub enum FunctionConfig {
 }
 
 #[cfg(feature = "pyo3")]
-#[pyclass(name = "FunctionConfig")]
-pub struct FunctionConfigPyClass {
+#[pyclass(name = "FunctionConfigChat")]
+pub struct FunctionConfigChatPyClass {
+    pub inner: Arc<FunctionConfig>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "FunctionConfigJson")]
+pub struct FunctionConfigJsonPyClass {
     pub inner: Arc<FunctionConfig>,
 }
 
@@ -69,7 +82,7 @@ impl FunctionConfig {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl FunctionConfigPyClass {
+impl FunctionConfigChatPyClass {
     #[getter]
     fn get_type(&self) -> FunctionConfigType {
         self.inner.config_type()
@@ -110,6 +123,59 @@ impl FunctionConfigPyClass {
 }
 
 #[cfg(feature = "pyo3")]
+#[pymethods]
+impl FunctionConfigJsonPyClass {
+    #[getter]
+    fn get_type(&self) -> FunctionConfigType {
+        self.inner.config_type()
+    }
+
+    #[getter]
+    fn get_variants(&self) -> VariantsConfigPyClass {
+        VariantsConfigPyClass {
+            inner: self.inner.variants().clone(),
+        }
+    }
+
+    #[getter]
+    fn get_system_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .system_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+
+    #[getter]
+    fn get_user_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .user_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+
+    #[getter]
+    fn get_assistant_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .assistant_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+
+    #[getter]
+    fn get_output_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        let FunctionConfig::Json(params) = &*self.inner else {
+            return Err(PyValueError::new_err(format!(
+                "FunctionConfig is not a JSON function: {IMPOSSIBLE_ERROR_MESSAGE}"
+            )));
+        };
+        serialize_to_dict(py, params.output_schema.value)
+    }
+}
+
+#[cfg(feature = "pyo3")]
 #[pyclass(mapping, name = "VariantsConfig")]
 struct VariantsConfigPyClass {
     pub inner: HashMap<String, Arc<VariantInfo>>,
@@ -122,13 +188,27 @@ impl VariantsConfigPyClass {
         self.inner.len()
     }
 
-    fn __getitem__(&self, key: &str) -> PyResult<VariantInfoPyClass> {
+    fn __getitem__<'py>(&self, py: Python<'py>, key: &str) -> PyResult<Bound<'py, PyAny>> {
         let v = self
             .inner
             .get(key)
             .cloned()
             .ok_or_else(|| PyKeyError::new_err(key.to_string()))?;
-        Ok(VariantInfoPyClass { inner: v })
+        match &v.inner {
+            VariantConfig::ChatCompletion(_) => {
+                ChatCompletionConfigPyClass { inner: v }.into_bound_py_any(py)
+            }
+            VariantConfig::BestOfNSampling(_) => {
+                BestOfNSamplingConfigPyClass { inner: v }.into_bound_py_any(py)
+            }
+            VariantConfig::Dicl(_) => DiclConfigPyClass { inner: v }.into_bound_py_any(py),
+            VariantConfig::MixtureOfN(_) => {
+                MixtureOfNConfigPyClass { inner: v }.into_bound_py_any(py)
+            }
+            VariantConfig::ChainOfThought(_) => {
+                ChainOfThoughtConfigPyClass { inner: v }.into_bound_py_any(py)
+            }
+        }
     }
 }
 
