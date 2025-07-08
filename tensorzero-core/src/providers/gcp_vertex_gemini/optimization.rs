@@ -178,10 +178,16 @@ pub fn convert_to_optimizer_status(
                 .unwrap_or(&tuned_model.model)
                 .clone();
 
+            let endpoint_id = tuned_model
+                .endpoint
+                .as_ref()
+                .and_then(|endpoint| endpoint.rsplit('/').next())
+                .map(|id| id.to_string());
+
             let model_provider = UninitializedModelProvider {
                 config: UninitializedProviderConfig::GCPVertexGemini {
                     model_id: None,
-                    endpoint_id: tuned_model.endpoint.clone(), // This is now Option<String>
+                    endpoint_id,
                     location,
                     project_id,
                     credential_location: Some(credential_location),
