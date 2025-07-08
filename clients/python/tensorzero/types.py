@@ -238,7 +238,9 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
             type=block_type,
         )
     elif block_type == "thought":
-        return Thought(text=block["text"], type=block_type)
+        return Thought(
+            text=block["text"], signature=block.get("signature"), type=block_type
+        )
     elif block_type == "unknown":
         return UnknownContentBlock(
             data=block["data"], model_provider_name=block.get("model_provider_name")

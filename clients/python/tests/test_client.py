@@ -334,7 +334,6 @@ async def test_async_reasoning_inference(async_client: AsyncTensorZeroGateway):
     result = await async_client.inference(
         model_name="dummy::reasoner_with_signature",
         input={
-            "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": "Hello"}],
         },
         tags={"key": "value"},
