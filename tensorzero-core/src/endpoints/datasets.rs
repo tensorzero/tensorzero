@@ -1,3 +1,4 @@
+use crate::function::FunctionConfigType;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
@@ -107,56 +108,44 @@ pub enum TaggedInferenceDatabaseInsert {
 }
 
 async fn query_inference_for_datapoint(
+    config: &Config<'_>,
     clickhouse: &ClickHouseConnectionInfo,
     inference_id: Uuid,
+    function_name: String,
+    variant_name: String,
+    episode_id: Uuid,
 ) -> Result<TaggedInferenceDatabaseInsert, Error> {
-    let result = clickhouse
-        .run_query_synchronous(
-            r#"
-            SELECT
-  uint_to_uuid(i.id_uint) AS id,
+    let function_type = config.get_function(&function_name)?.config_type();
+    let result = match function_type {
+        FunctionConfigType::Chat => {
+            clickhouse.run_query_synchronous(r#"
+                SELECT * EXCEPT(timestamp),
+                "chat" AS function_type, formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                FROM ChatInference
+                    WHERE function_name = {function_name:String}
+                    AND variant_name = {variant_name:String}
+                    AND episode_id = {episode_id:String}
+                    AND id = {inference_id:String}
+                LIMIT 1
+                FORMAT JSONEachRow;"#.to_string(),
+            &HashMap::from([("function_name", function_name.as_str()), ("variant_name", variant_name.as_str()), ("episode_id", episode_id.to_string().as_str()), ("inference_id", inference_id.to_string().as_str())])).await?
+        }
+        FunctionConfigType::Json => {
+            clickhouse.run_query_synchronous(r#"
+                SELECT * EXCEPT(timestamp),
+                "json" AS function_type, formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                FROM JsonInference
+                WHERE function_name = {function_name:String}
+                AND variant_name = {variant_name:String}
+                AND episode_id = {episode_id:String}
+                AND id = {inference_id:String}
+                LIMIT 1
+                FORMAT JSONEachRow;"#.to_string(),
+            &HashMap::from([("function_name", function_name.as_str()), ("variant_name", variant_name.as_str()), ("episode_id", episode_id.to_string().as_str()), ("inference_id", inference_id.to_string().as_str())])).await?
+        }
+    };
 
-  -- Common columns (pick via IF)
-  IF(i.function_type = 'chat', c.function_name, j.function_name) AS function_name,
-  IF(i.function_type = 'chat', c.variant_name,   j.variant_name)   AS variant_name,
-  IF(i.function_type = 'chat', c.episode_id,     j.episode_id)     AS episode_id,
-  IF(i.function_type = 'chat', c.input,          j.input)          AS input,
-  IF(i.function_type = 'chat', c.output,         j.output)         AS output,
 
-  -- Chat-specific columns
-  IF(i.function_type = 'chat', c.tool_params, '') AS tool_params,
-
-  -- Inference params (common name in the union)
-  IF(i.function_type = 'chat', c.inference_params, j.inference_params) AS inference_params,
-
-  -- Processing time
-  IF(i.function_type = 'chat', c.processing_time_ms, j.processing_time_ms) AS processing_time_ms,
-
-  -- JSON-specific columns
-  IF(i.function_type = 'json', j.output_schema, '') AS output_schema,
-  IF(i.function_type = 'json', j.auxiliary_content, '') AS auxiliary_content,
-
-  -- Timestamps & tags
-  IF(i.function_type = 'chat',
-   formatDateTime(c.timestamp, '%Y-%m-%dT%H:%i:%SZ'),
-   formatDateTime(j.timestamp, '%Y-%m-%dT%H:%i:%SZ')
-) AS timestamp,
-  IF(i.function_type = 'chat', c.tags,      j.tags)      AS tags,
-
-  -- Discriminator itself
-  i.function_type
-
-FROM InferenceById i FINAL
-LEFT JOIN ChatInference c
-  ON i.id_uint = toUInt128(c.id)
-LEFT JOIN JsonInference j
-  ON i.id_uint = toUInt128(j.id)
-WHERE uint_to_uuid(i.id_uint) = {id:String}
-FORMAT JSONEachRow;"#
-                .to_string(),
-            &HashMap::from([("id", inference_id.to_string().as_str())]),
-        )
-        .await?;
 
     if result.response.is_empty() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
@@ -174,11 +163,21 @@ FORMAT JSONEachRow;"#
 }
 
 async fn insert_from_existing(
+    config: &Config<'_>,
     clickhouse: &ClickHouseConnectionInfo,
     path_params: InsertPathParams,
     existing: &ExistingInferenceInfo,
 ) -> Result<Uuid, Error> {
-    let inference_data = query_inference_for_datapoint(clickhouse, existing.inference_id).await?;
+    let { function_name, variant_name, episode_id, inference_id, output } = existing;
+    let inference_data = query_inference_for_datapoint(
+        config,
+        clickhouse,
+        existing.inference_id,
+        function_name,
+        variant_name,
+        episode_id,
+    )
+    .await?;
     let datapoint_id = Uuid::now_v7();
 
     match inference_data {
@@ -279,6 +278,7 @@ pub async fn insert_from_existing_datapoint_handler(
 ) -> Result<Json<InsertDatapointResponse>, Error> {
     validate_dataset_name(&path_params.dataset_name)?;
     let datapoint_id = insert_from_existing(
+        &app_state.config,
         &app_state.clickhouse_connection_info,
         path_params,
         &existing_inference_info,
@@ -1043,6 +1043,9 @@ pub struct DeletePathParams {
 pub struct ExistingInferenceInfo {
     pub output: OutputKind,
     pub inference_id: Uuid,
+    pub function_name: String,
+    pub variant_name: String,
+    pub episode_id: Uuid,
 }
 
 #[derive(Debug, Deserialize)]
