@@ -1,4 +1,6 @@
 #[cfg(feature = "pyo3")]
+use pyo3::exceptions::PyValueError;
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -40,6 +42,9 @@ pub fn gcp_vertex_gemini_url(
 #[cfg_attr(test, ts(export))]
 pub struct GCPVertexGeminiSFTConfig {
     pub model: String,
+    pub bucket_name: String,
+    pub project_id: String,
+    pub region: String,
     pub learning_rate_multiplier: Option<f64>,
     pub adapter_size: Option<usize>,
     pub n_epochs: Option<usize>,
@@ -53,41 +58,139 @@ pub struct GCPVertexGeminiSFTConfig {
     pub service_account: Option<String>,
     pub kms_key_name: Option<String>,
     pub tuned_model_display_name: Option<String>,
-    pub bucket_name: String,
     pub bucket_path_prefix: Option<String>, // e.g., "fine-tuning/data" (optional)
-    pub project_id: String,
-    pub region: String,
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "GCPVertexGeminiSFTConfig"))]
 pub struct UninitializedGCPVertexGeminiSFTConfig {
     pub model: String,
+    pub bucket_name: String,
+    pub project_id: String,
+    pub region: String,
     pub learning_rate_multiplier: Option<f64>,
     pub adapter_size: Option<usize>,
     pub n_epochs: Option<usize>,
     pub export_last_checkpoint_only: Option<bool>,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credentials: Option<CredentialLocation>,
-    #[cfg_attr(test, ts(type = "string | null"))]
-    pub credential_location: Option<CredentialLocation>,
     pub api_base: Option<Url>,
     pub seed: Option<u64>,
     pub service_account: Option<String>,
     pub kms_key_name: Option<String>,
     pub tuned_model_display_name: Option<String>,
-    pub bucket_name: String,
     pub bucket_path_prefix: Option<String>, // e.g., "fine-tuning/data" (optional)
-    pub project_id: String,
-    pub region: String,
+}
+
+impl std::fmt::Display for UninitializedGCPVertexGeminiSFTConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl UninitializedGCPVertexGeminiSFTConfig {
+    #[expect(clippy::too_many_arguments)]
+    #[new]
+    #[pyo3(signature = (*, model, bucket_name, project_id, region, learning_rate_multiplier=None, adapter_size=None, n_epochs=None, export_last_checkpoint_only=None, credentials=None, api_base=None, seed=None, service_account=None, kms_key_name=None, tuned_model_display_name=None, bucket_path_prefix=None))]
+    pub fn new(
+        model: String,
+        bucket_name: String,
+        project_id: String,
+        region: String,
+        learning_rate_multiplier: Option<f64>,
+        adapter_size: Option<usize>,
+        n_epochs: Option<usize>,
+        export_last_checkpoint_only: Option<bool>,
+        credentials: Option<String>,
+        api_base: Option<String>,
+        seed: Option<u64>,
+        service_account: Option<String>,
+        kms_key_name: Option<String>,
+        tuned_model_display_name: Option<String>,
+        bucket_path_prefix: Option<String>,
+    ) -> PyResult<Self> {
+        // Use Deserialize to convert the string to a CredentialLocation
+        let credentials =
+            credentials.map(|s| serde_json::from_str(&s).unwrap_or(CredentialLocation::Env(s)));
+        let api_base = api_base
+            .map(|s| {
+                Url::parse(&s)
+                    .map_err(|e| PyErr::new::<PyValueError, std::string::String>(e.to_string()))
+            })
+            .transpose()?;
+        Ok(Self {
+            model,
+            learning_rate_multiplier,
+            adapter_size,
+            n_epochs,
+            export_last_checkpoint_only,
+            credentials,
+            api_base,
+            seed,
+            service_account,
+            kms_key_name,
+            tuned_model_display_name,
+            bucket_name,
+            bucket_path_prefix,
+            project_id,
+            region,
+        })
+    }
+
+    /// Initialize the GCPVertexGeminiSFTConfig. All parameters are optional except for `model`.
+    ///
+    /// :param model: The model to use for the fine-tuning job.
+    /// :param learning_rate_multiplier: The learning rate multiplier to use for the fine-tuning job.
+    /// :param adapter_size: The adapter size to use for the fine-tuning job.
+    /// :param n_epochs: The number of epochs to use for the fine-tuning job.
+    /// :param export_last_checkpoint_only: Whether to export the last checkpoint only.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::OPENAI_API_KEY". See docs for more details.
+    /// :param credential_location: The location of the credentials to use for the fine-tuning job.
+    /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
+    /// :param seed: The seed to use for the fine-tuning job.
+    /// :param service_account: The service account to use for the fine-tuning job.
+    /// :param kms_key_name: The KMS key name to use for the fine-tuning job.
+    /// :param tuned_model_display_name: The display name to use for the fine-tuning job.
+    /// :param bucket_name: The bucket name to use for the fine-tuning job.
+    /// :param bucket_path_prefix: The bucket path prefix to use for the fine-tuning job.
+    /// :param project_id: The project ID to use for the fine-tuning job.
+    /// :param region: The region to use for the fine-tuning job.
+    #[expect(unused_variables, clippy::too_many_arguments)]
+    #[pyo3(signature = (*, model, bucket_name, project_id, region, learning_rate_multiplier=None, adapter_size=None, n_epochs=None, export_last_checkpoint_only=None, credentials=None, api_base=None, seed=None, service_account=None, kms_key_name=None, tuned_model_display_name=None, bucket_path_prefix=None))]
+    fn __init__(
+        this: Py<Self>,
+        model: String,
+        bucket_name: String,
+        project_id: String,
+        region: String,
+        learning_rate_multiplier: Option<f64>,
+        adapter_size: Option<usize>,
+        n_epochs: Option<usize>,
+        export_last_checkpoint_only: Option<bool>,
+        credentials: Option<String>,
+        api_base: Option<String>,
+        seed: Option<u64>,
+        service_account: Option<String>,
+        kms_key_name: Option<String>,
+        tuned_model_display_name: Option<String>,
+        bucket_path_prefix: Option<String>,
+    ) -> Py<Self> {
+        this
+    }
 }
 
 impl UninitializedGCPVertexGeminiSFTConfig {
     pub fn load(self) -> Result<GCPVertexGeminiSFTConfig, Error> {
         Ok(GCPVertexGeminiSFTConfig {
             model: self.model,
-            api_base: self.api_base,
+            bucket_name: self.bucket_name,
+            project_id: self.project_id,
+            region: self.region,
             learning_rate_multiplier: self.learning_rate_multiplier,
             adapter_size: self.adapter_size,
             n_epochs: self.n_epochs,
@@ -98,15 +201,13 @@ impl UninitializedGCPVertexGeminiSFTConfig {
                 PROVIDER_TYPE,
                 &DEFAULT_CREDENTIALS,
             )?,
-            credential_location: self.credential_location,
+            credential_location: self.credentials,
+            api_base: self.api_base,
             seed: self.seed,
             service_account: self.service_account,
             kms_key_name: self.kms_key_name,
             tuned_model_display_name: self.tuned_model_display_name,
-            bucket_name: self.bucket_name,
             bucket_path_prefix: self.bucket_path_prefix,
-            project_id: self.project_id,
-            region: self.region,
         })
     }
 }
