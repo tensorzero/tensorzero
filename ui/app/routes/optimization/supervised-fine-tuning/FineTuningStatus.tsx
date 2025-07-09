@@ -7,7 +7,6 @@
 import { ExternalLink } from "lucide-react";
 import { Calendar, Function } from "~/components/icons/Icons";
 import type { SFTJobStatus } from "~/utils/supervised_fine_tuning/common";
-import { SFTAnalysis } from "./SFTAnalysis";
 import { extractTimestampFromUUIDv7 } from "~/utils/common";
 import { RawDataAccordion } from "./RawDataAccordion";
 import { ProgressIndicator } from "./ProgressIndicator";
@@ -110,11 +109,6 @@ export default function LLMFineTuningStatus({
         </a>
 
         <RawDataAccordion rawData={status.rawData} />
-      </SectionLayout>
-
-      <SectionLayout>
-        <SectionHeader heading="Dataset analysis" />
-        <SFTAnalysis status={status} />
       </SectionLayout>
     </SectionsGroup>
   );
