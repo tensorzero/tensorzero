@@ -168,11 +168,15 @@ pub fn convert_to_optimizer_status(
                 })
             })?;
 
-            // Use endpoint if available, otherwise fall back to model ID
             let model_name: String = tuned_model
                 .endpoint
                 .as_ref()
-                .unwrap_or(&tuned_model.model)
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::OptimizationResponse {
+                        message: "Tuned model must have an endpoint".to_string(),
+                        provider_type: super::PROVIDER_TYPE.to_string(),
+                    })
+                })?
                 .clone();
 
             let endpoint_id = tuned_model
@@ -352,7 +356,7 @@ mod tests {
             }
         ));
 
-        // Test for "succeeded" status with tuned model but no endpoint - should use model ID as fallback
+        // Test for "succeeded" status with tuned model but no endpoint - should error
         let succeeded_no_endpoint = json!({
             "name": "projects/test-project/locations/us-central1/tuningJobs/12358",
             "state": "JOB_STATE_SUCCEEDED",
@@ -371,19 +375,21 @@ mod tests {
         });
         let job =
             serde_json::from_value::<GCPVertexGeminiFineTuningJob>(succeeded_no_endpoint).unwrap();
-        let status = convert_to_optimizer_status(
+        let result = convert_to_optimizer_status(
             job,
             location.clone(),
             project_id.clone(),
             credential_location.clone(),
-        )
-        .unwrap();
-        assert!(matches!(
-            status,
-            OptimizationJobInfo::Completed {
-                output: OptimizerOutput::Model(_),
-            }
-        ));
+        );
+
+        // Should error when endpoint is missing
+        assert!(result.is_err());
+        // Optionally, you can also check the error message
+        if let Err(error) = result {
+            assert!(error
+                .to_string()
+                .contains("Tuned model must have an endpoint"));
+        }
 
         // Test for "running" status
         let running = json!({
