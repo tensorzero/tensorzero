@@ -12,14 +12,14 @@ describe("TensorZeroClient Integration Tests", () => {
   it("client creation throws on a bad URL", async () => {
     // This should throw an error that contains "relative URL without a base"
     await expect(
-      async () => await TensorZeroClient.buildHttp("foo")
+      async () => await TensorZeroClient.buildHttp("foo"),
     ).rejects.toThrow("relative URL without a base");
   });
 
   it("should have required methods and initialize without credentials", async () => {
     const client = await buildClient();
     expect(typeof client.experimentalLaunchOptimizationWorkflow).toBe(
-      "function"
+      "function",
     );
     expect(typeof client.experimentalPollOptimization).toBe("function");
   });
@@ -39,7 +39,7 @@ async function buildClient() {
   return await TensorZeroClient.buildEmbedded(
     UI_FIXTURES_CONFIG_PATH,
     undefined,
-    undefined
+    undefined,
   );
 }
 
@@ -67,7 +67,7 @@ it("should get config with models including shorthand", async () => {
   expect(config.models["gpt-4o-mini-2024-07-18"]).toBeDefined();
   expect(config.models["llama-3.1-8b-instruct"]).toBeDefined();
   expect(
-    config.models["ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"]
+    config.models["ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"],
   ).toBeDefined();
 
   // Check routing arrays
@@ -76,7 +76,7 @@ it("should get config with models including shorthand", async () => {
     "fireworks",
   ]);
   expect(
-    config.models["ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"]!.routing
+    config.models["ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"]!.routing,
   ).toEqual(["openai"]);
 });
 
@@ -108,15 +108,15 @@ it("should get config with comprehensive function coverage", async () => {
 
   // Test variant counts
   expect(Object.keys(config.functions.extract_entities!.variants).length).toBe(
-    6
+    6,
   );
   expect(Object.keys(config.functions.write_haiku!.variants).length).toBe(3);
   expect(Object.keys(config.functions.generate_secret!.variants).length).toBe(
-    1
+    1,
   );
   expect(Object.keys(config.functions.judge_answer!.variants).length).toBe(1);
   expect(
-    Object.keys(config.functions.multi_hop_rag_agent!.variants).length
+    Object.keys(config.functions.multi_hop_rag_agent!.variants).length,
   ).toBe(4);
 });
 
@@ -160,7 +160,7 @@ it("should get config with evaluations", async () => {
   expect(config.evaluations.images!.type).toBe("static");
 
   expect(config.evaluations.entity_extraction!.function_name).toBe(
-    "extract_entities"
+    "extract_entities",
   );
   expect(config.evaluations.haiku!.function_name).toBe("write_haiku");
   expect(config.evaluations.images!.function_name).toBe("image_judger");
