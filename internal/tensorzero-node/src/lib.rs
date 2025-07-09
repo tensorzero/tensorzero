@@ -58,7 +58,7 @@ impl TensorZeroClient {
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let info = self
             .client
-            .experimental_poll_optimization(job_handle)
+            .experimental_poll_optimization(&job_handle)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let info_str =

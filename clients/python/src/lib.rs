@@ -1101,7 +1101,7 @@ impl TensorZeroGateway {
         job_handle: OptimizationJobHandle,
     ) -> PyResult<OptimizationJobInfoPyClass> {
         let client = this.as_super().client.clone();
-        let fut = client.experimental_poll_optimization(job_handle);
+        let fut = client.experimental_poll_optimization(&job_handle);
         match tokio_block_on_without_gil(this.py(), fut) {
             Ok(status) => Ok(OptimizationJobInfoPyClass::new(status)),
             Err(e) => Err(convert_error(this.py(), e)),
@@ -1815,7 +1815,7 @@ impl AsyncTensorZeroGateway {
     ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.experimental_poll_optimization(job_handle).await;
+            let res = client.experimental_poll_optimization(&job_handle).await;
             match res {
                 Ok(status) => Ok(OptimizationJobInfoPyClass::new(status)),
                 Err(e) => Python::with_gil(|py| Err(convert_error(py, e))),

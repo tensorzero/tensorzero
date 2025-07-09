@@ -919,14 +919,14 @@ impl Client {
     /// Poll an optimization job for status.
     pub async fn experimental_poll_optimization(
         &self,
-        job_handle: OptimizationJobHandle,
+        job_handle: &OptimizationJobHandle,
     ) -> Result<OptimizationJobInfo, TensorZeroError> {
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::optimization::poll_optimization(
                         &gateway.state.http_client,
-                        &job_handle,
+                        job_handle,
                     )
                     .await
                     .map_err(err_to_http)
