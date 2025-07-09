@@ -1,5 +1,6 @@
-import { getNativeTensorZeroClient } from "../supervised_fine_tuning/client";
 import type { Config } from "tensorzero-node";
+import { getConfig as getConfigNative } from "tensorzero-node";
+import { getEnv } from "../env.server";
 
 const CACHE_TTL_MS = 1000 * 60; // 1 minute
 
@@ -28,8 +29,8 @@ We will likely address this with some form of query library down the line.
 */
 
 export async function loadConfig(): Promise<Config> {
-  const tensorZeroClient = await getNativeTensorZeroClient();
-  const config = await tensorZeroClient.getConfig();
+  const env = await getEnv();
+  const config = await getConfigNative(env.TENSORZERO_UI_CONFIG_PATH);
   return config;
 }
 
