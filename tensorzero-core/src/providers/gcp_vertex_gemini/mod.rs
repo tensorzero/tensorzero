@@ -1738,6 +1738,33 @@ struct GCPVertexGeminiToolConfig<'a> {
     function_calling_config: GCPVertexGeminiFunctionCallingConfig<'a>,
 }
 
+fn capitalize_types(value: &mut Value) {
+    match value {
+        Value::Object(obj) => {
+            // Check if this object has a "type" field and capitalize it
+            if let Some(Value::String(type_str)) = obj.get_mut("type") {
+                *type_str = capitalize_type(type_str);
+            }
+
+            // Recursively process all values in the object
+            for (_, v) in obj.iter_mut() {
+                capitalize_types(v);
+            }
+        }
+        Value::Array(arr) => {
+            // Recursively process all items in the array
+            for item in arr.iter_mut() {
+                capitalize_types(item);
+            }
+        }
+        _ => {} // Other types don't need processing
+    }
+}
+
+fn capitalize_type(s: &str) -> String {
+    s.to_uppercase()
+}
+
 #[derive(Debug, PartialEq, Serialize)]
 pub struct GCPVertexGeminiSFTTool<'a> {
     #[serde(flatten)]
@@ -1746,29 +1773,11 @@ pub struct GCPVertexGeminiSFTTool<'a> {
 
 impl<'a> From<&'a Tool> for GCPVertexGeminiSFTTool<'a> {
     fn from(tool: &'a Tool) -> Self {
+        let mut parameters = tool.parameters.clone();
+        capitalize_types(&mut parameters);
         let function_declaration = GCPVertexGeminiFunctionDeclaration {
             name: &tool.name,
             description: Some(&tool.description),
-            parameters: Some(tool.parameters.clone()),
-        };
-
-        GCPVertexGeminiSFTTool {
-            tool: GCPVertexGeminiTool::FunctionDeclarations(vec![function_declaration]),
-        }
-    }
-}
-
-impl<'a> From<&'a ToolConfig> for GCPVertexGeminiSFTTool<'a> {
-    fn from(tool: &'a ToolConfig) -> Self {
-        let mut parameters = tool.parameters().clone();
-        if let Some(obj) = parameters.as_object_mut() {
-            obj.remove("additionalProperties");
-            obj.remove("$schema");
-        }
-
-        let function_declaration = GCPVertexGeminiFunctionDeclaration {
-            name: tool.name(),
-            description: Some(tool.description()),
             parameters: Some(parameters),
         };
 
