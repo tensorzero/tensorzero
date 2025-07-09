@@ -679,7 +679,7 @@ impl TensorZeroRequestBuilderExt for reqwest::RequestBuilder {
             Error::new(ErrorDetails::InferenceClient {
                 status_code: e.status(),
                 message: format!(
-                    "Error sending request to Fireworks: {}",
+                    "Error sending request: {}",
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: provider_type.to_string(),
