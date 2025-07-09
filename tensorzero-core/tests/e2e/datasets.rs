@@ -1525,49 +1525,9 @@ async fn test_datapoint_insert_output_inherit_chat() {
         .await
         .unwrap();
 
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
+    assert!(select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
-        .unwrap();
-
-    let new_updated_at = datapoint
-        .as_object_mut()
-        .unwrap()
-        .remove("updated_at")
-        .unwrap();
-    let new_updated_at = chrono::NaiveDateTime::parse_from_str(
-        new_updated_at.as_str().unwrap(),
-        CLICKHOUSE_DATETIME_FORMAT,
-    )
-    .unwrap()
-    .and_utc();
-    assert!(
-        chrono::Utc::now()
-            .signed_duration_since(new_updated_at)
-            .num_seconds()
-            < 5,
-        "Unexpected updated_at: {new_updated_at:?}"
-    );
-
-    let expected = json!({
-      "dataset_name": dataset_name,
-      "function_name": "basic_test",
-      "id": datapoint_id.to_string(),
-      "episode_id": episode_id.to_string(),
-      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Hello, world!\"}]}]}",
-      "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
-      "tool_params": "",
-      "tags": {},
-      "auxiliary": "",
-      "is_deleted": true,
-      "is_custom": false,
-      "staled_at": null,
-      "source_inference_id": inference_id.to_string(),
-    });
-    assert_eq!(datapoint, expected);
-    assert_ne!(
-        updated_at, new_updated_at,
-        "Deleting datapoint should change updated_at"
-    );
+        .is_none());
 }
 
 #[tokio::test]
@@ -1941,54 +1901,9 @@ async fn test_datapoint_insert_output_inherit_json() {
         .await
         .unwrap();
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
+    assert!(select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
-        .unwrap();
-
-    let new_updated_at = datapoint
-        .as_object_mut()
-        .unwrap()
-        .remove("updated_at")
-        .unwrap();
-    let new_updated_at = chrono::NaiveDateTime::parse_from_str(
-        new_updated_at.as_str().unwrap(),
-        CLICKHOUSE_DATETIME_FORMAT,
-    )
-    .unwrap()
-    .and_utc();
-    assert!(
-        chrono::Utc::now()
-            .signed_duration_since(new_updated_at)
-            .num_seconds()
-            < 5,
-        "Unexpected updated_at: {new_updated_at:?}"
-    );
-
-    let expected = json!({
-      "dataset_name": dataset_name,
-      "function_name": "json_success",
-      "id": datapoint_id,
-      "episode_id": episode_id,
-      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"Japan\"}}]}]}",
-      "output": "{\"raw\":\"{\\\"answer\\\":\\\"Hello\\\"}\",\"parsed\":{\"answer\":\"Hello\"}}",
-      "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
-      "tags": {},
-      "auxiliary": "",
-      "is_deleted": true,
-      "staled_at": null,
-      "is_custom": false,
-      "source_inference_id": inference_id.to_string(),
-    });
-    assert_eq!(
-        datapoint,
-        expected,
-        "Unexpected datapoint: {}",
-        serde_json::to_string_pretty(&datapoint).unwrap()
-    );
-    assert_ne!(
-        updated_at, new_updated_at,
-        "Deleting datapoint should change updated_at"
-    );
+        .is_none());
 }
 
 #[tokio::test]
@@ -2717,6 +2632,7 @@ async fn test_stale_dataset_with_datapoints() {
             "function_name": "basic_test",
             "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "Chat message 1"}]}]},
             "output": [{"type": "text", "text": "Response 1"}],
+            "is_custom": false,
         }))
         .send()
         .await
@@ -2731,6 +2647,7 @@ async fn test_stale_dataset_with_datapoints() {
             "function_name": "basic_test",
             "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "Chat message 2"}]}]},
             "output": [{"type": "text", "text": "Response 2"}],
+            "is_custom": false,
         }))
         .send()
         .await
@@ -2750,6 +2667,7 @@ async fn test_stale_dataset_with_datapoints() {
             "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Brazil"}}]}]},
             "output": {"answer": "Result 1"},
             "output_schema": {},
+            "is_custom": false,
         }))
         .send()
         .await
@@ -2765,6 +2683,7 @@ async fn test_stale_dataset_with_datapoints() {
             "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "France"}}]}]},
             "output": {"answer": "Result 2"},
             "output_schema": {},
+            "is_custom": false,
         }))
         .send()
         .await
@@ -2848,6 +2767,7 @@ async fn test_stale_dataset_already_staled() {
             "function_name": "basic_test",
             "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "Test message"}]}]},
             "output": [{"type": "text", "text": "Test response"}],
+            "is_custom": false,
         }))
         .send()
         .await
@@ -2902,6 +2822,7 @@ async fn test_stale_dataset_mixed_staled_fresh() {
             "function_name": "basic_test",
             "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "Message 1"}]}]},
             "output": [{"type": "text", "text": "Response 1"}],
+            "is_custom": false,
         }))
         .send()
         .await
@@ -2934,6 +2855,7 @@ async fn test_stale_dataset_mixed_staled_fresh() {
             "function_name": "basic_test",
             "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "Message 2"}]}]},
             "output": [{"type": "text", "text": "Response 2"}],
+            "is_custom": false,
         }))
         .send()
         .await
