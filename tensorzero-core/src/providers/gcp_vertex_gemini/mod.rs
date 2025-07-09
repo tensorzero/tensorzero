@@ -57,7 +57,7 @@ use crate::model::{
     build_creds_caching_default_with_fn, fully_qualified_name, Credential, CredentialLocation,
     ModelProvider,
 };
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_anthropic::make_gcp_sdk_credentials;
 use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
@@ -1744,39 +1744,39 @@ pub struct GCPVertexGeminiSFTTool<'a> {
     pub tool: GCPVertexGeminiTool<'a>,
 }
 
-// impl<'a> From<&'a Tool> for GCPVertexGeminiSFTTool<'a> {
-//     fn from(tool: &'a Tool) -> Self {
-//         let function_declaration = GCPVertexGeminiFunctionDeclaration {
-//             name: &tool.name,
-//             description: Some(&tool.description),
-//             parameters: Some(tool.parameters.clone()),
-//         };
+impl<'a> From<&'a Tool> for GCPVertexGeminiSFTTool<'a> {
+    fn from(tool: &'a Tool) -> Self {
+        let function_declaration = GCPVertexGeminiFunctionDeclaration {
+            name: &tool.name,
+            description: Some(&tool.description),
+            parameters: Some(tool.parameters.clone()),
+        };
 
-//         GCPVertexGeminiSFTTool {
-//             tool: GCPVertexGeminiTool::FunctionDeclarations(vec![function_declaration]),
-//         }
-//     }
-// }
+        GCPVertexGeminiSFTTool {
+            tool: GCPVertexGeminiTool::FunctionDeclarations(vec![function_declaration]),
+        }
+    }
+}
 
-// impl<'a> From<&'a ToolConfig> for GCPVertexGeminiSFTTool<'a> {
-//     fn from(tool: &'a ToolConfig) -> Self {
-//         let mut parameters = tool.parameters().clone();
-//         if let Some(obj) = parameters.as_object_mut() {
-//             obj.remove("additionalProperties");
-//             obj.remove("$schema");
-//         }
+impl<'a> From<&'a ToolConfig> for GCPVertexGeminiSFTTool<'a> {
+    fn from(tool: &'a ToolConfig) -> Self {
+        let mut parameters = tool.parameters().clone();
+        if let Some(obj) = parameters.as_object_mut() {
+            obj.remove("additionalProperties");
+            obj.remove("$schema");
+        }
 
-//         let function_declaration = GCPVertexGeminiFunctionDeclaration {
-//             name: tool.name(),
-//             description: Some(tool.description()),
-//             parameters: Some(parameters),
-//         };
+        let function_declaration = GCPVertexGeminiFunctionDeclaration {
+            name: tool.name(),
+            description: Some(tool.description()),
+            parameters: Some(parameters),
+        };
 
-//         GCPVertexGeminiSFTTool {
-//             tool: GCPVertexGeminiTool::FunctionDeclarations(vec![function_declaration]),
-//         }
-//     }
-// }
+        GCPVertexGeminiSFTTool {
+            tool: GCPVertexGeminiTool::FunctionDeclarations(vec![function_declaration]),
+        }
+    }
+}
 
 // Auto is the default mode where a tool could be called but it isn't required.
 // Any is a mode where a tool is required and if allowed_function_names is Some it has to be from that list.

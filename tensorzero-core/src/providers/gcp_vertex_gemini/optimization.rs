@@ -56,7 +56,15 @@ pub struct GCPVertexGeminiFineTuningRequest {
 impl<'a> TryFrom<&'a RenderedSample> for GCPVertexGeminiSupervisedRow<'a> {
     type Error = Error;
     fn try_from(inference: &'a RenderedSample) -> Result<Self, Self::Error> {
-        let tools = vec![]; // TODO: add tools maybe? They do not seem to affect the job and increase the size of the dataset
+        // let tools = vec![]; // TODO: add tools maybe? They do not seem to affect the job and increase the size of the dataset
+        let tools = match &inference.tool_params {
+            Some(tool_params) => tool_params
+                .tools_available
+                .iter()
+                .map(|t| t.into())
+                .collect(),
+            None => vec![],
+        };
         let mut contents =
             prepare_gcp_vertex_gemini_messages(&inference.input.messages, PROVIDER_TYPE)?;
         let system_instruction = tensorzero_to_gcp_vertex_gemini_system_message(
