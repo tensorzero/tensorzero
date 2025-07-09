@@ -45,7 +45,7 @@ pub struct LaunchOptimizationWorkflowParams {
 /// and launch the optimization job specified.
 pub async fn launch_optimization_workflow(
     http_client: &reqwest::Client,
-    config: Arc<Config<'static>>,
+    config: Arc<Config>,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     params: LaunchOptimizationWorkflowParams,
 ) -> Result<OptimizationJobHandle, Error> {

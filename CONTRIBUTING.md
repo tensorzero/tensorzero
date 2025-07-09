@@ -2,11 +2,13 @@
 
 Thank you for your interest in contributing to TensorZero!
 
-TensorZero aims to power the next generation of AI applications. We'd love to collaborate with you to make this vision a reality.
+TensorZero aims to power the next generation of AI applications.
+We'd love to collaborate with you to make this vision a reality.
 
 > [!TIP]
 >
-> In addition to community contributions, we're also hiring in NYC (in-person only). See our [open roles](https://www.tensorzero.com/jobs).
+> In addition to community contributions, we're also hiring in NYC (in-person only).
+> See our [open roles](https://www.tensorzero.com/jobs).
 
 ## License
 
@@ -21,7 +23,8 @@ Join our community on [Slack](https://www.tensorzero.com/slack) or [Discord](htt
 
 ### GitHub
 
-We use GitHub Issues to track bugs and feature requests. For general questions, technical support, and conversations not directly related to code, please use GitHub Discussions.
+We use GitHub Issues to track bugs and feature requests.
+For general questions, technical support, and conversations not directly related to code, please use GitHub Discussions.
 
 ## Contributions
 
@@ -37,13 +40,17 @@ For larger changes, please communicate with us first to avoid duplicate work or 
 You can start a discussion (GitHub, Slack, or Discord) or open an issue as a starting point.
 The team will be happy to provide feedback and guidance.
 
+At this time, we don't assign issues to new external contributors (in the past, most people we assigned issues to never submitted a PR).
+Please submit a PR directly once you're ready to start working on an issue.
+
 > [!TIP]
 >
 > See the "Technical Guide" section below for more details on building and testing TensorZero.
 
 ### Documentation
 
-We're planning to open-source our documentation pages soon. See [issue #432](https://github.com/tensorzero/tensorzero/issues/432) for more details.
+We're planning to open-source our documentation pages soon.
+See [issue #432](https://github.com/tensorzero/tensorzero/issues/432) for more details.
 
 In the meantime, please open an issue if you have suggestions or find any problems with the documentation.
 
@@ -87,6 +94,9 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Install Python (3.9+) (e.g. `uv python install 3.9` + )
 - Install Node.js (we use v22) and `npm` [→](https://nodejs.org/en)
 - Install pnpm `npm install -g pnpm@10` [→](https://pnpm.io/installation)
+
+**macOS users:** If you see Rust build errors about missing dynamic libraries for Python, set up a Python virtual environment at `tensorzero/.venv` (e.g. `uv venv` from the `tensorzero` directory)
+This ensures the correct Python libraries are available for the build.
 
 ### Optimization Recipes
 
@@ -198,7 +208,8 @@ TENSORZERO_UI_CONFIG_PATH=<path-to-config-file> # For testing, set to ./fixtures
 4. Run the dependencies: `docker compose -f ui/fixtures/docker-compose.yml up --build --force-recreate`
    (you can omit these last 2 flags to skip the build step, but they ensure you're using the latest gateway)
 
-With the dependencies running, you can run the tests with `pnpm ui:test` and the Playwright tests with `pnpm ui:test:e2e`. Similarly, you can start a development server with `pnpm ui:dev`.
+With the dependencies running, you can run the tests with `pnpm ui:test` and the Playwright tests with `pnpm ui:test:e2e`.
+Similarly, you can start a development server with `pnpm ui:dev`.
 
 There may be some Playwright tests in `main` that require feature flags to be on, so be aware of that if they fail for nonobvious reasons.
 

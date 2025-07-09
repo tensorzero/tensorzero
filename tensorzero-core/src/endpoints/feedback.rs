@@ -272,7 +272,7 @@ async fn write_comment(
 
 async fn write_demonstration(
     connection_info: ClickHouseConnectionInfo,
-    config: &Config<'_>,
+    config: &Config,
     params: &Params,
     inference_id: Uuid,
     feedback_id: Uuid,
@@ -313,7 +313,7 @@ async fn write_demonstration(
 
 async fn write_float(
     connection_info: ClickHouseConnectionInfo,
-    config: &Config<'_>,
+    config: &Config,
     params: &Params,
     target_id: Uuid,
     feedback_id: Uuid,
@@ -348,7 +348,7 @@ async fn write_float(
 
 async fn write_boolean(
     connection_info: ClickHouseConnectionInfo,
-    config: &Config<'_>,
+    config: &Config,
     params: &Params,
     target_id: Uuid,
     feedback_id: Uuid,

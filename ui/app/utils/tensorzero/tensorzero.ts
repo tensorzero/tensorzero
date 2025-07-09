@@ -438,6 +438,9 @@ export class TensorZeroClient {
     datasetName: string,
     inferenceId: string,
     outputKind: "inherit" | "demonstration" | "none" = "inherit",
+    functionName: string,
+    variantName: string,
+    episodeId: string,
   ): Promise<DatapointResponse> {
     if (!datasetName || typeof datasetName !== "string") {
       throw new Error("Dataset name must be a non-empty string");
@@ -452,6 +455,9 @@ export class TensorZeroClient {
     const request = {
       inference_id: inferenceId,
       output: outputKind,
+      function_name: functionName,
+      variant_name: variantName,
+      episode_id: episodeId,
     };
 
     const response = await this.fetch(endpoint, {
