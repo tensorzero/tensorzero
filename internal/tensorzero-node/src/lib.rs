@@ -1,5 +1,6 @@
 #![deny(clippy::all)]
 use std::{path::Path, time::Duration};
+use url::Url;
 
 use tensorzero::{Client, ClientBuilder, ClientBuilderMode, OptimizationJobHandle};
 
@@ -14,7 +15,7 @@ pub struct TensorZeroClient {
 #[napi]
 impl TensorZeroClient {
     #[napi(factory)]
-    pub async fn build(
+    pub async fn build_embedded(
         config_path: String,
         clickhouse_url: Option<String>,
         timeout: Option<f64>,
@@ -28,6 +29,16 @@ impl TensorZeroClient {
         .build()
         .await
         .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(Self { client })
+    }
+
+    #[napi(factory)]
+    pub async fn build_http(gateway_url: String) -> Result<Self, napi::Error> {
+        let url = Url::parse(&gateway_url).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let client = ClientBuilder::new(ClientBuilderMode::HTTPGateway { url })
+            .build()
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         Ok(Self { client })
     }
 

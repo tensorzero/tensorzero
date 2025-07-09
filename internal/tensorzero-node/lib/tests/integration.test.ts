@@ -12,7 +12,7 @@ describe("TensorZeroClient Integration Tests", () => {
   it("client creation throws on a bad config path", async () => {
     // This should throw an error that contains "Failed to parse config: Internal TensorZero Error: Config file not found: "foo""
     await expect(
-      async () => await TensorZeroClient.build("foo"),
+      async () => await TensorZeroClient.buildHttp("foo"),
     ).rejects.toThrow(
       'Failed to parse config: Internal TensorZero Error: Config file not found: "foo"',
     );
@@ -38,7 +38,11 @@ describe("TensorZeroClient Integration Tests", () => {
 
 async function buildClient() {
   process.env.OPENAI_API_KEY = undefined;
-  return await TensorZeroClient.build(UI_FIXTURES_CONFIG_PATH);
+  return await TensorZeroClient.buildEmbedded(
+    UI_FIXTURES_CONFIG_PATH,
+    undefined,
+    undefined,
+  );
 }
 
 it("should get full config structure", async () => {
