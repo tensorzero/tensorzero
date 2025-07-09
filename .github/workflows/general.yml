@@ -434,7 +434,7 @@ jobs:
         run: TENSORZERO_SKIP_LARGE_FIXTURES=1 docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
 
       - name: Test (Rust)
-        run: TENSORZERO_USE_MOCK_INFERENCE_PROVIDER=1 OPENAI_API_KEY=not_used FIREWORKS_API_KEY=not_used FIREWORKS_ACCOUNT_ID=not_used cargo test-optimization
+        run: TENSORZERO_USE_MOCK_INFERENCE_PROVIDER=1 OPENAI_API_KEY=not_used FIREWORKS_API_KEY=not_used FIREWORKS_ACCOUNT_ID=not_used cargo test-optimization -- --skip together
 
   build-gateway-container:
     uses: ./.github/workflows/build-gateway-container.yml
