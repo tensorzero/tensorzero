@@ -885,16 +885,17 @@ impl Client {
                 .await
             }
             ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join("optimization_workflow").map_err(|e| {
-                    TensorZeroError::Other {
+                let url = client
+                    .base_url
+                    .join("experimental_optimization_workflow")
+                    .map_err(|e| TensorZeroError::Other {
                         source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
                             message: format!(
                                 "Failed to join base URL with /optimization_workflow endpoint: {e}"
                             ),
                         })
                         .into(),
-                    }
-                })?;
+                    })?;
                 let builder = client.http_client.post(url).json(&params);
                 let resp = self.check_http_response(builder.send().await).await?;
                 let encoded_handle = resp.text().await.map_err(|e| TensorZeroError::Other {
@@ -939,7 +940,7 @@ impl Client {
                     .map_err(|e| TensorZeroError::Other { source: e.into() })?;
                 let url = client
                     .base_url
-                    .join(&format!("optimization/{encoded_job_handle}"))
+                    .join(&format!("experimental_optimization/{encoded_job_handle}"))
                     .map_err(|e| TensorZeroError::Other {
                         source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
                             message: format!("Failed to join base URL with /optimization/{encoded_job_handle} endpoint: {e}"),
@@ -1196,7 +1197,7 @@ async fn with_embedded_timeout<R, F: Future<Output = Result<R, TensorZeroError>>
 /// This is a convenience function that wraps `Config::load_from_path_optional_verify_credentials`
 /// and returns a `TensorZeroError` instead of a `ConfigError`.
 /// This function does NOT verify credentials.
-pub async fn get_config(path: PathBuf) -> Result<Config, TensorZeroError> {
+pub async fn get_config_no_verify_credentials(path: PathBuf) -> Result<Config, TensorZeroError> {
     Config::load_from_path_optional_verify_credentials(&path, false)
         .await
         .map_err(|e| TensorZeroError::Other { source: e.into() })

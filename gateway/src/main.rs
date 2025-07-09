@@ -263,11 +263,11 @@ async fn main() {
             get(move || std::future::ready(metrics_handle.render())),
         )
         .route(
-            "/optimization_workflow",
+            "/experimental_optimization_workflow",
             post(endpoints::optimization::launch_optimization_workflow_handler),
         )
         .route(
-            "/optimization/{job_handle}",
+            "/experimental_optimization/{job_handle}",
             get(endpoints::optimization::poll_optimization_handler),
         );
 

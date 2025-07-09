@@ -93,9 +93,10 @@ impl TensorZeroClient {
 
 #[napi]
 pub async fn get_config(config_path: String) -> Result<String, napi::Error> {
-    let config = tensorzero::get_config(Path::new(&config_path).to_path_buf())
-        .await
-        .map_err(|e| napi::Error::from_reason(format!("Failed to get config: {e}")))?;
+    let config =
+        tensorzero::get_config_no_verify_credentials(Path::new(&config_path).to_path_buf())
+            .await
+            .map_err(|e| napi::Error::from_reason(format!("Failed to get config: {e}")))?;
     let config_str =
         serde_json::to_string(&config).map_err(|e| napi::Error::from_reason(e.to_string()))?;
     Ok(config_str)
