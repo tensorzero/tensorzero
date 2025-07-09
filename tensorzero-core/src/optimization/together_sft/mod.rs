@@ -7,6 +7,7 @@ use std::io::Write;
 
 use crate::config_parser::TimeoutsConfig;
 use crate::endpoints::inference::InferenceCredentials;
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::ContentBlock;
 use crate::model::{
     build_creds_caching_default, CredentialLocation, UninitializedModelConfig,
@@ -49,6 +50,8 @@ pub struct TogetherSFTConfig {
 pub struct TogetherSFTJobHandle {
     pub api_base: Url,
     pub job_id: String,
+    // A url to a human-readable page for the job.
+    pub job_url: Url,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocation>,
 }
@@ -358,8 +361,17 @@ impl Optimizer for TogetherSFTConfig {
             .await?;
         Ok(TogetherSFTJobHandle {
             api_base: self.api_base.clone(),
-            job_id: res.id,
+            job_id: res.id.clone(),
             credential_location: self.credential_location.clone(),
+            job_url: format!("https://api.together.ai/fine-tuning/{}", res.id)
+                .parse()
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!(
+                            "Failed to construct job url: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"
+                        ),
+                    })
+                })?,
         })
     }
 }

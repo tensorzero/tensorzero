@@ -3,5 +3,6 @@
 export type TogetherSFTJobHandle = {
   api_base: string;
   job_id: string;
+  job_url: string;
   credential_location: string | null;
 };
