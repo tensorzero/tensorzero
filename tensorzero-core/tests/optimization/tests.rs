@@ -55,7 +55,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let mut status;
     loop {
         status = job_handle.poll(&client, &credentials).await.unwrap();
-        println!("Status: {status:?}");
+        println!("Status: `{status:?}` Handle: `{job_handle}`");
         if matches!(status, OptimizationJobInfo::Completed { .. }) {
             break;
         }

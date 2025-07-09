@@ -1,3 +1,4 @@
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
@@ -163,7 +164,9 @@ impl UninitializedOpenAISFTConfig {
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct OpenAISFTJobHandle {
     pub job_id: String,
+    /// A url to a human-readable page for the job.
     pub job_url: Url,
+    pub job_api_url: Url,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocation>,
 }
@@ -294,13 +297,22 @@ impl Optimizer for OpenAISFTConfig {
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        let job_url = get_fine_tuning_url(
+        let job_api_url = get_fine_tuning_url(
             self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
             Some(&job.id),
         )?;
         Ok(OpenAISFTJobHandle {
             job_id: job.id.clone(),
-            job_url,
+            job_url: format!("https://platform.openai.com/finetune/{}", job.id)
+                .parse()
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!(
+                            "Failed to construct job url: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"
+                        ),
+                    })
+                })?,
+            job_api_url,
             credential_location: self.credential_location.clone(),
         })
     }
@@ -318,7 +330,7 @@ impl JobHandle for OpenAISFTJobHandle {
             PROVIDER_TYPE,
             &DEFAULT_CREDENTIALS,
         )?;
-        let mut request = client.get(self.job_url.clone());
+        let mut request = client.get(self.job_api_url.clone());
         let api_key = openai_credentials.get_api_key(credentials)?;
         if let Some(api_key) = api_key {
             request = request.bearer_auth(api_key.expose_secret());
