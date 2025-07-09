@@ -12,7 +12,7 @@ use crate::{
     model::{build_creds_caching_default, CredentialLocation},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::gcp_vertex_gemini::{
-        default_api_key_location,
+        default_api_key_location, location_subdomain_prefix,
         optimization::{
             convert_to_optimizer_status, EncryptionSpec, GCPVertexGeminiFineTuningJob,
             GCPVertexGeminiFineTuningRequest, SupervisedHyperparameters, SupervisedTuningSpec,
@@ -28,12 +28,13 @@ pub fn gcp_vertex_gemini_url(
     region: &str,
     job_id: Option<&str>,
 ) -> Result<Url, url::ParseError> {
+    let subdomain_prefix = location_subdomain_prefix(region);
     match job_id {
         Some(id) => Url::parse(&format!(
-            "https://{region}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{region}/tuningJobs/{id}"
+            "https://{subdomain_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{region}/tuningJobs/{id}"
         )),
         None => Url::parse(&format!(
-            "https://{region}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{region}/tuningJobs"
+            "https://{subdomain_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{region}/tuningJobs"
         )),
     }
 }
@@ -323,7 +324,10 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         let auth_headers = self
             .credentials
             .get_auth_headers(
-                &format!("https://{}-aiplatform.googleapis.com/", self.region),
+                &format!(
+                    "https://{}aiplatform.googleapis.com/",
+                    location_subdomain_prefix(&self.region)
+                ),
                 credentials,
             )
             .await?;

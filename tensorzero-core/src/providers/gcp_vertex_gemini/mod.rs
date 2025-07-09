@@ -419,7 +419,7 @@ pub fn parse_shorthand_url<'a>(
 // The global endpoint uses 'aiplatform.googleapis.com', while every other location
 // location uses '{location}-aiplatform.googleapis.com':
 // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations
-fn location_subdomain_prefix(location: &str) -> String {
+pub fn location_subdomain_prefix(location: &str) -> String {
     if location == "global" {
         "".to_string()
     } else {
