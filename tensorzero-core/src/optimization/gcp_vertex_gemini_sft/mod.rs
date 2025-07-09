@@ -23,20 +23,11 @@ use crate::{
     stored_inference::RenderedSample,
 };
 
-pub fn gcp_vertex_gemini_url(
-    project_id: &str,
-    region: &str,
-    job_id: Option<&str>,
-) -> Result<Url, url::ParseError> {
+pub fn gcp_vertex_gemini_base_url(project_id: &str, region: &str) -> Result<Url, url::ParseError> {
     let subdomain_prefix = location_subdomain_prefix(region);
-    match job_id {
-        Some(id) => Url::parse(&format!(
-            "https://{subdomain_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{region}/tuningJobs/{id}"
-        )),
-        None => Url::parse(&format!(
-            "https://{subdomain_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{region}/tuningJobs"
-        )),
-    }
+    Url::parse(&format!(
+        "https://{subdomain_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{region}/tuningJobs"
+    ))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -219,7 +210,6 @@ impl UninitializedGCPVertexGeminiSFTConfig {
 #[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct GCPVertexGeminiSFTJobHandle {
-    pub job_id: String,
     pub job_url: Url,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocation>,
@@ -315,7 +305,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             encryption_spec: Some(encryption_spec),
         };
 
-        let url = gcp_vertex_gemini_url(&self.project_id, &self.region, None).map_err(|e| {
+        let url = gcp_vertex_gemini_base_url(&self.project_id, &self.region).map_err(|e| {
             Error::new(ErrorDetails::InvalidBaseUrl {
                 message: e.to_string(),
             })
@@ -370,27 +360,18 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-        let job_id = job
-            .name
-            .split('/')
-            .next_back()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: "Invalid job name format in response".to_string(),
-                    raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?
-            .to_string();
-        let job_url = gcp_vertex_gemini_url(&self.project_id, &self.region, Some(&job_id))
-            .map_err(|e| {
-                Error::new(ErrorDetails::InternalError {
-                    message: format!("Failed to parse job URL: {e}"),
-                })
-            })?;
+        let subdomain_prefix = location_subdomain_prefix(&self.region);
+        let job_url = Url::parse(&format!(
+            "https://{subdomain_prefix}aiplatform.googleapis.com/v1/{}",
+            job.name
+        ))
+        .map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to parse job URL: {e}"),
+            })
+        })?;
+
         Ok(GCPVertexGeminiSFTJobHandle {
-            job_id,
             job_url,
             credential_location: self.credential_location.clone(),
             region: self.region.clone(),
