@@ -48,41 +48,10 @@ const baseRawData = {
   },
 };
 
-const analysisData = {
-  numExamples: 1000,
-  missingSystemCount: 5,
-  missingUserCount: 2,
-  messageCounts: {
-    min: 2,
-    max: 15,
-    mean: 5.7,
-    median: 5,
-    p5: 3,
-    p95: 12,
-  },
-  tokenCounts: {
-    min: 50,
-    max: 800,
-    mean: 234.5,
-    median: 220,
-    p5: 80,
-    p95: 450,
-  },
-  assistantTokenCounts: {
-    min: 20,
-    max: 400,
-    mean: 95.3,
-    median: 85,
-    p5: 35,
-    p95: 180,
-  },
-  tooLongCount: 12,
-  tokenLimit: 4096,
-};
-
 export const Idle: Story = {
   args: {
     status: { status: "idle" },
+    result: null,
   },
 };
 
@@ -94,8 +63,8 @@ export const Running: Story = {
       formData: baseFormData,
       jobUrl: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
       rawData: baseRawData,
-      analysisData,
     } satisfies SFTJobStatus,
+    result: null,
   },
 };
 
@@ -108,8 +77,9 @@ export const RunningWithEstimatedCompletion: Story = {
       jobUrl: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
       rawData: baseRawData,
       estimatedCompletionTime: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
-      analysisData,
     } satisfies SFTJobStatus,
+
+    result: null,
   },
 };
 
@@ -131,8 +101,8 @@ export const Completed: Story = {
         },
       },
       result: "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
-      analysisData,
     } satisfies SFTJobStatus,
+    result: null,
   },
 };
 
@@ -148,8 +118,8 @@ export const Error: Story = {
         message: "Training data validation failed: Invalid format in line 42",
       },
       error: "Training data validation failed: Invalid format in line 42",
-      analysisData,
     } satisfies SFTJobStatus,
+    result: null,
   },
 };
 
@@ -180,7 +150,7 @@ export const LongJobId: Story = {
         },
       },
       result: "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
-      analysisData,
     } satisfies SFTJobStatus,
+    result: null,
   },
 };

@@ -139,7 +139,7 @@ pub async fn dynamic_evaluation_run_episode(
 
 pub fn validate_variant_pins(
     variant_pins: &HashMap<String, String>,
-    config: &Config<'_>,
+    config: &Config,
 ) -> Result<(), Error> {
     for (function_name, variant_name) in variant_pins.iter() {
         let function_config = config.get_function(function_name)?;
