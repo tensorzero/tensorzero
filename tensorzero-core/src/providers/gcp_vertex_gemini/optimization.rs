@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
 use super::{
     prepare_gcp_vertex_gemini_messages, tensorzero_to_gcp_vertex_gemini_model_message,
@@ -139,30 +139,27 @@ pub fn convert_to_optimizer_status(
             .total_billable_token_count
     });
     Ok(match job.state {
-        GCPVertexGeminiFineTuningJobStatus::JobStateUnspecified => OptimizationJobInfo::Pending {
-            message: "Job State Unspecified".to_string(),
+        GCPVertexGeminiFineTuningJobStatus::JobStateUnspecified
+        | GCPVertexGeminiFineTuningJobStatus::JobStateQueued
+        | GCPVertexGeminiFineTuningJobStatus::JobStatePending
+        | GCPVertexGeminiFineTuningJobStatus::JobStateRunning
+        | GCPVertexGeminiFineTuningJobStatus::JobStatePaused
+        | GCPVertexGeminiFineTuningJobStatus::JobStateUpdating => OptimizationJobInfo::Pending {
+            message: job.state.to_string(),
             estimated_finish,
             trained_tokens,
             error: job.error,
         },
-        GCPVertexGeminiFineTuningJobStatus::JobStateQueued => OptimizationJobInfo::Pending {
-            message: "Job State Queued".to_string(),
-            estimated_finish,
-            trained_tokens,
-            error: job.error,
-        },
-        GCPVertexGeminiFineTuningJobStatus::JobStatePending => OptimizationJobInfo::Pending {
-            message: "Job State Pending".to_string(),
-            estimated_finish,
-            trained_tokens,
-            error: job.error,
-        },
-        GCPVertexGeminiFineTuningJobStatus::JobStateRunning => OptimizationJobInfo::Pending {
-            message: "Running".to_string(),
-            estimated_finish,
-            trained_tokens,
-            error: job.error,
-        },
+        GCPVertexGeminiFineTuningJobStatus::JobStateFailed
+        | GCPVertexGeminiFineTuningJobStatus::JobStateCancelling
+        | GCPVertexGeminiFineTuningJobStatus::JobStateCancelled
+        | GCPVertexGeminiFineTuningJobStatus::JobStateExpired
+        | GCPVertexGeminiFineTuningJobStatus::JobStatePartiallySucceeded => {
+            OptimizationJobInfo::Failed {
+                message: job.state.to_string(),
+                error: job.error,
+            }
+        }
         GCPVertexGeminiFineTuningJobStatus::JobStateSucceeded => {
             let tuned_model = job.tuned_model.as_ref().ok_or_else(|| {
                 Error::new(ErrorDetails::OptimizationResponse {
@@ -205,44 +202,10 @@ pub fn convert_to_optimizer_status(
                 }),
             }
         }
-        GCPVertexGeminiFineTuningJobStatus::JobStateFailed => OptimizationJobInfo::Failed {
-            message: "Failed".to_string(),
-            error: job.error,
-        },
-        GCPVertexGeminiFineTuningJobStatus::JobStateCancelling => OptimizationJobInfo::Failed {
-            message: "Cancelling".to_string(),
-            error: job.error,
-        },
-        GCPVertexGeminiFineTuningJobStatus::JobStateCancelled => OptimizationJobInfo::Failed {
-            message: "Cancelled".to_string(),
-            error: job.error,
-        },
-        GCPVertexGeminiFineTuningJobStatus::JobStatePaused => OptimizationJobInfo::Pending {
-            message: "Paused".to_string(),
-            estimated_finish,
-            trained_tokens,
-            error: job.error,
-        },
-        GCPVertexGeminiFineTuningJobStatus::JobStateExpired => OptimizationJobInfo::Failed {
-            message: "Expired".to_string(),
-            error: job.error,
-        },
-        GCPVertexGeminiFineTuningJobStatus::JobStateUpdating => OptimizationJobInfo::Pending {
-            message: "Updating".to_string(),
-            estimated_finish,
-            trained_tokens,
-            error: job.error,
-        },
-        GCPVertexGeminiFineTuningJobStatus::JobStatePartiallySucceeded => {
-            OptimizationJobInfo::Failed {
-                message: "Partially Succeeded".to_string(),
-                error: job.error,
-            }
-        }
     })
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum GCPVertexGeminiFineTuningJobStatus {
     JobStateUnspecified,
@@ -257,6 +220,13 @@ pub enum GCPVertexGeminiFineTuningJobStatus {
     JobStateExpired,
     JobStateUpdating,
     JobStatePartiallySucceeded,
+}
+
+// Get the 'SCREAMING_SNAKE_CASE' name for the enum value
+impl Display for GCPVertexGeminiFineTuningJobStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.serialize(f)
+    }
 }
 
 #[cfg(test)]
