@@ -13,7 +13,6 @@ import {
 } from "~/utils/config/models";
 import type { Route } from "./+types/route";
 import FineTuningStatus from "./FineTuningStatus";
-import { SFTResult } from "./SFTResult";
 import { SFTForm } from "./SFTForm";
 import {
   PageHeader,
@@ -161,9 +160,7 @@ function SupervisedFineTuningImpl(
         </div>
       </PageHeader>
 
-      <FineTuningStatus status={props} />
-
-      <SFTResult finalResult={finalResult} />
+      <FineTuningStatus status={props} result={finalResult} />
     </PageLayout>
   );
 }

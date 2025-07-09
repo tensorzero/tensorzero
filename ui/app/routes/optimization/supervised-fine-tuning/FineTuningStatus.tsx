@@ -23,11 +23,14 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
+import { SFTResult } from "./SFTResult";
 
 export default function LLMFineTuningStatus({
   status,
+  result,
 }: {
   status: SFTJobStatus;
+  result: string | null;
 }) {
   if (status.status === "idle") return null;
   const createdAt = extractTimestampFromUUIDv7(status.formData.jobId);
@@ -97,6 +100,7 @@ export default function LLMFineTuningStatus({
             </div>
           </SectionLayout>
         )}
+      <SFTResult finalResult={result} />
 
       <SectionLayout>
         <a
