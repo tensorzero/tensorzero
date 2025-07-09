@@ -51,6 +51,7 @@ const baseRawData = {
 export const Idle: Story = {
   args: {
     status: { status: "idle" },
+    result: null,
   },
 };
 
@@ -63,6 +64,7 @@ export const Running: Story = {
       jobUrl: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
       rawData: baseRawData,
     } satisfies SFTJobStatus,
+    result: null,
   },
 };
 
@@ -76,6 +78,8 @@ export const RunningWithEstimatedCompletion: Story = {
       rawData: baseRawData,
       estimatedCompletionTime: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
     } satisfies SFTJobStatus,
+
+    result: null,
   },
 };
 
@@ -98,6 +102,7 @@ export const Completed: Story = {
       },
       result: "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
     } satisfies SFTJobStatus,
+    result: null,
   },
 };
 
@@ -114,6 +119,7 @@ export const Error: Story = {
       },
       error: "Training data validation failed: Invalid format in line 42",
     } satisfies SFTJobStatus,
+    result: null,
   },
 };
 
@@ -145,5 +151,6 @@ export const LongJobId: Story = {
       },
       result: "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
     } satisfies SFTJobStatus,
+    result: null,
   },
 };
