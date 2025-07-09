@@ -13,7 +13,7 @@ use url::Url;
 
 pub mod migration_manager;
 pub mod query_builder;
-#[cfg(any(test, feature = "e2e_tests"))]
+#[cfg(any(test, feature = "e2e_tests", feature = "optimization_tests"))]
 pub mod test_helpers;
 
 use crate::config_parser::Config;

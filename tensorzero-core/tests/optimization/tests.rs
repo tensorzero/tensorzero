@@ -393,8 +393,8 @@ macro_rules! embedded_workflow_test_case {
     // $constructor = an expression which yields your impl of OptimizationTestCase
     ($fn_name:ident, $constructor:expr) => {
         ::paste::paste! {
-            #[tokio::test]
-            async fn [<test_embedded_optimization_ $fn_name>]() {
+            #[tokio::test(flavor = "multi_thread")]
+            async fn [<test_embedded_slow_optimization_ $fn_name>]() {
                 let client = $crate::make_embedded_gateway().await;
                 $crate::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
             }
@@ -410,7 +410,7 @@ macro_rules! http_workflow_test_case {
     ($fn_name:ident, $constructor:expr) => {
         ::paste::paste! {
             #[tokio::test]
-            async fn [<test_http_optimization_ $fn_name>]() {
+            async fn [<test_http_slow_optimization_ $fn_name>]() {
                 let client = $crate::make_http_gateway().await;
                 $crate::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
             }
