@@ -711,7 +711,7 @@ where
 /// Currently only used in the query builder.
 /// TODO: use across the codebase.
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 pub enum ClickhouseFormat {
     #[default]

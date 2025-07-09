@@ -870,26 +870,50 @@ impl Client {
         &self,
         params: LaunchOptimizationWorkflowParams,
     ) -> Result<OptimizationJobHandle, TensorZeroError> {
-        let ClientMode::EmbeddedGateway { gateway, timeout } = &self.mode else {
-            return Err(TensorZeroError::Other {
-                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
-                    mode: "Http".to_string(),
-                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    launch_optimization_workflow(
+                        &gateway.state.http_client,
+                        gateway.state.config.clone(),
+                        &gateway.state.clickhouse_connection_info,
+                        params,
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
-                .into(),
-            });
-        };
-        with_embedded_timeout(*timeout, async {
-            launch_optimization_workflow(
-                &gateway.state.http_client,
-                gateway.state.config.clone(),
-                &gateway.state.clickhouse_connection_info,
-                params,
-            )
-            .await
-            .map_err(err_to_http)
-        })
-        .await
+                .await
+            }
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("optimization_workflow").map_err(|e| {
+                    TensorZeroError::Other {
+                        source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /optimization_workflow endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    }
+                })?;
+                let builder = client.http_client.post(url).json(&params);
+                let resp = self.check_http_response(builder.send().await).await?;
+                let encoded_handle = resp.text().await.map_err(|e| TensorZeroError::Other {
+                    source: tensorzero_core::error::Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error deserializing response: {}",
+                            DisplayOrDebug {
+                                val: e,
+                                debug: self.verbose_errors,
+                            }
+                        ),
+                    })
+                    .into(),
+                })?;
+                let job_handle = OptimizationJobHandle::from_base64_urlencoded(&encoded_handle)
+                    .map_err(|e| TensorZeroError::Other { source: e.into() })?;
+                Ok(job_handle)
+            }
+        }
     }
 
     /// Poll an optimization job for status.
@@ -909,13 +933,24 @@ impl Client {
                 })
                 .await?)
             }
-            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
-                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
-                    mode: "Http".to_string(),
-                    message: "This function is only available in EmbeddedGateway mode".to_string(),
-                })
-                .into(),
-            }),
+            ClientMode::HTTPGateway(client) => {
+                let encoded_job_handle = job_handle
+                    .to_base64_urlencoded()
+                    .map_err(|e| TensorZeroError::Other { source: e.into() })?;
+                let url = client
+                    .base_url
+                    .join(&format!("optimization/{encoded_job_handle}"))
+                    .map_err(|e| TensorZeroError::Other {
+                        source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!("Failed to join base URL with /optimization/{encoded_job_handle} endpoint: {e}"),
+                        })
+                        .into(),
+                    })?;
+                let builder = client.http_client.get(url);
+                let resp: OptimizationJobInfo =
+                    self.parse_http_response(builder.send().await).await?;
+                Ok(resp)
+            }
         }
     }
 
@@ -932,10 +967,10 @@ impl Client {
         }
     }
 
-    async fn parse_http_response<T: serde::de::DeserializeOwned>(
+    async fn check_http_response(
         &self,
         resp: Result<reqwest::Response, reqwest::Error>,
-    ) -> Result<T, TensorZeroError> {
+    ) -> Result<reqwest::Response, TensorZeroError> {
         let resp = resp.map_err(|e| {
             if e.is_timeout() {
                 TensorZeroError::RequestTimeout
@@ -976,19 +1011,29 @@ impl Client {
                 .into(),
             });
         }
+        Ok(resp)
+    }
 
-        resp.json().await.map_err(|e| TensorZeroError::Other {
-            source: tensorzero_core::error::Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error deserializing response: {}",
-                    DisplayOrDebug {
-                        val: e,
-                        debug: self.verbose_errors,
-                    }
-                ),
+    async fn parse_http_response<T: serde::de::DeserializeOwned>(
+        &self,
+        resp: Result<reqwest::Response, reqwest::Error>,
+    ) -> Result<T, TensorZeroError> {
+        self.check_http_response(resp)
+            .await?
+            .json()
+            .await
+            .map_err(|e| TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error deserializing response: {}",
+                        DisplayOrDebug {
+                            val: e,
+                            debug: self.verbose_errors,
+                        }
+                    ),
+                })
+                .into(),
             })
-            .into(),
-        })
     }
 
     async fn http_inference_stream(
