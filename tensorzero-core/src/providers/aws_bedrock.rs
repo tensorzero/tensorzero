@@ -12,7 +12,9 @@ use aws_sdk_bedrockruntime::types::{
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
 use futures::StreamExt;
+use itertools::Itertools;
 use reqwest::StatusCode;
+use serde::Serialize;
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -21,7 +23,7 @@ use super::aws_common::{self, build_interceptor, InterceptorAndRawBody};
 use super::helpers::peek_first_chunk;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::file::mime_type_to_ext;
@@ -43,10 +45,14 @@ const PROVIDER_NAME: &str = "AWS Bedrock";
 const PROVIDER_TYPE: &str = "aws_bedrock";
 
 // NB: If you add `Clone` someday, you'll need to wrap client in Arc
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct AWSBedrockProvider {
     model_id: String,
+    #[serde(skip)]
     client: aws_sdk_bedrockruntime::Client,
+    #[serde(skip)]
     base_config: aws_sdk_bedrockruntime::config::Builder,
 }
 
@@ -85,6 +91,7 @@ impl InferenceProvider for AWSBedrockProvider {
             .messages
             .iter()
             .map(Message::try_from)
+            .filter_ok(|m| !m.content.is_empty())
             .collect::<Result<Vec<_>, _>>()?;
 
         if self.model_id.contains("claude")
@@ -120,8 +127,11 @@ impl InferenceProvider for AWSBedrockProvider {
             .inference_config(inference_config.build());
 
         if let Some(system) = &request.system {
-            let system_block = SystemContentBlock::Text(system.clone());
-            bedrock_request = bedrock_request.system(system_block);
+            // AWS Bedrock does not support system message "" so we remove it
+            if !system.is_empty() {
+                let system_block = SystemContentBlock::Text(system.clone());
+                bedrock_request = bedrock_request.system(system_block);
+            }
         }
 
         if let Some(tool_config) = &request.tool_config {
@@ -256,8 +266,11 @@ impl InferenceProvider for AWSBedrockProvider {
             .inference_config(inference_config.build());
 
         if let Some(system) = &request.system {
-            let system_block = SystemContentBlock::Text(system.clone());
-            bedrock_request = bedrock_request.system(system_block);
+            // AWS Bedrock does not support system message "" so we remove it
+            if !system.is_empty() {
+                let system_block = SystemContentBlock::Text(system.clone());
+                bedrock_request = bedrock_request.system(system_block);
+            }
         }
 
         if let Some(tool_config) = &request.tool_config {
@@ -677,7 +690,10 @@ impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
             // output of a chat completion is used as an input to another model inference,
             // i.e. a judge or something.
             // We don't think the thoughts should be passed in in this case.
-            ContentBlock::Thought(_thought) => Ok(None),
+            ContentBlock::Thought(thought) => {
+                warn_discarded_thought_block(PROVIDER_TYPE, thought);
+                Ok(None)
+            }
             ContentBlock::Unknown {
                 data: _,
                 model_provider_name: _,
@@ -737,7 +753,7 @@ impl TryFrom<&RequestMessage> for Message {
             .into_iter()
             .flatten()
             .collect();
-        let mut message_builder = Message::builder().role(role);
+        let mut message_builder = Message::builder().role(role).set_content(Some(vec![]));
         for block in content {
             message_builder = message_builder.content(block);
         }

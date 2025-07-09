@@ -549,17 +549,17 @@ async fn get_latest_batch_inference(
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    if response.is_empty() {
+    if response.response.is_empty() {
         return None;
     }
-    let batch_request = serde_json::from_str::<BatchRequestRow>(&response).unwrap();
+    let batch_request = serde_json::from_str::<BatchRequestRow>(&response.response).unwrap();
     Some(batch_request)
 }
 
 async fn get_all_batch_inferences(
     clickhouse: &ClickHouseConnectionInfo,
     batch_id: Uuid,
-) -> Vec<BatchModelInferenceRow> {
+) -> Vec<BatchModelInferenceRow<'_>> {
     let query = format!(
         "SELECT * FROM BatchModelInference WHERE batch_id = '{batch_id}' FORMAT JSONEachRow",
     );
@@ -568,6 +568,7 @@ async fn get_all_batch_inferences(
         .await
         .unwrap();
     let rows = response
+        .response
         .lines()
         .filter(|line| !line.is_empty())
         .map(serde_json::from_str::<BatchModelInferenceRow>)
@@ -3928,7 +3929,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
                "messages": [
                 {
                     "role": "user",
-                    "content": {"country": "Japan"}
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]}],
         "tags": [{"test_type": "json_mode"}]
@@ -4268,7 +4269,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
                "messages": [
                 {
                     "role": "user",
-                    "content": {"country": "Japan"}
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]}],
         "output_schemas": [output_schema.clone()],

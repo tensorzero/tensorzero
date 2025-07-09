@@ -48,7 +48,7 @@ use crate::{
         InferenceProvider,
     },
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::providers::{
     anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
@@ -59,16 +59,20 @@ use crate::providers::{
     xai::XAIProvider,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
     pub timeouts: TimeoutsConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[serde(deny_unknown_fields)]
-pub(crate) struct UninitializedModelConfig {
+pub struct UninitializedModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, UninitializedModelProvider>, // provider name => provider config
     #[serde(default)]
@@ -138,21 +142,15 @@ impl StreamResponse {
                         // request:
                         // The new result was 'created' now
                         created: current_timestamp(),
-                        // Only include usage in the last chunk, None for all others
-                        usage: if index == chunks_len - 1 {
-                            Some(Usage {
-                                input_tokens: cache_lookup.input_tokens,
-                                output_tokens: cache_lookup.output_tokens,
-                            })
-                        } else {
-                            None
-                        },
+                        // Use the real usage (so that the `ModelInference` row we write is accurate)
+                        // The usage returned to over HTTP is adjusted in `InferenceResponseChunk::new`
+                        usage: c.usage,
                         // We didn't make any network calls to the model provider, so the latency is 0
                         latency: Duration::from_secs(0),
                         // For all chunks but the last one, the finish reason is None
                         // For the last chunk, the finish reason is the same as the cache lookup
                         finish_reason: if index == chunks_len - 1 {
-                            cache_lookup.finish_reason.clone()
+                            cache_lookup.finish_reason
                         } else {
                             None
                         },
@@ -618,8 +616,10 @@ fn consolidate_usage(chunks: &[ProviderInferenceResponseChunk]) -> Usage {
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub(crate) struct UninitializedModelProvider {
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct UninitializedModelProvider {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,
     pub extra_body: Option<ExtraBodyConfig>,
@@ -634,7 +634,9 @@ pub(crate) struct UninitializedModelProvider {
     pub discard_unknown_chunks: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ModelProvider {
     pub name: Arc<str>,
     pub config: ProviderConfig,
@@ -732,26 +734,39 @@ pub struct ModelProviderRequestInfo {
     pub extra_body: Option<ExtraBodyConfig>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
+    #[serde(rename = "aws_bedrock")]
     AWSBedrock(AWSBedrockProvider),
+    #[serde(rename = "aws_sagemaker")]
     AWSSagemaker(AWSSagemakerProvider),
     Azure(AzureProvider),
     DeepSeek(DeepSeekProvider),
     Fireworks(FireworksProvider),
+    #[serde(rename = "gcp_vertex_anthropic")]
     GCPVertexAnthropic(GCPVertexAnthropicProvider),
+    #[serde(rename = "gcp_vertex_gemini")]
     GCPVertexGemini(GCPVertexGeminiProvider),
+    #[serde(rename = "google_ai_studio_gemini")]
     GoogleAIStudioGemini(GoogleAIStudioGeminiProvider),
     Groq(GroqProvider),
     Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
     OpenRouter(OpenRouterProvider),
+    #[serde(rename = "sglang")]
     SGLang(SGLangProvider),
+    #[serde(rename = "tgi")]
     TGI(TGIProvider),
     Together(TogetherProvider),
+    #[serde(rename = "vllm")]
     VLLM(VLLMProvider),
+    #[serde(rename = "xai")]
     XAI(XAIProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
@@ -759,7 +774,9 @@ pub enum ProviderConfig {
 
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
 pub enum HostedProviderKind {
@@ -767,14 +784,17 @@ pub enum HostedProviderKind {
     TGI,
 }
 
-#[derive(Debug, TensorZeroDeserialize, VariantNames)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[derive(Debug, TensorZeroDeserialize, VariantNames, Serialize)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
-pub(super) enum UninitializedProviderConfig {
+pub enum UninitializedProviderConfig {
     Anthropic {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "aws_bedrock")]
@@ -798,6 +818,7 @@ pub(super) enum UninitializedProviderConfig {
     Azure {
         deployment_id: String,
         endpoint: Url,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "gcp_vertex_anthropic")]
@@ -806,6 +827,7 @@ pub(super) enum UninitializedProviderConfig {
         model_id: String,
         location: String,
         project_id: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         credential_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "gcp_vertex_gemini")]
@@ -815,79 +837,91 @@ pub(super) enum UninitializedProviderConfig {
         endpoint_id: Option<String>,
         location: String,
         project_id: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         credential_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "google_ai_studio_gemini")]
     #[serde(rename = "google_ai_studio_gemini")]
     GoogleAIStudioGemini {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "groq")]
     #[serde(rename = "groq")]
     Groq {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     Hyperbolic {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "fireworks")]
     #[serde(rename = "fireworks")]
     Fireworks {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
         #[serde(default = "crate::providers::fireworks::default_parse_think_blocks")]
         parse_think_blocks: bool,
     },
     Mistral {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     OpenAI {
         model_name: String,
         api_base: Option<Url>,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     OpenRouter {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     Together {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
         #[serde(default = "crate::providers::together::default_parse_think_blocks")]
         parse_think_blocks: bool,
     },
-    #[expect(clippy::upper_case_acronyms)]
     VLLM {
         model_name: String,
         api_base: Url,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
-    #[expect(clippy::upper_case_acronyms)]
     XAI {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
-    #[expect(clippy::upper_case_acronyms)]
     TGI {
         api_base: Url,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     SGLang {
         model_name: String,
         api_base: Url,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     DeepSeek {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
 }
@@ -1162,6 +1196,7 @@ impl ModelProvider {
         gen_ai.operation.name = "chat",
         gen_ai.system = self.genai_system_name(),
         gen_ai.request.model = self.genai_model_name(),
+        time_to_first_token,
     stream = true))]
     async fn infer_stream(
         &self,
@@ -1466,7 +1501,7 @@ impl ModelProvider {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum CredentialLocation {
     /// Environment variable containing the actual credential
     Env(String),
@@ -1504,6 +1539,23 @@ impl<'de> Deserialize<'de> for CredentialLocation {
                 "Invalid ApiKeyLocation format: {s}"
             )))
         }
+    }
+}
+
+impl Serialize for CredentialLocation {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let s = match self {
+            CredentialLocation::Env(inner) => format!("env::{inner}"),
+            CredentialLocation::PathFromEnv(inner) => format!("path_from_env::{inner}"),
+            CredentialLocation::Dynamic(inner) => format!("dynamic::{inner}"),
+            CredentialLocation::Path(inner) => format!("path::{inner}"),
+            CredentialLocation::Sdk => "sdk".to_string(),
+            CredentialLocation::None => "none".to_string(),
+        };
+        serializer.serialize_str(&s)
     }
 }
 
@@ -1822,7 +1874,7 @@ mod tests {
         model_table::RESERVED_MODEL_PREFIXES,
         providers::dummy::{
             DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
-            DUMMY_INFER_USAGE, DUMMY_STREAMING_RESPONSE,
+            DUMMY_STREAMING_RESPONSE,
         },
     };
     use secrecy::SecretString;
@@ -1907,7 +1959,13 @@ mod tests {
         let raw = response.raw_response;
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
-        assert_eq!(usage, DUMMY_INFER_USAGE);
+        assert_eq!(
+            usage,
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         assert_eq!(&*response.model_provider_name, "good_provider");
 
         // Try inferring the bad model
@@ -2044,7 +2102,13 @@ mod tests {
         let raw = response.raw_response;
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
-        assert_eq!(usage, DUMMY_INFER_USAGE);
+        assert_eq!(
+            usage,
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         assert_eq!(&*response.model_provider_name, "good_provider");
     }
 

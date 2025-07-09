@@ -121,6 +121,9 @@ pub fn tensorzero_derive(input: TokenStream) -> TokenStream {
     let mut stripped_variants = data.variants.clone();
     for variant in stripped_variants.iter_mut() {
         variant.attrs.retain(|attr| attr.path().is_ident("serde"));
+        for field in variant.fields.iter_mut() {
+            field.attrs.retain(|attr| attr.path().is_ident("serde"));
+        }
     }
 
     // Build up match arms that looks like:

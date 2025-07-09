@@ -45,9 +45,12 @@ fn default_api_key_location() -> CredentialLocation {
 const PROVIDER_NAME: &str = "xAI";
 const PROVIDER_TYPE: &str = "xai";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct XAIProvider {
     model_name: String,
+    #[serde(skip)]
     credentials: XAICredentials,
 }
 
@@ -356,6 +359,7 @@ impl<'a> XAIRequest<'a> {
             request.system.as_deref(),
             &request.messages,
             Some(&request.json_mode),
+            PROVIDER_TYPE,
         )?;
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);

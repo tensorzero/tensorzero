@@ -52,9 +52,12 @@ fn default_api_key_location() -> CredentialLocation {
 const PROVIDER_NAME: &str = "Mistral";
 const PROVIDER_TYPE: &str = "mistral";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct MistralProvider {
     model_name: String,
+    #[serde(skip)]
     credentials: MistralCredentials,
 }
 
@@ -357,7 +360,7 @@ pub(super) fn prepare_mistral_messages<'a>(
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages.iter() {
-        messages.extend(tensorzero_to_openai_messages(message)?);
+        messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
     }
     if let Some(system_msg) = tensorzero_to_mistral_system_message(request.system.as_deref()) {
         messages.insert(0, system_msg);

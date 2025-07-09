@@ -14,7 +14,7 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::resolved_input::FileWithPath;
@@ -56,9 +56,12 @@ fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("ANTHROPIC_API_KEY".to_string())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct AnthropicProvider {
     model_name: String,
+    #[serde(skip)]
     credentials: AnthropicCredentials,
 }
 
@@ -275,7 +278,7 @@ impl InferenceProvider for AnthropicProvider {
             builder,
         )
         .await?;
-        let mut stream = stream_anthropic(event_source, start_time).peekable();
+        let mut stream = stream_anthropic(event_source, start_time, model_provider).peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
         if matches!(
             request.json_mode,
@@ -318,10 +321,13 @@ impl InferenceProvider for AnthropicProvider {
 fn stream_anthropic(
     mut event_source: EventSource,
     start_time: Instant,
+    model_provider: &ModelProvider,
 ) -> ProviderInferenceResponseStreamInner {
+    let discard_unknown_chunks = model_provider.discard_unknown_chunks;
     Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
         let mut current_tool_name: Option<String> = None;
+
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -352,6 +358,7 @@ fn stream_anthropic(
                                 start_time.elapsed(),
                                 &mut current_tool_id,
                                 &mut current_tool_name,
+                                discard_unknown_chunks,
                             )
                         });
 
@@ -999,31 +1006,12 @@ fn handle_anthropic_error(
 
 #[derive(Deserialize, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-enum AnthropicMessageBlock {
-    Text {
-        text: String,
-    },
-    Thinking {
-        thinking: String,
-        signature: String,
-    },
-    TextDelta {
-        text: String,
-    },
-    ToolUse {
-        id: String,
-        name: String,
-        input: serde_json::Value,
-    },
-    InputJsonDelta {
-        partial_json: String,
-    },
-    SignatureDelta {
-        signature: String,
-    },
-    ThinkingDelta {
-        thinking: String,
-    },
+#[expect(clippy::enum_variant_names)]
+enum AnthropicContentBlockDelta {
+    TextDelta { text: String },
+    InputJsonDelta { partial_json: String },
+    SignatureDelta { signature: String },
+    ThinkingDelta { thinking: String },
 }
 
 #[derive(Deserialize, Debug, Serialize)]
@@ -1039,11 +1027,11 @@ pub(crate) struct AnthropicMessageDelta {
 #[serde(tag = "type", rename_all = "snake_case")]
 enum AnthropicStreamMessage {
     ContentBlockDelta {
-        delta: AnthropicMessageBlock,
+        delta: FlattenUnknown<'static, AnthropicContentBlockDelta>,
         index: u32,
     },
     ContentBlockStart {
-        content_block: AnthropicMessageBlock,
+        content_block: FlattenUnknown<'static, AnthropicContentBlock>,
         index: u32,
     },
     ContentBlockStop {
@@ -1053,7 +1041,7 @@ enum AnthropicStreamMessage {
         error: Value,
     },
     MessageDelta {
-        delta: AnthropicMessageDelta,
+        delta: FlattenUnknown<'static, AnthropicMessageDelta>,
         usage: Value,
     },
     MessageStart {
@@ -1075,10 +1063,14 @@ fn anthropic_to_tensorzero_stream_message(
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
     current_tool_name: &mut Option<String>,
+    discard_unknown_chunks: bool,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match message {
-        AnthropicStreamMessage::ContentBlockDelta { delta, index } => match delta {
-            AnthropicMessageBlock::TextDelta { text } => {
+        AnthropicStreamMessage::ContentBlockDelta {
+            delta: FlattenUnknown::Normal(delta),
+            index,
+        } => match delta {
+            AnthropicContentBlockDelta::TextDelta { text } => {
                 Ok(Some(ProviderInferenceResponseChunk::new(
                     vec![ContentBlockChunk::Text(TextChunk {
                         text,
@@ -1090,7 +1082,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                 )))
             }
-            AnthropicMessageBlock::InputJsonDelta { partial_json } => {
+            AnthropicContentBlockDelta::InputJsonDelta { partial_json } => {
                 Ok(Some(ProviderInferenceResponseChunk::new(
                     // Take the current tool name and ID and use them to create a ToolCallChunk
                     // This is necessary because the ToolCallChunk must always contain the tool name and ID
@@ -1111,7 +1103,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                 )))
             }
-            AnthropicMessageBlock::ThinkingDelta { thinking } => {
+            AnthropicContentBlockDelta::ThinkingDelta { thinking } => {
                 Ok(Some(ProviderInferenceResponseChunk::new(
                     vec![ContentBlockChunk::Thought(ThoughtChunk {
                         text: Some(thinking),
@@ -1124,7 +1116,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                 )))
             }
-            AnthropicMessageBlock::SignatureDelta { signature } => {
+            AnthropicContentBlockDelta::SignatureDelta { signature } => {
                 Ok(Some(ProviderInferenceResponseChunk::new(
                     vec![ContentBlockChunk::Thought(ThoughtChunk {
                         text: None,
@@ -1137,19 +1129,12 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                 )))
             }
-            _ => Err(ErrorDetails::InferenceServer {
-                message: "Unsupported content block type for ContentBlockDelta".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(serde_json::to_string(&delta).unwrap_or_default()),
-            }
-            .into()),
         },
         AnthropicStreamMessage::ContentBlockStart {
-            content_block,
+            content_block: FlattenUnknown::Normal(content_block),
             index,
         } => match content_block {
-            AnthropicMessageBlock::Text { text } => {
+            AnthropicContentBlock::Text { text } => {
                 let text_chunk = ContentBlockChunk::Text(TextChunk {
                     text,
                     id: index.to_string(),
@@ -1162,7 +1147,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                 )))
             }
-            AnthropicMessageBlock::ToolUse { id, name, .. } => {
+            AnthropicContentBlock::ToolUse { id, name, .. } => {
                 // This is a new tool call, update the ID for future chunks
                 *current_tool_id = Some(id.clone());
                 *current_tool_name = Some(name.clone());
@@ -1179,7 +1164,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                 )))
             }
-            AnthropicMessageBlock::Thinking {
+            AnthropicContentBlock::Thinking {
                 thinking,
                 signature,
             } => Ok(Some(ProviderInferenceResponseChunk::new(
@@ -1193,13 +1178,6 @@ fn anthropic_to_tensorzero_stream_message(
                 message_latency,
                 None,
             ))),
-            _ => Err(ErrorDetails::InferenceServer {
-                message: "Unsupported content block type for ContentBlockStart".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(serde_json::to_string(&content_block).unwrap_or_default()),
-            }
-            .into()),
         },
         AnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
         AnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
@@ -1209,7 +1187,10 @@ fn anthropic_to_tensorzero_stream_message(
             raw_response: None,
         }
         .into()),
-        AnthropicStreamMessage::MessageDelta { usage, delta } => {
+        AnthropicStreamMessage::MessageDelta {
+            usage,
+            delta: FlattenUnknown::Normal(delta),
+        } => {
             let usage = parse_usage_info(&usage);
             Ok(Some(ProviderInferenceResponseChunk::new(
                 vec![],
@@ -1234,6 +1215,54 @@ fn anthropic_to_tensorzero_stream_message(
             }
         }
         AnthropicStreamMessage::MessageStop | AnthropicStreamMessage::Ping => Ok(None),
+        AnthropicStreamMessage::ContentBlockDelta {
+            delta: FlattenUnknown::Unknown(delta),
+            index: _,
+        } => {
+            if discard_unknown_chunks {
+                warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
+                return Ok(None);
+            }
+            Err(ErrorDetails::InferenceServer {
+                message: "Unsupported content block type for ContentBlockDelta".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(delta.to_string()),
+            }
+            .into())
+        }
+        AnthropicStreamMessage::ContentBlockStart {
+            content_block: FlattenUnknown::Unknown(content_block),
+            index: _,
+        } => {
+            if discard_unknown_chunks {
+                warn_discarded_unknown_chunk(PROVIDER_TYPE, &content_block.to_string());
+                return Ok(None);
+            }
+            Err(ErrorDetails::InferenceServer {
+                message: "Unsupported content block type for ContentBlockStart".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(content_block.to_string()),
+            }
+            .into())
+        }
+        AnthropicStreamMessage::MessageDelta {
+            usage: _,
+            delta: FlattenUnknown::Unknown(delta),
+        } => {
+            if discard_unknown_chunks {
+                warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
+                return Ok(None);
+            }
+            Err(ErrorDetails::InferenceServer {
+                message: "Unsupported content block type for MessageDelta".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(delta.to_string()),
+            }
+            .into())
+        }
     }
 }
 
@@ -1262,6 +1291,7 @@ mod tests {
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
     use serde_json::json;
+    use tracing_test::traced_test;
     use uuid::Uuid;
 
     #[test]
@@ -2208,9 +2238,9 @@ mod tests {
         let mut current_tool_id = None;
         let mut current_tool_name = None;
         let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
-            delta: AnthropicMessageBlock::TextDelta {
+            delta: FlattenUnknown::Normal(AnthropicContentBlockDelta::TextDelta {
                 text: "Hello".to_string(),
-            },
+            }),
             index: 0,
         };
         let latency = Duration::from_millis(100);
@@ -2220,6 +2250,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            false,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2237,9 +2268,9 @@ mod tests {
         let mut current_tool_id = None;
         let mut current_tool_name = None;
         let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
-            delta: AnthropicMessageBlock::InputJsonDelta {
+            delta: FlattenUnknown::Normal(AnthropicContentBlockDelta::InputJsonDelta {
                 partial_json: "aaaa: bbbbb".to_string(),
-            },
+            }),
             index: 0,
         };
         let latency = Duration::from_millis(100);
@@ -2249,6 +2280,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            false,
         );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
@@ -2265,9 +2297,9 @@ mod tests {
         let mut current_tool_id = Some("tool_id".to_string());
         let mut current_tool_name = Some("tool_name".to_string());
         let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
-            delta: AnthropicMessageBlock::InputJsonDelta {
+            delta: FlattenUnknown::Normal(AnthropicContentBlockDelta::InputJsonDelta {
                 partial_json: "aaaa: bbbbb".to_string(),
-            },
+            }),
             index: 0,
         };
         let latency = Duration::from_millis(100);
@@ -2277,6 +2309,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            false,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2294,11 +2327,11 @@ mod tests {
         let mut current_tool_id = None;
         let mut current_tool_name = None;
         let content_block_start = AnthropicStreamMessage::ContentBlockStart {
-            content_block: AnthropicMessageBlock::ToolUse {
+            content_block: FlattenUnknown::Normal(AnthropicContentBlock::ToolUse {
                 id: "tool1".to_string(),
                 name: "calculator".to_string(),
                 input: json!({}),
-            },
+            }),
             index: 1,
         };
         let latency = Duration::from_millis(110);
@@ -2308,6 +2341,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            false,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2327,9 +2361,9 @@ mod tests {
         let mut current_tool_id = None;
         let mut current_tool_name = None;
         let content_block_start = AnthropicStreamMessage::ContentBlockStart {
-            content_block: AnthropicMessageBlock::Text {
+            content_block: FlattenUnknown::Normal(AnthropicContentBlock::Text {
                 text: "Hello".to_string(),
-            },
+            }),
             index: 2,
         };
         let latency = Duration::from_millis(120);
@@ -2339,6 +2373,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            false,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2351,36 +2386,6 @@ mod tests {
         }
         assert_eq!(chunk.latency, latency);
 
-        // Test ContentBlockStart with InputJsonDelta (should fail)
-        let mut current_tool_id = None;
-        let mut current_tool_name = None;
-        let content_block_start = AnthropicStreamMessage::ContentBlockStart {
-            content_block: AnthropicMessageBlock::InputJsonDelta {
-                partial_json: "aaaa: bbbbb".to_string(),
-            },
-            index: 3,
-        };
-        let latency = Duration::from_millis(130);
-        let result = anthropic_to_tensorzero_stream_message(
-            "my_raw_chunk".to_string(),
-            content_block_start,
-            latency,
-            &mut current_tool_id,
-            &mut current_tool_name,
-        );
-        let details = result.unwrap_err().get_owned_details();
-        assert_eq!(
-            details,
-            ErrorDetails::InferenceServer {
-                message: "Unsupported content block type for ContentBlockStart".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":\"input_json_delta\",\"partial_json\":\"aaaa: bbbbb\"}".to_string()
-                ),
-            }
-        );
-
         // Test ContentBlockStop
         let content_block_stop = AnthropicStreamMessage::ContentBlockStop { index: 2 };
         let latency = Duration::from_millis(120);
@@ -2390,6 +2395,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            false,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2405,6 +2411,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            false,
         );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
@@ -2419,10 +2426,10 @@ mod tests {
 
         // Test MessageDelta with usage
         let message_delta = AnthropicStreamMessage::MessageDelta {
-            delta: AnthropicMessageDelta {
+            delta: FlattenUnknown::Normal(AnthropicMessageDelta {
                 stop_reason: Some(AnthropicStopReason::EndTurn),
                 stop_sequence: None,
-            },
+            }),
             usage: json!({"input_tokens": 10, "output_tokens": 20}),
         };
         let latency = Duration::from_millis(140);
@@ -2432,6 +2439,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            false,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2454,6 +2462,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            false,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2473,6 +2482,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            false,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2486,6 +2496,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            false,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2718,5 +2729,51 @@ mod tests {
             result.unwrap_err().get_owned_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
+    }
+
+    #[test]
+    fn test_convert_unknown_chunk_error() {
+        let err = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
+            AnthropicStreamMessage::ContentBlockStart {
+                content_block: FlattenUnknown::Unknown(Cow::Owned(
+                    serde_json::json!({"my_unknown": "content_block"}),
+                )),
+                index: 0,
+            },
+            Duration::from_secs(0),
+            &mut Default::default(),
+            &mut Default::default(),
+            false,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains(
+                "Error from anthropic server: Unsupported content block type for ContentBlockStart"
+            ),
+            "Unexpected error message: {err}"
+        );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_convert_unknown_chunk_warn() {
+        let res = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
+            AnthropicStreamMessage::ContentBlockStart {
+                content_block: FlattenUnknown::Unknown(Cow::Owned(
+                    serde_json::json!({"my_unknown": "content_block"}),
+                )),
+                index: 0,
+            },
+            Duration::from_secs(0),
+            &mut Default::default(),
+            &mut Default::default(),
+            true,
+        )
+        .unwrap();
+        assert_eq!(res, None);
+        assert!(logs_contain("Discarding unknown chunk"));
     }
 }

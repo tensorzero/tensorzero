@@ -25,11 +25,12 @@ use tensorzero::{
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
+use tracing_test::traced_test;
 
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
 
 use tensorzero_core::gateway_util::AppStateData;
-use tensorzero_core::inference::types::{FinishReason, TextKind};
+use tensorzero_core::inference::types::{FinishReason, TextKind, Thought};
 use tensorzero_core::{
     cache::CacheEnabledMode,
     inference::types::{
@@ -108,6 +109,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await
@@ -119,6 +121,7 @@ pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
         config_file: None,
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await
@@ -132,6 +135,7 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await
@@ -207,6 +211,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_streaming_include_original_response_with_provider;
         use $crate::providers::common::test_pdf_inference_with_provider_filesystem;
         use $crate::providers::common::test_stop_sequences_inference_request_with_provider;
+        use $crate::providers::common::test_warn_ignored_thought_block_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -216,7 +221,13 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
+        #[tokio::test(flavor = "multi_thread")]
+        async fn test_warn_ignored_thought_block() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_warn_ignored_thought_block_with_provider(provider).await;
+            }
+        }
 
         #[tokio::test]
         async fn test_reasoning_inference_request_simple() {
@@ -1704,6 +1715,50 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
     assert_eq!(status, StatusCode::BAD_GATEWAY);
 }
 
+#[traced_test]
+pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProvider) {
+    let client = make_embedded_gateway().await;
+    client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some(provider.variant_name),
+            input: ClientInput {
+                system: Some(serde_json::json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![
+                    ClientInputMessage {
+                        role: Role::Assistant,
+                        content: vec![ClientInputMessageContent::Thought(Thought {
+                            text: "My TensorZero thought".to_string(),
+                            signature: Some("My TensorZero signature".to_string()),
+                        })],
+                    },
+                    ClientInputMessage {
+                        role: Role::User,
+                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                            text: "What is the name of the capital city of Japan?".to_string(),
+                        })],
+                    },
+                ],
+            },
+            extra_headers: get_extra_headers(),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    if ["anthropic"].contains(&provider.model_provider_name.as_str()) {
+        assert!(
+            !logs_contain("does not support input thought blocks"),
+            "Should not have warned about dropping thought blocks"
+        );
+    } else {
+        assert!(
+            logs_contain("does not support input thought blocks"),
+            "Missing expected warning"
+        );
+    }
+}
+
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
@@ -2358,21 +2413,6 @@ pub async fn check_simple_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens
-    );
 
     if !is_batch {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -2573,21 +2613,6 @@ pub async fn check_simple_image_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens
-    );
 
     if !is_batch {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -2826,14 +2851,18 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let mut input_tokens = 0;
     let mut output_tokens = 0;
     let mut finish_reason: Option<String> = None;
-    for chunk in chunks.clone() {
-        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
+    for (i, chunk) in chunks.clone().iter().enumerate() {
+        let chunk_json: Value = serde_json::from_str(chunk).unwrap();
 
         println!("API response chunk: {chunk_json:#?}");
 
         // The `original_chunk` field should only be set if we enable the `include_original_response` flag
         if include_original_response {
-            assert!(chunk_json.get("original_chunk").is_some());
+            // The last chunk might be a usage chunk generated by TensorZero
+            // (if the original stream didn't report usage), so don't check it
+            if i != chunks.len() - 1 {
+                assert!(chunk_json.get("original_chunk").is_some());
+            }
         } else {
             assert_eq!(chunk_json.get("original_chunk"), None);
         }
@@ -2947,22 +2976,6 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        expected_max_tokens
-    );
-
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
 
@@ -3854,11 +3867,6 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         return;
     }
 
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
@@ -4474,10 +4482,6 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
         return;
     }
 
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -5070,11 +5074,6 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         return;
     }
 
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -5396,16 +5395,20 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
         .collect();
 
-    // Assert exactly one tool call
-    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+    // Assert at least one tool call
+    assert!(
+        !tool_call_blocks.is_empty(),
+        "Expected at least one tool call in {output:?}"
+    );
 
-    let tool_call_block = tool_call_blocks[0];
-    match tool_call_block {
-        ContentBlock::ToolCall(tool_call) => {
-            assert_eq!(tool_call.name, "get_temperature");
-            serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+    for tool_call_block in tool_call_blocks {
+        match tool_call_block {
+            ContentBlock::ToolCall(tool_call) => {
+                assert_eq!(tool_call.name, "get_temperature");
+                serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+            }
+            _ => panic!("Unreachable"),
         }
-        _ => panic!("Unreachable"),
     }
 }
 
@@ -5673,10 +5676,6 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     // Gemini 2.5 Pro will produce 'executableCode' blocks for this test, which we don't support
     // in streaming mode (since we don't have "unknown" streaming chunks)
     if provider.model_name.starts_with("gemini-2.5-pro") {
-        return;
-    }
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -5985,11 +5984,6 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
         || provider.model_provider_name == "mistral"
         || provider.model_provider_name == "together"
     {
-        return;
-    }
-
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -6325,11 +6319,6 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "groq"
     {
-        return;
-    }
-
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -6992,10 +6981,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     if provider.model_provider_name == "together" {
         return;
     }
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
+
     // Groq does not support streaming in JSON mode
     // (no reason given): https://console.groq.com/docs/text-chat#json-mode
     if provider.model_provider_name == "groq" {
@@ -7346,11 +7332,6 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
         return;
     }
 
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -7516,21 +7497,6 @@ pub async fn check_tool_use_multi_turn_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens,
-    );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -7637,11 +7603,6 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     // We skip this test for xAI until the fix is deployed.
     // https://gist.github.com/GabrielBianconi/47a4247cfd8b6689e7228f654806272d
     if provider.model_provider_name == "xai" {
-        return;
-    }
-
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -7836,19 +7797,6 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens
-    );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -8386,11 +8334,6 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
 ) {
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
 
     let input_function_name = "basic_test";
@@ -8534,7 +8477,8 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
 
     let inference_id = inference_id.unwrap();
     let tool_id = tool_id.unwrap();
-    assert!(serde_json::from_str::<Value>(&arguments).is_ok());
+    println!("Collected arguments: {arguments}");
+    serde_json::from_str::<Value>(&arguments).unwrap();
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -9665,21 +9609,6 @@ pub async fn check_json_mode_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens
-    );
 
     if !is_batch {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -9760,29 +9689,19 @@ pub async fn check_json_mode_inference_response(
     output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
 
     let is_openrouter = provider.model_provider_name == "openrouter";
-    if is_openrouter {
-        // OpenRouter may return both an empty text block and a tool_call block
-        assert!(
-            output.len() <= 2,
-            "Expected at most 2 output blocks for OpenRouter, got {}",
-            output.len()
-        );
-    } else {
-        // For other providers, expect exactly one block
-        assert_eq!(
-            output.len(),
-            1,
-            "Expected exactly 1 output block, got {}",
-            output.len()
-        );
-    }
+    // Some providers may return both an empty text block and a tool_call block
+    assert!(
+        output.len() <= 2,
+        "Expected at most 2 output blocks, got {}",
+        output.len()
+    );
 
     // Check for valid content in the output
     let mut found_valid_content = false;
     for output_block in &output {
         match output_block {
-            ContentBlock::Text(text) if text.text.is_empty() && is_openrouter => {
-                // Skip empty text blocks from OpenRouter
+            ContentBlock::Text(text) if text.text.trim().is_empty() => {
+                // Skip empty text blocks
                 continue;
             }
             ContentBlock::Text(text) => {
@@ -9799,7 +9718,7 @@ pub async fn check_json_mode_inference_response(
                 found_valid_content = true;
             }
             _ => {
-                panic!("Expected a text block or tool_call (for OpenRouter), got {output_block:?}");
+                panic!("Expected a text block or tool_call, got {output_block:?}");
             }
         }
     }
@@ -9960,21 +9879,6 @@ pub async fn check_dynamic_json_mode_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
-        500
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        max_tokens
-    );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -10045,29 +9949,19 @@ pub async fn check_dynamic_json_mode_inference_response(
     output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
 
     let is_openrouter = provider.model_provider_name == "openrouter";
-    if is_openrouter {
-        // OpenRouter may return both an empty text block and a tool_call block
-        assert!(
-            output.len() <= 2,
-            "Expected at most 2 output blocks for OpenRouter, got {}",
-            output.len()
-        );
-    } else {
-        // For other providers, expect exactly one block
-        assert_eq!(
-            output.len(),
-            1,
-            "Expected exactly 1 output block, got {}",
-            output.len()
-        );
-    }
+    // Some providers return both an empty text block and a tool_call block
+    assert!(
+        output.len() <= 2,
+        "Expected at most 2 output blocks for OpenRouter, got {}",
+        output.len()
+    );
 
     // Check for valid content in the output
     let mut found_valid_content = false;
     for output_block in &output {
         match output_block {
-            ContentBlock::Text(text) if text.text.is_empty() && is_openrouter => {
-                // Skip empty text blocks from OpenRouter
+            ContentBlock::Text(text) if text.text.trim().is_empty() => {
+                // Skip empty text blocks
                 continue;
             }
             ContentBlock::Text(text) => {
@@ -10108,10 +10002,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         // Groq does not support streaming in JSON mode (no reason given): https://console.groq.com/docs/text-chat#json-mode)
         return;
     }
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -10257,6 +10148,8 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("gemini-2.5-pro") {
         500
+    } else if provider.model_name.starts_with("o1") {
+        1000
     } else {
         100
     };

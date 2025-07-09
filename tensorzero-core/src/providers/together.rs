@@ -50,9 +50,12 @@ lazy_static! {
 const PROVIDER_NAME: &str = "Together";
 const PROVIDER_TYPE: &str = "together";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct TogetherProvider {
     model_name: String,
+    #[serde(skip)]
     credentials: TogetherCredentials,
     parse_think_blocks: bool,
 }
@@ -390,7 +393,7 @@ pub(super) fn prepare_together_messages<'a>(
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages.iter() {
-        messages.extend(tensorzero_to_openai_messages(message)?);
+        messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
     }
 
     if let Some(system_msg) = tensorzero_to_together_system_message(request.system.as_deref()) {

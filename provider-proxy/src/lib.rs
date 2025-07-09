@@ -29,7 +29,7 @@ use tracing::level_filters::LevelFilter;
 
 const CACHE_HEADER_NAME: &str = "x-tensorzero-provider-proxy-cache";
 
-fn make_root_cert() -> rcgen::CertifiedKey {
+fn make_root_cert() -> rcgen::Issuer<'static, rcgen::KeyPair> {
     let mut param = rcgen::CertificateParams::default();
 
     param.distinguished_name = rcgen::DistinguishedName::new();
@@ -44,9 +44,7 @@ fn make_root_cert() -> rcgen::CertifiedKey {
     param.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
 
     let key_pair = rcgen::KeyPair::generate().unwrap();
-    let cert = param.self_signed(&key_pair).unwrap();
-
-    rcgen::CertifiedKey { cert, key_pair }
+    rcgen::Issuer::new(param, key_pair)
 }
 
 fn hash_value(request: &serde_json::Value) -> Result<String, anyhow::Error> {

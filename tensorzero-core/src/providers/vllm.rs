@@ -32,10 +32,13 @@ use crate::providers::openai::check_api_base_suffix;
 const PROVIDER_NAME: &str = "vLLM";
 const PROVIDER_TYPE: &str = "vllm";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct VLLMProvider {
     model_name: String,
     api_base: Url,
+    #[serde(skip)]
     credentials: VLLMCredentials,
 }
 
@@ -433,7 +436,7 @@ pub(super) fn prepare_vllm_messages<'a>(
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages.iter() {
-        messages.extend(tensorzero_to_openai_messages(message)?);
+        messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
     }
     if let Some(system_msg) = tensorzero_to_vllm_system_message(request.system.as_deref()) {
         messages.insert(0, system_msg);

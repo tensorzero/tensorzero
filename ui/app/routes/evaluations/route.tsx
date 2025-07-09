@@ -19,6 +19,7 @@ import {
   type InferenceCacheSetting,
 } from "~/utils/evaluations.server";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const totalEvaluationRuns = await countTotalEvaluationRuns();
@@ -58,7 +59,7 @@ export async function action({ request }: Route.ActionArgs) {
       inference_cache as InferenceCacheSetting,
     );
   } catch (error) {
-    console.error("Error starting evaluation:", error);
+    logger.error("Error starting evaluation:", error);
     throw new Response(`Failed to start evaluation: ${error}`, {
       status: 500,
     });
@@ -118,7 +119,7 @@ export default function EvaluationSummaryPage({
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

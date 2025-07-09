@@ -461,7 +461,7 @@ pub async fn get_batch_request(
                 "#
             );
             let response = clickhouse.run_query_synchronous_no_params(query).await?;
-            if response.is_empty() {
+            if response.response.is_empty() {
                 return Err(ErrorDetails::BatchNotFound { id: *batch_id }.into());
             }
             response
@@ -492,17 +492,18 @@ pub async fn get_batch_request(
                 "#,
             );
             let response = clickhouse.run_query_synchronous_no_params(query).await?;
-            if response.is_empty() {
+            if response.response.is_empty() {
                 return Err(ErrorDetails::BatchNotFound { id: *inference_id }.into());
             }
             response
         }
     };
-    let batch_request = serde_json::from_str::<BatchRequestRow>(&response).map_err(|e| {
-        Error::new(ErrorDetails::ClickHouseDeserialization {
-            message: e.to_string(),
-        })
-    })?;
+    let batch_request =
+        serde_json::from_str::<BatchRequestRow>(&response.response).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: e.to_string(),
+            })
+        })?;
     Ok(batch_request)
 }
 
@@ -672,11 +673,11 @@ pub async fn write_batch_request_row(
 ///
 /// Note: only call this function if the batch was Pending prior to being polled.
 /// We don't need to poll if the batch is failed or completed because the status will not change.
-pub async fn write_poll_batch_inference<'a>(
+pub async fn write_poll_batch_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    batch_request: &BatchRequestRow<'a>,
+    batch_request: &BatchRequestRow<'_>,
     response: PollBatchInferenceResponse,
-    config: &Config<'a>,
+    config: &Config,
 ) -> Result<PollInferenceResponse, Error> {
     match response {
         PollBatchInferenceResponse::Pending {
@@ -779,7 +780,7 @@ pub async fn write_completed_batch_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_request: &'a BatchRequestRow<'a>,
     mut response: ProviderBatchInferenceResponse,
-    config: &'a Config<'a>,
+    config: &Config,
 ) -> Result<Vec<InferenceResponse>, Error> {
     let inference_ids: Vec<Uuid> = response.elements.keys().copied().collect();
     let batch_model_inferences = get_batch_inferences(
@@ -840,7 +841,7 @@ pub async fn write_completed_batch_inference<'a>(
             input_messages,
             raw_request: raw_request.into_owned(),
             raw_response,
-            usage: usage.clone(),
+            usage,
             latency: Latency::Batch,
             model_name: batch_request.model_name.clone(),
             model_provider_name: batch_request.model_provider_name.clone().into(),
@@ -874,7 +875,6 @@ pub async fn write_completed_batch_inference<'a>(
             .prepare_response(
                 inference_id,
                 output,
-                usage,
                 vec![model_inference_response],
                 &inference_config,
                 inference_params.into_owned(),
@@ -951,6 +951,7 @@ pub async fn get_batch_inferences(
         .run_query_synchronous_no_params(query)
         .await?;
     let rows = response
+        .response
         .lines()
         .filter(|line| !line.is_empty())
         .map(serde_json::from_str::<BatchModelInferenceRow>)
@@ -1006,7 +1007,7 @@ pub async fn get_completed_batch_inference_response(
                     .run_query_synchronous_no_params(query)
                     .await?;
                 let mut inference_responses = Vec::new();
-                for row in response.lines() {
+                for row in response.response.lines() {
                     let inference_response: ChatInferenceResponseDatabaseRead =
                         serde_json::from_str(row).map_err(|e| {
                             Error::new(ErrorDetails::Serialization {
@@ -1055,14 +1056,14 @@ pub async fn get_completed_batch_inference_response(
                 let response = clickhouse_connection_info
                     .run_query_synchronous_no_params(query)
                     .await?;
-                if response.is_empty() {
+                if response.response.is_empty() {
                     return Err(ErrorDetails::InferenceNotFound {
                         inference_id: *inference_id,
                     }
                     .into());
                 }
                 let inference_response: ChatInferenceResponseDatabaseRead =
-                    serde_json::from_str(&response).map_err(|e| {
+                    serde_json::from_str(&response.response).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: e.to_string(),
                         })
@@ -1105,7 +1106,7 @@ pub async fn get_completed_batch_inference_response(
                     .run_query_synchronous_no_params(query)
                     .await?;
                 let mut inference_responses = Vec::new();
-                for row in response.lines() {
+                for row in response.response.lines() {
                     let inference_response: JsonInferenceResponseDatabaseRead =
                         serde_json::from_str(row).map_err(|e| {
                             Error::new(ErrorDetails::Serialization {
@@ -1154,14 +1155,14 @@ pub async fn get_completed_batch_inference_response(
                 let response = clickhouse_connection_info
                     .run_query_synchronous_no_params(query)
                     .await?;
-                if response.is_empty() {
+                if response.response.is_empty() {
                     return Err(ErrorDetails::InferenceNotFound {
                         inference_id: *inference_id,
                     }
                     .into());
                 }
                 let inference_response: JsonInferenceResponseDatabaseRead =
-                    serde_json::from_str(&response).map_err(|e| {
+                    serde_json::from_str(&response.response).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: e.to_string(),
                         })

@@ -57,9 +57,12 @@ fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("TGI_API_KEY".to_string())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct TGIProvider {
     api_base: Url,
+    #[serde(skip)]
     credentials: TGICredentials,
 }
 
@@ -442,6 +445,7 @@ impl<'a> TGIRequest<'a> {
             request.system.as_deref(),
             &request.messages,
             Some(&request.json_mode),
+            PROVIDER_TYPE,
         )?;
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);

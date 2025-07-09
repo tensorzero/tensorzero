@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 use std::io::Write;
 use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
@@ -121,6 +122,7 @@ pub async fn run_evaluation(
             config_file: Some(args.config_file),
             clickhouse_url: Some(clickhouse_url.clone()),
             timeout: None,
+            verify_credentials: true,
         }),
     }
     .build()

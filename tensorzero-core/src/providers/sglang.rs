@@ -44,10 +44,13 @@ fn default_api_key_location() -> CredentialLocation {
 const PROVIDER_NAME: &str = "SGLang";
 const PROVIDER_TYPE: &str = "sglang";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct SGLangProvider {
     model_name: String,
     api_base: Url,
+    #[serde(skip)]
     credentials: SGLangCredentials,
 }
 
@@ -560,6 +563,7 @@ impl<'a> SGLangRequest<'a> {
             request.system.as_deref(),
             &request.messages,
             Some(&request.json_mode),
+            PROVIDER_TYPE,
         )?;
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);

@@ -3,6 +3,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use futures::StreamExt;
+use itertools::Itertools;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource};
 use secrecy::{ExposeSecret, SecretString};
@@ -16,6 +17,8 @@ use super::helpers::check_new_tool_call_name;
 use super::helpers::inject_extra_request_data_and_send_eventsource;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
+use crate::error::warn_discarded_thought_block;
+use crate::error::warn_discarded_unknown_chunk;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::file::require_image;
@@ -47,11 +50,14 @@ const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 /// See the `GCPVertexGeminiProvider` struct docs for information about our handling 'thought' and unknown blocks.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct GoogleAIStudioGeminiProvider {
     model_name: String,
     request_url: Url,
     streaming_request_url: Url,
+    #[serde(skip)]
     credentials: GoogleAIStudioCredentials,
 }
 
@@ -274,7 +280,8 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             builder,
         )
         .await?;
-        let stream = stream_google_ai_studio_gemini(event_source, start_time).peekable();
+        let stream =
+            stream_google_ai_studio_gemini(event_source, start_time, model_provider).peekable();
         Ok((stream, raw_request))
     }
 
@@ -306,7 +313,9 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
 fn stream_google_ai_studio_gemini(
     mut event_source: EventSource,
     start_time: Instant,
+    model_provider: &ModelProvider,
 ) -> ProviderInferenceResponseStreamInner {
+    let discard_unknown_chunks = model_provider.discard_unknown_chunks;
     Box::pin(async_stream::stream! {
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
@@ -342,6 +351,7 @@ fn stream_google_ai_studio_gemini(
                             start_time.elapsed(),
                             &mut last_tool_name,
                             &mut last_tool_idx,
+                            discard_unknown_chunks,
                         )
                     }
                 }
@@ -479,7 +489,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GeminiPart<'a>>
             // output of a chat completion is used as an input to another model inference,
             // i.e. a judge or something.
             // We don't think the thoughts should be passed in in this case.
-            ContentBlock::Thought(_thought) => Ok(None),
+            ContentBlock::Thought(thought) => {
+                warn_discarded_thought_block(PROVIDER_TYPE, thought);
+                Ok(None)
+            }
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
@@ -658,6 +671,7 @@ impl<'a> GeminiRequest<'a> {
             .messages
             .iter()
             .map(GeminiContent::try_from)
+            .filter_ok(|m| !m.parts.is_empty())
             .collect::<Result<_, _>>()?;
         let (tools, tool_config) = prepare_tools(request);
         let (response_mime_type, response_schema) = match request.json_mode {
@@ -748,23 +762,24 @@ fn content_part_to_tensorzero_chunk(
     part: GeminiResponseContentPart,
     last_tool_name: &mut Option<String>,
     last_tool_idx: &mut Option<u32>,
-) -> Result<ContentBlockChunk, Error> {
+    discard_unknown_chunks: bool,
+) -> Result<Option<ContentBlockChunk>, Error> {
     if part.thought {
         match part.data {
             FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => {
-                return Ok(ContentBlockChunk::Thought(ThoughtChunk {
+                return Ok(Some(ContentBlockChunk::Thought(ThoughtChunk {
                     id: "0".to_string(),
                     text: Some(text),
                     signature: part.thought_signature,
-                }));
+                })));
             }
             // Handle 'thought/thoughtSignature' with no other fields
             FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
-                return Ok(ContentBlockChunk::Thought(ThoughtChunk {
+                return Ok(Some(ContentBlockChunk::Thought(ThoughtChunk {
                     id: "0".to_string(),
                     text: None,
                     signature: part.thought_signature,
-                }));
+                })));
             }
             _ => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
@@ -781,10 +796,10 @@ fn content_part_to_tensorzero_chunk(
     }
     match part.data {
         FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => {
-            Ok(ContentBlockChunk::Text(TextChunk {
+            Ok(Some(ContentBlockChunk::Text(TextChunk {
                 text,
                 id: "0".to_string(),
-            }))
+            })))
         }
         FlattenUnknown::Normal(GeminiResponseContentPartData::FunctionCall(function_call)) => {
             let arguments = serialize_or_log(&function_call.args);
@@ -805,18 +820,24 @@ fn content_part_to_tensorzero_chunk(
                     message: "Tool call index is not set in Google AI Studio Gemini. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports".to_string(),
                 })),
             };
-            Ok(ContentBlockChunk::ToolCall(ToolCallChunk {
+            Ok(Some(ContentBlockChunk::ToolCall(ToolCallChunk {
                 raw_name: name,
                 raw_arguments: arguments,
                 id,
+            })))
+        }
+        FlattenUnknown::Unknown(part) => {
+            if discard_unknown_chunks {
+                warn_discarded_unknown_chunk(PROVIDER_TYPE, &part.to_string());
+                return Ok(None);
+            }
+            Err(Error::new(ErrorDetails::InferenceServer {
+                message: "Unknown content part in Google AI Studio Gemini response".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(part.to_string()),
             }))
         }
-        FlattenUnknown::Unknown(part) => Err(Error::new(ErrorDetails::InferenceServer {
-            message: "Unknown content part in Google AI Studio Gemini response".to_string(),
-            provider_type: PROVIDER_TYPE.to_string(),
-            raw_request: None,
-            raw_response: Some(part.to_string()),
-        })),
     }
 }
 
@@ -1035,6 +1056,7 @@ fn convert_stream_response_with_metadata_to_chunk(
     latency: Duration,
     last_tool_name: &mut Option<String>,
     last_tool_idx: &mut Option<u32>,
+    discard_unknown_chunks: bool,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
         Error::new(ErrorDetails::InferenceServer {
@@ -1050,7 +1072,15 @@ fn convert_stream_response_with_metadata_to_chunk(
         Some(content) => content
             .parts
             .into_iter()
-            .map(|part| content_part_to_tensorzero_chunk(part, last_tool_name, last_tool_idx))
+            .flat_map(|part| {
+                content_part_to_tensorzero_chunk(
+                    part,
+                    last_tool_name,
+                    last_tool_idx,
+                    discard_unknown_chunks,
+                )
+                .transpose()
+            })
             .collect::<Result<Vec<ContentBlockChunk>, Error>>()?,
         None => vec![],
     };
@@ -1114,11 +1144,57 @@ mod tests {
     use std::borrow::Cow;
 
     use serde_json::json;
+    use tracing_test::traced_test;
 
     use super::*;
     use crate::inference::types::{FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode};
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{ToolCallConfig, ToolResult};
+
+    #[test]
+    #[traced_test]
+    fn test_convert_unknown_content_block_warn() {
+        use std::time::Duration;
+        let content = GeminiResponseContent {
+            parts: vec![GeminiResponseContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Unknown(Cow::Owned(
+                    json!({"unknown_field": "unknown_value"}),
+                )),
+            }],
+        };
+
+        let response = GeminiResponse {
+            candidates: vec![GeminiResponseCandidate {
+                content: Some(content),
+                finish_reason: Some(GeminiFinishReason::Stop),
+            }],
+            usage_metadata: Some(GeminiUsageMetadata {
+                prompt_token_count: 10,
+                candidates_token_count: Some(5),
+            }),
+        };
+
+        let latency = Duration::from_millis(100);
+        let mut last_tool_name = None;
+
+        let mut last_tool_idx = None;
+        let res = convert_stream_response_with_metadata_to_chunk(
+            "raw_response".to_string(),
+            response,
+            latency,
+            &mut last_tool_name,
+            &mut last_tool_idx,
+            true,
+        )
+        .unwrap();
+        assert_eq!(res.content, []);
+        assert!(
+            logs_contain("Discarding unknown chunk in google_ai_studio_gemini response"),
+            "Missing warning in logs"
+        );
+    }
 
     #[test]
     fn test_google_ai_studio_gemini_content_try_from() {
@@ -2024,6 +2100,7 @@ mod tests {
             Duration::from_millis(100),
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         )
         .unwrap();
 
@@ -2081,6 +2158,7 @@ mod tests {
             Duration::from_millis(50),
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         )
         .unwrap();
 
@@ -2142,6 +2220,7 @@ mod tests {
             Duration::from_millis(75),
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         )
         .unwrap();
 
@@ -2193,6 +2272,7 @@ mod tests {
             Duration::from_millis(120),
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         )
         .unwrap();
 
@@ -2241,6 +2321,7 @@ mod tests {
             Duration::from_millis(60),
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         )
         .unwrap();
 
@@ -2280,6 +2361,7 @@ mod tests {
             Duration::from_millis(30),
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         );
 
         // Should remain None when there's an error
@@ -2352,6 +2434,7 @@ mod tests {
                     Duration::from_millis(10),
                     &mut last_tool_name,
                     &mut last_tool_idx,
+                    false,
                 );
                 // Verify tool call tracking state
                 assert_eq!(last_tool_idx, None);

@@ -9,10 +9,11 @@ use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use tensorzero::{RenderedStoredInference, Role};
+use tensorzero::{RenderedSample, Role};
 use tensorzero_core::{
     cache::CacheOptions,
     clickhouse::ClickHouseConnectionInfo,
+    config_parser::ProviderTypesConfig,
     endpoints::inference::InferenceClients,
     inference::types::{
         resolved_input::FileWithPath,
@@ -20,14 +21,20 @@ use tensorzero_core::{
         Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
         ModelInput, RequestMessage, Text,
     },
-    optimization::{Optimizer, OptimizerInfo, OptimizerOutput, OptimizerStatus},
+    optimization::JobHandle,
+    optimization::{OptimizationJobInfo, Optimizer, OptimizerInfo, OptimizerOutput},
     tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
 };
 
+mod fireworks_sft;
 mod openai_sft;
 
 static FERRIS_PNG: &[u8] = include_bytes!("../e2e/providers/ferris.png");
+
+pub fn use_mock_inference_provider() -> bool {
+    std::env::var("TENSORZERO_USE_MOCK_INFERENCE_PROVIDER").is_ok()
+}
 
 pub trait OptimizationTestCase {
     fn supports_image_data(&self) -> bool;
@@ -45,26 +52,33 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .launch(&client, test_examples, val_examples, &credentials)
         .await
         .unwrap();
-    let mut status = optimizer_info
-        .poll(&client, &job_handle, &credentials)
-        .await
-        .unwrap();
-    while !matches!(status, OptimizerStatus::Completed(_)) {
-        status = optimizer_info
-            .poll(&client, &job_handle, &credentials)
-            .await
-            .unwrap();
-        println!("Status: {status:?}");
-        // Sleep for a minute
-        sleep(Duration::from_secs(60)).await;
-        if matches!(status, OptimizerStatus::Failed) {
-            panic!("Optimization failed");
+    let mut status;
+    loop {
+        status = job_handle.poll(&client, &credentials).await.unwrap();
+        println!("Status: `{status:?}` Handle: `{job_handle}`");
+        if matches!(status, OptimizationJobInfo::Completed { .. }) {
+            break;
         }
+        if matches!(status, OptimizationJobInfo::Failed { .. }) {
+            panic!("Optimization failed: {status:?}");
+        }
+        sleep(if use_mock_inference_provider() {
+            Duration::from_secs(1)
+        } else {
+            Duration::from_secs(60)
+        })
+        .await;
     }
-    assert!(matches!(status, OptimizerStatus::Completed(_)));
-    let OptimizerStatus::Completed(OptimizerOutput::Model(model_config)) = status else {
+    assert!(matches!(status, OptimizationJobInfo::Completed { .. }));
+    let OptimizationJobInfo::Completed {
+        output: OptimizerOutput::Model(model_config),
+    } = status
+    else {
         panic!("Expected model config");
     };
+    let model_config = model_config
+        .load("test-fine-tuned-model", &ProviderTypesConfig::default())
+        .unwrap();
     let system = "You are a helpful assistant named Dr. M.M. Patel.".to_string();
     let messages = vec![RequestMessage {
         role: Role::User,
@@ -98,6 +112,10 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         credentials: &HashMap::new(),
         cache_options: &CacheOptions::default(),
     };
+    // We didn't produce a real model, so there's nothing to test
+    if use_mock_inference_provider() {
+        return;
+    }
     let response = model_config
         .infer(&request, &clients, "test")
         .await
@@ -105,12 +123,9 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     println!("Response: {response:?}");
 }
 
-fn get_examples(
-    test_case: &impl OptimizationTestCase,
-    num_examples: usize,
-) -> Vec<RenderedStoredInference> {
+fn get_examples(test_case: &impl OptimizationTestCase, num_examples: usize) -> Vec<RenderedSample> {
     assert!(num_examples >= 10);
-    let mut generators: Vec<fn() -> RenderedStoredInference> = vec![generate_text_example];
+    let mut generators: Vec<fn() -> RenderedSample> = vec![generate_text_example];
     if test_case.supports_tool_calls() {
         generators.push(generate_tool_call_example);
     }
@@ -125,12 +140,11 @@ fn get_examples(
         .collect()
 }
 
-fn generate_text_example() -> RenderedStoredInference {
+fn generate_text_example() -> RenderedSample {
     // So the examples are different
     let id = Uuid::now_v7().to_string();
-    RenderedStoredInference {
+    RenderedSample {
         function_name: "test".to_string(),
-        variant_name: "test".to_string(),
         input: ModelInput {
             system: Some(format!(
                 "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
@@ -142,22 +156,24 @@ fn generate_text_example() -> RenderedStoredInference {
                 })],
             }],
         },
-        output: vec![ContentBlockChatOutput::Text(Text {
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "The capital of France is Paris.".to_string(),
-        })],
-        episode_id: Uuid::now_v7(),
-        inference_id: Uuid::now_v7(),
+        })]),
+        episode_id: Some(Uuid::now_v7()),
+        inference_id: Some(Uuid::now_v7()),
         tool_params: None,
         output_schema: None,
+        dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
+            text: "The capital of France is Marseille.".to_string(),
+        })]],
     }
 }
 
-fn generate_tool_call_example() -> RenderedStoredInference {
+fn generate_tool_call_example() -> RenderedSample {
     // So the examples are different
     let id = Uuid::now_v7().to_string();
-    RenderedStoredInference {
+    RenderedSample {
         function_name: "test".to_string(),
-        variant_name: "test".to_string(),
         input: ModelInput {
             system: Some(format!(
                 "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
@@ -210,7 +226,7 @@ fn generate_tool_call_example() -> RenderedStoredInference {
                 },
             ],
         },
-        output: vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
+        output: Some(vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
             name: Some("get_weather".to_string()),
             arguments: Some(serde_json::json!({
                 "location": "London",
@@ -221,9 +237,7 @@ fn generate_tool_call_example() -> RenderedStoredInference {
             })
             .to_string(),
             id: "call_2".to_string(),
-        })],
-        episode_id: Uuid::now_v7(),
-        inference_id: Uuid::now_v7(),
+        })]),
         tool_params: Some(ToolCallConfigDatabaseInsert {
             tools_available: vec![Tool {
                 name: "get_weather".to_string(),
@@ -243,16 +257,18 @@ fn generate_tool_call_example() -> RenderedStoredInference {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
         }),
+        episode_id: Some(Uuid::now_v7()),
+        inference_id: Some(Uuid::now_v7()),
         output_schema: None,
+        dispreferred_outputs: vec![],
     }
 }
 
-fn generate_image_example() -> RenderedStoredInference {
+fn generate_image_example() -> RenderedSample {
     // So the examples are different
     let id = Uuid::now_v7().to_string();
-    RenderedStoredInference {
+    RenderedSample {
         function_name: "test".to_string(),
-        variant_name: "test".to_string(),
         input: ModelInput {
             system: Some(format!(
                 "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
@@ -279,13 +295,16 @@ fn generate_image_example() -> RenderedStoredInference {
                 ],
             }],
         },
-        output: vec![ContentBlockChatOutput::Text(Text {
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "Orange!".to_string(),
-        })],
-        episode_id: Uuid::now_v7(),
-        inference_id: Uuid::now_v7(),
+        })]),
         tool_params: None,
+        episode_id: Some(Uuid::now_v7()),
+        inference_id: Some(Uuid::now_v7()),
         output_schema: None,
+        dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
+            text: "Blue!".to_string(),
+        })]],
     }
 }
 

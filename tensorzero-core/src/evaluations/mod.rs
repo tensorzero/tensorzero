@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::{
@@ -20,7 +20,9 @@ use crate::{
     jsonschema_util::StaticJSONSchema,
     tool::create_implicit_tool_call_config,
     variant::{
-        best_of_n_sampling::{BestOfNSamplingConfig, EvaluatorConfig as OnlineEvaluatorConfig},
+        best_of_n_sampling::{
+            BestOfNEvaluatorConfig as OnlineEvaluatorConfig, BestOfNSamplingConfig,
+        },
         chain_of_thought::ChainOfThoughtConfig,
         chat_completion::ChatCompletionConfig,
         dicl::DiclConfig,
@@ -35,20 +37,29 @@ pub const LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT: &str =
 pub const LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT: &str =
     include_str!("llm_judge_boolean_output_schema.json");
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct StaticEvaluationConfig {
     pub evaluators: HashMap<String, EvaluatorConfig>,
     pub function_name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvaluationConfig {
     Static(StaticEvaluationConfig),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvaluatorConfig {
     ExactMatch(ExactMatchConfig),
+    #[serde(rename = "llm_judge")]
     LLMJudge(LLMJudgeConfig),
 }
 
@@ -68,13 +79,17 @@ impl EvaluatorConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ExactMatchConfig {
     #[serde(default)]
     pub cutoff: Option<f32>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct LLMJudgeConfig {
     pub input_format: LLMJudgeInputFormat,
     pub output_type: LLMJudgeOutputType,
@@ -83,13 +98,17 @@ pub struct LLMJudgeConfig {
     pub cutoff: Option<f32>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct LLMJudgeIncludeConfig {
     #[serde(default)]
     pub reference_output: bool,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeInputFormat {
     #[default]
@@ -97,7 +116,9 @@ pub enum LLMJudgeInputFormat {
     Messages,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeOutputType {
     Float,
@@ -113,7 +134,9 @@ impl From<LLMJudgeOutputType> for MetricConfigType {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeOptimize {
     Min,
@@ -378,6 +401,10 @@ impl UninitializedEvaluatorConfig {
                 let output_schema = StaticJSONSchema::from_value(&output_schema_value)?;
                 let implicit_tool_call_config =
                     create_implicit_tool_call_config(output_schema.clone());
+                let variants = variants
+                    .into_iter()
+                    .map(|(name, variant)| (name, Arc::new(variant)))
+                    .collect();
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     system_schema: None,

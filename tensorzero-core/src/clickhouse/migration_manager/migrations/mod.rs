@@ -29,6 +29,7 @@ pub mod migration_0028;
 pub mod migration_0029;
 pub mod migration_0030;
 pub mod migration_0031;
+pub mod migration_0032;
 pub mod migration_0033;
 
 /// Returns true if the table exists, false if it does not
@@ -53,7 +54,7 @@ async fn check_table_exists(
             .into())
         }
         Ok(response) => {
-            if response.trim() != "1" {
+            if response.response.trim() != "1" {
                 return Ok(false);
             }
         }
@@ -90,7 +91,7 @@ async fn check_column_exists(
             .into())
         }
         Ok(response) => {
-            if response.trim() != "1" {
+            if response.response.trim() != "1" {
                 return Ok(false);
             }
         }
@@ -116,7 +117,7 @@ async fn get_column_type(
             message: e.to_string(),
         }
         .into()),
-        Ok(response) => Ok(response.trim().to_string()),
+        Ok(response) => Ok(response.response.trim().to_string()),
     }
 }
 
@@ -138,7 +139,7 @@ async fn get_default_expression(
             message: e.to_string(),
         }
         .into()),
-        Ok(response) => Ok(response.trim().to_string()),
+        Ok(response) => Ok(response.response.trim().to_string()),
     }
 }
 
@@ -149,7 +150,7 @@ async fn table_is_nonempty(
 ) -> Result<bool, Error> {
     let query = format!("SELECT COUNT() FROM {table} FORMAT CSV");
     let result = clickhouse.run_query_synchronous_no_params(query).await?;
-    Ok(result.trim().parse::<i64>().map_err(|e| {
+    Ok(result.response.trim().parse::<i64>().map_err(|e| {
         Error::new(ErrorDetails::ClickHouseMigration {
             id: migration_id.to_string(),
             message: e.to_string(),
@@ -167,7 +168,7 @@ async fn get_table_engine(
         table
     );
     let result = clickhouse.run_query_synchronous_no_params(query).await?;
-    Ok(result.trim().to_string())
+    Ok(result.response.trim().to_string())
 }
 
 async fn check_index_exists(
@@ -177,5 +178,5 @@ async fn check_index_exists(
 ) -> Result<bool, Error> {
     let query = format!("SELECT 1 FROM system.data_skipping_indices WHERE database='{}' AND table='{}' AND name='{}'", clickhouse.database(), table, index);
     let result = clickhouse.run_query_synchronous_no_params(query).await?;
-    Ok(result.trim() == "1")
+    Ok(result.response.trim() == "1")
 }
