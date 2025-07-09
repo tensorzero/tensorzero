@@ -36,7 +36,7 @@ function renderContentBlock(block: DisplayInputMessageContent, index: number) {
 
     // "Raw text" is when the user submits an inference on the function/variant and overrides template interpolation
     case "raw_text":
-      return <TextMessage key={index} label="Text" content={block.value} />;
+      return <TextMessage key={index} label="Raw Text" content={block.value} />;
 
     case "missing_function_text":
       return (
@@ -98,6 +98,12 @@ function renderContentBlock(block: DisplayInputMessageContent, index: number) {
 export default function InputSnippet({ system, messages }: InputSnippetProps) {
   return (
     <SnippetLayout>
+      {!system && messages.length === 0 && (
+        <SnippetContent>
+          <EmptyMessage message="Empty input" />
+        </SnippetContent>
+      )}
+
       {system && (
         <SnippetContent>
           <SnippetMessage role="system">
@@ -110,17 +116,15 @@ export default function InputSnippet({ system, messages }: InputSnippetProps) {
         </SnippetContent>
       )}
 
-      <SnippetContent>
-        {messages.length === 0 ? (
-          <EmptyMessage message="No input messages" />
-        ) : (
-          messages.map((message, messageIndex) => (
+      {messages.length > 0 && (
+        <SnippetContent>
+          {messages.map((message, messageIndex) => (
             <SnippetMessage role={message.role} key={messageIndex}>
               {message.content.map(renderContentBlock)}
             </SnippetMessage>
-          ))
-        )}
-      </SnippetContent>
+          ))}
+        </SnippetContent>
+      )}
     </SnippetLayout>
   );
 }

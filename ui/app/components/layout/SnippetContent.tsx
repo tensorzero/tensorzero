@@ -124,7 +124,7 @@ export function ParameterizedMessage({ parameters }: { parameters?: unknown }) {
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label
-        text="Template arguments"
+        text="Template Arguments"
         icon={<BlocksIcon className="text-fg-muted h-3 w-3" />}
       />
       <CodeEditor allowedLanguages={["json"]} value={formattedJson} readOnly />
@@ -156,7 +156,6 @@ function ToolDetails({
       <p className="text-fg-secondary font-medium">{payloadLabel}</p>
       <CodeEditor
         value={formattedPayload}
-        allowedLanguages={["json"]}
         className="bg-bg-secondary"
         readOnly
       />
