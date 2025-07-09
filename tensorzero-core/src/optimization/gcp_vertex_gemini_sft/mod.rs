@@ -1,3 +1,4 @@
+use futures::try_join;
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
@@ -263,10 +264,14 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             Some(prefix) => format!("gs://{}/{}/{}", self.bucket_name, prefix, train_filename),
             None => format!("gs://{}/{}", self.bucket_name, train_filename),
         };
-        upload_rows_to_gcp_object_store(&train_rows, &train_gs_url, &self.credentials, credentials)
-            .await?;
+        // Run uploads concurrently
+        let train_fut = upload_rows_to_gcp_object_store(
+            &train_rows,
+            &train_gs_url,
+            &self.credentials,
+            credentials,
+        );
 
-        // Upload validation data if provided
         let val_gs_url = if let Some(val_rows) = &val_rows {
             let val_filename = format!("val_{}.jsonl", uuid::Uuid::now_v7());
             let val_url = match &self.bucket_path_prefix {
@@ -274,10 +279,15 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                 None => format!("gs://{}/{}", self.bucket_name, val_filename),
             };
 
-            upload_rows_to_gcp_object_store(val_rows, &val_url, &self.credentials, credentials)
-                .await?;
+            let val_fut =
+                upload_rows_to_gcp_object_store(val_rows, &val_url, &self.credentials, credentials);
+
+            // Run both futures concurrently
+            try_join!(train_fut, val_fut)?;
             Some(val_url)
         } else {
+            // Just run the training file upload
+            train_fut.await?;
             None
         };
 
