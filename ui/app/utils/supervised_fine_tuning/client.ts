@@ -4,12 +4,14 @@ import { TensorZeroClient } from "tensorzero-node";
 import type {
   InferenceFilterTreeNode,
   InferenceOutputSource,
+  JsonValue,
   OptimizationJobHandle,
   OptimizationJobInfo,
   UninitializedOptimizerInfo,
 } from "tensorzero-node";
 import { getConfig } from "~/utils/config/index.server";
 import { getEnv } from "../env.server";
+import { logger } from "../logger";
 
 let _tensorZeroClient: TensorZeroClient | undefined;
 export async function getNativeTensorZeroClient(): Promise<TensorZeroClient> {
@@ -75,9 +77,9 @@ class NativeSFTJob extends SFTJob {
           jobUrl: this.jobHandle.job_url,
           rawData: {
             status: "error",
-            message: "Job failed",
+            message: this.jobStatus.message,
           },
-          error: "Job failed",
+          error: this.jobStatus.message,
         };
       case "completed": {
         // NOTE: the native SFT backend actually returns a model provider that is all we need
@@ -105,8 +107,19 @@ class NativeSFTJob extends SFTJob {
 
   async poll(): Promise<SFTJob> {
     const client = await getNativeTensorZeroClient();
-    const status = await client.experimentalPollOptimization(this.jobHandle);
-    this.jobStatus = status;
+    logger.debug("Polling job", this.jobHandle);
+    try {
+      const status = await client.experimentalPollOptimization(this.jobHandle);
+      this.jobStatus = status;
+    } catch (e) {
+      logger.error(e);
+      this.jobStatus = {
+        status: "failed",
+        message: `Job failed: ${e}`,
+        error: e as JsonValue,
+      };
+    }
+    logger.debug("Job status", this.jobStatus);
     return this;
   }
 }

@@ -300,6 +300,15 @@ pub async fn get_fine_tuning_job(
             "state": "JOB_STATE_RUNNING",
         })))
     } else {
+        if params.account_id.contains("error") {
+            return Ok(Json(serde_json::json!({
+                "name": format!("accounts/{}/supervisedFineTuningJobs/{}", params.account_id, params.job_id),
+                "state": "JOB_STATE_FAILED",
+                "error": serde_json::json!({
+                    "unexpected_error": "Model error"
+                }),
+            })));
+        }
         Ok(Json(serde_json::json!({
             "name": format!("accounts/{}/supervisedFineTuningJobs/{}", params.account_id, params.job_id),
             "state": "JOB_STATE_COMPLETED",
