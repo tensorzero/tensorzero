@@ -26,7 +26,7 @@ pub struct AppStateData {
     pub http_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     // Prevent `AppStateData` from being directly constructed outside of this module
-    // This ensures that `AppStateData`is only every constructed via explicit `new` methods,
+    // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
     _private: (),
 }
