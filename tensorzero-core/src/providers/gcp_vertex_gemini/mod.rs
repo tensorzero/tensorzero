@@ -2082,13 +2082,6 @@ pub fn tensorzero_to_gcp_vertex_gemini_content<'a>(
         }
     }
 
-    // Check if we have any content blocks
-    if model_content_blocks.is_empty() {
-        return Err(Error::new(ErrorDetails::InvalidMessage {
-            message: "Model message must contain at least one content block".to_string(),
-        }));
-    }
-
     let message = GCPVertexGeminiContent {
         role,
         parts: model_content_blocks,

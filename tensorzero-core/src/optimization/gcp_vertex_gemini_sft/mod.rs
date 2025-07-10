@@ -395,7 +395,10 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
 
         let auth_headers = gcp_credentials
             .get_auth_headers(
-                &format!("https://{}-aiplatform.googleapis.com/", self.region),
+                &format!(
+                    "https://{}aiplatform.googleapis.com/",
+                    location_subdomain_prefix(&self.region)
+                ),
                 credentials,
             )
             .await?;
