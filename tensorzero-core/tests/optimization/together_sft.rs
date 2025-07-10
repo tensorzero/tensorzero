@@ -1,6 +1,6 @@
 use crate::{optimization_test_case, OptimizationTestCase};
 use tensorzero_core::optimization::{
-    together_sft::UninitializedTogetherSFTConfig, OptimizerInfo, UninitializedOptimizerConfig,
+    together_sft::UninitializedTogetherSFTConfig, UninitializedOptimizerConfig,
     UninitializedOptimizerInfo,
 };
 
@@ -15,7 +15,7 @@ impl OptimizationTestCase for TogetherSFTTestCase {
         false
     }
 
-    fn get_optimizer_info(&self) -> OptimizerInfo {
+    fn get_optimizer_info(&self, _use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
         UninitializedOptimizerInfo {
             inner: UninitializedOptimizerConfig::TogetherSFT(UninitializedTogetherSFTConfig {
                 model: "meta-llama/Meta-Llama-3.1-8B-Instruct-Reference".to_string(),
@@ -23,8 +23,6 @@ impl OptimizationTestCase for TogetherSFTTestCase {
                 api_base: None,
             }),
         }
-        .load()
-        .expect("Failed to create TogetherSFT optimizer info")
     }
 }
 

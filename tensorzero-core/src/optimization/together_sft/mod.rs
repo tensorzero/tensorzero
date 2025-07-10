@@ -64,7 +64,7 @@ impl std::fmt::Display for TogetherSFTJobHandle {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 pub struct UninitializedTogetherSFTConfig {
     pub model: String,
