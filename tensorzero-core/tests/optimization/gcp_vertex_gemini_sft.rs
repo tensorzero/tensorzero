@@ -1,7 +1,4 @@
-use crate::{
-    embedded_workflow_test_case, http_workflow_test_case, optimization_test_case,
-    OptimizationTestCase,
-};
+use crate::{optimization_test_case, OptimizationTestCase};
 use tensorzero_core::optimization::{
     gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig, UninitializedOptimizerConfig,
     UninitializedOptimizerInfo,
@@ -48,5 +45,3 @@ impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {
 }
 
 optimization_test_case!(gcp_vertex_gemini_sft, GCPVertexGeminiSFTTestCase());
-embedded_workflow_test_case!(gcp_vertex_gemini_sft, GCPVertexGeminiSFTTestCase());
-http_workflow_test_case!(gcp_vertex_gemini_sft, GCPVertexGeminiSFTTestCase());
