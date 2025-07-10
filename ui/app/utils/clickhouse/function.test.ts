@@ -4,8 +4,8 @@ import {
   getVariantCounts,
   getVariantPerformances,
 } from "./function";
-import type { FunctionConfig } from "../config/function";
-import type { MetricConfig } from "../config/metric";
+import type { FunctionConfig } from "tensorzero-node";
+import type { MetricConfig } from "tensorzero-node";
 
 describe("getVariantPerformances", () => {
   test("getVariantPerformances for extract_entities", async () => {
@@ -211,6 +211,30 @@ describe("getVariantPerformances", () => {
         avg_metric: expect.closeTo(0.043478260869565216, 6),
         stdev: expect.closeTo(0.20851441405707477, 6),
         ci_error: expect.closeTo(0.08521739130434784, 6),
+      },
+      {
+        avg_metric: 0.4791666666666667,
+        ci_error: 0.1428235512262245,
+        count: 48,
+        period_start: "2025-04-28T00:00:00.000Z",
+        stdev: 0.5048523413086471,
+        variant_name: "baseline",
+      },
+      {
+        avg_metric: 1,
+        ci_error: 0,
+        count: 3,
+        period_start: "2025-04-28T00:00:00.000Z",
+        stdev: 0,
+        variant_name: "gpt-4.1-mini",
+      },
+      {
+        avg_metric: 0.4489795918367347,
+        ci_error: 0.14071247279470286,
+        count: 49,
+        period_start: "2025-04-28T00:00:00.000Z",
+        stdev: 0.5025445456953674,
+        variant_name: "gpt-4.1-nano",
       },
     ]);
   });
@@ -436,6 +460,14 @@ describe("getVariantPerformances with variant filtering", () => {
         stdev: expect.closeTo(0.20851441405707477, 6),
         ci_error: expect.closeTo(0.08521739130434784, 6),
       },
+      {
+        avg_metric: 0.4791666666666667,
+        ci_error: 0.1428235512262245,
+        count: 48,
+        period_start: "2025-04-28T00:00:00.000Z",
+        stdev: 0.5048523413086471,
+        variant_name: "baseline",
+      },
     ]);
   });
 
@@ -553,12 +585,12 @@ describe("getVariantCounts", () => {
     });
     expect(result).toMatchObject([
       {
-        count: 648,
-        last_used: "2025-04-14T23:09:51.000Z",
+        count: 649,
+        last_used: "2025-05-12T21:59:20.000Z",
         variant_name: "initial_prompt_gpt4o_mini",
       },
       {
-        count: 156,
+        count: 155,
         last_used: "2025-04-15T02:33:07.000Z",
         variant_name: "better_prompt_haiku_3_5",
       },

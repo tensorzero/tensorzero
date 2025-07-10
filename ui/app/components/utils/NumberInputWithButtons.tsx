@@ -1,9 +1,10 @@
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { Input } from "~/components/ui/input";
+import { logger } from "~/utils/logger";
 
 type NumberInputWithButtonsProps = {
-  value: number | null;
-  onChange: (value: number) => void;
+  value: number | null | "";
+  onChange: (value: number | "") => void;
   min?: number;
   max?: number;
   step?: number;
@@ -20,6 +21,10 @@ export function NumberInputWithButtons({
   "aria-label-increase": ariaLabelIncrease,
   "aria-label-decrease": ariaLabelDecrease,
 }: NumberInputWithButtonsProps) {
+  let numericValue = Number(value);
+  if (!isValidNumber(numericValue)) {
+    numericValue = 0;
+  }
   return (
     <div className="group relative">
       <Input
@@ -28,14 +33,26 @@ export function NumberInputWithButtons({
         max={max}
         step={step}
         value={value === null ? "" : value}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onChange={(e) => {
+          if (e.target.value === "") {
+            onChange("");
+            return;
+          }
+
+          const coercedValue = Number(e.target.value);
+          if (!isValidNumber(coercedValue)) {
+            logger.warn(`Invalid number input value: ${coercedValue}`);
+          } else {
+            onChange(coercedValue);
+          }
+        }}
         className="focus:ring-primary/20 [appearance:textfield] focus:ring-2 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
       <div className="absolute top-2 right-3 bottom-2 flex flex-col opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100">
         <button
           type="button"
           className="bg-secondary hover:bg-secondary-foreground/15 flex h-1/2 w-4 cursor-pointer items-center justify-center border-none"
-          onClick={() => onChange(Math.min((value || 0) + step, max))}
+          onClick={() => onChange(Math.min(numericValue + step, max))}
           aria-label={ariaLabelIncrease}
         >
           <ChevronUp className="h-3 w-3" />
@@ -43,7 +60,7 @@ export function NumberInputWithButtons({
         <button
           type="button"
           className="bg-secondary hover:bg-secondary-foreground/15 flex h-1/2 w-4 cursor-pointer items-center justify-center border-none"
-          onClick={() => onChange(Math.max((value || 0) - step, min))}
+          onClick={() => onChange(Math.max(numericValue - step, min))}
           aria-label={ariaLabelDecrease}
         >
           <ChevronDown className="h-3 w-3" />
@@ -51,4 +68,8 @@ export function NumberInputWithButtons({
       </div>
     </div>
   );
+}
+
+function isValidNumber(value: number) {
+  return !Number.isNaN(value) && Number.isFinite(value);
 }

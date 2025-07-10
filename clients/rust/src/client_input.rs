@@ -1,11 +1,12 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use serde_untagged::UntaggedEnumVisitor;
-use tensorzero_internal::{
+use tensorzero_core::{
     error::Error,
-    inference::types::{Image, InputMessageContent, Role, TextKind, Thought},
-    tool::{ToolCall, ToolCallInput, ToolResult},
+    inference::types::{File, InputMessageContent, Role, TextKind, Thought},
+    tool::{ToolCallInput, ToolResult},
 };
+use tensorzero_derive::TensorZeroDeserialize;
 
 // Like the normal `Input` type, but with `ClientInputMessage` instead of `InputMessage`.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
@@ -26,8 +27,9 @@ pub struct ClientInputMessage {
     pub content: Vec<ClientInputMessageContent>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, TensorZeroDeserialize, Serialize, PartialEq)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum ClientInputMessageContent {
     Text(TextKind),
     ToolCall(ToolCallInput),
@@ -36,7 +38,8 @@ pub enum ClientInputMessageContent {
         value: String,
     },
     Thought(Thought),
-    Image(Image),
+    #[serde(alias = "image")]
+    File(File),
     /// An unknown content block type, used to allow passing provider-specific
     /// content blocks (e.g. Anthropic's "redacted_thinking") in and out
     /// of TensorZero.
@@ -55,14 +58,14 @@ impl TryFrom<ClientInputMessageContent> for InputMessageContent {
         Ok(match this {
             ClientInputMessageContent::Text(text) => InputMessageContent::Text(text),
             ClientInputMessageContent::ToolCall(tool_call) => {
-                InputMessageContent::ToolCall(tool_call.try_into()?)
+                InputMessageContent::ToolCall(tool_call)
             }
             ClientInputMessageContent::ToolResult(tool_result) => {
                 InputMessageContent::ToolResult(tool_result)
             }
             ClientInputMessageContent::RawText { value } => InputMessageContent::RawText { value },
             ClientInputMessageContent::Thought(thought) => InputMessageContent::Thought(thought),
-            ClientInputMessageContent::Image(image) => InputMessageContent::Image(image),
+            ClientInputMessageContent::File(image) => InputMessageContent::File(image),
             ClientInputMessageContent::Unknown {
                 data,
                 model_provider_name,
@@ -97,15 +100,15 @@ pub fn deserialize_content<'de, D: Deserializer<'de>>(
 // as expected. This is never actually called - we just care that it compiles
 pub(super) fn test_client_input_to_input(
     client_input: ClientInput,
-) -> tensorzero_internal::inference::types::Input {
-    tensorzero_internal::inference::types::Input {
+) -> tensorzero_core::inference::types::Input {
+    tensorzero_core::inference::types::Input {
         system: client_input.system,
         messages: client_input
             .messages
             .into_iter()
             .map(|message| {
                 let ClientInputMessage { role, content } = message;
-                tensorzero_internal::inference::types::InputMessage {
+                tensorzero_core::inference::types::InputMessage {
                     role,
                     content: content
                         .into_iter()
@@ -125,20 +128,22 @@ pub(super) fn test_client_to_message_content(
         ClientInputMessageContent::ToolCall(ToolCallInput {
             id,
             name,
-            raw_name: _,
+            raw_name,
             arguments,
-            raw_arguments: _,
-        }) => InputMessageContent::ToolCall(ToolCall {
+            raw_arguments,
+        }) => InputMessageContent::ToolCall(ToolCallInput {
             id,
-            name: name.unwrap_or_default(),
-            arguments: arguments.unwrap_or_default().to_string(),
+            name,
+            raw_name,
+            raw_arguments,
+            arguments,
         }),
         ClientInputMessageContent::ToolResult(tool_result) => {
             InputMessageContent::ToolResult(tool_result)
         }
         ClientInputMessageContent::RawText { value } => InputMessageContent::RawText { value },
         ClientInputMessageContent::Thought(thought) => InputMessageContent::Thought(thought),
-        ClientInputMessageContent::Image(image) => InputMessageContent::Image(image),
+        ClientInputMessageContent::File(image) => InputMessageContent::File(image),
         ClientInputMessageContent::Unknown {
             data,
             model_provider_name,

@@ -1,0 +1,37 @@
+# Unfortunately, writing to the Github Actions cache from a merge queue doesn't work correctly.
+# The `merge_group` event runs on a temporary branch, which prevents it from being used from
+# any other branches: https://github.com/orgs/community/discussions/47349
+#
+# The hacky solution is to re-run certain workflows on pushes to `main`,
+# as caches written from `main` are accessible from all other branches.
+#
+# To avoid wasting money, we should only use the standard (free) Github Actions runners.
+name: Caching Hack (re-runs actions on 'main' to update the cache)
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  check-python-client-build:
+    uses: ./.github/workflows/python-client-build.yml
+
+  build-gateway:
+    strategy:
+      matrix:
+        runner:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          # We use this cache key from other jobs that need to build the gateway
+          shared-key: "build-gateway-cache"
+      - run: |
+          # Run both of these, as they build dependencies with different features
+          cargo build --features e2e_tests --tests
+          cargo build-e2e

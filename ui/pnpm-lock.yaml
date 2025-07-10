@@ -164,6 +164,9 @@ importers:
       "@storybook/experimental-addon-test":
         specifier: ^8.6.12
         version: 8.6.12(@vitest/browser@3.1.1)(@vitest/runner@3.1.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(storybook@8.6.12(prettier@3.5.3))(vitest@3.1.1)
+      "@storybook/preview-api":
+        specifier: ^8.6.12
+        version: 8.6.12(storybook@8.6.12(prettier@3.5.3))
       "@storybook/react":
         specifier: ^8.6.12
         version: 8.6.12(@storybook/test@8.6.12(storybook@8.6.12(prettier@3.5.3)))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(storybook@8.6.12(prettier@3.5.3))(typescript@5.8.2)
@@ -215,6 +218,9 @@ importers:
       storybook:
         specifier: ^8.6.12
         version: 8.6.12(prettier@3.5.3)
+      storybook-addon-remix-react-router:
+        specifier: ^4.0.1
+        version: 4.0.1(@storybook/blocks@8.6.12(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(storybook@8.6.12(prettier@3.5.3)))(@storybook/channels@8.6.12(storybook@8.6.12(prettier@3.5.3)))(@storybook/components@8.6.12(storybook@8.6.12(prettier@3.5.3)))(@storybook/core-events@8.6.12(storybook@8.6.12(prettier@3.5.3)))(@storybook/manager-api@8.6.12(storybook@8.6.12(prettier@3.5.3)))(@storybook/preview-api@8.6.12(storybook@8.6.12(prettier@3.5.3)))(@storybook/theming@8.6.12(storybook@8.6.12(prettier@3.5.3)))(react-dom@19.1.0(react@19.1.0))(react-router@7.5.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)
       tailwindcss:
         specifier: ^4.1.2
         version: 4.1.3
@@ -1002,6 +1008,24 @@ packages:
     peerDependencies:
       "@types/react": ">=16"
       react: ">=16"
+
+  "@mjackson/form-data-parser@0.4.0":
+    resolution:
+      {
+        integrity: sha512-zDQ0sFfXqn2bJaZ/ypXfGUe0lUjCzXybBHYEoyWaO2w1dZ0nOM9nRER8tVVv3a8ZIgO/zF6p2I5ieWJAUOzt3w==,
+      }
+
+  "@mjackson/headers@0.5.1":
+    resolution:
+      {
+        integrity: sha512-sJpFgecPT/zJvwk3GRNVWNs8EkwaJoUNU2D0VMlp+gDJs6cuSTm1q/aCZi3ZtuV6CgDEQ4l2ZjUG3A9JrQlbNA==,
+      }
+
+  "@mjackson/multipart-parser@0.6.3":
+    resolution:
+      {
+        integrity: sha512-aQhySnM6OpAYMMG+m7LEygYye99hB1md/Cy1AFE0yD5hfNW+X4JDu7oNVY9Gc6IW8PZ45D1rjFLDIUdnkXmwrA==,
+      }
 
   "@mjackson/node-fetch-server@0.2.0":
     resolution:
@@ -2035,10 +2059,26 @@ packages:
       storybook: ^8.6.12
       vite: ^4.0.0 || ^5.0.0 || ^6.0.0
 
+  "@storybook/channels@8.6.12":
+    resolution:
+      {
+        integrity: sha512-31hhRuAcEJjb8whU9nlbStD/5SK2lPW3dDfJLg8+LqHh8MadXKPXbZYG08oETrP53jZadVPhhZU6th1duF2Gcg==,
+      }
+    peerDependencies:
+      storybook: ^8.2.0 || ^8.3.0-0 || ^8.4.0-0 || ^8.5.0-0 || ^8.6.0-0
+
   "@storybook/components@8.6.12":
     resolution:
       {
         integrity: sha512-FiaE8xvCdvKC2arYusgtlDNZ77b8ysr8njAYQZwwaIHjy27TbR2tEpLDCmUwSbANNmivtc/xGEiDDwcNppMWlQ==,
+      }
+    peerDependencies:
+      storybook: ^8.2.0 || ^8.3.0-0 || ^8.4.0-0 || ^8.5.0-0 || ^8.6.0-0
+
+  "@storybook/core-events@8.6.12":
+    resolution:
+      {
+        integrity: sha512-j2MUlSfYOhTsjlruRWTqSVwYreJGFIsWeqHFAhCdtmXe3qpFBM/LuxTKuaM1uWvs6vEAyGEzDw8+DXwuO6uISg==,
       }
     peerDependencies:
       storybook: ^8.2.0 || ^8.3.0-0 || ^8.4.0-0 || ^8.5.0-0 || ^8.6.0-0
@@ -3181,6 +3221,12 @@ packages:
         integrity: sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==,
       }
     engines: { node: ">= 0.8" }
+
+  compare-versions@6.1.1:
+    resolution:
+      {
+        integrity: sha512-4hm4VPpIecmlg59CHXnRDnqGplJFrbLG4aFEl5vl6cK1u76ws3LLvX7ikFnTDl5vo39sjWD6AaDPYodJp/NNHg==,
+      }
 
   compressible@2.0.18:
     resolution:
@@ -5576,6 +5622,14 @@ packages:
     peerDependencies:
       react: ^16.8.0 || ^17 || ^18 || ^19
 
+  react-inspector@6.0.2:
+    resolution:
+      {
+        integrity: sha512-x+b7LxhmHXjHoU/VrFAzw5iutsILRoYyDq97EDYdFpPLcvqtEzk4ZSZSQjnFPbr5T57tLXnHcqFYoN1pI6u8uQ==,
+      }
+    peerDependencies:
+      react: ^16.8.4 || ^17.0.0 || ^18.0.0
+
   react-is@16.13.1:
     resolution:
       {
@@ -6049,6 +6103,28 @@ packages:
       {
         integrity: sha512-vj5lIj3Mwf9D79hBkltk5qmkFI+biIKWS2IBxEyEU3AX1tUf7AoL8nSazCOiiqQsGKIq01SClsKEzweu34uwvA==,
       }
+
+  storybook-addon-remix-react-router@4.0.1:
+    resolution:
+      {
+        integrity: sha512-Plhul9kInTKdOhoHumiJ0KRmuIVYhT5WBCnAlNt9MlsmDGEuuiimh8msyj5LPWnGD51/t38i14xI8gmmTyu1ow==,
+      }
+    peerDependencies:
+      "@storybook/blocks": ^8.0.0
+      "@storybook/channels": ^8.0.0
+      "@storybook/components": ^8.0.0
+      "@storybook/core-events": ^8.0.0
+      "@storybook/manager-api": ^8.0.0
+      "@storybook/preview-api": ^8.0.0
+      "@storybook/theming": ^8.0.0
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+      react-router: ^7.0.2
+    peerDependenciesMeta:
+      react:
+        optional: true
+      react-dom:
+        optional: true
 
   storybook@8.6.12:
     resolution:
@@ -7357,6 +7433,16 @@ snapshots:
       "@types/react": 19.1.0
       react: 19.1.0
 
+  "@mjackson/form-data-parser@0.4.0":
+    dependencies:
+      "@mjackson/multipart-parser": 0.6.3
+
+  "@mjackson/headers@0.5.1": {}
+
+  "@mjackson/multipart-parser@0.6.3":
+    dependencies:
+      "@mjackson/headers": 0.5.1
+
   "@mjackson/node-fetch-server@0.2.0": {}
 
   "@mswjs/interceptors@0.37.6":
@@ -8171,7 +8257,15 @@ snapshots:
       ts-dedent: 2.2.0
       vite: 6.2.7(@types/node@22.14.0)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.0)
 
+  "@storybook/channels@8.6.12(storybook@8.6.12(prettier@3.5.3))":
+    dependencies:
+      storybook: 8.6.12(prettier@3.5.3)
+
   "@storybook/components@8.6.12(storybook@8.6.12(prettier@3.5.3))":
+    dependencies:
+      storybook: 8.6.12(prettier@3.5.3)
+
+  "@storybook/core-events@8.6.12(storybook@8.6.12(prettier@3.5.3))":
     dependencies:
       storybook: 8.6.12(prettier@3.5.3)
 
@@ -9001,6 +9095,8 @@ snapshots:
   combined-stream@1.0.8:
     dependencies:
       delayed-stream: 1.0.0
+
+  compare-versions@6.1.1: {}
 
   compressible@2.0.18:
     dependencies:
@@ -10422,6 +10518,10 @@ snapshots:
     dependencies:
       react: 19.1.0
 
+  react-inspector@6.0.2(react@19.1.0):
+    dependencies:
+      react: 19.1.0
+
   react-is@16.13.1: {}
 
   react-is@17.0.2: {}
@@ -10755,6 +10855,23 @@ snapshots:
   statuses@2.0.1: {}
 
   std-env@3.8.1: {}
+
+  storybook-addon-remix-react-router@4.0.1(@storybook/blocks@8.6.12(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(storybook@8.6.12(prettier@3.5.3)))(@storybook/channels@8.6.12(storybook@8.6.12(prettier@3.5.3)))(@storybook/components@8.6.12(storybook@8.6.12(prettier@3.5.3)))(@storybook/core-events@8.6.12(storybook@8.6.12(prettier@3.5.3)))(@storybook/manager-api@8.6.12(storybook@8.6.12(prettier@3.5.3)))(@storybook/preview-api@8.6.12(storybook@8.6.12(prettier@3.5.3)))(@storybook/theming@8.6.12(storybook@8.6.12(prettier@3.5.3)))(react-dom@19.1.0(react@19.1.0))(react-router@7.5.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0):
+    dependencies:
+      "@mjackson/form-data-parser": 0.4.0
+      "@storybook/blocks": 8.6.12(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(storybook@8.6.12(prettier@3.5.3))
+      "@storybook/channels": 8.6.12(storybook@8.6.12(prettier@3.5.3))
+      "@storybook/components": 8.6.12(storybook@8.6.12(prettier@3.5.3))
+      "@storybook/core-events": 8.6.12(storybook@8.6.12(prettier@3.5.3))
+      "@storybook/manager-api": 8.6.12(storybook@8.6.12(prettier@3.5.3))
+      "@storybook/preview-api": 8.6.12(storybook@8.6.12(prettier@3.5.3))
+      "@storybook/theming": 8.6.12(storybook@8.6.12(prettier@3.5.3))
+      compare-versions: 6.1.1
+      react-inspector: 6.0.2(react@19.1.0)
+      react-router: 7.5.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+    optionalDependencies:
+      react: 19.1.0
+      react-dom: 19.1.0(react@19.1.0)
 
   storybook@8.6.12(prettier@3.5.3):
     dependencies:

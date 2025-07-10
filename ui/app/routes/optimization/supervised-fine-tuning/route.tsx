@@ -1,4 +1,4 @@
-import { data, type MetaFunction } from "react-router";
+import { data, type RouteHandle } from "react-router";
 import { useEffect, useState } from "react";
 import type {
   SFTJob,
@@ -8,30 +8,24 @@ import { useRevalidator } from "react-router";
 import { redirect } from "react-router";
 import { useConfig } from "~/context/config";
 import {
-  dump_model_config,
-  get_fine_tuned_model_config,
+  dump_provider_config,
+  get_fine_tuned_provider_config,
 } from "~/utils/config/models";
 import type { Route } from "./+types/route";
 import FineTuningStatus from "./FineTuningStatus";
-import { SFTResult } from "./SFTResult";
 import { SFTForm } from "./SFTForm";
 import {
   PageHeader,
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import { SFTFormValuesSchema, type SFTFormValues } from "./types";
+import { SFTFormValuesSchema } from "./types";
 import { launch_sft_job } from "~/utils/supervised_fine_tuning/client";
-import { FF_ENABLE_PYTHON } from "./featureflag.server";
+import { Badge } from "~/components/ui/badge";
+import { ModelBadge } from "~/components/model/ModelBadge";
 
-export const meta: MetaFunction = () => {
-  return [
-    { title: "TensorZero Supervised Fine-Tuning UI" },
-    {
-      name: "description",
-      content: "Supervised Fine-Tuning Optimization UI",
-    },
-  ];
+export const handle: RouteHandle = {
+  crumb: () => ["Supervised Fine-Tuning"],
 };
 
 // Mutable store mapping job IDs to their info
@@ -50,10 +44,6 @@ export async function loader({
     };
   }
 
-  if (FF_ENABLE_PYTHON) {
-    return await loadPythonFineTuneJob(job_id);
-  }
-
   const storedJob = jobStore[job_id];
   if (!storedJob) {
     throw new Response(JSON.stringify({ error: "Job not found" }), {
@@ -68,22 +58,6 @@ export async function loader({
   return status;
 }
 
-async function loadPythonFineTuneJob(job_id: string) {
-  const res = await fetch(`http://localhost:7001/optimizations/poll/${job_id}`);
-  if (!res.ok) {
-    if (res.status === 404) {
-      throw new Response(JSON.stringify({ error: await res.text() }), {
-        status: 404,
-      });
-    } else {
-      throw new Response(JSON.stringify({ error: await res.text() }), {
-        status: 500,
-      });
-    }
-  }
-  return await res.json();
-}
-
 // The action actually launches the fine-tuning job.
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
@@ -93,11 +67,6 @@ export async function action({ request }: Route.ActionArgs) {
   }
   const jsonData = JSON.parse(serializedFormData);
   const validatedData = SFTFormValuesSchema.parse(jsonData);
-
-  if (FF_ENABLE_PYTHON) {
-    return await startPythonFineTune(jsonData, validatedData);
-  }
-
   let job;
   try {
     job = await launch_sft_job(validatedData);
@@ -112,47 +81,8 @@ export async function action({ request }: Route.ActionArgs) {
   }
   jobStore[validatedData.jobId] = job;
 
-  // The query parameter is currently just used by e2e tests to check that we're
-  // using the expected backend
   return redirect(
-    `/optimization/supervised-fine-tuning/${validatedData.jobId}?backend=nodejs`,
-  );
-}
-
-async function startPythonFineTune(
-  parsedFormData: object,
-  validatedData: SFTFormValues,
-) {
-  try {
-    const res = await fetch("http://localhost:7001/optimizations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        data: {
-          kind: "sft",
-          ...parsedFormData,
-        },
-      }),
-    });
-    const resText = await res.text();
-    if (!res.ok) {
-      return data(
-        { message: `Error ${res.status} from fine-tuning server: ${resText}` },
-        { status: 500 },
-      );
-    }
-  } catch (error) {
-    const errors = {
-      message:
-        error instanceof Error
-          ? error.message
-          : "Unknown error occurred while launching fine-tuning job",
-    };
-    return data({ errors }, { status: 500 });
-  }
-
-  return redirect(
-    `/optimization/supervised-fine-tuning/${validatedData.jobId}?backend=python`,
+    `/optimization/supervised-fine-tuning/${validatedData.jobId}`,
   );
 }
 
@@ -180,34 +110,57 @@ function SupervisedFineTuningImpl(
         },
         navigator.userAgent === "TensorZeroE2E" ? 500 : 10000,
       );
-      return () => clearInterval(interval);
+      return () => {
+        clearInterval(interval);
+      };
     }
   }, [props, revalidator]);
 
   const finalResult =
     props.status === "completed"
-      ? dump_model_config(
-          get_fine_tuned_model_config(props.result, props.modelProvider),
+      ? dump_provider_config(
+          props.result,
+          get_fine_tuned_provider_config(props.result, props.modelProvider),
         )
       : null;
   if (finalResult && submissionPhase !== "complete") {
     setSubmissionPhase("complete");
   }
 
-  return (
+  return props.status === "idle" ? (
     <PageLayout>
       <PageHeader heading="Supervised Fine-Tuning" />
       <SectionLayout>
-        {props.status === "idle" && (
-          <SFTForm
-            config={config}
-            submissionPhase={submissionPhase}
-            setSubmissionPhase={setSubmissionPhase}
-          />
-        )}
-        <FineTuningStatus status={props} />
-        <SFTResult finalResult={finalResult} />
+        <SFTForm
+          config={config}
+          submissionPhase={submissionPhase}
+          setSubmissionPhase={setSubmissionPhase}
+        />
       </SectionLayout>
+    </PageLayout>
+  ) : (
+    <PageLayout>
+      <PageHeader
+        label="Supervised Fine-Tuning Job"
+        heading={props.formData.jobId}
+      >
+        <div className="flex items-center gap-2">
+          <Badge
+            variant={
+              props.status === "running"
+                ? "default"
+                : props.status === "completed"
+                  ? "secondary"
+                  : "destructive"
+            }
+          >
+            {props.status}
+          </Badge>
+          <ModelBadge provider={props.modelProvider} />
+        </div>
+      </PageHeader>
+
+      <FineTuningStatus status={props} result={finalResult} />
     </PageLayout>
   );
 }

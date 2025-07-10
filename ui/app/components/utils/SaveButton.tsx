@@ -28,6 +28,8 @@ export function SaveButton({
             onClick={onClick}
             className={className}
             disabled={disabled}
+            aria-label="Save"
+            title="Save"
           >
             <Save className="h-4 w-4" />
           </Button>

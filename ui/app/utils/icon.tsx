@@ -1,9 +1,16 @@
-import { TypeChat, TypeJson, QuestionMark } from "~/components/icons/Icons";
+import {
+  TypeChat,
+  TypeJson,
+  CircleSmall,
+  CircleSmallFill,
+  QuestionMark,
+} from "~/components/icons/Icons";
 import type { ReactNode } from "react";
 
 export type IconConfig = {
   icon: ReactNode;
   iconBg: string;
+  label?: string;
 };
 
 /**
@@ -14,15 +21,22 @@ export type IconConfig = {
 export function getFunctionTypeIcon(functionType: string): IconConfig {
   switch (functionType?.toLowerCase()) {
     case "chat":
-    case "conversation":
       return {
         icon: <TypeChat className="text-fg-type-chat" />,
         iconBg: "bg-bg-type-chat",
+        label: "Function type: Chat",
       };
-    default:
+    case "json":
       return {
         icon: <TypeJson className="text-fg-type-json" />,
         iconBg: "bg-bg-type-json",
+        label: "Function type: JSON",
+      };
+    default:
+      return {
+        icon: <QuestionMark className="text-neutral-600" />,
+        iconBg: "bg-neutral-100",
+        label: "Function type: Unknown",
       };
   }
 }
@@ -46,39 +60,39 @@ export function getFeedbackIcon(
     // Status-based icons
     case "success":
       return {
-        icon: null,
-        iconBg: "bg-green-200",
+        icon: <CircleSmallFill className="text-green-600" size={16} />,
+        iconBg: "none",
       };
     case "failure":
       return {
-        icon: null,
-        iconBg: "bg-red-200",
+        icon: <CircleSmallFill className="text-red-600" size={16} />,
+        iconBg: "none",
       };
 
     // Value type-based icons (all neutral status)
     case "unknown":
       return {
-        icon: <QuestionMark className="text-neutral-400" size={16} />,
-        iconBg: "bg-gray-100",
+        icon: <CircleSmall className="text-neutral-400" size={16} />,
+        iconBg: "none",
       };
     case "float":
       return {
-        icon: null,
-        iconBg: "bg-gray-100",
+        icon: <CircleSmallFill className="text-neutral-400" size={16} />,
+        iconBg: "none",
       };
     case "comment":
     case "demonstration":
       return {
-        icon: null,
-        iconBg: "bg-gray-100",
+        icon: <CircleSmallFill className="text-neutral-400" size={16} />,
+        iconBg: "none",
       };
 
     // Default icon (no icon)
     case "default":
     default:
       return {
-        icon: null,
-        iconBg: "bg-gray-100",
+        icon: <CircleSmall className="text-neutral-400" size={16} />,
+        iconBg: "none",
       };
   }
 }

@@ -3,7 +3,7 @@ use std::{collections::HashMap, ops::Deref};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tensorzero_internal::{
+use tensorzero_core::{
     cache::CacheParamsOptions,
     endpoints::inference::{InferenceParams, Params},
     error::Error,
@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use crate::client_input::{test_client_input_to_input, ClientInput};
 
-// This is a copy-paste of the `Params` struct from `tensorzero_internal::endpoints::inference::Params`.
+// This is a copy-paste of the `Params` struct from `tensorzero_core::endpoints::inference::Params`.
 // with just the `credentials` field adjusted to allow serialization.
 /// The expected payload is a JSON object with the following fields:
 #[derive(Clone, Debug, Serialize, Default)]
@@ -180,7 +180,7 @@ impl Serialize for ClientSecretString {
     }
 }
 
-// The orphan rule requires us to write some impls in this crate, instead of in the `python-pyo3` wrapper crate.
+// The orphan rule requires us to write some impls in this crate, instead of in the `python` wrapper crate.
 #[cfg(feature = "pyo3")]
 mod pyo3_impls {
     use super::*;

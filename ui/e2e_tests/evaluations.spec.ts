@@ -27,7 +27,7 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
   await page.waitForTimeout(500);
   await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
   await page.getByRole("button", { name: "Launch" }).click();
-  await page.waitForTimeout(5000);
+  await page.waitForTimeout(10000);
 
   await expect(
     page.getByText("Select evaluation runs to compare..."),

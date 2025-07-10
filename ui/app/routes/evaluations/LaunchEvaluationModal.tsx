@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { useFetcher, Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
@@ -39,7 +39,7 @@ import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 interface LaunchEvaluationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  dataset_names: string[];
+  datasetNames: string[];
 }
 
 interface DatasetSelectorProps {
@@ -127,28 +127,38 @@ function DatasetSelector({
   );
 }
 
-function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
+function EvaluationForm({
+  datasetNames,
+  initialFormState,
+}: {
+  datasetNames: string[];
+  initialFormState: Partial<EvaluationsFormValues> | null;
+}) {
   const fetcher = useFetcher();
   const config = useConfig();
   const evaluation_names = Object.keys(config.evaluations);
   const [selectedEvaluationName, setSelectedEvaluationName] = useState<
     string | null
-  >(null);
+  >(initialFormState?.evaluation_name ?? null);
   const [selectedDatasetName, setSelectedDatasetName] = useState<string | null>(
-    null,
+    initialFormState?.dataset_name ?? null,
   );
   const [selectedVariantName, setSelectedVariantName] = useState<string | null>(
-    null,
+    initialFormState?.variant_name ?? null,
   );
-  const [concurrencyLimit, setConcurrencyLimit] = useState<string>("5");
-  const [inferenceCache, setInferenceCache] =
-    useState<InferenceCacheSetting>("on");
+  const [concurrencyLimit, setConcurrencyLimit] = useState<string>(
+    initialFormState?.concurrency_limit ?? "5",
+  );
+  const [inferenceCache, setInferenceCache] = useState<InferenceCacheSetting>(
+    initialFormState?.inference_cache ?? "on",
+  );
 
   let count = null;
   let isLoading = false;
   let function_name = null;
   if (selectedEvaluationName) {
-    function_name = config.evaluations[selectedEvaluationName]?.function_name;
+    function_name =
+      config.evaluations[selectedEvaluationName]?.function_name ?? null;
   }
   const { count: datasetCount, isLoading: datasetLoading } =
     useDatasetCountFetcher(selectedDatasetName, function_name);
@@ -166,7 +176,13 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
     concurrencyLimit !== "";
 
   return (
-    <fetcher.Form method="post">
+    <fetcher.Form
+      method="post"
+      onSubmit={(event) => {
+        const formData = new FormData(event.currentTarget);
+        persistToLocalStorage(formData);
+      }}
+    >
       <div className="mt-4">
         <label
           htmlFor="evaluation_name"
@@ -177,6 +193,7 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
       </div>
       <Select
         name="evaluation_name"
+        defaultValue={initialFormState?.evaluation_name ?? undefined}
         onValueChange={(value) => {
           setSelectedEvaluationName(value);
           setSelectedVariantName(null); // Reset variant selection when evaluation changes
@@ -203,7 +220,7 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
       </div>
 
       <DatasetSelector
-        dataset_names={dataset_names}
+        dataset_names={datasetNames}
         selectedDatasetName={selectedDatasetName}
         setSelectedDatasetName={setSelectedDatasetName}
       />
@@ -240,6 +257,7 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
       </div>
       <Select
         name="variant_name"
+        defaultValue={initialFormState?.variant_name ?? undefined}
         disabled={!selectedEvaluationName}
         onValueChange={(value) => setSelectedVariantName(value)}
       >
@@ -251,10 +269,12 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
             if (!selectedEvaluationName) return null;
 
             const evaluation_function =
-              config.evaluations[selectedEvaluationName].function_name;
-            const variant_names = Object.keys(
-              config.functions[evaluation_function].variants,
-            );
+              config.evaluations[selectedEvaluationName];
+            if (!evaluation_function) return null;
+            const function_config =
+              config.functions[evaluation_function.function_name];
+            if (!function_config) return null;
+            const variant_names = Object.keys(function_config.variants);
 
             return variant_names.map((variant_name) => (
               <SelectItem key={variant_name} value={variant_name}>
@@ -284,8 +304,9 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
       </div>
       <div className="mt-4">
         <AdvancedParametersAccordion
-          inference_cache={inferenceCache}
+          inferenceCache={inferenceCache}
           setInferenceCache={setInferenceCache}
+          defaultOpen={inferenceCache !== "on"}
         />
         <input type="hidden" name="inference_cache" value={inferenceCache} />
       </div>
@@ -301,17 +322,80 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
 export default function LaunchEvaluationModal({
   isOpen,
   onClose,
-  dataset_names,
+  datasetNames,
 }: LaunchEvaluationModalProps) {
+  const [initialFormState, setInitialFormState] =
+    useState<EvaluationsFormState | null>(null);
+  // useLayoutEffect to update fields before paint to avoid flicker of old state
+  useLayoutEffect(() => {
+    const storedValues = getFromLocalStorage();
+    if (storedValues) {
+      setInitialFormState({
+        ...storedValues,
+        // generate a key that we'll use to force re-render the form so that all
+        // internal state values are reset when given new data
+        renderKey: Date.now().toString(),
+      });
+    }
+  }, []);
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Launch Evaluation</DialogTitle>
         </DialogHeader>
-
-        <EvaluationForm dataset_names={dataset_names} />
+        <EvaluationForm
+          key={initialFormState?.renderKey}
+          datasetNames={datasetNames}
+          initialFormState={initialFormState}
+        />
       </DialogContent>
     </Dialog>
   );
+}
+
+interface EvaluationsFormValues {
+  dataset_name: string | null;
+  evaluation_name: string | null;
+  variant_name: string | null;
+  concurrency_limit: string;
+  inference_cache: InferenceCacheSetting;
+}
+
+interface EvaluationsFormState extends Partial<EvaluationsFormValues> {
+  renderKey: string;
+}
+
+const LOCAL_STORAGE_KEY = "tensorzero:evaluationForm";
+
+function persistToLocalStorage(formData: FormData) {
+  const formObject: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) {
+    if (typeof value !== "string") continue;
+    formObject[key] = value;
+  }
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(formObject));
+  } catch {
+    // silently ignore errors, e.g. if localStorage is full
+  }
+}
+
+function getFromLocalStorage() {
+  const values = localStorage.getItem(LOCAL_STORAGE_KEY);
+  if (!values) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(values);
+    if (parsed == null || typeof parsed !== "object") {
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      return null;
+    }
+  } catch {
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
+    return null;
+  }
+
+  // TODO: add validation
+  return parsed as Partial<EvaluationsFormValues>;
 }
