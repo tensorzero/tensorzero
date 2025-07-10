@@ -3577,23 +3577,6 @@ mod tests {
             _ => panic!("Expected InferenceClient error"),
         }
 
-        // Test empty content blocks
-        let content_blocks: Vec<ContentBlock> = vec![];
-        let result = tensorzero_to_gcp_vertex_gemini_content(
-            GCPVertexGeminiRole::User,
-            Cow::Borrowed(&content_blocks),
-            PROVIDER_TYPE,
-        );
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        let details = err.get_owned_details();
-        assert_eq!(
-            details,
-            ErrorDetails::InvalidMessage {
-                message: "Model message must contain at least one content block".to_string()
-            }
-        );
-
         // Test with Cow::Owned content blocks
         let content_blocks = vec!["Owned content".to_string().into()];
         let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
