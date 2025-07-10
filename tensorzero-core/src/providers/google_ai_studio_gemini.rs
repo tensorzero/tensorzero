@@ -925,16 +925,16 @@ enum GeminiFinishReason {
 impl From<GeminiFinishReason> for FinishReason {
     fn from(finish_reason: GeminiFinishReason) -> Self {
         match finish_reason {
-            GeminiFinishReason::Stop => FinishReason::Stop,
-            GeminiFinishReason::MaxTokens => FinishReason::Length,
-            GeminiFinishReason::Safety => FinishReason::ContentFilter,
-            GeminiFinishReason::Recitation => FinishReason::ToolCall,
-            GeminiFinishReason::Other => FinishReason::Unknown,
-            GeminiFinishReason::Blocklist => FinishReason::ContentFilter,
-            GeminiFinishReason::ProhibitedContent => FinishReason::ContentFilter,
+            GeminiFinishReason::Blocklist |
+            GeminiFinishReason::ProhibitedContent |
+            GeminiFinishReason::Safety |
             GeminiFinishReason::Spii => FinishReason::ContentFilter,
-            GeminiFinishReason::MalformedFunctionCall => FinishReason::ToolCall,
-            GeminiFinishReason::FinishReasonUnspecified => FinishReason::Unknown,
+            GeminiFinishReason::MaxTokens => FinishReason::Length,
+            GeminiFinishReason::Stop => FinishReason::Stop,
+            GeminiFinishReason::MalformedFunctionCall |
+            GeminiFinishReason::Recitation => FinishReason::ToolCall,
+            GeminiFinishReason::FinishReasonUnspecified |
+            GeminiFinishReason::Other |
             GeminiFinishReason::Unknown => FinishReason::Unknown,
         }
     }

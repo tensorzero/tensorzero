@@ -140,8 +140,8 @@ impl TryFrom<Credential> for OpenAICredentials {
         match credentials {
             Credential::Static(key) => Ok(OpenAICredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(OpenAICredentials::Dynamic(key_name)),
+            Credential::Missing |
             Credential::None => Ok(OpenAICredentials::None),
-            Credential::Missing => Ok(OpenAICredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for OpenAI provider".to_string(),
             })),
@@ -1084,12 +1084,12 @@ pub enum OpenAIRequestMessage<'a> {
 impl OpenAIRequestMessage<'_> {
     pub fn no_content(&self) -> bool {
         match self {
-            OpenAIRequestMessage::System(_) => false,
             OpenAIRequestMessage::User(OpenAIUserRequestMessage { content }) => content.is_empty(),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                 content,
                 tool_calls,
             }) => content.is_none() && tool_calls.is_none(),
+            OpenAIRequestMessage::System(_) |
             OpenAIRequestMessage::Tool(_) => false,
         }
     }
@@ -1098,7 +1098,7 @@ impl OpenAIRequestMessage<'_> {
             OpenAIRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
             OpenAIRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => false,
+                OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } |
                 // Don't inspect the contents of 'unknown' blocks
                 OpenAIContentBlock::Unknown { data: _ } => false,
             }),
@@ -1106,9 +1106,7 @@ impl OpenAIRequestMessage<'_> {
                 if let Some(content) = &msg.content {
                     content.iter().any(|c| match c {
                         OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                        OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => {
-                            false
-                        }
+                        OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } |
                         // Don't inspect the contents of 'unknown' blocks
                         OpenAIContentBlock::Unknown { data: _ } => false,
                     })
@@ -1829,11 +1827,11 @@ pub(super) enum OpenAIFinishReason {
 impl From<OpenAIFinishReason> for FinishReason {
     fn from(finish_reason: OpenAIFinishReason) -> Self {
         match finish_reason {
-            OpenAIFinishReason::Stop => FinishReason::Stop,
-            OpenAIFinishReason::Length => FinishReason::Length,
             OpenAIFinishReason::ContentFilter => FinishReason::ContentFilter,
+            OpenAIFinishReason::Length => FinishReason::Length,
+            OpenAIFinishReason::Stop => FinishReason::Stop,
+            OpenAIFinishReason::FunctionCall |
             OpenAIFinishReason::ToolCalls => FinishReason::ToolCall,
-            OpenAIFinishReason::FunctionCall => FinishReason::ToolCall,
             OpenAIFinishReason::Unknown => FinishReason::Unknown,
         }
     }

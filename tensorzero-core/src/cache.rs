@@ -48,12 +48,12 @@ pub struct CacheParamsOptions {
 impl From<(CacheParamsOptions, bool)> for CacheOptions {
     fn from((options, dryrun): (CacheParamsOptions, bool)) -> Self {
         let enabled = match (options.enabled, dryrun) {
+            (CacheEnabledMode::ReadOnly, _) |
             (CacheEnabledMode::On, true) => CacheEnabledMode::ReadOnly,
             (CacheEnabledMode::On, false) => CacheEnabledMode::On,
+            (CacheEnabledMode::Off, _) |
             (CacheEnabledMode::WriteOnly, true) => CacheEnabledMode::Off,
             (CacheEnabledMode::WriteOnly, false) => CacheEnabledMode::WriteOnly,
-            (CacheEnabledMode::ReadOnly, _) => CacheEnabledMode::ReadOnly,
-            (CacheEnabledMode::Off, _) => CacheEnabledMode::Off,
         };
         Self {
             max_age_s: options.max_age_s,

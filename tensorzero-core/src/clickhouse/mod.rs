@@ -204,7 +204,7 @@ impl ClickHouseConnectionInfo {
         parameters: &HashMap<&str, &str>,
     ) -> Result<String, Error> {
         match self {
-            Self::Disabled => Ok("".to_string()),
+            Self::Disabled |
             Self::Mock { .. } => Ok("".to_string()),
             Self::Production {
                 database_url,
@@ -350,7 +350,7 @@ impl ClickHouseConnectionInfo {
 
     pub async fn create_database(&self) -> Result<(), Error> {
         match self {
-            Self::Disabled => {}
+            Self::Disabled | 
             Self::Mock { .. } => {}
             Self::Production {
                 database_url,

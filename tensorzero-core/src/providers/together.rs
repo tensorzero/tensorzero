@@ -458,10 +458,10 @@ enum TogetherFinishReason {
 impl From<TogetherFinishReason> for FinishReason {
     fn from(finish_reason: TogetherFinishReason) -> Self {
         match finish_reason {
-            TogetherFinishReason::Stop => FinishReason::Stop,
-            TogetherFinishReason::Eos => FinishReason::Stop,
             TogetherFinishReason::Length => FinishReason::Length,
-            TogetherFinishReason::ToolCalls => FinishReason::ToolCall,
+            TogetherFinishReason::Eos |
+            TogetherFinishReason::Stop => FinishReason::Stop,
+            TogetherFinishReason::ToolCalls |
             TogetherFinishReason::FunctionCall => FinishReason::ToolCall,
             TogetherFinishReason::Unknown => FinishReason::Unknown,
         }
