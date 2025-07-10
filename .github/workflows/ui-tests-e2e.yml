@@ -180,7 +180,6 @@ jobs:
         working-directory: ui
         run: |
           docker compose -f fixtures/docker-compose.ui.yml up --no-build -d
-          docker compose -f fixtures/docker-compose.ui.yml wait ui
 
       - name: Run UI E2E tests
         id: e2e_tests
