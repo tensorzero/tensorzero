@@ -1567,10 +1567,6 @@ pub enum GCPVertexGeminiContentPart<'a> {
         function_response: GCPVertexGeminiFunctionResponse<'a>,
     },
     // TODO (if needed): VideoMetadata { video_metadata: VideoMetadata },
-    Unknown {
-        #[serde(flatten)]
-        data: Cow<'a, Value>,
-    },
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -1583,9 +1579,11 @@ impl<'a> TryFrom<&'a RequestMessage> for GCPVertexGeminiContent<'a> {
     type Error = Error;
 
     fn try_from(message: &'a RequestMessage) -> Result<Self, Error> {
-        let gcp_message = tensorzero_to_gcp_vertex_gemini_content(message, PROVIDER_TYPE)?;
-
-        Ok(gcp_message)
+        tensorzero_to_gcp_vertex_gemini_content(
+            message.role.into(),
+            Cow::Borrowed(&message.content),
+            PROVIDER_TYPE,
+        )
     }
 }
 
@@ -1879,7 +1877,8 @@ pub fn prepare_gcp_vertex_gemini_messages<'a>(
     let mut gcp_vertex_gemini_messages = Vec::with_capacity(messages.len());
     for message in messages.iter() {
         gcp_vertex_gemini_messages.push(tensorzero_to_gcp_vertex_gemini_content(
-            message,
+            message.role.into(),
+            Cow::Borrowed(&message.content),
             provider_type,
         )?);
     }
@@ -1906,31 +1905,7 @@ fn prepare_tools<'a>(
     }
 }
 
-pub(super) fn tensorzero_to_gcp_vertex_gemini_content<'a>(
-    message: &'a RequestMessage,
-    provider_type: &str,
-) -> Result<GCPVertexGeminiContent<'a>, Error> {
-    match message.role {
-        Role::User => {
-            let message = tensorzero_to_gcp_vertex_gemini_message(
-                GCPVertexGeminiRole::User,
-                Cow::Borrowed(&message.content),
-                provider_type,
-            )?;
-            Ok(message)
-        }
-        Role::Assistant => {
-            let message = tensorzero_to_gcp_vertex_gemini_message(
-                GCPVertexGeminiRole::Model,
-                Cow::Borrowed(&message.content),
-                provider_type,
-            )?;
-            Ok(message)
-        }
-    }
-}
-
-pub fn tensorzero_to_gcp_vertex_gemini_message<'a>(
+pub fn tensorzero_to_gcp_vertex_gemini_content<'a>(
     role: GCPVertexGeminiRole,
     content_blocks: Cow<'a, [ContentBlock]>,
     provider_type: &str,
@@ -3440,11 +3415,13 @@ mod tests {
     #[test]
     fn test_tensorzero_to_gcp_vertex_gemini_content() {
         // Test user message with text
-        let message = RequestMessage {
-            role: Role::User,
-            content: vec!["Hello".to_string().into()],
-        };
-        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(&message, PROVIDER_TYPE).unwrap();
+        let content_blocks = vec!["Hello".to_string().into()];
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::User,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        )
+        .unwrap();
         assert_eq!(gcp_content.role, GCPVertexGeminiRole::User);
         assert_eq!(gcp_content.parts.len(), 1);
         match &gcp_content.parts[0] {
@@ -3455,14 +3432,16 @@ mod tests {
         }
 
         // Message with multiple blocks
-        let message = RequestMessage {
-            role: Role::User,
-            content: vec![
-                "Hello".to_string().into(),
-                "How are you?".to_string().into(),
-            ],
-        };
-        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(&message, PROVIDER_TYPE).unwrap();
+        let content_blocks = vec![
+            "Hello".to_string().into(),
+            "How are you?".to_string().into(),
+        ];
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::User,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        )
+        .unwrap();
         assert_eq!(gcp_content.role, GCPVertexGeminiRole::User);
         assert_eq!(gcp_content.parts.len(), 2);
         match &gcp_content.parts[0] {
@@ -3484,11 +3463,13 @@ mod tests {
             name: "test_function".to_string(),
             arguments: "{}".to_string(),
         });
-        let message = RequestMessage {
-            role: Role::Assistant,
-            content: vec!["Hello".to_string().into(), tool_block],
-        };
-        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(&message, PROVIDER_TYPE).unwrap();
+        let content_blocks = vec!["Hello".to_string().into(), tool_block];
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::Model,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        )
+        .unwrap();
         assert_eq!(gcp_content.role, GCPVertexGeminiRole::Model);
         assert_eq!(gcp_content.parts.len(), 2);
         match &gcp_content.parts[0] {
@@ -3511,18 +3492,20 @@ mod tests {
             name: "test_function".to_string(),
             result: r#"{"result": "success"}"#.to_string(),
         });
-        let message = RequestMessage {
-            role: Role::User,
-            content: vec![tool_result],
-        };
-        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(&message, PROVIDER_TYPE).unwrap();
+        let content_blocks = vec![tool_result];
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::User,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        )
+        .unwrap();
         assert_eq!(gcp_content.role, GCPVertexGeminiRole::User);
         assert_eq!(gcp_content.parts.len(), 1);
         match &gcp_content.parts[0] {
             FlattenUnknown::Normal(GCPVertexGeminiContentPart::FunctionResponse {
                 function_response,
             }) => {
-                assert_eq!(function_response.name, "test_function");
+                assert_eq!(function_response.name, Cow::Borrowed("test_function"));
                 assert_eq!(
                     function_response.response,
                     json!({
@@ -3534,63 +3517,106 @@ mod tests {
             _ => panic!("Expected a function response"),
         }
 
-        // Test error case: tool call in user message
+        // Test with tool call that has valid JSON arguments
         let tool_call = ContentBlock::ToolCall(ToolCall {
             id: "call1".to_string(),
             name: "test_function".to_string(),
-            arguments: "{}".to_string(),
+            arguments: r#"{"param": "value"}"#.to_string(),
         });
-        let message = RequestMessage {
-            role: Role::User,
-            content: vec![tool_call],
-        };
-        let result = tensorzero_to_gcp_vertex_gemini_content(&message, PROVIDER_TYPE);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        let details = err.get_owned_details();
-        assert_eq!(
-            details,
-            ErrorDetails::InvalidMessage {
-                message: "Tool calls are not supported in user messages".to_string()
+        let content_blocks = vec![tool_call];
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::Model,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        )
+        .unwrap();
+        assert_eq!(gcp_content.role, GCPVertexGeminiRole::Model);
+        assert_eq!(gcp_content.parts.len(), 1);
+        match &gcp_content.parts[0] {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::FunctionCall { function_call }) => {
+                assert_eq!(function_call.name, Cow::Borrowed("test_function"));
+                assert_eq!(function_call.args, json!({"param": "value"}));
             }
-        );
+            _ => panic!("Expected a function call"),
+        }
 
-        // Test error case: tool result in assistant message
-        let tool_result = ContentBlock::ToolResult(ToolResult {
+        // Test error case: tool call with invalid JSON arguments
+        let tool_call = ContentBlock::ToolCall(ToolCall {
             id: "call1".to_string(),
             name: "test_function".to_string(),
-            result: "result".to_string(),
+            arguments: "invalid json".to_string(),
         });
-        let message = RequestMessage {
-            role: Role::Assistant,
-            content: vec![tool_result],
-        };
-        let result = tensorzero_to_gcp_vertex_gemini_content(&message, PROVIDER_TYPE);
+        let content_blocks = vec![tool_call];
+        let result = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::Model,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let details = err.get_owned_details();
+        match details {
+            ErrorDetails::InferenceClient { message, .. } => {
+                assert!(message.contains("Error parsing tool call arguments as JSON Value"));
+            }
+            _ => panic!("Expected InferenceClient error"),
+        }
+
+        // Test error case: tool call with non-object JSON arguments
+        let tool_call = ContentBlock::ToolCall(ToolCall {
+            id: "call1".to_string(),
+            name: "test_function".to_string(),
+            arguments: r#""string_value""#.to_string(),
+        });
+        let content_blocks = vec![tool_call];
+        let result = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::Model,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let details = err.get_owned_details();
+        match details {
+            ErrorDetails::InferenceClient { message, .. } => {
+                assert_eq!(message, "Tool call arguments must be a JSON object");
+            }
+            _ => panic!("Expected InferenceClient error"),
+        }
+
+        // Test empty content blocks
+        let content_blocks: Vec<ContentBlock> = vec![];
+        let result = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::User,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        );
         assert!(result.is_err());
         let err = result.unwrap_err();
         let details = err.get_owned_details();
         assert_eq!(
             details,
             ErrorDetails::InvalidMessage {
-                message: "Tool results are not supported in model messages".to_string()
+                message: "Model message must contain at least one content block".to_string()
             }
         );
 
-        // Test empty content blocks
-        let message = RequestMessage {
-            role: Role::User,
-            content: vec![],
-        };
-        let result = tensorzero_to_gcp_vertex_gemini_content(&message, PROVIDER_TYPE);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        let details = err.get_owned_details();
-        assert_eq!(
-            details,
-            ErrorDetails::InvalidMessage {
-                message: "User message must contain at least one content block".to_string()
+        // Test with Cow::Owned content blocks
+        let content_blocks = vec!["Owned content".to_string().into()];
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::User,
+            Cow::Owned(content_blocks),
+            PROVIDER_TYPE,
+        )
+        .unwrap();
+        assert_eq!(gcp_content.role, GCPVertexGeminiRole::User);
+        assert_eq!(gcp_content.parts.len(), 1);
+        match &gcp_content.parts[0] {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text }) => {
+                assert_eq!(text, "Owned content");
             }
-        );
+            _ => panic!("Expected a text part"),
+        }
     }
 
     #[test]
