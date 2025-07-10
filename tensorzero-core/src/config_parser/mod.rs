@@ -189,23 +189,30 @@ impl ObjectStoreInfo {
         };
 
         let object_store: Option<Arc<dyn ObjectStore>> = match &config {
-            StorageKind::Filesystem { path } => Some(Arc::new(
-                LocalFileSystem::new_with_prefix(path).map_err(|e| {
-                    if !std::fs::exists(path).unwrap_or(false) {
-                        Error::new(ErrorDetails::Config {
-                            message: format!(
-                                "Failed to create filesystem object store: path does not exist: {path}"
-                            ),
-                        })
-                    } else {
-                        Error::new(ErrorDetails::Config {
-                            message: format!(
-                                "Failed to create filesystem object store for path: {path}: {e}"
-                            ),
-                        })
+            StorageKind::Filesystem { path } => {
+                Some(Arc::new(match LocalFileSystem::new_with_prefix(path) {
+                    Ok(object_store) => object_store,
+                    Err(e) => {
+                        if !std::fs::exists(path).unwrap_or(false) {
+                            if skip_credential_validation() {
+                                tracing::warn!("Filesystem object store path does not exist: {path}. Treating object store as unconfigured");
+                                return Ok(None);
+                            }
+                            return Err(Error::new(ErrorDetails::Config {
+                                message: format!(
+                                    "Failed to create filesystem object store: path does not exist: {path}"
+                                ),
+                            }));
+                        } else {
+                            return Err(Error::new(ErrorDetails::Config {
+                                message: format!(
+                                    "Failed to create filesystem object store for path: {path}: {e}"
+                                ),
+                            }));
+                        }
                     }
-                })?,
-            )),
+                }))
+            }
             StorageKind::S3Compatible {
                 bucket_name,
                 region,

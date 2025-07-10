@@ -51,5 +51,5 @@ describe("native sft", () => {
       status = await client.experimentalPollOptimization(job);
     }
     console.log(status);
-  });
+  }, 10000); // timeout in ms
 });
