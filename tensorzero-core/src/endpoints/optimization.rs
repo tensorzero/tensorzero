@@ -51,6 +51,7 @@ pub async fn launch_optimization_workflow_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        ..
     }): AppState,
     StructuredJson(params): StructuredJson<LaunchOptimizationWorkflowParams>,
 ) -> Result<Response<Body>, Error> {

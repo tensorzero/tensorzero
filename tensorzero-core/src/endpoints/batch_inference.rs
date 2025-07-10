@@ -108,6 +108,7 @@ pub async fn start_batch_inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        ..
     }): AppState,
     StructuredJson(params): StructuredJson<StartBatchInferenceParams>,
 ) -> Result<Response<Body>, Error> {
@@ -339,6 +340,7 @@ pub async fn poll_batch_inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        ..
     }): AppState,
     Path(path_params): Path<PollPathParams>,
 ) -> Result<Response<Body>, Error> {
