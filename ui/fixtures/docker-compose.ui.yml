@@ -18,3 +18,5 @@ services:
     ports:
       - "4000:4000"
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
