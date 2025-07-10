@@ -1632,6 +1632,28 @@ async fn test_config_missing_filesystem_object_store() {
         );
 }
 
+#[tokio::test]
+#[traced_test]
+#[cfg_attr(feature = "e2e_tests", ignore)]
+async fn test_config_no_verify_creds_missing_filesystem_object_store() {
+    let tempfile = NamedTempFile::new().unwrap();
+    write!(
+        &tempfile,
+        r#"
+            [object_storage]
+            type = "filesystem"
+            path = "/fake-tensorzero-path/other-path"
+
+            [functions]"#
+    )
+    .unwrap();
+    let config = Config::load_from_path_optional_verify_credentials(tempfile.path(), false)
+        .await
+        .unwrap();
+    assert!(config.object_store_info.is_none());
+    assert!(logs_contain("Filesystem object store path does not exist: /fake-tensorzero-path/other-path. Treating object store as unconfigured"));
+}
+
 #[traced_test]
 #[tokio::test]
 async fn test_config_load_invalid_s3_creds() {
