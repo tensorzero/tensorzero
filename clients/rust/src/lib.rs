@@ -298,11 +298,11 @@ impl ClientBuilder {
                 Ok(Client {
                     mode: ClientMode::EmbeddedGateway {
                         gateway: EmbeddedGateway {
-                            state: AppStateData {
+                            state: AppStateData::new_with_clickhouse_and_http_client(
                                 config,
-                                http_client,
                                 clickhouse_connection_info,
-                            },
+                                http_client,
+                            ),
                         },
                         timeout: *timeout,
                     },

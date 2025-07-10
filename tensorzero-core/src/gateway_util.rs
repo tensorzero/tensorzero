@@ -19,10 +19,16 @@ use crate::error::{Error, ErrorDetails};
 
 /// State for the API
 #[derive(Clone)]
+// `#[non_exhaustive]` only affects downstream crates, so we can't use it here
+#[expect(clippy::manual_non_exhaustive)]
 pub struct AppStateData {
     pub config: Arc<Config>,
     pub http_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
+    // Prevent `AppStateData` from being directly constructed outside of this module
+    // This ensures that `AppStateData`is only every constructed via explicit `new` methods,
+    // which can ensure that we update global state.
+    _private: (),
 }
 pub type AppState = axum::extract::State<AppStateData>;
 
@@ -49,7 +55,33 @@ impl AppStateData {
             config,
             http_client,
             clickhouse_connection_info,
+            _private: (),
         })
+    }
+
+    pub fn new_with_clickhouse_and_http_client(
+        config: Arc<Config>,
+        clickhouse_connection_info: ClickHouseConnectionInfo,
+        http_client: Client,
+    ) -> Self {
+        Self {
+            config,
+            http_client,
+            clickhouse_connection_info,
+            _private: (),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn new_unit_test_data(config: Arc<Config>, clickhouse_healthy: bool) -> Self {
+        let http_client = reqwest::Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_mock(clickhouse_healthy);
+        AppStateData {
+            config,
+            http_client,
+            clickhouse_connection_info,
+            _private: (),
+        }
     }
 }
 
