@@ -180,6 +180,12 @@ async fn get_openai_fine_tuning_job(
             job.val["estimated_finish"] = finish_at.timestamp().into();
         }
         if let Some(finish_at) = job.finish_at {
+            if job.val["model"].as_str().unwrap().contains("error") {
+                job.val["status"] = "failed because the model is an error model".into();
+                job.val["error"] = json!({
+                    "unexpected_error": "error model"
+                });
+            }
             if chrono::Utc::now() >= finish_at {
                 job.val["status"] = "succeeded".into();
                 job.val["fine_tuned_model"] = "mock-inference-finetune-1234".into();
