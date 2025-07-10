@@ -280,8 +280,8 @@ pub async fn make_gcp_object_store(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GCPVertexGeminiSupervisedRow<'a> {
-    contents: Vec<GCPVertexGeminiRequestMessage<'a>>,
-    system_instruction: Option<GCPVertexGeminiRequestMessage<'a>>,
+    contents: Vec<GCPVertexGeminiContent<'a>>,
+    system_instruction: Option<GCPVertexGeminiContent<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<GCPVertexGeminiSFTTool<'a>>,
 }
@@ -1519,6 +1519,7 @@ fn stream_gcp_vertex_gemini(
 enum GCPVertexGeminiRole {
     User,
     Model,
+    System,
 }
 
 impl From<Role> for GCPVertexGeminiRole {
@@ -1567,93 +1568,13 @@ pub enum GCPVertexGeminiContentPart<'a> {
     },
     // TODO (if needed): VideoMetadata { video_metadata: VideoMetadata },
     Unknown {
+        #[serde(flatten)]
         data: Cow<'a, Value>,
     },
 }
 
-impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGeminiContentPart<'a>>> {
-    type Error = Error;
-
-    fn try_from(block: &'a ContentBlock) -> Result<Self, Error> {
-        match block {
-            ContentBlock::Text(Text { text }) => Ok(Some(FlattenUnknown::Normal(
-                GCPVertexGeminiContentPart::Text {
-                    text: Cow::Borrowed(text),
-                },
-            ))),
-            ContentBlock::ToolResult(tool_result) => {
-                // GCP expects the format below according to [the documentation](https://ai.google.dev/gemini-api/docs/function-calling#multi-turn-example-1)
-                let response = serde_json::json!({
-                    "name": tool_result.name,
-                    "content": tool_result.result
-                });
-
-                Ok(Some(FlattenUnknown::Normal(
-                    GCPVertexGeminiContentPart::FunctionResponse {
-                        function_response: GCPVertexGeminiFunctionResponse {
-                            name: &tool_result.name,
-                            response,
-                        },
-                    },
-                )))
-            }
-            ContentBlock::ToolCall(tool_call) => {
-                // Convert the tool call arguments from String to JSON Value (GCP expects an object)
-                let args: Value = serde_json::from_str(&tool_call.arguments).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceClient {
-                        status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!(
-                            "Error parsing tool call arguments as JSON Value: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: Some(tool_call.arguments.clone()),
-                    })
-                })?;
-
-                if !args.is_object() {
-                    return Err(ErrorDetails::InferenceClient {
-                        status_code: Some(StatusCode::BAD_REQUEST),
-                        message: "Tool call arguments must be a JSON object".to_string(),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: Some(tool_call.arguments.clone()),
-                    }
-                    .into());
-                };
-
-                Ok(Some(FlattenUnknown::Normal(
-                    GCPVertexGeminiContentPart::FunctionCall {
-                        function_call: GCPVertexGeminiFunctionCall {
-                            name: Cow::Borrowed(&tool_call.name),
-                            args,
-                        },
-                    },
-                )))
-            }
-            ContentBlock::File(file) => Ok(Some(FlattenUnknown::Normal(
-                GCPVertexGeminiContentPart::InlineData {
-                    inline_data: GCPVertexInlineData {
-                        mime_type: file.file.mime_type.to_string(),
-                        data: Cow::Borrowed(file.file.data()?),
-                    },
-                },
-            ))),
-            ContentBlock::Thought(thought) => {
-                warn_discarded_thought_block(PROVIDER_TYPE, thought);
-                Ok(None)
-            }
-            ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            } => Ok(Some(FlattenUnknown::Unknown(Cow::Borrowed(data)))),
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Serialize)]
-struct GCPVertexGeminiContent<'a> {
+pub struct GCPVertexGeminiContent<'a> {
     role: GCPVertexGeminiRole,
     parts: Vec<FlattenUnknown<'a, GCPVertexGeminiContentPart<'a>>>,
 }
@@ -1662,17 +1583,9 @@ impl<'a> TryFrom<&'a RequestMessage> for GCPVertexGeminiContent<'a> {
     type Error = Error;
 
     fn try_from(message: &'a RequestMessage) -> Result<Self, Error> {
-        let role = GCPVertexGeminiRole::from(message.role);
-        let parts: Vec<FlattenUnknown<GCPVertexGeminiContentPart>> = message
-            .content
-            .iter()
-            .map(|block| block.try_into())
-            .collect::<Result<Vec<Option<FlattenUnknown<GCPVertexGeminiContentPart>>>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect();
+        let gcp_message = tensorzero_to_gcp_vertex_gemini_content(message, PROVIDER_TYPE)?;
 
-        Ok(GCPVertexGeminiContent { role, parts })
+        Ok(gcp_message)
     }
 }
 
@@ -1959,61 +1872,13 @@ impl<'a> GCPVertexGeminiRequest<'a> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct GCPVertexGeminiSystemRequestMessage<'a> {
-    pub parts: Vec<GCPVertexGeminiContentPart<'a>>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct GCPVertexGeminiUserOrModelRequestMessage<'a> {
-    pub parts: Vec<GCPVertexGeminiContentPart<'a>>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(tag = "role")]
-#[serde(rename_all = "lowercase")]
-pub enum GCPVertexGeminiRequestMessage<'a> {
-    System(GCPVertexGeminiSystemRequestMessage<'a>),
-    User(GCPVertexGeminiUserOrModelRequestMessage<'a>),
-    Model(GCPVertexGeminiUserOrModelRequestMessage<'a>),
-}
-
-impl GCPVertexGeminiRequestMessage<'_> {
-    pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
-        let value_lower = value.to_lowercase();
-
-        match self {
-            GCPVertexGeminiRequestMessage::System(msg) => msg.parts.iter().any(|part| {
-                if let GCPVertexGeminiContentPart::Text { text } = part {
-                    text.to_lowercase().contains(&value_lower)
-                } else {
-                    false
-                }
-            }),
-            GCPVertexGeminiRequestMessage::User(msg)
-            | GCPVertexGeminiRequestMessage::Model(msg) => {
-                msg.parts.iter().any(|part| match part {
-                    GCPVertexGeminiContentPart::Text { text } => {
-                        text.to_lowercase().contains(&value_lower)
-                    }
-                    GCPVertexGeminiContentPart::InlineData { .. } => false,
-                    GCPVertexGeminiContentPart::FunctionCall { .. } => false,
-                    GCPVertexGeminiContentPart::FunctionResponse { .. } => false,
-                    // Don't inspect the contents of 'unknown' blocks
-                    GCPVertexGeminiContentPart::Unknown { data: _ } => false,
-                })
-            }
-        }
-    }
-}
-
 pub fn prepare_gcp_vertex_gemini_messages<'a>(
     messages: &'a [RequestMessage],
     provider_type: &str,
-) -> Result<Vec<GCPVertexGeminiRequestMessage<'a>>, Error> {
+) -> Result<Vec<GCPVertexGeminiContent<'a>>, Error> {
     let mut gcp_vertex_gemini_messages = Vec::with_capacity(messages.len());
     for message in messages.iter() {
-        gcp_vertex_gemini_messages.extend(tensorzero_to_gcp_vertex_gemini_messages(
+        gcp_vertex_gemini_messages.push(tensorzero_to_gcp_vertex_gemini_content(
             message,
             provider_type,
         )?);
@@ -2041,79 +1906,22 @@ fn prepare_tools<'a>(
     }
 }
 
-/// This function is complicated only by the fact that OpenAI and Azure require
-/// different instructions depending on the json mode and the content of the messages.
-///
-/// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
-/// the request will return an error.
-/// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
-pub(super) fn tensorzero_to_gcp_vertex_gemini_system_message<'a>(
-    system: Option<&'a str>,
-    json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
-    messages: &[GCPVertexGeminiRequestMessage<'a>],
-) -> Option<GCPVertexGeminiRequestMessage<'a>> {
-    match system {
-        Some(system) => {
-            match json_mode {
-                Some(ModelInferenceRequestJsonMode::On) => {
-                    if messages
-                        .iter()
-                        .any(|msg| msg.content_contains_case_insensitive("json"))
-                        || system.to_lowercase().contains("json")
-                    {
-                        GCPVertexGeminiRequestMessage::System(GCPVertexGeminiSystemRequestMessage {
-                            parts: vec![GCPVertexGeminiContentPart::Text {
-                                text: Cow::Borrowed(system),
-                            }],
-                        })
-                    } else {
-                        let formatted_instructions = format!("Respond using JSON.\n\n{system}");
-                        GCPVertexGeminiRequestMessage::System(GCPVertexGeminiSystemRequestMessage {
-                            parts: vec![GCPVertexGeminiContentPart::Text {
-                                text: Cow::Owned(formatted_instructions),
-                            }],
-                        })
-                    }
-                }
-
-                // If JSON mode is either off or strict, we don't need to do anything special
-                _ => GCPVertexGeminiRequestMessage::System(GCPVertexGeminiSystemRequestMessage {
-                    parts: vec![GCPVertexGeminiContentPart::Text {
-                        text: Cow::Borrowed(system),
-                    }],
-                }),
-            }
-            .into()
-        }
-        None => match json_mode {
-            Some(ModelInferenceRequestJsonMode::On) => Some(GCPVertexGeminiRequestMessage::System(
-                GCPVertexGeminiSystemRequestMessage {
-                    parts: vec![GCPVertexGeminiContentPart::Text {
-                        text: Cow::Owned("Respond using JSON.".to_string()),
-                    }],
-                },
-            )),
-            _ => None,
-        },
-    }
-}
-
-pub(super) fn tensorzero_to_gcp_vertex_gemini_messages<'a>(
+pub(super) fn tensorzero_to_gcp_vertex_gemini_content<'a>(
     message: &'a RequestMessage,
     provider_type: &str,
-) -> Result<Vec<GCPVertexGeminiRequestMessage<'a>>, Error> {
+) -> Result<GCPVertexGeminiContent<'a>, Error> {
     match message.role {
         Role::User => {
             let message =
                 tensorzero_to_gcp_vertex_gemini_user_message(&message.content, provider_type)?;
-            Ok(vec![message])
+            Ok(message)
         }
         Role::Assistant => {
             let message = tensorzero_to_gcp_vertex_gemini_model_message(
                 Cow::Borrowed(&message.content),
                 provider_type,
             )?;
-            Ok(vec![message])
+            Ok(message)
         }
     }
 }
@@ -2121,7 +1929,7 @@ pub(super) fn tensorzero_to_gcp_vertex_gemini_messages<'a>(
 fn tensorzero_to_gcp_vertex_gemini_user_message<'a>(
     content_blocks: &'a [ContentBlock],
     provider_type: &str,
-) -> Result<GCPVertexGeminiRequestMessage<'a>, Error> {
+) -> Result<GCPVertexGeminiContent<'a>, Error> {
     let mut user_content_blocks = Vec::new();
 
     for block in content_blocks.iter() {
@@ -2178,9 +1986,13 @@ fn tensorzero_to_gcp_vertex_gemini_user_message<'a>(
         }));
     }
 
-    let message = GCPVertexGeminiRequestMessage::User(GCPVertexGeminiUserOrModelRequestMessage {
-        parts: user_content_blocks,
-    });
+    let message = GCPVertexGeminiContent {
+        role: GCPVertexGeminiRole::User,
+        parts: user_content_blocks
+            .into_iter()
+            .map(FlattenUnknown::Normal)
+            .collect(),
+    };
 
     Ok(message)
 }
@@ -2188,7 +2000,7 @@ fn tensorzero_to_gcp_vertex_gemini_user_message<'a>(
 pub fn tensorzero_to_gcp_vertex_gemini_model_message<'a>(
     content_blocks: Cow<'a, [ContentBlock]>,
     provider_type: &str,
-) -> Result<GCPVertexGeminiRequestMessage<'a>, Error> {
+) -> Result<GCPVertexGeminiContent<'a>, Error> {
     let content_block_cows: Vec<Cow<'_, ContentBlock>> = match content_blocks {
         Cow::Borrowed(content_blocks) => content_blocks.iter().map(Cow::Borrowed).collect(),
         Cow::Owned(content_blocks) => content_blocks.into_iter().map(Cow::Owned).collect(),
@@ -2336,9 +2148,13 @@ pub fn tensorzero_to_gcp_vertex_gemini_model_message<'a>(
         }));
     }
 
-    let message = GCPVertexGeminiRequestMessage::Model(GCPVertexGeminiUserOrModelRequestMessage {
-        parts: model_content_blocks,
-    });
+    let message = GCPVertexGeminiContent {
+        role: GCPVertexGeminiRole::Model,
+        parts: model_content_blocks
+            .into_iter()
+            .map(FlattenUnknown::Normal)
+            .collect(),
+    };
 
     Ok(message)
 }
@@ -3659,25 +3475,20 @@ mod tests {
     }
 
     #[test]
-    fn test_tensorzero_to_gcp_vertex_gemini_messages() {
+    fn test_tensorzero_to_gcp_vertex_gemini_content() {
         // Test user message with text
         let message = RequestMessage {
             role: Role::User,
             content: vec!["Hello".to_string().into()],
         };
-        let gcp_messages =
-            tensorzero_to_gcp_vertex_gemini_messages(&message, PROVIDER_TYPE).unwrap();
-        assert_eq!(gcp_messages.len(), 1);
-        match &gcp_messages[0] {
-            GCPVertexGeminiRequestMessage::User(content) => {
-                assert_eq!(
-                    content.parts,
-                    vec![GCPVertexGeminiContentPart::Text {
-                        text: "Hello".into()
-                    }]
-                );
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(&message, PROVIDER_TYPE).unwrap();
+        assert_eq!(gcp_content.role, GCPVertexGeminiRole::User);
+        assert_eq!(gcp_content.parts.len(), 1);
+        match &gcp_content.parts[0] {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text }) => {
+                assert_eq!(text, "Hello");
             }
-            _ => panic!("Expected a user message"),
+            _ => panic!("Expected a text part"),
         }
 
         // Message with multiple blocks
@@ -3688,24 +3499,20 @@ mod tests {
                 "How are you?".to_string().into(),
             ],
         };
-        let gcp_messages =
-            tensorzero_to_gcp_vertex_gemini_messages(&message, PROVIDER_TYPE).unwrap();
-        assert_eq!(gcp_messages.len(), 1);
-        match &gcp_messages[0] {
-            GCPVertexGeminiRequestMessage::User(content) => {
-                assert_eq!(
-                    content.parts,
-                    vec![
-                        GCPVertexGeminiContentPart::Text {
-                            text: "Hello".into()
-                        },
-                        GCPVertexGeminiContentPart::Text {
-                            text: "How are you?".into()
-                        }
-                    ]
-                );
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(&message, PROVIDER_TYPE).unwrap();
+        assert_eq!(gcp_content.role, GCPVertexGeminiRole::User);
+        assert_eq!(gcp_content.parts.len(), 2);
+        match &gcp_content.parts[0] {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text }) => {
+                assert_eq!(text, "Hello");
             }
-            _ => panic!("Expected a user message"),
+            _ => panic!("Expected a text part"),
+        }
+        match &gcp_content.parts[1] {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text }) => {
+                assert_eq!(text, "How are you?");
+            }
+            _ => panic!("Expected a text part"),
         }
 
         // Assistant message with text and tool call
@@ -3718,27 +3525,21 @@ mod tests {
             role: Role::Assistant,
             content: vec!["Hello".to_string().into(), tool_block],
         };
-        let gcp_message =
-            tensorzero_to_gcp_vertex_gemini_messages(&message, PROVIDER_TYPE).unwrap();
-        assert_eq!(gcp_message.len(), 1);
-        match &gcp_message[0] {
-            GCPVertexGeminiRequestMessage::Model(content) => {
-                assert_eq!(content.parts.len(), 2);
-                assert_eq!(
-                    content.parts[0],
-                    GCPVertexGeminiContentPart::Text {
-                        text: "Hello".into()
-                    }
-                );
-                match &content.parts[1] {
-                    GCPVertexGeminiContentPart::FunctionCall { function_call } => {
-                        assert_eq!(function_call.name, Cow::Borrowed("test_function"));
-                        assert_eq!(function_call.args, json!({}));
-                    }
-                    _ => panic!("Expected a function call"),
-                }
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(&message, PROVIDER_TYPE).unwrap();
+        assert_eq!(gcp_content.role, GCPVertexGeminiRole::Model);
+        assert_eq!(gcp_content.parts.len(), 2);
+        match &gcp_content.parts[0] {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text }) => {
+                assert_eq!(text, "Hello");
             }
-            _ => panic!("Expected a model message"),
+            _ => panic!("Expected a text part"),
+        }
+        match &gcp_content.parts[1] {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::FunctionCall { function_call }) => {
+                assert_eq!(function_call.name, Cow::Borrowed("test_function"));
+                assert_eq!(function_call.args, json!({}));
+            }
+            _ => panic!("Expected a function call"),
         }
 
         // User message with tool result
@@ -3751,27 +3552,23 @@ mod tests {
             role: Role::User,
             content: vec![tool_result],
         };
-        let gcp_message =
-            tensorzero_to_gcp_vertex_gemini_messages(&message, PROVIDER_TYPE).unwrap();
-        assert_eq!(gcp_message.len(), 1);
-        match &gcp_message[0] {
-            GCPVertexGeminiRequestMessage::User(content) => {
-                assert_eq!(content.parts.len(), 1);
-                match &content.parts[0] {
-                    GCPVertexGeminiContentPart::FunctionResponse { function_response } => {
-                        assert_eq!(function_response.name, "test_function");
-                        assert_eq!(
-                            function_response.response,
-                            json!({
-                                "name": "test_function",
-                                "content": r#"{"result": "success"}"#
-                            })
-                        );
-                    }
-                    _ => panic!("Expected a function response"),
-                }
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(&message, PROVIDER_TYPE).unwrap();
+        assert_eq!(gcp_content.role, GCPVertexGeminiRole::User);
+        assert_eq!(gcp_content.parts.len(), 1);
+        match &gcp_content.parts[0] {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::FunctionResponse {
+                function_response,
+            }) => {
+                assert_eq!(function_response.name, "test_function");
+                assert_eq!(
+                    function_response.response,
+                    json!({
+                        "name": "test_function",
+                        "content": r#"{"result": "success"}"#
+                    })
+                );
             }
-            _ => panic!("Expected a user message"),
+            _ => panic!("Expected a function response"),
         }
 
         // Test error case: tool call in user message
@@ -3784,7 +3581,7 @@ mod tests {
             role: Role::User,
             content: vec![tool_call],
         };
-        let result = tensorzero_to_gcp_vertex_gemini_messages(&message, PROVIDER_TYPE);
+        let result = tensorzero_to_gcp_vertex_gemini_content(&message, PROVIDER_TYPE);
         assert!(result.is_err());
         let err = result.unwrap_err();
         let details = err.get_owned_details();
@@ -3805,7 +3602,7 @@ mod tests {
             role: Role::Assistant,
             content: vec![tool_result],
         };
-        let result = tensorzero_to_gcp_vertex_gemini_messages(&message, PROVIDER_TYPE);
+        let result = tensorzero_to_gcp_vertex_gemini_content(&message, PROVIDER_TYPE);
         assert!(result.is_err());
         let err = result.unwrap_err();
         let details = err.get_owned_details();
@@ -3821,7 +3618,7 @@ mod tests {
             role: Role::User,
             content: vec![],
         };
-        let result = tensorzero_to_gcp_vertex_gemini_messages(&message, PROVIDER_TYPE);
+        let result = tensorzero_to_gcp_vertex_gemini_content(&message, PROVIDER_TYPE);
         assert!(result.is_err());
         let err = result.unwrap_err();
         let details = err.get_owned_details();
@@ -3831,219 +3628,6 @@ mod tests {
                 message: "User message must contain at least one content block".to_string()
             }
         );
-    }
-
-    #[test]
-    fn test_tensorzero_to_gcp_vertex_gemini_system_message() {
-        // Test Case 1: system is None, json_mode is Off
-        let system = None;
-        let json_mode = ModelInferenceRequestJsonMode::Off;
-        let messages: Vec<GCPVertexGeminiRequestMessage> = vec![];
-        let result =
-            tensorzero_to_gcp_vertex_gemini_system_message(system, Some(&json_mode), &messages);
-        assert_eq!(result, None);
-
-        // Test Case 2: system is Some, json_mode is On, messages contain "json"
-        let system = Some("System instructions");
-        let json_mode = ModelInferenceRequestJsonMode::On;
-        let messages = vec![
-            GCPVertexGeminiRequestMessage::User(GCPVertexGeminiUserOrModelRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: "Please respond in JSON format.".into(),
-                }],
-            }),
-            GCPVertexGeminiRequestMessage::Model(GCPVertexGeminiUserOrModelRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: "Sure, here is the data.".into(),
-                }],
-            }),
-        ];
-        let expected = Some(GCPVertexGeminiRequestMessage::System(
-            GCPVertexGeminiSystemRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: Cow::Borrowed("System instructions"),
-                }],
-            },
-        ));
-        let result =
-            tensorzero_to_gcp_vertex_gemini_system_message(system, Some(&json_mode), &messages);
-        assert_eq!(result, expected);
-
-        // Test Case 3: system is Some, json_mode is On, messages do not contain "json"
-        let system = Some("System instructions");
-        let json_mode = ModelInferenceRequestJsonMode::On;
-        let messages = vec![
-            GCPVertexGeminiRequestMessage::User(GCPVertexGeminiUserOrModelRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: "Hello, how are you?".into(),
-                }],
-            }),
-            GCPVertexGeminiRequestMessage::Model(GCPVertexGeminiUserOrModelRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: "I am fine, thank you!".into(),
-                }],
-            }),
-        ];
-        let expected_content = "Respond using JSON.\n\nSystem instructions".to_string();
-        let expected = Some(GCPVertexGeminiRequestMessage::System(
-            GCPVertexGeminiSystemRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: Cow::Owned(expected_content),
-                }],
-            },
-        ));
-        let result =
-            tensorzero_to_gcp_vertex_gemini_system_message(system, Some(&json_mode), &messages);
-        assert_eq!(result, expected);
-
-        // Test Case 4: system is Some, json_mode is Off
-        let system = Some("System instructions");
-        let json_mode = ModelInferenceRequestJsonMode::Off;
-        let messages = vec![
-            GCPVertexGeminiRequestMessage::User(GCPVertexGeminiUserOrModelRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: "Hello, how are you?".into(),
-                }],
-            }),
-            GCPVertexGeminiRequestMessage::Model(GCPVertexGeminiUserOrModelRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: "I am fine, thank you!".into(),
-                }],
-            }),
-        ];
-        let expected = Some(GCPVertexGeminiRequestMessage::System(
-            GCPVertexGeminiSystemRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: Cow::Borrowed("System instructions"),
-                }],
-            },
-        ));
-        let result =
-            tensorzero_to_gcp_vertex_gemini_system_message(system, Some(&json_mode), &messages);
-        assert_eq!(result, expected);
-
-        // Test Case 5: system is Some, json_mode is Strict
-        let system = Some("System instructions");
-        let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let messages = vec![
-            GCPVertexGeminiRequestMessage::User(GCPVertexGeminiUserOrModelRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: "Hello, how are you?".into(),
-                }],
-            }),
-            GCPVertexGeminiRequestMessage::Model(GCPVertexGeminiUserOrModelRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: "I am fine, thank you!".into(),
-                }],
-            }),
-        ];
-        let expected = Some(GCPVertexGeminiRequestMessage::System(
-            GCPVertexGeminiSystemRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: Cow::Borrowed("System instructions"),
-                }],
-            },
-        ));
-        let result =
-            tensorzero_to_gcp_vertex_gemini_system_message(system, Some(&json_mode), &messages);
-        assert_eq!(result, expected);
-
-        // Test Case 6: system contains "json", json_mode is On
-        let system = Some("Respond using JSON.\n\nSystem instructions");
-        let json_mode = ModelInferenceRequestJsonMode::On;
-        let messages = vec![GCPVertexGeminiRequestMessage::User(
-            GCPVertexGeminiUserOrModelRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: "Hello, how are you?".into(),
-                }],
-            },
-        )];
-        let expected = Some(GCPVertexGeminiRequestMessage::System(
-            GCPVertexGeminiSystemRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
-                }],
-            },
-        ));
-        let result =
-            tensorzero_to_gcp_vertex_gemini_system_message(system, Some(&json_mode), &messages);
-        assert_eq!(result, expected);
-
-        // Test Case 7: system is None, json_mode is On
-        let system = None;
-        let json_mode = ModelInferenceRequestJsonMode::On;
-        let messages = vec![
-            GCPVertexGeminiRequestMessage::User(GCPVertexGeminiUserOrModelRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: "Tell me a joke.".into(),
-                }],
-            }),
-            GCPVertexGeminiRequestMessage::Model(GCPVertexGeminiUserOrModelRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: "Sure, here's one for you.".into(),
-                }],
-            }),
-        ];
-        let expected = Some(GCPVertexGeminiRequestMessage::System(
-            GCPVertexGeminiSystemRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: Cow::Owned("Respond using JSON.".to_string()),
-                }],
-            },
-        ));
-        let result =
-            tensorzero_to_gcp_vertex_gemini_system_message(system, Some(&json_mode), &messages);
-        assert_eq!(result, expected);
-
-        // Test Case 8: system is None, json_mode is Strict
-        let system = None;
-        let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let messages = vec![
-            GCPVertexGeminiRequestMessage::User(GCPVertexGeminiUserOrModelRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: "Provide a summary of the news.".into(),
-                }],
-            }),
-            GCPVertexGeminiRequestMessage::Model(GCPVertexGeminiUserOrModelRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: "Here's the summary.".into(),
-                }],
-            }),
-        ];
-
-        let result =
-            tensorzero_to_gcp_vertex_gemini_system_message(system, Some(&json_mode), &messages);
-        assert!(result.is_none());
-
-        // Test Case 9: system is None, json_mode is On, with empty messages
-        let system = None;
-        let json_mode = ModelInferenceRequestJsonMode::On;
-        let messages: Vec<GCPVertexGeminiRequestMessage> = vec![];
-        let expected = Some(GCPVertexGeminiRequestMessage::System(
-            GCPVertexGeminiSystemRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: Cow::Owned("Respond using JSON.".to_string()),
-                }],
-            },
-        ));
-        let result =
-            tensorzero_to_gcp_vertex_gemini_system_message(system, Some(&json_mode), &messages);
-        assert_eq!(result, expected);
-
-        // Test Case 10: system is None, json_mode is Off, with messages containing "json"
-        let system = None;
-        let json_mode = ModelInferenceRequestJsonMode::Off;
-        let messages = vec![GCPVertexGeminiRequestMessage::User(
-            GCPVertexGeminiUserOrModelRequestMessage {
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: "Please include JSON in your response.".into(),
-                }],
-            },
-        )];
-        let expected = None;
-        let result =
-            tensorzero_to_gcp_vertex_gemini_system_message(system, Some(&json_mode), &messages);
-        assert_eq!(result, expected);
     }
 
     #[test]
