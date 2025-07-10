@@ -1610,6 +1610,7 @@ async fn test_config_load_no_config_file() {
 }
 
 #[tokio::test]
+#[cfg_attr(feature = "e2e_tests", ignore)]
 async fn test_config_missing_filesystem_object_store() {
     let tempfile = NamedTempFile::new().unwrap();
     write!(
@@ -1634,7 +1635,6 @@ async fn test_config_missing_filesystem_object_store() {
 
 #[tokio::test]
 #[traced_test]
-#[cfg_attr(feature = "e2e_tests", ignore)]
 async fn test_config_no_verify_creds_missing_filesystem_object_store() {
     let tempfile = NamedTempFile::new().unwrap();
     write!(
