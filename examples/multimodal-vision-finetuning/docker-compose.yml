@@ -30,11 +30,6 @@ services:
       - "3000:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    healthcheck:
-      test: wget --spider --tries 1 http://localhost:3000/status
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
     depends_on:
       clickhouse:
         condition: service_healthy
