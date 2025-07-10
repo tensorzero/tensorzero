@@ -1,14 +1,15 @@
-import { Button } from "~/components/ui/button";
-import { Feedback } from "../icons/Icons";
+import { Button, type ButtonProps, ButtonIcon } from "~/components/ui/button";
+import { AddFeedback } from "../icons/Icons";
 
-export interface HumanFeedbackButtonProps {
-  onClick: () => void;
-}
+export type HumanFeedbackButtonProps = Omit<
+  ButtonProps,
+  "children" | "variant" | "size" | "slotLeft" | "slotRight" | "asChild"
+>;
 
-export function HumanFeedbackButton({ onClick }: HumanFeedbackButtonProps) {
+export function HumanFeedbackButton(props: HumanFeedbackButtonProps) {
   return (
-    <Button variant="outline" size="sm" onClick={onClick}>
-      <Feedback className="text-fg-tertiary h-4 w-4" />
+    <Button variant="outline" size="sm" {...props}>
+      <ButtonIcon as={AddFeedback} variant="tertiary" />
       Add feedback
     </Button>
   );

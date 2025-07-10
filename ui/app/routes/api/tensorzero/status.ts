@@ -1,13 +1,14 @@
 import { useFetcher } from "react-router";
-import { tensorZeroClient } from "~/utils/tensorzero.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { useEffect } from "react";
+import { logger } from "~/utils/logger";
 
 export async function loader() {
   try {
-    const status = await tensorZeroClient.status();
+    const status = await getTensorZeroClient().status();
     return status;
   } catch (error) {
-    console.error("Failed to fetch TensorZero status:", error);
+    logger.error("Failed to fetch TensorZero status:", error);
     return null;
   }
 }
@@ -24,6 +25,8 @@ export function useTensorZeroStatusFetcher() {
     if (statusFetcher.state === "idle" && !statusFetcher.data) {
       statusFetcher.load("/api/tensorzero/status");
     }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return { status, isLoading: statusFetcher.state === "loading" };

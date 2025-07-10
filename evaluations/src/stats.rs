@@ -5,7 +5,8 @@ use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::InferenceResponse;
-use tensorzero_internal::{endpoints::datasets::Datapoint, evaluations::EvaluatorConfig};
+use tensorzero_core::{endpoints::datasets::Datapoint, evaluations::EvaluatorConfig};
+use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
 use crate::{evaluators, OutputFormat};
@@ -21,8 +22,13 @@ impl EvaluationStats {
     pub(crate) fn new(output_format: OutputFormat, dataset_len: usize) -> Self {
         let progress_bar = match output_format {
             OutputFormat::Jsonl => None,
-            OutputFormat::HumanReadable => Some(ProgressBar::new(dataset_len as u64)),
+            OutputFormat::Pretty => Some(ProgressBar::new(dataset_len as u64)),
         };
+        debug!(
+            output_format = ?output_format,
+            dataset_len = dataset_len,
+            "Initialized evaluation stats tracker"
+        );
         Self {
             output_format,
             evaluation_infos: Vec::new(),
@@ -40,7 +46,7 @@ impl EvaluationStats {
             OutputFormat::Jsonl => {
                 writeln!(writer, "{}", serde_json::to_string(&evaluation_update)?)?;
             }
-            OutputFormat::HumanReadable => {
+            OutputFormat::Pretty => {
                 if let Some(progress_bar) = &mut self.progress_bar {
                     progress_bar.inc(1);
                 }
@@ -58,15 +64,19 @@ impl EvaluationStats {
     }
 
     /// Computes the mean and stderr for each of the evaluations observed
+    #[instrument(skip(self, evaluators), fields(evaluation_infos_count = self.evaluation_infos.len(), evaluation_errors_count = self.evaluation_errors.len()))]
     pub(crate) fn compute_stats(
         &self,
         evaluators: &HashMap<String, EvaluatorConfig>,
     ) -> HashMap<String, EvaluatorStats> {
+        info!("Computing evaluation statistics");
         let mut data: HashMap<String, Vec<f32>> = evaluators
             .keys()
             .map(|key| (key.clone(), Vec::new()))
             .collect();
+        debug!(evaluators = ?evaluators.keys().collect::<Vec<_>>(), "Initialized data collectors for evaluators");
         // Collect evaluation inference data into vectors by evaluation (all as floats)
+        debug!("Processing evaluation results into statistics");
         for evaluation_info in self.evaluation_infos.iter() {
             for (evaluation_name, evaluation_result) in evaluation_info.evaluations.iter() {
                 match evaluation_result {
@@ -88,15 +98,28 @@ impl EvaluationStats {
         }
 
         // Compute stats
+        debug!("Computing final statistics");
         let mut stats = HashMap::new();
         for (evaluator_name, data_vec) in data.into_iter() {
+            let count = data_vec.len();
             let mean = mean(&data_vec).unwrap_or(0.0);
             let stderr = match std_deviation(&data_vec) {
                 Some(std_dev) if !data_vec.is_empty() => std_dev / (data_vec.len() as f32).sqrt(),
                 _ => 0.0,
             };
+            debug!(
+                evaluator_name = %evaluator_name,
+                count = count,
+                mean = mean,
+                stderr = stderr,
+                "Computed statistics for evaluator"
+            );
             stats.insert(evaluator_name.clone(), EvaluatorStats { mean, stderr });
         }
+        info!(
+            computed_stats = stats.len(),
+            "Statistics computation completed"
+        );
         stats
     }
 }
@@ -104,7 +127,7 @@ impl EvaluationStats {
 // We allow large enum variants because
 // we expect the Success case way more often so it's ok to pay the cost
 // of a large enum here.
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum EvaluationUpdate {

@@ -1,14 +1,35 @@
-import { Code } from "~/components/ui/code";
+import { useState } from "react";
+import { Sheet, SheetContent } from "~/components/ui/sheet";
 import type { FeedbackRow } from "~/utils/clickhouse/feedback";
-import type { MetricConfig } from "~/utils/config/metric";
+import type { MetricConfig } from "tensorzero-node";
+import {
+  BooleanItem,
+  FloatItem,
+  CommentItem,
+  DemonstrationItem,
+} from "./FeedbackValueItem";
+import { CommentModal, DemonstrationModal } from "./FeedbackTableModal";
+
+interface FeedbackValueProps {
+  feedback: FeedbackRow;
+  metric?: MetricConfig;
+}
 
 export default function FeedbackValue({
   feedback,
   metric,
-}: {
-  feedback: FeedbackRow;
-  metric?: MetricConfig;
-}) {
+}: FeedbackValueProps) {
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  const handleClick = (event: React.MouseEvent) => {
+    if (feedback.type === "comment" || feedback.type === "demonstration") {
+      event.stopPropagation();
+      setIsSheetOpen(true);
+    }
+  };
+  const isHumanFeedback =
+    feedback.tags["tensorzero::human_feedback"] === "true";
+
   // Handle boolean metrics
   if (feedback.type === "boolean" && typeof feedback.value === "boolean") {
     const optimize = metric?.type === "boolean" ? metric.optimize : "unknown";
@@ -20,38 +41,63 @@ export default function FeedbackValue({
       (feedback.value === true && optimize === "min") ||
       (feedback.value === false && optimize === "max");
 
+    let status: "success" | "failure" | "default" = "default";
+
+    if (success) {
+      status = "success";
+    } else if (failure) {
+      status = "failure";
+    }
+
     return (
-      <div className="flex items-center gap-2">
-        <div
-          className={`h-2 w-2 rounded-full ${
-            success ? "bg-green-700" : failure ? "bg-red-700" : "bg-gray-700"
-          }`}
-        />
-        <span>{feedback.value ? "True" : "False"}</span>
-      </div>
+      <BooleanItem
+        value={feedback.value}
+        status={status}
+        isHumanFeedback={isHumanFeedback}
+      />
     );
   }
 
   // Handle float metrics
   if (feedback.type === "float" && typeof feedback.value === "number") {
-    return <div>{feedback.value.toFixed(3)}</div>;
-  }
-
-  // Handle comments and demonstrations (both have string values)
-  if (feedback.type === "comment" && typeof feedback.value === "string") {
     return (
-      <div className="break-words whitespace-pre-wrap">{feedback.value}</div>
+      <FloatItem value={feedback.value} isHumanFeedback={isHumanFeedback} />
     );
   }
 
-  if (feedback.type === "demonstration" && typeof feedback.value === "string") {
-    // truncate to 1000 characters
+  // Handle comments
+  if (feedback.type === "comment" && typeof feedback.value === "string") {
     return (
-      <Code className="text-sm font-normal">
-        {feedback.value.length > 1000
-          ? feedback.value.slice(0, 1000) + "..."
-          : feedback.value}
-      </Code>
+      <>
+        <CommentItem
+          value={feedback.value}
+          isHumanFeedback={isHumanFeedback}
+          onClick={handleClick}
+        />
+        <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+          <SheetContent className="bg-bg-secondary overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+            <CommentModal feedback={feedback} />
+          </SheetContent>
+        </Sheet>
+      </>
+    );
+  }
+
+  // Handle demonstrations
+  if (feedback.type === "demonstration" && typeof feedback.value === "string") {
+    return (
+      <>
+        <DemonstrationItem
+          value={feedback.value}
+          isHumanFeedback={isHumanFeedback}
+          onClick={handleClick}
+        />
+        <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+          <SheetContent className="bg-bg-secondary w-full overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+            <DemonstrationModal feedback={feedback} />
+          </SheetContent>
+        </Sheet>
+      </>
     );
   }
 

@@ -1,7 +1,8 @@
 import { z } from "zod";
-import type { MetricConfig, MetricConfigOptimize } from "../config/metric";
+import type { MetricConfigOptimize } from "tensorzero-node";
 import {
   contentBlockOutputSchema,
+  CountSchema,
   getInferenceTableName,
   InferenceJoinKey,
   InferenceTableName,
@@ -9,22 +10,25 @@ import {
   jsonInferenceOutputSchema,
 } from "./common";
 import type { JsonInferenceOutput } from "./common";
-import { clickhouseClient } from "./client.server";
-import type { FunctionConfig } from "../config/function";
-import { getComparisonOperator } from "../config/metric";
+import { getClickhouseClient } from "./client.server";
+import type { FunctionConfig } from "tensorzero-node";
+import { getComparisonOperator, type FeedbackConfig } from "../config/feedback";
 import {
   getInferenceJoinKey,
+  parsedChatExampleSchema,
+  parsedJsonInferenceExampleSchema,
   type InferenceExample,
   type ParsedChatInferenceExample,
   type ParsedInferenceExample,
   type ParsedJsonInferenceExample,
 } from "./curation";
+import { logger } from "~/utils/logger";
 
 export async function countFeedbacksForMetric(
   function_name: string,
   function_config: FunctionConfig,
   metric_name: string,
-  metric_config: MetricConfig,
+  metric_config: FeedbackConfig,
 ): Promise<number | null> {
   const inference_table_name = getInferenceTableName(function_config);
   switch (metric_config.type) {
@@ -62,7 +66,7 @@ export async function countCuratedInferences(
   function_name: string,
   function_config: FunctionConfig,
   metric_name: string,
-  metric_config: MetricConfig,
+  metric_config: FeedbackConfig,
   threshold: number,
 ) {
   const inference_table_name = getInferenceTableName(function_config);
@@ -103,7 +107,7 @@ export async function getCuratedInferences(
   function_name: string,
   function_config: FunctionConfig,
   metric_name: string | null,
-  metric_config: MetricConfig | null,
+  metric_config: FeedbackConfig | null,
   threshold: number,
   max_samples?: number,
 ) {
@@ -161,8 +165,8 @@ async function queryAllInferencesForFunction(
   max_samples: number | undefined,
 ): Promise<ParsedInferenceExample[]> {
   const limitClause = max_samples ? `LIMIT ${max_samples}` : "";
-  const query = `SELECT * FROM ${inference_table_name} WHERE function_name = {function_name:String} ${limitClause}`;
-  const resultSet = await clickhouseClient.query({
+  const query = `SELECT variant_name, input, output, episode_id  FROM ${inference_table_name} WHERE function_name = {function_name:String} ${limitClause}`;
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { function_name },
@@ -230,7 +234,7 @@ async function queryCuratedMetricData(
       ${limitClause}
     `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -291,7 +295,7 @@ async function countMetricData(
         i.function_name = {function_name:String}
     `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -301,7 +305,8 @@ async function countMetricData(
     },
   });
   const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 async function queryDemonstrationDataForFunction(
@@ -332,7 +337,7 @@ async function queryDemonstrationDataForFunction(
       ${limitClause}
     `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -364,7 +369,7 @@ export async function countDemonstrationDataForFunction(
         i.function_name = {function_name:String}
     `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -372,7 +377,8 @@ export async function countDemonstrationDataForFunction(
     },
   });
   const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 function parseInferenceExamples(
@@ -381,13 +387,17 @@ function parseInferenceExamples(
   function_name: string,
 ): ParsedChatInferenceExample[] | ParsedJsonInferenceExample[] {
   if (tableName === "ChatInference") {
-    return rows.map((row) => ({
+    const processedRows = rows.map((row) => ({
       ...row,
       input: inputSchema.parse(JSON.parse(row.input)),
       output: z.array(contentBlockOutputSchema).parse(JSON.parse(row.output)),
     })) as ParsedChatInferenceExample[];
+    const parsedRows = processedRows.map((row) =>
+      parsedChatExampleSchema.parse(row),
+    );
+    return parsedRows;
   } else {
-    return rows.map((row) => {
+    const processedRows = rows.map((row) => {
       if (function_name.startsWith("tensorzero::llm_judge::")) {
         row.output = handle_llm_judge_output(row.output);
       }
@@ -397,6 +407,10 @@ function parseInferenceExamples(
         output: jsonInferenceOutputSchema.parse(JSON.parse(row.output)),
       };
     }) as ParsedJsonInferenceExample[];
+    const parsedRows = processedRows.map((row) =>
+      parsedJsonInferenceExampleSchema.parse(row),
+    );
+    return parsedRows;
   }
 }
 
@@ -411,7 +425,7 @@ export function handle_llm_judge_output(output: string) {
   try {
     parsed = JSON.parse(output);
   } catch (e) {
-    console.warn("Error parsing LLM Judge output", e);
+    logger.warn("Error parsing LLM Judge output", e);
     // Don't do anything if the output failed to parse
     return output;
   }

@@ -33,8 +33,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -59,8 +62,8 @@ describe("OpenAI Compatibility", () => {
 
     const usage = result.usage;
     expect(usage?.prompt_tokens).toBe(10);
-    expect(usage?.completion_tokens).toBe(10);
-    expect(usage?.total_tokens).toBe(20);
+    expect(usage?.completion_tokens).toBe(1);
+    expect(usage?.total_tokens).toBe(11);
     expect(result.choices[0].finish_reason).toBe("stop");
   });
 
@@ -70,8 +73,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -85,6 +91,9 @@ describe("OpenAI Compatibility", () => {
       temperature: 0.4,
       // @ts-expect-error - custom TensorZero property
       "tensorzero::episode_id": episodeId,
+      "tensorzero::tags": {
+        foo: "bar",
+      },
     });
 
     // @ts-expect-error - custom TensorZero property
@@ -96,8 +105,8 @@ describe("OpenAI Compatibility", () => {
 
     const usage = result.usage;
     expect(usage?.prompt_tokens).toBe(10);
-    expect(usage?.completion_tokens).toBe(10);
-    expect(usage?.total_tokens).toBe(20);
+    expect(usage?.completion_tokens).toBe(1);
+    expect(usage?.total_tokens).toBe(11);
     expect(result.choices[0].finish_reason).toBe("stop");
   });
 
@@ -107,8 +116,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            name_of_assistant: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              name_of_assistant: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -139,8 +151,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -218,10 +233,9 @@ describe("OpenAI Compatibility", () => {
         expect(chunk.choices[0].delta.content).toBe(expectedText[i]);
         expect(chunk.choices[0].finish_reason).toBeNull();
       } else {
-        expect(chunk.choices[0].delta.content).toBeNull();
-        expect(chunk.usage?.prompt_tokens).toBe(10);
-        expect(chunk.usage?.completion_tokens).toBe(16);
-        expect(chunk.usage?.total_tokens).toBe(26);
+        expect(chunk.choices[0].delta.content).toBeUndefined();
+        // No usage information because we didn't set `include_usage`
+        expect(chunk.usage).toBeNull();
         expect(chunk.choices[0].finish_reason).toBe("stop");
       }
     }
@@ -233,8 +247,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -259,8 +276,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -285,8 +305,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -311,8 +334,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -333,8 +359,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            name_of_assistant: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              name_of_assistant: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -360,8 +389,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -398,7 +430,7 @@ describe("OpenAI Compatibility", () => {
 
     const usage = result.usage;
     expect(usage?.prompt_tokens).toBe(10);
-    expect(usage?.completion_tokens).toBe(10);
+    expect(usage?.completion_tokens).toBe(1);
     expect(result.choices[0].finish_reason).toBe("tool_calls");
   });
 
@@ -408,8 +440,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -447,7 +482,7 @@ describe("OpenAI Compatibility", () => {
 
     const usage = result.usage;
     expect(usage?.prompt_tokens).toBe(10);
-    expect(usage?.completion_tokens).toBe(10);
+    expect(usage?.completion_tokens).toBe(1);
   });
 
   it("should handle tool call streaming", async () => {
@@ -456,8 +491,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -492,6 +530,7 @@ describe("OpenAI Compatibility", () => {
 
     let previousInferenceId: string | null = null;
     let previousEpisodeId: string | null = null;
+    let nameSeen = false;
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
@@ -512,21 +551,26 @@ describe("OpenAI Compatibility", () => {
 
       if (i + 1 < chunks.length) {
         expect(chunk.choices.length).toBe(1);
-        expect(chunk.choices[0].delta.content).toBeNull();
+        expect(chunk.choices[0].delta.content).toBeUndefined();
         expect(chunk.choices[0].delta.tool_calls?.length).toBe(1);
 
         const toolCall = chunk.choices[0].delta.tool_calls![0];
         expect(toolCall.type).toBe("function");
-        expect(toolCall.function?.name).toBe("get_temperature");
+        if (toolCall.function?.name) {
+          expect(nameSeen).toBe(false);
+          expect(toolCall.function.name).toBe("get_temperature");
+          nameSeen = true;
+        }
         expect(toolCall.function?.arguments).toBe(expectedText[i]);
       } else {
-        expect(chunk.choices[0].delta.content).toBeNull();
-        expect(chunk.choices[0].delta.tool_calls?.length).toBe(0);
-        expect(chunk.usage?.prompt_tokens).toBe(10);
-        expect(chunk.usage?.completion_tokens).toBe(5);
+        expect(chunk.choices[0].delta.content).toBeUndefined();
+        expect(chunk.choices[0].delta.tool_calls).toBeUndefined();
+        // No usage information because we didn't set `include_usage`
+        expect(chunk.usage).toBeNull();
         expect(chunk.choices[0].finish_reason).toBe("tool_calls");
       }
     }
+    expect(nameSeen).toBe(true);
   });
 
   it("should handle JSON streaming", async () => {
@@ -535,8 +579,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -544,8 +591,11 @@ describe("OpenAI Compatibility", () => {
         role: "user",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            country: "Japan",
+            "tensorzero::arguments": {
+              country: "Japan",
+            },
           },
         ],
       },
@@ -558,6 +608,7 @@ describe("OpenAI Compatibility", () => {
       model: "tensorzero::function_name::json_success",
       stream: true,
       "tensorzero::episode_id": episodeId,
+      "tensorzero::variant_name": "test-diff-schema",
     });
 
     const chunks = [];
@@ -601,15 +652,15 @@ describe("OpenAI Compatibility", () => {
       previousEpisodeId = chunk.episode_id;
 
       expect(chunk.model).toBe(
-        "tensorzero::function_name::json_success::variant_name::test"
+        "tensorzero::function_name::json_success::variant_name::test-diff-schema"
       );
 
       if (i + 1 < chunks.length) {
         expect(chunk.choices[0].delta.content).toBe(expectedText[i]);
       } else {
         expect(chunk.choices[0].delta.content).toBe("");
-        expect(chunk.usage?.prompt_tokens).toBe(10);
-        expect(chunk.usage?.completion_tokens).toBe(16);
+        // No usage information because we didn't set `include_usage`
+        expect(chunk.usage).toBeNull();
       }
     }
   });
@@ -622,7 +673,9 @@ describe("OpenAI Compatibility", () => {
           {
             type: "text",
             // @ts-expect-error - custom TensorZero property
-            "tensorzero::arguments": { assistant_name: "Alfred Pennyworth" },
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -654,7 +707,7 @@ describe("OpenAI Compatibility", () => {
     expect(result.choices[0].message.content).toBe('{"answer":"Hello"}');
     expect(result.choices[0].message.tool_calls).toBeNull();
     expect(result.usage?.prompt_tokens).toBe(10);
-    expect(result.usage?.completion_tokens).toBe(10);
+    expect(result.usage?.completion_tokens).toBe(1);
   });
 
   it("should handle json success", async () => {
@@ -663,8 +716,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -672,8 +728,11 @@ describe("OpenAI Compatibility", () => {
         role: "user",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            country: "Japan",
+            "tensorzero::arguments": {
+              country: "Japan",
+            },
           },
         ],
       },
@@ -694,7 +753,7 @@ describe("OpenAI Compatibility", () => {
     expect(result.choices[0].message.content).toBe('{"answer":"Hello"}');
     expect(result.choices[0].message.tool_calls).toBeNull();
     expect(result.usage?.prompt_tokens).toBe(10);
-    expect(result.usage?.completion_tokens).toBe(10);
+    expect(result.usage?.completion_tokens).toBe(1);
   });
 
   it("should handle json invalid system", async () => {
@@ -713,8 +772,11 @@ describe("OpenAI Compatibility", () => {
         role: "user",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            country: "Japan",
+            "tensorzero::arguments": {
+              country: "Japan",
+            },
           },
         ],
       },
@@ -737,8 +799,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -761,7 +826,7 @@ describe("OpenAI Compatibility", () => {
     );
     expect(result.choices[0].message.tool_calls).toBeNull();
     expect(result.usage?.prompt_tokens).toBe(10);
-    expect(result.usage?.completion_tokens).toBe(10);
+    expect(result.usage?.completion_tokens).toBe(1);
   });
 
   it("should handle caching", async () => {
@@ -770,8 +835,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -790,8 +858,8 @@ describe("OpenAI Compatibility", () => {
 
     const usage = result.usage;
     expect(usage?.prompt_tokens).toBe(10);
-    expect(usage?.completion_tokens).toBe(10);
-    expect(usage?.total_tokens).toBe(20);
+    expect(usage?.completion_tokens).toBe(1);
+    expect(usage?.total_tokens).toBe(11);
 
     // Test caching
     const cachedResult = await client.chat.completions.create({
@@ -821,8 +889,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -834,6 +905,9 @@ describe("OpenAI Compatibility", () => {
       messages,
       model: "tensorzero::function_name::basic_test",
       stream: true,
+      stream_options: {
+        include_usage: true,
+      },
       seed: 69,
     });
 
@@ -869,11 +943,15 @@ describe("OpenAI Compatibility", () => {
       }
     }
 
-    // Check final chunk
+    const prevChunk = chunks[chunks.length - 2];
+    expect(prevChunk.choices[0].finish_reason).toBe("stop");
+    expect(prevChunk.usage).toBeNull();
+
+    // Check final chunk (which contains usage)
     const finalChunk = chunks[chunks.length - 1];
-    expect(finalChunk.choices[0].finish_reason).toBe("stop");
     expect(finalChunk.usage?.prompt_tokens).toBe(10);
     expect(finalChunk.usage?.completion_tokens).toBe(16);
+    expect(finalChunk.choices).toStrictEqual([]);
 
     // Second streaming request with cache
     // @ts-expect-error - custom TensorZero property
@@ -881,9 +959,12 @@ describe("OpenAI Compatibility", () => {
       messages,
       model: "tensorzero::function_name::basic_test",
       stream: true,
+      stream_options: {
+        include_usage: true,
+      },
       seed: 69,
       "tensorzero::cache_options": {
-        max_age_s: 10,
+        max_age_s: 30, // NOTE: This was 10s and we actually occasionally time out on CI.
         enabled: "on",
       },
     });
@@ -903,19 +984,15 @@ describe("OpenAI Compatibility", () => {
 
     expect(content).toBe(cachedContent);
 
+    const prevCachedChunk = cachedChunks[cachedChunks.length - 2];
+    expect(prevCachedChunk.choices[0].finish_reason).toBe("stop");
+    expect(prevCachedChunk.usage).toBeNull();
+
     // Check final cached chunk
     const finalCachedChunk = cachedChunks[cachedChunks.length - 1];
-    expect(finalCachedChunk.choices[0].finish_reason).toBe("stop");
-
-    // Check cached usage stats if present
-    if (
-      finalCachedChunk.usage !== undefined &&
-      finalCachedChunk.usage !== null
-    ) {
-      expect(finalCachedChunk.usage.prompt_tokens).toBe(0);
-      expect(finalCachedChunk.usage.completion_tokens).toBe(0);
-      expect(finalCachedChunk.usage.total_tokens).toBe(0);
-    }
+    expect(finalCachedChunk.usage?.prompt_tokens).toBe(0);
+    expect(finalCachedChunk.usage?.completion_tokens).toBe(0);
+    expect(finalCachedChunk.usage?.total_tokens).toBe(0);
   });
 
   it("should handle dynamic tool use inference with OpenAI", async () => {
@@ -924,8 +1001,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Dr. Mehta",
+            "tensorzero::arguments": {
+              assistant_name: "Dr. Mehta",
+            },
           },
         ],
       },
@@ -1001,6 +1081,15 @@ describe("OpenAI Compatibility", () => {
       required: ["response"],
       additionalProperties: false,
     };
+    const response_format = {
+      type: "json_schema" as const,
+      json_schema: {
+        name: "test",
+        description: "test",
+        schema: outputSchema,
+        strict: true,
+      },
+    };
 
     const serializedOutputSchema = JSON.stringify(outputSchema);
     const messages: ChatCompletionMessageParam[] = [
@@ -1008,9 +1097,12 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Dr. Mehta",
-            schema: serializedOutputSchema,
+            "tensorzero::arguments": {
+              assistant_name: "Dr. Mehta",
+              schema: serializedOutputSchema,
+            },
           },
         ],
       },
@@ -1018,8 +1110,11 @@ describe("OpenAI Compatibility", () => {
         role: "user",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            country: "Japan",
+            "tensorzero::arguments": {
+              country: "Japan",
+            },
           },
         ],
       },
@@ -1028,10 +1123,7 @@ describe("OpenAI Compatibility", () => {
     const result = await client.chat.completions.create({
       messages,
       model: "tensorzero::function_name::dynamic_json",
-      response_format: {
-        type: "json_schema",
-        json_schema: { name: "json_schema", ...outputSchema }, // the Node client requires a `name` field here...?
-      },
+      response_format,
       // @ts-expect-error - custom TensorZero property
       "tensorzero::episode_id": episodeId,
       "tensorzero::variant_name": "openai",
@@ -1085,7 +1177,7 @@ describe("OpenAI Compatibility", () => {
     // Read image and convert to base64
     const imagePath = path.join(
       __dirname,
-      "../../../tensorzero-internal/tests/e2e/providers/ferris.png"
+      "../../../tensorzero-core/tests/e2e/providers/ferris.png"
     );
     const ferrisPng = fs.readFileSync(imagePath).toString("base64");
 
@@ -1117,6 +1209,49 @@ describe("OpenAI Compatibility", () => {
 
     expect(result.choices[0].message.content?.toLowerCase()).toContain("crab");
   });
+
+  it("should handle multi-block file_base64", async () => {
+    // Read PDF file and convert to base64
+    const pdfPath = path.join(
+      __dirname,
+      "../../../tensorzero-core/tests/e2e/providers/deepseek_paper.pdf"
+    );
+    const deepseekPaperPdf = fs.readFileSync(pdfPath).toString("base64");
+
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Output exactly two words describing the image",
+          },
+          {
+            type: "file",
+            file: {
+              file_data: deepseekPaperPdf,
+              filename: "test.pdf",
+            },
+          },
+        ],
+      },
+    ];
+
+    const episodeId = uuidv7();
+    const result = await client.chat.completions.create({
+      messages,
+      model: "tensorzero::model_name::dummy::require_pdf",
+      // @ts-expect-error - custom TensorZero property
+      "tensorzero::episode_id": episodeId,
+    });
+
+    expect(result.choices[0].message.content).not.toBeNull();
+    const jsonContent = JSON.parse(result.choices[0].message.content!);
+    expect(jsonContent[0].storage_path).toEqual({
+      kind: { type: "disabled" },
+      path: "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
+    });
+  });
 });
 
 it("should reject string input for function with input schema", async () => {
@@ -1125,8 +1260,11 @@ it("should reject string input for function with input schema", async () => {
       role: "system",
       content: [
         {
+          type: "text",
           // @ts-expect-error - custom TensorZero property
-          assistant_name: "Alfred Pennyworth",
+          "tensorzero::arguments": {
+            assistant_name: "Alfred Pennyworth",
+          },
         },
       ],
     },
@@ -1135,8 +1273,11 @@ it("should reject string input for function with input schema", async () => {
       role: "user",
       content: [
         {
+          type: "text",
           // @ts-expect-error - custom TensorZero property
-          country: "Japan",
+          "tensorzero::arguments": {
+            country: "Japan",
+          },
         },
       ],
     },
@@ -1370,4 +1511,90 @@ it("should handle json function null response", async () => {
     "tensorzero::function_name::null_json::variant_name::variant"
   );
   expect(result.choices[0].message.content).toBeNull();
+});
+
+it("should handle extra headers parameter", async () => {
+  const result = await client.chat.completions.create({
+    // @ts-expect-error - custom TensorZero property
+    "tensorzero::extra_headers": [
+      {
+        model_provider_name:
+          "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+        name: "x-my-extra-header",
+        value: "my-extra-header-value",
+      },
+    ],
+    messages: [{ role: "user", content: "Hello, world!" }],
+    model: "tensorzero::model_name::dummy::echo_extra_info",
+  });
+
+  expect(result.model).toBe("tensorzero::model_name::dummy::echo_extra_info");
+  expect(JSON.parse(result.choices[0].message.content!)).toEqual({
+    extra_body: { inference_extra_body: [] },
+    extra_headers: {
+      inference_extra_headers: [
+        {
+          model_provider_name:
+            "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+          name: "x-my-extra-header",
+          value: "my-extra-header-value",
+        },
+      ],
+      variant_extra_headers: null,
+    },
+  });
+});
+
+it("should handle extra body parameter", async () => {
+  const result = await client.chat.completions.create({
+    // @ts-expect-error - custom TensorZero property
+    "tensorzero::extra_body": [
+      {
+        model_provider_name:
+          "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+        pointer: "/thinking",
+        value: {
+          type: "enabled",
+          budget_tokens: 1024,
+        },
+      },
+    ],
+    messages: [{ role: "user", content: "Hello, world!" }],
+    model: "tensorzero::model_name::dummy::echo_extra_info",
+  });
+
+  expect(result.model).toBe("tensorzero::model_name::dummy::echo_extra_info");
+  expect(JSON.parse(result.choices[0].message.content!)).toEqual({
+    extra_body: {
+      inference_extra_body: [
+        {
+          model_provider_name:
+            "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+          pointer: "/thinking",
+          value: { type: "enabled", budget_tokens: 1024 },
+        },
+      ],
+    },
+    extra_headers: { variant_extra_headers: null, inference_extra_headers: [] },
+  });
+});
+
+it("should handle multiple text blocks in message", async () => {
+  const result = await client.chat.completions.create({
+    model: "tensorzero::model_name::dummy::multiple-text-blocks",
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Hello, world!" },
+          { type: "text", text: "Hello, world!" },
+        ],
+      },
+    ],
+  });
+
+  expect(result.model).toBe(
+    "tensorzero::model_name::dummy::multiple-text-blocks"
+  );
+  expect(result.choices[0].message.content).toContain("Megumin");
 });

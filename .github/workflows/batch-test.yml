@@ -13,10 +13,13 @@ env:
   FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
   FORCE_COLOR: 1
   GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
+  GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp_jwt_key.json
   GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
+  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
   HYPERBOLIC_API_KEY: ${{secrets.HYPERBOLIC_API_KEY}}
   MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
   SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
   TGI_API_KEY: ${{ secrets.TGI_API_KEY }}
   TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
@@ -27,9 +30,7 @@ env:
 
 on:
   workflow_dispatch:
-  merge_group:
-  schedule:
-    - cron: '0 0 * * *'  # Runs at 00:00 UTC every day
+  workflow_call:
 
 jobs:
   batch-tests:
@@ -52,6 +53,8 @@ jobs:
           cache: |
             rust
 
+      - uses: dtolnay/rust-toolchain@stable
+
       - name: Login to DockerHub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
@@ -60,10 +63,10 @@ jobs:
 
       - name: Wake up ClickHouse cloud (for batch tests)
         run: |
-          curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES'
+          curl "${{ secrets.CLICKHOUSE_CLOUD_URL }}" --retry 4 --retry-all-errors --data-binary 'SHOW DATABASES'
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
           tool: cargo-nextest
 
@@ -78,7 +81,7 @@ jobs:
 
       - name: Launch the gateway for batch tests
         run: |
-          curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES'
+          curl "${{ secrets.CLICKHOUSE_CLOUD_URL }}" --retry 4 --retry-all-errors --data-binary 'SHOW DATABASES'
           cargo run-e2e > batch_logs.txt 2>&1 &
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
           while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do

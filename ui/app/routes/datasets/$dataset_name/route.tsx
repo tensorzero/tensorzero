@@ -16,6 +16,7 @@ import {
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
@@ -60,6 +61,8 @@ export default function DatasetDetailPage({
         description: `Added ${rowsAdded} rows to the dataset. Skipped ${rowsSkipped} duplicate rows.`,
       });
     }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowsAdded, toast]);
 
   const navigate = useNavigate();
@@ -73,6 +76,7 @@ export default function DatasetDetailPage({
     searchParams.set("offset", String(offset - pageSize));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
+
   return (
     <PageLayout>
       <PageHeader heading="Dataset" name={count_info.dataset_name} />
@@ -92,7 +96,7 @@ export default function DatasetDetailPage({
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

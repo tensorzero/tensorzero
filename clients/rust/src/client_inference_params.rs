@@ -3,20 +3,20 @@ use std::{collections::HashMap, ops::Deref};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tensorzero_internal::{
+use tensorzero_core::{
     cache::CacheParamsOptions,
     endpoints::inference::{InferenceParams, Params},
     error::Error,
-    inference::types::{
-        extra_body::UnfilteredInferenceExtraBody, Input, InputMessage, InputMessageContent,
-    },
+    inference::types::extra_body::UnfilteredInferenceExtraBody,
+    inference::types::extra_headers::UnfilteredInferenceExtraHeaders,
+    inference::types::{Input, InputMessage, InputMessageContent},
     tool::DynamicToolParams,
 };
 use uuid::Uuid;
 
 use crate::client_input::{test_client_input_to_input, ClientInput};
 
-// This is a copy-paste of the `Params` struct from `tensorzero_internal::endpoints::inference::Params`.
+// This is a copy-paste of the `Params` struct from `tensorzero_core::endpoints::inference::Params`.
 // with just the `credentials` field adjusted to allow serialization.
 /// The expected payload is a JSON object with the following fields:
 #[derive(Clone, Debug, Serialize, Default)]
@@ -68,6 +68,8 @@ pub struct ClientInferenceParams {
     pub include_original_response: bool,
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default)]
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 impl TryFrom<ClientInferenceParams> for Params {
@@ -109,6 +111,7 @@ impl TryFrom<ClientInferenceParams> for Params {
             cache_options: this.cache_options,
             include_original_response: this.include_original_response,
             extra_body: this.extra_body,
+            extra_headers: this.extra_headers,
         })
     }
 }
@@ -116,7 +119,7 @@ impl TryFrom<ClientInferenceParams> for Params {
 // This asserts that the fields in `ClientInferenceParams` match the fields in `Params`,
 // by explicitly naming all of the fields in both structs.
 // This will stop compiling if the fields don't match.
-#[allow(unused)]
+#[expect(unused)]
 fn assert_params_match(client_params: ClientInferenceParams) {
     let ClientInferenceParams {
         function_name,
@@ -135,6 +138,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         cache_options,
         include_original_response,
         extra_body,
+        extra_headers,
     } = client_params;
     let _ = Params {
         function_name,
@@ -153,6 +157,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         cache_options,
         include_original_response,
         extra_body,
+        extra_headers,
     };
 }
 
@@ -175,7 +180,7 @@ impl Serialize for ClientSecretString {
     }
 }
 
-// The orphan rule requires us to write some impls in this crate, instead of in the `python-pyo3` wrapper crate.
+// The orphan rule requires us to write some impls in this crate, instead of in the `python` wrapper crate.
 #[cfg(feature = "pyo3")]
 mod pyo3_impls {
     use super::*;

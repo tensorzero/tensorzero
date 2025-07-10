@@ -2,6 +2,7 @@ import {
   getEvaluationRunInfos,
   getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
+  pollForEvaluations,
 } from "~/utils/clickhouse/evaluations.server";
 import type { Route } from "./+types/route";
 import {
@@ -11,8 +12,15 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { PageLayout } from "~/components/layout/PageLayout";
-import Input from "~/components/inference/Input";
-import { data, isRouteErrorResponse, redirect } from "react-router";
+import InputSnippet from "~/components/inference/InputSnippet";
+
+import {
+  data,
+  isRouteErrorResponse,
+  Link,
+  redirect,
+  type RouteHandle,
+} from "react-router";
 import Output from "~/components/inference/NewOutput";
 import {
   consolidate_evaluation_results,
@@ -20,11 +28,8 @@ import {
   type ConsolidatedMetric,
 } from "~/utils/clickhouse/evaluations";
 import { useConfig } from "~/context/config";
-import MetricValue from "~/components/evaluations/MetricValue";
-import {
-  getMetricType,
-  type EvaluatorConfig,
-} from "~/utils/config/evaluations";
+import MetricValue from "~/components/metric/MetricValue";
+import { getMetricType } from "~/utils/config/evaluations";
 import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
 import BasicInfo from "./EvaluationDatapointBasicInfo";
 import {
@@ -39,9 +44,19 @@ import {
   useColorAssigner,
 } from "~/hooks/evaluations/ColorAssigner";
 import { getConfig } from "~/utils/config/index.server";
-import type { EvaluationConfig } from "~/utils/config/evaluations";
+import type { EvaluationConfig, EvaluatorConfig } from "tensorzero-node";
 import type { ContentBlockOutput } from "~/utils/clickhouse/common";
 import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
+import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
+import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
+import { Toaster } from "~/components/ui/toaster";
+import { useToast } from "~/hooks/use-toast";
+import { useEffect } from "react";
+import { logger } from "~/utils/logger";
+
+export const handle: RouteHandle = {
+  crumb: (match) => ["Datapoints", match.params.datapoint_id!],
+};
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const evaluation_name = params.evaluation_name;
@@ -50,7 +65,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const searchParams = new URLSearchParams(url.search);
   const config = await getConfig();
   const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw data(
+      `Evaluation config not found for evaluation ${evaluation_name}`,
+      { status: 404 },
+    );
+  }
   const function_name = evaluation_config.function_name;
+  const newFeedbackId = searchParams.get("newFeedbackId");
+  const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
 
   const selected_evaluation_run_ids = searchParams.get("evaluation_run_ids");
   const selectedRunIds = selected_evaluation_run_ids
@@ -59,17 +82,42 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (selectedRunIds.length === 0) {
     return redirect(`/evaluations/${evaluation_name}`);
   }
+
+  // Define all promises
+  const selectedEvaluationRunInfosPromise = getEvaluationRunInfos(
+    selectedRunIds,
+    function_name,
+  );
+  const allowedEvaluationRunInfosPromise = getEvaluationRunInfosForDatapoint(
+    datapoint_id,
+    function_name,
+  );
+
+  // If there is a freshly inserted feedback, ClickHouse may take some time to
+  // update the evaluation results as it is eventually consistent.
+  // In this case, we poll for the evaluation results until the feedback is found.
+  const evaluationResultsPromise = newFeedbackId
+    ? pollForEvaluations(
+        evaluation_name,
+        datapoint_id,
+        selectedRunIds,
+        newFeedbackId,
+      )
+    : getEvaluationsForDatapoint(evaluation_name, datapoint_id, selectedRunIds);
+
+  // Execute all promises concurrently
   const [
     selected_evaluation_run_infos,
     allowedEvaluationRunInfos,
-    EvaluationResults,
+    evaluationResults,
   ] = await Promise.all([
-    getEvaluationRunInfos(selectedRunIds, function_name),
-    getEvaluationRunInfosForDatapoint(datapoint_id, function_name),
-    getEvaluationsForDatapoint(evaluation_name, datapoint_id, selectedRunIds),
+    selectedEvaluationRunInfosPromise,
+    allowedEvaluationRunInfosPromise,
+    evaluationResultsPromise,
   ]);
+
   const consolidatedEvaluationResults =
-    consolidate_evaluation_results(EvaluationResults);
+    consolidate_evaluation_results(evaluationResults);
   if (consolidatedEvaluationResults.length !== selectedRunIds.length) {
     // Find which evaluation run IDs are missing from the results
     const foundEvaluationRunIds = new Set(
@@ -91,7 +139,38 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     selected_evaluation_run_infos,
     allowedEvaluationRunInfos,
     selectedRunIds,
+    newFeedbackId,
+    newJudgeDemonstrationId,
   };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const _action = formData.get("_action");
+  switch (_action) {
+    case "addFeedback": {
+      const response = await addEvaluationHumanFeedback(formData);
+      const url = new URL(request.url);
+      url.searchParams.delete("beforeFeedback");
+      url.searchParams.delete("afterFeedback");
+      url.searchParams.set(
+        "newFeedbackId",
+        response.feedbackResponse.feedback_id,
+      );
+      if (response.judgeDemonstrationResponse) {
+        url.searchParams.set(
+          "newJudgeDemonstrationId",
+          response.judgeDemonstrationResponse.feedback_id,
+        );
+      } else {
+        logger.warn("No judge demonstration response");
+      }
+      return redirect(url.toString());
+    }
+    default:
+      logger.error(`Unknown action: ${_action}`);
+      return null;
+  }
 }
 
 export default function EvaluationDatapointPage({
@@ -104,26 +183,41 @@ export default function EvaluationDatapointPage({
     selected_evaluation_run_infos,
     allowedEvaluationRunInfos,
     selectedRunIds,
+    newFeedbackId,
+    newJudgeDemonstrationId,
   } = loaderData;
   const config = useConfig();
   const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw data(
+      `Evaluation config not found for evaluation ${evaluation_name}`,
+      { status: 404 },
+    );
+  }
   const outputsToDisplay = [
     {
       id: "Reference",
       output: consolidatedEvaluationResults[0].reference_output,
       metrics: [],
       variant_name: "Reference",
+      inferenceId: null,
     },
     ...consolidatedEvaluationResults.map((result) => ({
       id: result.evaluation_run_id,
+      inferenceId: result.inference_id,
       variant_name: result.variant_name,
       output: result.generated_output,
       metrics: result.metrics,
     })),
   ];
-
-  // REMOVE useColorAssigner() call from here
-
+  const { toast } = useToast();
+  useEffect(() => {
+    if (newFeedbackId) {
+      toast({
+        title: "Feedback Added",
+      });
+    }
+  }, [newFeedbackId, newJudgeDemonstrationId, toast]);
   return (
     // Provider remains here
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
@@ -145,14 +239,16 @@ export default function EvaluationDatapointPage({
         <SectionsGroup>
           <SectionLayout>
             <SectionHeader heading="Input" />
-            <Input input={consolidatedEvaluationResults[0].input} />
+            <InputSnippet {...consolidatedEvaluationResults[0].input} />
           </SectionLayout>
           <OutputsSection
             outputsToDisplay={outputsToDisplay}
             evaluation_name={evaluation_name}
             evaluation_config={evaluation_config}
+            datapointId={datapoint_id}
           />
         </SectionsGroup>
+        <Toaster />
       </PageLayout>
     </ColorAssignerProvider>
   );
@@ -163,13 +259,21 @@ const MetricsDisplay = ({
   metrics,
   evaluation_name,
   evaluatorsConfig,
+  datapointId,
+  inferenceId,
+  evalRunId,
+  variantName,
 }: {
   metrics: ConsolidatedMetric[];
   evaluation_name: string;
-  evaluatorsConfig: Record<string, EvaluatorConfig>;
+  evaluatorsConfig: Record<string, EvaluatorConfig | undefined>;
+  datapointId: string;
+  inferenceId: string | null;
+  evalRunId: string;
+  variantName: string;
 }) => {
   return (
-    <div className="mt-3 border-t border-gray-200 pt-2">
+    <div className="pt-2">
       <div className="space-y-1">
         {metrics.map((metricObj) => {
           const evaluatorConfig = evaluatorsConfig[metricObj.evaluator_name];
@@ -182,6 +286,12 @@ const MetricsDisplay = ({
               evaluatorName={metricObj.evaluator_name}
               metricValue={metricObj.metric_value}
               evaluatorConfig={evaluatorConfig}
+              datapointId={datapointId}
+              inferenceId={inferenceId}
+              evaluatorInferenceId={metricObj.evaluator_inference_id}
+              evalRunId={evalRunId}
+              variantName={variantName}
+              isHumanFeedback={metricObj.is_human_feedback}
             />
           );
         })}
@@ -196,21 +306,36 @@ const MetricRow = ({
   evaluation_name,
   metricValue,
   evaluatorConfig,
+  datapointId,
+  inferenceId,
+  evalRunId,
+  evaluatorInferenceId,
+  variantName,
+  isHumanFeedback,
 }: {
   evaluatorName: string;
   evaluation_name: string;
   metricValue: string;
   evaluatorConfig: EvaluatorConfig;
+  datapointId: string;
+  inferenceId: string | null;
+  evaluatorInferenceId: string | null;
+  evalRunId: string;
+  variantName: string;
+  isHumanFeedback: boolean;
 }) => {
   const config = useConfig();
   const metric_name = getEvaluatorMetricName(evaluation_name, evaluatorName);
   const metricProperties = config.metrics[metric_name];
-  if (
-    metricProperties.type === "comment" ||
-    metricProperties.type === "demonstration"
-  ) {
+  if (!metricProperties) {
     return null;
   }
+  if (inferenceId === null) {
+    logger.warn(
+      `Inference ID is null for metric ${metric_name} in datapoint ${datapointId}, this should not happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports`,
+    );
+  }
+  const evaluationType = evaluatorConfig.type;
   return (
     <div className="flex items-center gap-2">
       <TooltipProvider delayDuration={300}>
@@ -249,15 +374,34 @@ const MetricRow = ({
       <MetricValue
         value={String(metricValue)}
         metricType={getMetricType(evaluatorConfig)}
-        evaluatorConfig={evaluatorConfig}
+        optimize={
+          evaluatorConfig.type === "llm_judge"
+            ? evaluatorConfig.optimize
+            : "max"
+        }
+        cutoff={evaluatorConfig.cutoff ?? undefined}
+        isHumanFeedback={isHumanFeedback}
         className="text-sm"
       />
+      {inferenceId !== null && evaluationType === "llm_judge" && (
+        <div className="opacity-0 transition-opacity duration-200 hover:opacity-100">
+          <EvaluationFeedbackEditor
+            inferenceId={inferenceId}
+            datapointId={datapointId}
+            metricName={metric_name}
+            originalValue={metricValue}
+            evalRunId={evalRunId}
+            evaluatorInferenceId={evaluatorInferenceId}
+            variantName={variantName}
+          />
+        </div>
+      )}
     </div>
   );
 };
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (
@@ -290,38 +434,38 @@ type OutputsSectionProps = {
     variant_name: string;
     output: ContentBlockOutput[] | JsonInferenceOutput;
     metrics: ConsolidatedMetric[];
+    inferenceId: string | null;
   }>;
   evaluation_name: string;
   evaluation_config: EvaluationConfig; // Use the specific config type
+  datapointId: string;
 };
 
 function OutputsSection({
   outputsToDisplay,
   evaluation_name,
   evaluation_config,
+  datapointId,
 }: OutputsSectionProps) {
   const { getColor } = useColorAssigner();
 
   return (
     <SectionLayout>
       <SectionHeader heading="Output" />
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="grid grid-flow-col grid-rows-[min-content_min-content_min-content] gap-x-4 gap-y-2 overflow-x-auto">
         {outputsToDisplay.map((result) => (
-          <div
-            key={result.id}
-            className="flex max-w-[450px] min-w-[300px] shrink-0 flex-col justify-between"
-          >
-            <div>
-              <div className="mb-2 flex">
-                {result.id === "Reference" ? (
-                  <EvaluationRunBadge
-                    runInfo={{
-                      evaluation_run_id: "",
-                      variant_name: result.variant_name,
-                    }}
-                    getColor={() => "bg-gray-100 text-gray-700"}
-                  />
-                ) : (
+          <section className="contents" key={result.id}>
+            <div className="row-start-1 flex flex-col gap-1">
+              {result.id === "Reference" ? (
+                <EvaluationRunBadge
+                  runInfo={{
+                    evaluation_run_id: "",
+                    variant_name: result.variant_name,
+                  }}
+                  getColor={() => "bg-gray-100 text-gray-700"}
+                />
+              ) : (
+                <>
                   <EvaluationRunBadge
                     runInfo={{
                       evaluation_run_id: result.id,
@@ -330,10 +474,26 @@ function OutputsSection({
                     // Use the getColor obtained from the correct context
                     getColor={getColor}
                   />
-                )}
-              </div>
-              <Output output={result.output} />
+
+                  {result.inferenceId && (
+                    <div className="text-xs text-gray-500">
+                      Inference:{" "}
+                      <Link
+                        to={`/observability/inferences/${result.inferenceId}`}
+                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        {result.inferenceId}
+                      </Link>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
+
+            <section className="row-start-2">
+              <Output output={result.output} />
+            </section>
+
             {result.id !== "Reference" &&
               result.metrics &&
               result.metrics.length > 0 && (
@@ -341,9 +501,13 @@ function OutputsSection({
                   evaluation_name={evaluation_name}
                   metrics={result.metrics}
                   evaluatorsConfig={evaluation_config.evaluators}
+                  datapointId={datapointId}
+                  inferenceId={result.inferenceId}
+                  evalRunId={result.id}
+                  variantName={result.variant_name}
                 />
               )}
-          </div>
+          </section>
         ))}
       </div>
     </SectionLayout>

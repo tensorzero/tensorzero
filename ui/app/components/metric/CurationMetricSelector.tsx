@@ -5,7 +5,7 @@ import {
   type Path,
   type PathValue,
 } from "react-hook-form";
-import { Config } from "~/utils/config";
+import type { Config } from "tensorzero-node";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import {
   Select,
@@ -16,11 +16,12 @@ import {
 } from "~/components/ui/select";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Input } from "~/components/ui/input";
-import MetricBadges from "~/components/metric/MetricBadges";
+import FeedbackBadges from "~/components/feedback/FeedbackBadges";
 import { useEffect, useMemo } from "react";
 import { useFetcher } from "react-router";
 import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
 import { Badge } from "~/components/ui/badge";
+import type { FeedbackConfig } from "~/utils/config/feedback";
 
 type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   control: Control<T>;
@@ -28,7 +29,7 @@ type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   functionFieldName: Path<T>;
   feedbackCount: number | null;
   curatedInferenceCount: number | null;
-  removeDemonstrations?: boolean;
+  addDemonstrations: boolean;
   config: Config;
 };
 
@@ -51,10 +52,20 @@ export default function CurationMetricSelector<
   feedbackCount,
   curatedInferenceCount,
   config,
-  removeDemonstrations = false,
+  addDemonstrations,
 }: CurationMetricSelectorProps<T>) {
   const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
   const { getValues, setValue } = useFormContext<T>();
+  const metrics = Object.fromEntries(
+    Object.entries(config.metrics).filter(([, v]) => v !== undefined),
+  ) as Record<string, FeedbackConfig>;
+
+  if (addDemonstrations) {
+    metrics["demonstration"] = {
+      type: "demonstration",
+      level: "inference",
+    };
+  }
 
   const functionValue = useWatch({
     control,
@@ -67,18 +78,18 @@ export default function CurationMetricSelector<
         `/api/function/${encodeURIComponent(functionValue)}/feedback_counts`,
       );
     }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [functionValue]);
 
   const validMetrics = useMemo(() => {
     if (!metricsFetcher.data) return new Set<string>();
     return new Set(
       metricsFetcher.data.metrics
-        .filter(
-          (m) => !removeDemonstrations || m.metric_name !== "demonstration",
-        )
+        .filter((m) => addDemonstrations || m.metric_name !== "demonstration")
         .map((m) => m.metric_name),
     );
-  }, [metricsFetcher.data, removeDemonstrations]);
+  }, [metricsFetcher.data, addDemonstrations]);
 
   const isLoading = metricsFetcher.state === "loading";
 
@@ -94,6 +105,8 @@ export default function CurationMetricSelector<
       // TODO: Figure out how to generalize the generic for this function so that it accepts a null value
       setValue(name, null as PathValue<T, Path<T>>);
     }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [functionValue, validMetrics, getValues, setValue]);
 
   return (
@@ -126,8 +139,13 @@ export default function CurationMetricSelector<
                       <span>None</span>
                     </div>
                   </SelectItem>
-                  {Object.entries(config.metrics)
-                    .filter(([name]) => validMetrics.has(name))
+                  {Object.entries(metrics)
+                    .sort(([a], [b]) => {
+                      // We want to show demonstration first if it is present
+                      if (a === "demonstration") return -1;
+                      if (b === "demonstration") return 1;
+                      return 0;
+                    })
                     .map(([name, metric]) => {
                       const metricFeedback = metricsFetcher.data?.metrics.find(
                         (m) => m.metric_name === name,
@@ -138,12 +156,13 @@ export default function CurationMetricSelector<
                           <div className="flex w-full items-center justify-between">
                             <span>{name}</span>
                             <div className="ml-2 flex items-center gap-2">
-                              {metricFeedback && (
-                                <Badge className="bg-gray-200 text-gray-800 dark:bg-gray-900 dark:text-gray-300">
-                                  Count: {metricFeedback.feedback_count}
-                                </Badge>
-                              )}
-                              <MetricBadges metric={metric} />
+                              <Badge className="bg-gray-200 text-gray-800 dark:bg-gray-900 dark:text-gray-300">
+                                Count:{" "}
+                                {metricFeedback
+                                  ? metricFeedback.feedback_count
+                                  : 0}
+                              </Badge>
+                              {metric && <FeedbackBadges metric={metric} />}
                             </div>
                           </div>
                         </SelectItem>

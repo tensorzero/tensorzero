@@ -7,7 +7,8 @@ import {
   SupervisedFineTuning,
   Documentation,
   Dataset,
-  Evaluation,
+  GridCheck,
+  SequenceChecks,
 } from "~/components/icons/Icons";
 import { useSidebar } from "~/components/ui/sidebar";
 import { useActivePath } from "~/hooks/use-active-path";
@@ -30,9 +31,6 @@ import {
   SidebarGroupContent,
 } from "~/components/ui/sidebar";
 import TensorZeroStatusIndicator from "./TensorZeroStatusIndicator";
-
-const FF_ENABLE_DATASETS =
-  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
 
 interface NavigationItem {
   title: string;
@@ -76,25 +74,26 @@ const navigation: NavigationSection[] = [
       },
     ],
   },
-  ...(FF_ENABLE_DATASETS
-    ? [
-        {
-          title: "Workflows",
-          items: [
-            {
-              title: "Datasets",
-              url: "/datasets",
-              icon: Dataset,
-            },
-            {
-              title: "Evaluations",
-              url: "/evaluations",
-              icon: Evaluation,
-            },
-          ],
-        },
-      ]
-    : []),
+  {
+    title: "Workflows",
+    items: [
+      {
+        title: "Datasets",
+        url: "/datasets",
+        icon: Dataset,
+      },
+      {
+        title: "Static Evaluations",
+        url: "/evaluations",
+        icon: GridCheck,
+      },
+      {
+        title: "Dynamic Evaluations",
+        url: "/dynamic_evaluations",
+        icon: SequenceChecks,
+      },
+    ],
+  },
 ];
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {

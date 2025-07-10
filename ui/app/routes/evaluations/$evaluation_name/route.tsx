@@ -5,6 +5,7 @@ import {
   getEvaluationResults,
   getEvaluationRunInfos,
   countDatapointsForEvaluation,
+  pollForEvaluationResults,
 } from "~/utils/clickhouse/evaluations.server";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import { EvaluationTable } from "./EvaluationTable";
@@ -16,7 +17,7 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
-import { useNavigate } from "react-router";
+import { data, redirect, useNavigate } from "react-router";
 import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
 import BasicInfo from "./EvaluationBasicInfo";
 import { useConfig } from "~/context/config";
@@ -25,15 +26,33 @@ import {
   EvaluationErrorInfo,
   type EvaluationErrorDisplayInfo,
 } from "./EvaluationErrorInfo";
+import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
+import { Toaster } from "~/components/ui/toaster";
+import { useToast } from "~/hooks/use-toast";
+import { useEffect } from "react";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
-  const function_name =
-    config.evaluations[params.evaluation_name].function_name;
-  const function_type = config.functions[function_name].type;
+  const evaluationConfig = config.evaluations[params.evaluation_name];
+  if (!evaluationConfig) {
+    throw data(
+      `Evaluation config not found for evaluation ${params.evaluation_name}`,
+      { status: 404 },
+    );
+  }
+  const function_name = evaluationConfig.function_name;
+  const function_type = config.functions[function_name]?.type;
+  if (!function_type) {
+    throw data(`Function config not found for function ${function_name}`, {
+      status: 404,
+    });
+  }
 
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
+  const newFeedbackId = searchParams.get("newFeedbackId");
+  const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
 
   const selected_evaluation_run_ids = searchParams.get("evaluation_run_ids");
   const selected_evaluation_run_ids_array = selected_evaluation_run_ids
@@ -43,9 +62,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const offset = parseInt(searchParams.get("offset") || "0");
   const pageSize = parseInt(searchParams.get("pageSize") || "15");
 
-  const evaluator_names = Object.keys(
-    config.evaluations[params.evaluation_name].evaluators,
-  );
+  const evaluator_names = Object.keys(evaluationConfig.evaluators);
 
   const metric_names = evaluator_names.map((evaluatorName) =>
     getEvaluatorMetricName(params.evaluation_name, evaluatorName),
@@ -60,14 +77,27 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // Create placeholder promises for results and statistics that will be used conditionally
   let resultsPromise;
   if (selected_evaluation_run_ids_array.length > 0) {
-    resultsPromise = getEvaluationResults(
-      function_name,
-      function_type,
-      metric_names,
-      selected_evaluation_run_ids_array,
-      pageSize,
-      offset,
-    );
+    // If there is a freshly inserted feedback, ClickHouse may take some time to
+    // update the evaluation results as it is eventually consistent.
+    // In this case, we poll for the evaluation results until the feedback is found.
+    resultsPromise = newFeedbackId
+      ? pollForEvaluationResults(
+          function_name,
+          function_type,
+          metric_names,
+          selected_evaluation_run_ids_array,
+          newFeedbackId,
+          pageSize,
+          offset,
+        )
+      : getEvaluationResults(
+          function_name,
+          function_type,
+          metric_names,
+          selected_evaluation_run_ids_array,
+          pageSize,
+          offset,
+        );
   } else {
     resultsPromise = Promise.resolve([]);
   }
@@ -157,7 +187,38 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     evaluator_names,
     any_evaluation_is_running,
     errors,
+    newFeedbackId,
+    newJudgeDemonstrationId,
   };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const _action = formData.get("_action");
+  switch (_action) {
+    case "addFeedback": {
+      const response = await addEvaluationHumanFeedback(formData);
+      const url = new URL(request.url);
+      url.searchParams.delete("beforeFeedback");
+      url.searchParams.delete("afterFeedback");
+      url.searchParams.set(
+        "newFeedbackId",
+        response.feedbackResponse.feedback_id,
+      );
+      if (response.judgeDemonstrationResponse) {
+        url.searchParams.set(
+          "newJudgeDemonstrationId",
+          response.judgeDemonstrationResponse.feedback_id,
+        );
+      } else {
+        logger.warn("No judge demonstration response");
+      }
+      return redirect(url.toString());
+    }
+    default:
+      logger.error(`Unknown action: ${_action}`);
+      return null;
+  }
 }
 
 export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
@@ -173,6 +234,8 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     evaluator_names,
     any_evaluation_is_running,
     errors,
+    newFeedbackId,
+    newJudgeDemonstrationId,
   } = loaderData;
   const navigate = useNavigate();
   const handleNextPage = () => {
@@ -191,9 +254,23 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
 
   const config = useConfig();
   const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw data(
+      `Evaluation config not found for evaluation ${evaluation_name}`,
+      { status: 404 },
+    );
+  }
   const hasErrorsToDisplay = Object.values(errors).some(
     (error) => error.errors.length > 0,
   );
+  const { toast } = useToast();
+  useEffect(() => {
+    if (newFeedbackId) {
+      toast({
+        title: "Feedback Added",
+      });
+    }
+  }, [newFeedbackId, newJudgeDemonstrationId, toast]);
 
   return (
     <PageLayout>
@@ -235,6 +312,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
           )}
         </SectionLayout>
       </SectionsGroup>
+      <Toaster />
     </PageLayout>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import { useRef, useState, useEffect, createContext, useContext } from "react";
 
 // Color palette with 10 distinct options
 const COLORS = [
@@ -38,6 +38,7 @@ const ColorAssignerContext = createContext<{
 }>({
   getColor: () => DEFAULT_COLOR,
 });
+ColorAssignerContext.displayName = "ColorAssignerContext";
 
 export function ColorAssignerProvider({
   children,
@@ -47,7 +48,7 @@ export function ColorAssignerProvider({
   selectedRunIds: string[];
 }) {
   // Store the mapping of runId to color
-  const [colorMap, setColorMap] = useState<Map<string, number>>(new Map());
+  const [colorMap, setColorMap] = useState(new Map<string, number>());
 
   // Function to get a color for a run ID
   const getColor = (runId: string, withHover = true) => {
@@ -59,40 +60,55 @@ export function ColorAssignerProvider({
   };
 
   // Update color assignments when selected run IDs change
+  const selectedRunIdsRef = useRef<string[]>([]);
   useEffect(() => {
-    // Create a new map to store updated assignments
-    const newColorMap = new Map<string, number>();
-    const usedColorIndices = new Set<number>();
+    // because selectedRunIds is an array of strings that may not be memoized,
+    // do a manual shallow comparison before running the sync effect to prevent
+    // render loops
+    const previousRunIds = selectedRunIdsRef.current;
+    selectedRunIdsRef.current = selectedRunIds;
+    if (arraysEqual(selectedRunIds, previousRunIds)) {
+      return;
+    }
 
-    // First, preserve existing assignments for IDs that are still selected
-    selectedRunIds.forEach((runId) => {
-      if (colorMap.has(runId)) {
-        const colorIndex = colorMap.get(runId)!;
-        newColorMap.set(runId, colorIndex);
-        usedColorIndices.add(colorIndex);
-      }
-    });
+    setColorMap((colorMap) => {
+      // Create a new map to store updated assignments
+      const newColorMap = new Map<string, number>();
+      const usedColorIndices = new Set<number>();
 
-    // Then assign new colors to IDs that don't have one yet
-    selectedRunIds.forEach((runId) => {
-      if (!newColorMap.has(runId)) {
-        // Find the first available color
-        let colorIndex = 0;
-        while (usedColorIndices.has(colorIndex) && colorIndex < COLORS.length) {
-          colorIndex++;
-        }
-
-        // If we have more runs than colors, use the default
-        if (colorIndex < COLORS.length) {
+      // First, preserve existing assignments for IDs that are still selected
+      selectedRunIds.forEach((runId) => {
+        if (colorMap.has(runId)) {
+          const colorIndex = colorMap.get(runId)!;
           newColorMap.set(runId, colorIndex);
           usedColorIndices.add(colorIndex);
         }
-      }
-    });
+      });
 
-    // Update the state
-    setColorMap(newColorMap);
-  }, [selectedRunIds]); // Only depends on selectedRunIds
+      // Then assign new colors to IDs that don't have one yet
+      selectedRunIds.forEach((runId) => {
+        if (!newColorMap.has(runId)) {
+          // Find the first available color
+          let colorIndex = 0;
+          while (
+            usedColorIndices.has(colorIndex) &&
+            colorIndex < COLORS.length
+          ) {
+            colorIndex++;
+          }
+
+          // If we have more runs than colors, use the default
+          if (colorIndex < COLORS.length) {
+            newColorMap.set(runId, colorIndex);
+            usedColorIndices.add(colorIndex);
+          }
+        }
+      });
+
+      // update the state
+      return newColorMap;
+    });
+  }, [selectedRunIds]);
 
   return (
     <ColorAssignerContext.Provider value={{ getColor }}>
@@ -104,4 +120,12 @@ export function ColorAssignerProvider({
 // Hook to use the color assigner context
 export function useColorAssigner() {
   return useContext(ColorAssignerContext);
+}
+
+function arraysEqual(a: unknown[] = [], b: unknown[] = []) {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return a.every((item, index) => Object.is(item, b[index]));
 }

@@ -1,8 +1,18 @@
+use std::collections::HashMap;
+
 use anyhow::{anyhow, Result};
-use tensorzero::{CacheParamsOptions, DynamicToolParams};
-use tensorzero_internal::{
-    cache::CacheEnabledMode, function::FunctionConfig, tool::ToolCallConfigDatabaseInsert,
+use serde::Deserialize;
+use serde_json::Value;
+use tensorzero::{CacheParamsOptions, DynamicToolParams, InferenceResponse};
+use tensorzero_core::clickhouse::escape_string_for_clickhouse_literal;
+use tensorzero_core::serde_util::deserialize_json_string;
+use tensorzero_core::{
+    cache::CacheEnabledMode, clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
+    tool::ToolCallConfigDatabaseInsert,
 };
+use tracing::debug;
+use tracing_subscriber::EnvFilter;
+use uuid::Uuid;
 
 use crate::{Args, OutputFormat};
 
@@ -46,12 +56,17 @@ pub fn setup_logging(args: &Args) -> Result<()> {
         OutputFormat::Jsonl => {
             let subscriber = tracing_subscriber::FmtSubscriber::builder()
                 .with_writer(std::io::stderr)
+                .json()
+                .with_env_filter(EnvFilter::from_default_env())
                 .finish();
             tracing::subscriber::set_global_default(subscriber)
                 .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))
         }
-        OutputFormat::HumanReadable => {
-            let subscriber = tracing_subscriber::FmtSubscriber::new();
+        OutputFormat::Pretty => {
+            let subscriber = tracing_subscriber::FmtSubscriber::builder()
+                .with_writer(std::io::stderr)
+                .with_env_filter(EnvFilter::from_default_env())
+                .finish();
             tracing::subscriber::set_global_default(subscriber)
                 .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))
         }
@@ -65,13 +80,61 @@ pub fn get_cache_options(inference_cache: CacheEnabledMode) -> CacheParamsOption
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct HumanFeedbackResult {
+    #[serde(deserialize_with = "deserialize_json_string")]
+    pub value: Value,
+    pub evaluator_inference_id: Uuid,
+}
+
+pub async fn check_static_eval_human_feedback(
+    clickhouse: &ClickHouseConnectionInfo,
+    metric_name: &str,
+    datapoint_id: Uuid,
+    inference_output: &InferenceResponse,
+) -> Result<Option<HumanFeedbackResult>> {
+    let serialized_output = inference_output.get_serialized_output()?;
+    let query = r#"
+        SELECT value, evaluator_inference_id FROM StaticEvaluationHumanFeedback
+        WHERE
+            metric_name = {metric_name:String}
+        AND datapoint_id = {datapoint_id:UUID}
+        AND output = {output:String}
+        ORDER BY timestamp DESC
+        LIMIT 1
+        FORMAT JSONEachRow
+    "#;
+    debug!(query = %query, "Executing ClickHouse query");
+    let escaped_serialized_output = escape_string_for_clickhouse_literal(&serialized_output);
+    let result = clickhouse
+        .run_query_synchronous(
+            query.to_string(),
+            &HashMap::from([
+                ("metric_name", metric_name),
+                ("datapoint_id", &datapoint_id.to_string()),
+                ("output", &escaped_serialized_output),
+            ]),
+        )
+        .await?;
+    debug!(
+        result_length = result.response.len(),
+        "Query executed successfully"
+    );
+    if result.response.is_empty() {
+        return Ok(None);
+    }
+    let human_feedback_result: HumanFeedbackResult = serde_json::from_str(&result.response)
+        .map_err(|e| anyhow!("Failed to parse human feedback result: {}", e))?;
+    Ok(Some(human_feedback_result))
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
     use serde_json::json;
     use tensorzero::Tool;
-    use tensorzero_internal::{function::FunctionConfigChat, tool::ToolChoice};
+    use tensorzero_core::{function::FunctionConfigChat, tool::ToolChoice};
 
     use super::*;
 

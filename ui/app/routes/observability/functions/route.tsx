@@ -2,12 +2,13 @@ import type { Route } from "./+types/route";
 import { isRouteErrorResponse } from "react-router";
 import FunctionsTable from "./FunctionsTable";
 import { useConfig } from "~/context/config";
-import { countInferencesByFunction } from "~/utils/clickhouse/inference";
+import { countInferencesByFunction } from "~/utils/clickhouse/inference.server";
 import {
   PageHeader,
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import { logger } from "~/utils/logger";
 
 export async function loader() {
   const countsInfo = await countInferencesByFunction();
@@ -30,7 +31,7 @@ export default function FunctionsPage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

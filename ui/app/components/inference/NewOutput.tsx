@@ -9,104 +9,128 @@ import {
   SnippetMessage,
   type SnippetTab,
 } from "~/components/layout/SnippetLayout";
-import { CodeMessage, TextMessage } from "~/components/layout/SnippetContent";
+import {
+  EmptyMessage,
+  TextMessage,
+  ToolCallMessage,
+} from "~/components/layout/SnippetContent";
+import { CodeBlock } from "../ui/code-block";
 
 /*
 NOTE: This is the new output component but it is not editable yet so we are rolling
 it out across the UI incrementally.
 */
 
+type ChatInferenceOutputRenderingData = ContentBlockOutput[];
+
+interface JsonInferenceOutputRenderingData extends JsonInferenceOutput {
+  schema?: Record<string, unknown>;
+}
+
 interface OutputProps {
-  output: JsonInferenceOutput | ContentBlockOutput[];
-  outputSchema?: Record<string, unknown>;
+  output: ChatInferenceOutputRenderingData | JsonInferenceOutputRenderingData;
 }
 
 function isJsonInferenceOutput(
   output: OutputProps["output"],
-): output is JsonInferenceOutput {
+): output is JsonInferenceOutputRenderingData {
   return "raw" in output;
 }
 
-function renderContentBlock(block: ContentBlockOutput, index: number) {
-  switch (block.type) {
-    case "text":
-      return <TextMessage key={index} label="Text" content={block.text} />;
-    case "tool_call":
-      return (
-        <TextMessage
-          key={index}
-          label={`Tool: ${block.name}`}
-          content={JSON.stringify(block.arguments, null, 2)}
-        />
-      );
+function renderJsonInferenceOutput(output: JsonInferenceOutputRenderingData) {
+  const tabs: SnippetTab[] = [
+    {
+      id: "parsed",
+      label: "Parsed Output",
+      indicator: output.parsed ? "content" : "fail",
+    },
+    {
+      id: "raw",
+      label: "Raw Output",
+    },
+  ];
+
+  // Add Output Schema tab if available
+  if (output.schema) {
+    tabs.push({
+      id: "schema",
+      label: "Output Schema",
+    });
   }
+
+  // Set default tab to Parsed if it has content, otherwise Raw
+  const defaultTab = output.parsed ? "parsed" : "raw";
+
+  return (
+    <SnippetTabs tabs={tabs} defaultTab={defaultTab}>
+      {(activeTab) => (
+        <>
+          {activeTab === "parsed" ? (
+            <>
+              {output.parsed ? (
+                <CodeBlock
+                  raw={JSON.stringify(output.parsed, null, 2)}
+                  showLineNumbers
+                />
+              ) : (
+                <SnippetMessage>
+                  <EmptyMessage message="The inference output failed to parse against the schema." />
+                </SnippetMessage>
+              )}
+            </>
+          ) : activeTab === "raw" ? (
+            <CodeBlock raw={output.raw} showLineNumbers={true} />
+          ) : (
+            <CodeBlock
+              raw={JSON.stringify(output.schema, null, 2)}
+              showLineNumbers={true}
+            />
+          )}
+        </>
+      )}
+    </SnippetTabs>
+  );
 }
 
-export function OutputContent({ output, outputSchema }: OutputProps) {
-  if (isJsonInferenceOutput(output)) {
-    const tabs: SnippetTab[] = [
-      {
-        id: "parsed",
-        label: "Parsed Output",
-        indicator: output.parsed ? "content" : "fail",
-      },
-      {
-        id: "raw",
-        label: "Raw Output",
-      },
-    ];
-
-    // Add Output Schema tab if available
-    if (outputSchema) {
-      tabs.push({
-        id: "schema",
-        label: "Output Schema",
-      });
-    }
-
-    // Set default tab to Parsed if it has content, otherwise Raw
-    const defaultTab = output.parsed ? "parsed" : "raw";
-
-    return (
-      <SnippetTabs tabs={tabs} defaultTab={defaultTab}>
-        {(activeTab) => (
-          <SnippetContent>
-            {activeTab === "parsed" ? (
-              <CodeMessage
-                content={
-                  output.parsed
-                    ? JSON.stringify(output.parsed, null, 2)
-                    : "The inference output failed to parse against the schema."
-                }
-                showLineNumbers={true}
-              />
-            ) : activeTab === "raw" ? (
-              <CodeMessage content={output.raw} showLineNumbers={true} />
-            ) : (
-              <CodeMessage
-                content={JSON.stringify(outputSchema, null, 2)}
-                showLineNumbers={true}
-              />
-            )}
-          </SnippetContent>
-        )}
-      </SnippetTabs>
-    );
-  }
-
+function renderChatInferenceOutput(output: ChatInferenceOutputRenderingData) {
   return (
     <SnippetContent>
       <SnippetMessage>
-        {output.map((block, index) => renderContentBlock(block, index))}
+        {output.length === 0 ? (
+          <EmptyMessage message="No output messages found" />
+        ) : (
+          output.map((block, index) => {
+            switch (block.type) {
+              case "text":
+                return (
+                  <TextMessage key={index} label="Text" content={block.text} />
+                );
+              case "tool_call":
+                return (
+                  <ToolCallMessage
+                    key={index}
+                    toolName={block.name ?? ""}
+                    toolArguments={JSON.stringify(block.arguments, null, 2)}
+                    // TODO: if arguments is null, display raw arguments without parsing
+                    toolCallId={block.id}
+                  />
+                );
+              default:
+                return null;
+            }
+          })
+        )}
       </SnippetMessage>
     </SnippetContent>
   );
 }
 
-export default function Output({ output, outputSchema }: OutputProps) {
+export default function Output({ output }: OutputProps) {
   return (
     <SnippetLayout>
-      <OutputContent output={output} outputSchema={outputSchema} />
+      {isJsonInferenceOutput(output)
+        ? renderJsonInferenceOutput(output)
+        : renderChatInferenceOutput(output)}
     </SnippetLayout>
   );
 }

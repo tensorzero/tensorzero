@@ -1,26 +1,24 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
-import { getConfigPath } from "./config/index.server";
 import {
   EvaluationErrorSchema,
   type DisplayEvaluationError,
 } from "./evaluations";
+import { logger } from "~/utils/logger";
+import { getEnv } from "./env.server";
 /**
  * Get the path to the evaluations binary from environment variables.
  * Defaults to 'evaluations' if not specified.
  */
 function getEvaluationsPath(): string {
-  return process.env.TENSORZERO_EVALUATIONS_PATH || "evaluations";
+  return getEnv().TENSORZERO_EVALUATIONS_PATH || "evaluations";
+}
+function getConfigPath(): string {
+  return getEnv().TENSORZERO_UI_CONFIG_PATH;
 }
 
-function getGatewayURL(): string {
-  const gatewayURL = process.env.TENSORZERO_GATEWAY_URL;
-  // This error is thrown on startup in tensorzero.server.ts
-  if (!gatewayURL) {
-    throw new Error("TENSORZERO_GATEWAY_URL environment variable is not set");
-  }
-  return gatewayURL;
-}
+export type InferenceCacheSetting = "on" | "off" | "read_only" | "write_only";
+
 interface RunningEvaluationInfo {
   errors: DisplayEvaluationError[];
   variantName: string;
@@ -47,9 +45,10 @@ export function runEvaluation(
   datasetName: string,
   variantName: string,
   concurrency: number,
+  inferenceCache: InferenceCacheSetting,
 ): Promise<EvaluationStartInfo> {
   const evaluationsPath = getEvaluationsPath();
-  const gatewayURL = getGatewayURL();
+  const gatewayURL = getEnv().TENSORZERO_GATEWAY_URL;
   // Construct the command to run the evaluations binary
   // Example: evaluations --gateway-url http://localhost:3000 --name entity_extraction --variant-name llama_8b_initial_prompt --concurrency 10 --format jsonl
   // We do not need special escaping for the evaluation name or variant name because
@@ -70,11 +69,16 @@ export function runEvaluation(
     concurrency.toString(),
     "--format",
     "jsonl",
+    "--inference-cache",
+    inferenceCache,
   ];
 
   return new Promise<EvaluationStartInfo>((resolve, reject) => {
     // Spawn a child process to run the evaluations command
     const child = spawn(command[0], command.slice(1));
+    // We also want to forward stderr to the parent process
+    // so it shows up in container logs.
+    child.stderr.pipe(process.stderr);
 
     // Variables to track state
     let evaluationRunId: string | null = null;
@@ -82,6 +86,7 @@ export function runEvaluation(
 
     // Buffer for incomplete lines
     let stdoutBuffer = "";
+    let stderrBuffer = "";
 
     // Record the start time of the evaluation
     const startTime = new Date();
@@ -139,7 +144,7 @@ export function runEvaluation(
         }
         // We're ignoring other types of output that don't match these patterns
       } catch {
-        console.warn(`Bad JSON line: ${line}`);
+        logger.warn(`Bad JSON line: ${line}`);
       }
     };
 
@@ -161,7 +166,27 @@ export function runEvaluation(
       // stdoutBuffer now contains any incomplete line (or nothing)
     });
 
-    // Ignore stderr completely
+    // Handle stderr data and process it line-by-line
+    child.stderr.on("data", (data) => {
+      // Add new data to our buffer
+      stderrBuffer += data.toString();
+
+      // Process complete lines
+      let newlineIndex;
+      while ((newlineIndex = stderrBuffer.indexOf("\n")) !== -1) {
+        // Extract a complete line
+        const line = stderrBuffer.substring(0, newlineIndex).trim();
+        // Remove the processed line from the buffer
+        stderrBuffer = stderrBuffer.substring(newlineIndex + 1);
+        // Accumulate the error
+        if (evaluationRunId) {
+          runningEvaluations[evaluationRunId].errors.unshift({
+            message: `Process error: ${line}`,
+          });
+        }
+      }
+      // stderrBuffer now contains any incomplete line (or nothing)
+    });
 
     // Handle process errors (e.g., if the process couldn't be spawned)
     child.on("error", (error) => {
@@ -172,7 +197,7 @@ export function runEvaluation(
 
     // Handle process completion
     child.on("close", (code) => {
-      // Process any remaining data in the buffer
+      // Process any remaining data in the stdout buffer
       if (stdoutBuffer.trim()) {
         processCompleteLine(stdoutBuffer.trim());
       }
@@ -183,16 +208,23 @@ export function runEvaluation(
 
         // Add exit code info if not successful
         if (code !== 0) {
-          runningEvaluations[evaluationRunId].errors.push({
-            message: `Process exited with code ${code}`,
-          });
+          if (stderrBuffer.trim()) {
+            runningEvaluations[evaluationRunId].errors.push({
+              message: `Error: ${stderrBuffer.trim()}`,
+            });
+          } else {
+            runningEvaluations[evaluationRunId].errors.push({
+              message: `Process exited with code ${code}`,
+            });
+          }
         }
       }
 
       if (!initialDataReceived) {
         reject(
           new Error(
-            `Process exited with code ${code} without producing output`,
+            stderrBuffer.trim() ||
+              `Process exited with code ${code} without producing output`,
           ),
         );
       }

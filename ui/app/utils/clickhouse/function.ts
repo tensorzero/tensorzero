@@ -1,8 +1,7 @@
 import z from "zod";
 import { getInferenceTableName } from "./common";
-import type { MetricConfig } from "../config/metric";
-import type { FunctionConfig } from "../config/function";
-import { clickhouseClient } from "./client.server";
+import type { FunctionConfig, MetricConfig } from "tensorzero-node";
+import { getClickhouseClient } from "./client.server";
 
 export const timeWindowUnitSchema = z.enum([
   "day",
@@ -28,12 +27,6 @@ export async function getVariantPerformances(params: {
     time_window_unit,
     variant_name,
   } = params;
-  if (
-    metric_config.type === "comment" ||
-    metric_config.type === "demonstration"
-  ) {
-    return undefined;
-  }
   const metric_table_name = (() => {
     switch (metric_config.type) {
       case "float":
@@ -213,7 +206,7 @@ ORDER BY
 ;
   `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -303,7 +296,7 @@ ORDER BY
     variant_name ASC
   `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -342,7 +335,7 @@ WHERE function_name = {function_name:String}
 GROUP BY variant_name
 ORDER BY count DESC
 `;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { function_name },
@@ -367,7 +360,7 @@ export async function getUsedVariants(
     WHERE function_name = {function_name:String}
   )
 `;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { function_name },

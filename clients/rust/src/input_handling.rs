@@ -2,11 +2,11 @@ use futures::future::try_join_all;
 use serde_json::Value;
 
 use crate::{Client, ClientInput, ClientInputMessage, ClientInputMessageContent, TensorZeroError};
-use tensorzero_internal::tool::{ToolCall, ToolCallInput};
-use tensorzero_internal::{
+use tensorzero_core::tool::{ToolCall, ToolCallInput};
+use tensorzero_core::{
     error::ErrorDetails,
     inference::types::{
-        storage::StoragePath, Image, ResolvedInput, ResolvedInputMessage,
+        storage::StoragePath, File, ResolvedInput, ResolvedInputMessage,
         ResolvedInputMessageContent, TextKind,
     },
 };
@@ -59,7 +59,7 @@ async fn resolved_input_message_content_to_client_input_message_content(
                 arguments: o,
             })),
             _ => Err(TensorZeroError::Other {
-                source: tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+                source: tensorzero_core::error::Error::new(ErrorDetails::Serialization {
                     message: "Text types must be a string or an object".to_string(),
                 })
                 .into(),
@@ -77,17 +77,17 @@ async fn resolved_input_message_content_to_client_input_message_content(
         ResolvedInputMessageContent::Thought(thought) => {
             Ok(ClientInputMessageContent::Thought(thought))
         }
-        ResolvedInputMessageContent::Image(image) => {
-            let mime_type = image.image.mime_type;
-            let data = match image.image.data {
+        ResolvedInputMessageContent::File(file) => {
+            let mime_type = file.file.mime_type;
+            let data = match file.file.data {
                 Some(data) => data,
                 None => {
-                    let storage_path = image.storage_path;
-                    fetch_image_data(storage_path, client).await?
+                    let storage_path = file.storage_path;
+                    fetch_file_data(storage_path, client).await?
                 }
             };
 
-            Ok(ClientInputMessageContent::Image(Image::Base64 {
+            Ok(ClientInputMessageContent::File(File::Base64 {
                 mime_type,
                 data,
             }))
@@ -102,7 +102,7 @@ async fn resolved_input_message_content_to_client_input_message_content(
     }
 }
 
-async fn fetch_image_data(
+async fn fetch_file_data(
     storage_path: StoragePath,
     client: &Client,
 ) -> Result<String, TensorZeroError> {
@@ -114,8 +114,8 @@ async fn fetch_image_data(
 mod tests {
     use object_store::path::Path;
 
-    use tensorzero_internal::inference::types::{
-        resolved_input::ImageWithPath, storage::StorageKind, Base64Image, ImageKind,
+    use tensorzero_core::inference::types::{
+        resolved_input::FileWithPath, storage::StorageKind, Base64File,
     };
     use url::Url;
 
@@ -173,14 +173,14 @@ mod tests {
         };
 
         // Create the resolved input message content with an image
-        let resolved_content = ResolvedInputMessageContent::Image(ImageWithPath {
-            image: Base64Image {
+        let resolved_content = ResolvedInputMessageContent::File(Box::new(FileWithPath {
+            file: Base64File {
                 url: Some(Url::parse("http://notaurl.com").unwrap()),
-                mime_type: ImageKind::Jpeg,
+                mime_type: mime::IMAGE_JPEG,
                 data: Some(image_data.to_string()),
             },
             storage_path: storage_path.clone(),
-        });
+        }));
 
         // Call the function under test
         let result = resolved_input_message_content_to_client_input_message_content(
@@ -192,11 +192,11 @@ mod tests {
 
         // Verify the result
         match result {
-            ClientInputMessageContent::Image(Image::Base64 {
+            ClientInputMessageContent::File(File::Base64 {
                 mime_type: result_mime_type,
                 data: result_data,
             }) => {
-                assert_eq!(result_mime_type, ImageKind::Jpeg);
+                assert_eq!(result_mime_type, mime::IMAGE_JPEG);
                 assert_eq!(result_data, image_data);
             }
             _ => panic!("Expected ClientInputMessageContent::Image, got something else"),

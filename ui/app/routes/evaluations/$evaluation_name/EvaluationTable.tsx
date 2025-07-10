@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import React from "react";
 import { useSearchParams, useNavigate } from "react-router";
 
+import * as RadixTooltip from "@radix-ui/react-tooltip";
 import {
   Table,
   TableBody,
@@ -23,139 +24,101 @@ import type {
   EvaluationStatistics,
   ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
-import type { Input, ResolvedInput } from "~/utils/clickhouse/common";
+import type { DisplayInput } from "~/utils/clickhouse/common";
 import type {
   JsonInferenceOutput,
   ContentBlockOutput,
 } from "~/utils/clickhouse/common";
-import InputComponent from "~/components/inference/Input";
 import OutputComponent from "~/components/inference/Output";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
 import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
-import type { MetricConfig } from "~/utils/config/metric";
-import { type EvaluatorConfig } from "~/utils/config/evaluations";
+import { formatMetricSummaryValue } from "~/utils/config/feedback";
+import type { EvaluatorConfig, MetricConfig } from "tensorzero-node";
 import {
   useColorAssigner,
   ColorAssignerProvider,
 } from "~/hooks/evaluations/ColorAssigner";
-import MetricValue, {
-  isCutoffFailed,
-} from "~/components/evaluations/MetricValue";
+import MetricValue, { isCutoffFailed } from "~/components/metric/MetricValue";
+import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
+import InputSnippet from "~/components/inference/InputSnippet";
+import { logger } from "~/utils/logger";
 
-// Enhanced TruncatedText component that can handle complex structures
-const TruncatedContent = ({
-  content,
-  maxLength = 30,
-  type = "text",
-}: {
-  content: string | ResolvedInput | JsonInferenceOutput | ContentBlockOutput[];
+type TruncatedContentProps = (
+  | {
+      type: "text";
+      content: string;
+    }
+  | {
+      type: "input";
+      content: DisplayInput;
+    }
+  | {
+      type: "output";
+      content: JsonInferenceOutput | ContentBlockOutput[];
+    }
+) & {
   maxLength?: number;
-  type?: "text" | "input" | "output";
-}) => {
-  // For simple strings, use the existing TruncatedText component
-  if (typeof content === "string" && type === "text") {
-    const truncated =
-      content.length > maxLength
-        ? content.slice(0, maxLength) + "..."
-        : content;
-
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
-              <span className="font-mono text-sm">{truncated}</span>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent
-            side="right"
-            align="start"
-            sideOffset={5}
-            className="tooltip-scrollable max-h-[60vh] max-w-md overflow-auto shadow-xs"
-            avoidCollisions={true}
-          >
-            <div className="flex h-full w-full items-center justify-center p-4">
-              <pre className="w-full text-xs whitespace-pre-wrap">
-                {content}
-              </pre>
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  // For Input type
-  if (type === "input" && typeof content !== "string") {
-    // For the truncated display, just show a brief summary
-    const inputSummary = getInputSummary(content as Input);
-
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
-              <span className="font-mono text-sm">{inputSummary}</span>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent
-            side="right"
-            align="start"
-            sideOffset={5}
-            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto shadow-xs"
-            avoidCollisions={true}
-          >
-            <div className="flex h-full w-full items-center justify-center p-4">
-              <InputComponent input={content as ResolvedInput} />
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  // For Output type
-  if (type === "output" && typeof content !== "string") {
-    // For the truncated display, just show a brief summary
-    const outputSummary = getOutputSummary(
-      content as JsonInferenceOutput | ContentBlockOutput[],
-    );
-
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
-              <span className="font-mono text-sm">{outputSummary}</span>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent
-            side="right"
-            align="start"
-            sideOffset={5}
-            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto shadow-xs"
-            avoidCollisions={true}
-          >
-            <div className="flex h-full w-full items-center justify-center p-4">
-              <OutputComponent
-                output={content as JsonInferenceOutput | ContentBlockOutput[]}
-              />
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  // Fallback for unknown types
-  return <span>Unsupported content type</span>;
 };
 
+const TruncatedContent = ({
+  maxLength = 30,
+  type,
+  content,
+}: TruncatedContentProps) => {
+  const truncatedLabel =
+    type === "text"
+      ? content.length > maxLength
+        ? content.slice(0, maxLength) + "..."
+        : content
+      : type === "input"
+        ? getInputSummary(content)
+        : getOutputSummary(content);
+
+  return (
+    <TruncatedContentTooltip truncatedLabel={truncatedLabel}>
+      {type === "text" ? (
+        <div className="flex h-full w-full items-center justify-center p-4">
+          <pre className="w-full text-xs whitespace-pre-wrap">{content}</pre>
+        </div>
+      ) : type === "input" ? (
+        <InputSnippet {...content} />
+      ) : (
+        <OutputComponent output={content} />
+      )}
+    </TruncatedContentTooltip>
+  );
+};
+
+const TruncatedContentTooltip: React.FC<
+  React.PropsWithChildren<{
+    truncatedLabel: string;
+  }>
+> = ({ children, truncatedLabel }) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <div className="flex items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
+        <span className="font-mono text-sm">{truncatedLabel}</span>
+      </div>
+    </TooltipTrigger>
+
+    {/* TODO Reuse animations and such with existing Tooltip component. Other styling doesn't work as well here. */}
+    <RadixTooltip.Content
+      className="animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 max-h-[60vh] max-w-[500px] overflow-auto rounded-lg text-xs shadow-lg"
+      side="right"
+      align="start"
+      sideOffset={2}
+      avoidCollisions={true}
+    >
+      {children}
+    </RadixTooltip.Content>
+  </Tooltip>
+);
+
 // Helper function to generate a summary of an Input object
-function getInputSummary(input: Input): string {
+function getInputSummary(input: DisplayInput): string {
   if (!input || !input.messages || input.messages.length === 0) {
     return "Empty input";
   }
@@ -167,11 +130,24 @@ function getInputSummary(input: Input): string {
   }
 
   const firstContent = firstMessage.content[0];
-  if (firstContent.type === "text") {
-    const text =
-      typeof firstContent.value === "string"
-        ? firstContent.value
-        : JSON.stringify(firstContent.value);
+
+  if (firstContent.type === "structured_text") {
+    const text = JSON.stringify(firstContent.arguments, null, 2);
+    return text.length > 30 ? text.substring(0, 30) + "..." : text;
+  }
+
+  if (firstContent.type === "unstructured_text") {
+    const text = firstContent.text;
+    return text.length > 30 ? text.substring(0, 30) + "..." : text;
+  }
+
+  if (firstContent.type === "missing_function_text") {
+    const text = firstContent.value;
+    return text.length > 30 ? text.substring(0, 30) + "..." : text;
+  }
+
+  if (firstContent.type === "raw_text") {
+    const text = firstContent.value;
     return text.length > 30 ? text.substring(0, 30) + "..." : text;
   }
 
@@ -241,6 +217,13 @@ interface EvaluationTableProps {
   evaluation_name: string;
 }
 
+interface MetricValueInfo {
+  value: string;
+  evaluator_inference_id: string | null;
+  inference_id: string;
+  is_human_feedback: boolean;
+}
+
 export function EvaluationTable({
   selected_evaluation_run_infos,
   evaluation_results,
@@ -258,7 +241,7 @@ export function EvaluationTable({
       string,
       {
         id: string;
-        input: ResolvedInput;
+        input: DisplayInput;
         reference_output: JsonInferenceOutput | ContentBlockOutput[];
       }
     >();
@@ -282,12 +265,12 @@ export function EvaluationTable({
   // Organize results by datapoint and run ID
   const organizedResults = useMemo(() => {
     const organized = new Map<
-      string,
+      string, // datapoint id
       Map<
-        string,
+        string, // evaluation run id
         {
           generated_output: JsonInferenceOutput | ContentBlockOutput[];
-          metrics: Map<string, string>;
+          metrics: Map<string, MetricValueInfo>;
         }
       >
     >();
@@ -313,7 +296,12 @@ export function EvaluationTable({
 
       const runData = datapointMap.get(result.evaluation_run_id);
       if (runData && result.metric_name) {
-        runData.metrics.set(result.metric_name, result.metric_value);
+        runData.metrics.set(result.metric_name, {
+          value: result.metric_value,
+          evaluator_inference_id: result.evaluator_inference_id,
+          inference_id: result.inference_id,
+          is_human_feedback: result.is_human_feedback,
+        });
       }
     });
 
@@ -403,7 +391,7 @@ export function EvaluationTable({
                         generated_output:
                           | JsonInferenceOutput
                           | ContentBlockOutput[];
-                        metrics: Map<string, string>;
+                        metrics: Map<string, MetricValueInfo>;
                       },
                     ][];
 
@@ -485,9 +473,9 @@ export function EvaluationTable({
                               );
                               const metricValue = data.metrics.get(metric_name);
                               const metricType =
-                                config.metrics[metric_name].type;
+                                config.metrics[metric_name]?.type;
                               const evaluatorConfig =
-                                config.evaluations[evaluation_name].evaluators[
+                                config.evaluations[evaluation_name]?.evaluators[
                                   evaluator_name
                                 ];
 
@@ -496,13 +484,56 @@ export function EvaluationTable({
                                   key={metric_name}
                                   className="h-[52px] text-center align-middle"
                                 >
-                                  <div className="flex h-full items-center justify-center">
-                                    {metricValue ? (
-                                      <MetricValue
-                                        value={metricValue}
-                                        metricType={metricType}
-                                        evaluatorConfig={evaluatorConfig}
-                                      />
+                                  {/* Add group and relative positioning to the container */}
+                                  <div
+                                    className={`group relative flex h-full items-center justify-center ${metricValue && evaluatorConfig?.type === "llm_judge" ? "pl-10" : ""}`}
+                                  >
+                                    {metricValue &&
+                                    metricType &&
+                                    evaluatorConfig ? (
+                                      <>
+                                        <MetricValue
+                                          value={metricValue.value}
+                                          metricType={metricType}
+                                          isHumanFeedback={
+                                            metricValue.is_human_feedback
+                                          }
+                                          optimize={
+                                            evaluatorConfig.type === "llm_judge"
+                                              ? evaluatorConfig.optimize
+                                              : "max"
+                                          }
+                                          cutoff={
+                                            evaluatorConfig.cutoff ?? undefined
+                                          }
+                                        />
+                                        {/* Make feedback editor appear on hover */}
+                                        {evaluatorConfig.type ===
+                                          "llm_judge" && (
+                                          <div
+                                            className="ml-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                                            // Stop click event propagation so the row navigation is not triggered
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <EvaluationFeedbackEditor
+                                              inferenceId={
+                                                metricValue.inference_id
+                                              }
+                                              datapointId={datapoint.id}
+                                              metricName={metric_name}
+                                              originalValue={metricValue.value}
+                                              evalRunId={runId}
+                                              evaluatorInferenceId={
+                                                metricValue.evaluator_inference_id
+                                              }
+                                              variantName={
+                                                runIdToVariant.get(runId) ||
+                                                "Unknown"
+                                              }
+                                            />
+                                          </div>
+                                        )}
+                                      </>
                                     ) : (
                                       "-"
                                     )}
@@ -535,14 +566,20 @@ const EvaluatorHeader = ({
   summaryStats: EvaluationStatistics[];
 }) => {
   const config = useConfig();
-  const EvaluationConfig = config.evaluations[evaluation_name];
-  const evaluatorConfig = EvaluationConfig.evaluators[evaluator_name];
+  const evaluationConfig = config.evaluations[evaluation_name];
+  const evaluatorConfig = evaluationConfig?.evaluators[evaluator_name];
+  if (!evaluatorConfig) {
+    logger.warn(
+      `Evaluator config not found for evaluation ${evaluation_name} and evaluator ${evaluator_name}`,
+    );
+    return null;
+  }
   const metric_name = getEvaluatorMetricName(evaluation_name, evaluator_name);
   const metricProperties = config.metrics[metric_name];
-  if (
-    metricProperties.type === "comment" ||
-    metricProperties.type === "demonstration"
-  ) {
+  if (!metricProperties) {
+    logger.warn(
+      `Metric config not found for evaluation ${evaluation_name} and metric ${metric_name}`,
+    );
     return null;
   }
   return (
@@ -610,35 +647,46 @@ const EvaluatorProperties = ({
     .filter((runId) => statsByRunId.has(runId))
     .map((runId) => statsByRunId.get(runId)!);
 
+  const assigner = useColorAssigner();
+
   return (
     <div className="mt-2 flex flex-col items-center gap-1">
       {orderedStats.length > 0 && (
         <div className="text-muted-foreground mt-2 text-center text-xs">
           {orderedStats.map((stat) => {
             // Get the variant color for the circle using the run ID from the stat
-            const variantColorClass = useColorAssigner().getColor(
+            const variantColorClass = assigner.getColor(
               stat.evaluation_run_id,
               false,
             ); // Pass 'false' to get non-hover version
-
+            const failed =
+              evaluatorConfig.type === "llm_judge" && evaluatorConfig.cutoff
+                ? isCutoffFailed(
+                    stat.mean_metric,
+                    evaluatorConfig.optimize,
+                    evaluatorConfig.cutoff,
+                  )
+                : false;
             return (
               <div
                 key={stat.evaluation_run_id}
                 className={`mt-1 flex items-center justify-center gap-1.5 ${
-                  isCutoffFailed(stat.mean_metric, evaluatorConfig)
-                    ? "text-red-700"
-                    : ""
+                  failed ? "text-red-700" : ""
                 }`}
               >
                 <div
                   className={`h-2 w-2 rounded-full ${variantColorClass} shrink-0`}
                 ></div>
                 <span>
-                  {formatSummaryValue(stat.mean_metric, metricConfig)}
+                  {formatMetricSummaryValue(stat.mean_metric, metricConfig)}
                   {stat.stderr_metric ? (
                     <>
                       {" "}
-                      ± {formatSummaryValue(stat.stderr_metric, metricConfig)}
+                      ±{" "}
+                      {formatMetricSummaryValue(
+                        stat.stderr_metric,
+                        metricConfig,
+                      )}
                     </>
                   ) : null}{" "}
                   (n={stat.datapoint_count})
@@ -650,13 +698,4 @@ const EvaluatorProperties = ({
       )}
     </div>
   );
-};
-
-const formatSummaryValue = (value: number, metricConfig: MetricConfig) => {
-  if (metricConfig.type === "boolean") {
-    return `${Math.round(value * 100)}%`;
-  } else if (metricConfig.type === "float") {
-    return value.toFixed(2);
-  }
-  return value;
 };

@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 use std::io::Write;
 use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
@@ -6,7 +7,7 @@ use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use dataset::query_dataset;
 use evaluators::{evaluate_inference, EvaluateInferenceParams};
-use helpers::{get_cache_options, get_tool_params_args, setup_logging};
+use helpers::{get_cache_options, get_tool_params_args};
 use serde::{Deserialize, Serialize};
 use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
 use tensorzero::ClientInput;
@@ -15,14 +16,15 @@ use tensorzero::{
     ClientInferenceParams, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
     InferenceResponse,
 };
-use tensorzero_internal::cache::CacheEnabledMode;
-use tensorzero_internal::config_parser::MetricConfigOptimize;
-use tensorzero_internal::evaluations::{EvaluationConfig, EvaluatorConfig};
-use tensorzero_internal::{
+use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::config_parser::MetricConfigOptimize;
+use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
+use tensorzero_core::{
     clickhouse::ClickHouseConnectionInfo, config_parser::Config, endpoints::datasets::Datapoint,
     function::FunctionConfig,
 };
 use tokio::{sync::Semaphore, task::JoinSet};
+use tracing::{debug, error, info, instrument};
 use url::Url;
 use uuid::Uuid;
 
@@ -36,7 +38,7 @@ pub mod stats;
 pub enum OutputFormat {
     Jsonl,
     #[default]
-    HumanReadable,
+    Pretty,
 }
 
 #[derive(Parser, Debug)]
@@ -66,35 +68,52 @@ pub struct Args {
     #[arg(short, long, default_value = "1")]
     pub concurrency: usize,
 
-    #[arg(short, long, default_value = "human_readable")]
+    #[arg(short, long, default_value = "pretty")]
     pub format: OutputFormat,
 
     #[arg(long, default_value = "on")]
     pub inference_cache: CacheEnabledMode,
 }
 
+pub struct Clients {
+    pub tensorzero_client: ThrottledTensorZeroClient,
+    pub clickhouse_client: ClickHouseConnectionInfo,
+}
+
+#[instrument(skip(writer), fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
 pub async fn run_evaluation(
     args: Args,
     evaluation_run_id: Uuid,
     mut writer: impl Write,
 ) -> Result<()> {
-    setup_logging(&args)?;
+    info!("Initializing evaluation environment");
     let semaphore = Semaphore::new(args.concurrency);
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
+    debug!(clickhouse_url = %clickhouse_url, "ClickHouse URL resolved");
 
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
+    info!(config_file = ?args.config_file, "Loading configuration");
     let config =
         Config::load_from_path_optional_verify_credentials(&args.config_file, false).await?;
+    debug!("Configuration loaded successfully");
     let evaluation_config = config
         .evaluations
         .get(&args.evaluation_name)
         .ok_or(anyhow!("evaluation not found"))?
         .clone();
+    debug!(evaluation_name = %args.evaluation_name, "Evaluation config found");
+
     let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
-    let function_config = config.get_function(&static_evaluation_config.function_name)?;
-    #[allow(unused)]
+    let function_config = config
+        .get_function(&static_evaluation_config.function_name)?
+        .into_owned();
+    info!(
+        function_name = %static_evaluation_config.function_name,
+        evaluators = ?static_evaluation_config.evaluators.keys().collect::<Vec<_>>(),
+        "Function and evaluators configured"
+    );
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
             ClientBuilder::new(ClientBuilderMode::HTTPGateway { url: gateway_url })
@@ -103,24 +122,28 @@ pub async fn run_evaluation(
             config_file: Some(args.config_file),
             clickhouse_url: Some(clickhouse_url.clone()),
             timeout: None,
+            verify_credentials: true,
         }),
     }
     .build()
     .await
     .map_err(|e| anyhow!("Failed to build client: {}", e))?;
-    let tensorzero_client_with_semaphore =
-        Arc::new(ThrottledTensorZeroClient::new(tensorzero_client, semaphore));
+    let clients = Arc::new(Clients {
+        tensorzero_client: ThrottledTensorZeroClient::new(tensorzero_client, semaphore),
+        clickhouse_client: ClickHouseConnectionInfo::new(&clickhouse_url).await?,
+    });
 
-    let clickhouse_client = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
     let mut join_set = JoinSet::new();
 
+    info!("Querying dataset");
     let dataset = query_dataset(
-        &clickhouse_client,
+        &clients.clickhouse_client,
         &args.dataset_name,
         &static_evaluation_config.function_name,
-        function_config,
+        &function_config,
     )
     .await?;
+    info!(dataset_size = dataset.len(), "Dataset loaded successfully");
     let dataset_name = Arc::new(args.dataset_name);
     let variant_name = Arc::new(args.variant_name);
     let evaluation_name = Arc::new(args.evaluation_name);
@@ -138,7 +161,7 @@ pub async fn run_evaluation(
 
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
-        let client_clone = tensorzero_client_with_semaphore.clone();
+        let clients_clone = clients.clone();
         let variant_name = variant_name.clone();
         let function_config = function_config.clone();
         let evaluation_config = evaluation_config.clone();
@@ -149,10 +172,10 @@ pub async fn run_evaluation(
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
         let abort_handle = join_set.spawn(async move {
-            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone(), &client_clone.client).await?);
+            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone(), &clients_clone.tensorzero_client.client).await?);
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
-                    tensorzero_client: &client_clone,
+                    clients: &clients_clone,
                     function_name: &function_name,
                     variant_name: &variant_name,
                     evaluation_run_id: evaluation_run_id_clone,
@@ -173,11 +196,12 @@ pub async fn run_evaluation(
                     input,
                     evaluation_config,
                     evaluation_name,
-                    tensorzero_client: client_clone,
+                    clients: clients_clone.clone(),
                     evaluation_run_id: evaluation_run_id_clone,
                     inference_cache: args.inference_cache,
                 })
                 .await?;
+            debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
 
             Ok::<(Datapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
                 Arc::into_inner(datapoint).ok_or_else(|| anyhow!("Failed to get datapoint for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
@@ -227,12 +251,12 @@ pub async fn run_evaluation(
         progress_bar.finish_with_message("Done");
     }
 
-    if evaluation_stats.output_format == OutputFormat::HumanReadable {
+    if evaluation_stats.output_format == OutputFormat::Pretty {
         let stats = evaluation_stats.compute_stats(&static_evaluation_config.evaluators);
 
         // Print all stats
         for (evaluator_name, evaluator_stats) in &stats {
-            writeln!(writer, "{}: {}", evaluator_name, evaluator_stats)?;
+            writeln!(writer, "{evaluator_name}: {evaluator_stats}")?;
         }
 
         // Check cutoffs and handle failures
@@ -242,8 +266,7 @@ pub async fn run_evaluation(
         for (name, cutoff, actual) in &failures {
             writeln!(
                 writer,
-                "Failed cutoff for evaluator {} ({:.2}, got {:.2})",
-                name, cutoff, actual
+                "Failed cutoff for evaluator {name} ({cutoff:.2}, got {actual:.2})"
             )?;
         }
 
@@ -294,15 +317,13 @@ pub fn check_evaluator_cutoffs(
 pub fn format_cutoff_failures(failures: &[(String, f32, f32)]) -> String {
     failures
         .iter()
-        .map(|(name, cutoff, actual)| {
-            format!("{} (cutoff: {:.2}, got: {:.2})", name, cutoff, actual)
-        })
+        .map(|(name, cutoff, actual)| format!("{name} (cutoff: {cutoff:.2}, got: {actual:.2})"))
         .collect::<Vec<_>>()
         .join("\n")
 }
 
 struct InferDatapointParams<'a> {
-    tensorzero_client: &'a ThrottledTensorZeroClient,
+    clients: &'a Clients,
     function_name: &'a str,
     variant_name: &'a str,
     evaluation_run_id: Uuid,
@@ -314,9 +335,10 @@ struct InferDatapointParams<'a> {
     inference_cache: CacheEnabledMode,
 }
 
+#[instrument(skip(params), fields(datapoint_id = %params.datapoint.id(), function_name = %params.function_name, variant_name = %params.variant_name))]
 async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceResponse> {
     let InferDatapointParams {
-        tensorzero_client,
+        clients,
         function_name,
         variant_name,
         evaluation_run_id,
@@ -328,23 +350,36 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         inference_cache,
     } = params;
 
+    debug!("Processing tool parameters");
     let dynamic_tool_params = match datapoint.tool_call_config() {
-        Some(tool_params) => get_tool_params_args(tool_params, function_config).await,
-        None => DynamicToolParams::default(),
+        Some(tool_params) => {
+            debug!("Tool parameters found, processing");
+            get_tool_params_args(tool_params, function_config).await
+        }
+        None => {
+            debug!("No tool parameters found");
+            DynamicToolParams::default()
+        }
     };
+    debug!("Processing output schema");
     let output_schema = match (datapoint.output_schema(), function_config) {
         // If the datapoint has an output schema, use it only in the case where it is not the same as the output schema of the function
         (Some(output_schema), FunctionConfig::Json(json_function_config)) => {
             if output_schema == json_function_config.output_schema.value {
+                debug!("Output schema matches function schema, using function default");
                 None
             } else {
+                debug!("Custom output schema provided");
                 Some(output_schema)
             }
         }
         (Some(_), FunctionConfig::Chat(_)) => {
             return Err(anyhow!("Chat function does not support output schema"));
         }
-        (None, _) => None,
+        (None, _) => {
+            debug!("No output schema specified");
+            None
+        }
     };
     let params = ClientInferenceParams {
         function_name: Some(function_name.to_string()),
@@ -380,11 +415,17 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         include_original_response: false,
         internal: true,
         extra_body: Default::default(),
+        extra_headers: Default::default(),
     };
-    let inference_result = tensorzero_client.inference(params).await?;
+    debug!("Making inference request");
+    let inference_result = clients.tensorzero_client.inference(params).await?;
     match inference_result {
-        InferenceOutput::NonStreaming(inference_response) => Ok(inference_response),
+        InferenceOutput::NonStreaming(inference_response) => {
+            debug!(inference_id = %inference_response.inference_id(), "Inference completed successfully");
+            Ok(inference_response)
+        }
         InferenceOutput::Streaming(_inference_stream) => {
+            error!("Received streaming inference response when non-streaming was expected");
             bail!("Streaming inference should never happen in evaluations")
         }
     }
@@ -399,7 +440,7 @@ fn write_run_info(
         OutputFormat::Jsonl => {
             writeln!(writer, "{}", serde_json::to_string(run_info)?)?;
         }
-        OutputFormat::HumanReadable => {
+        OutputFormat::Pretty => {
             writeln!(writer, "Run ID: {}", run_info.evaluation_run_id)?;
             writeln!(writer, "Number of datapoints: {}", run_info.num_datapoints)?;
         }
@@ -437,7 +478,7 @@ impl ThrottledTensorZeroClient {
 
 #[cfg(test)]
 mod tests {
-    use tensorzero_internal::evaluations::ExactMatchConfig;
+    use tensorzero_core::evaluations::ExactMatchConfig;
 
     use super::*;
 

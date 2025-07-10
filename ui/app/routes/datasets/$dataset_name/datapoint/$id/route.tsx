@@ -1,15 +1,22 @@
-import { useFetcher } from "react-router";
-import { data, isRouteErrorResponse, redirect } from "react-router";
+import type { ActionFunctionArgs, RouteHandle } from "react-router";
+import {
+  data,
+  isRouteErrorResponse,
+  Link,
+  redirect,
+  useFetcher,
+  useParams,
+} from "react-router";
 import { v7 as uuid } from "uuid";
-import BasicInfo from "./DatapointBasicInfo";
+import DatapointBasicInfo from "./DatapointBasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useConfig } from "~/context/config";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import type { Route } from "./+types/route";
-import type { ActionFunctionArgs } from "react-router";
 import {
   ParsedDatasetRowSchema,
   type ParsedDatasetRow,
@@ -18,7 +25,7 @@ import {
   staleDatapoint,
   getDatasetCounts,
 } from "~/utils/clickhouse/datasets.server";
-import { tensorZeroClient } from "~/utils/tensorzero.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import {
   PageHeader,
   PageLayout,
@@ -27,9 +34,15 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { DatapointActions } from "./DatapointActions";
-import type { ResolvedInputMessage } from "~/utils/clickhouse/common";
 import { getConfig } from "~/utils/config/index.server";
 import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
+import {
+  prepareInferenceActionRequest,
+  useInferenceActionFetcher,
+} from "~/routes/api/tensorzero/inference.utils";
+import type { DisplayInputMessage } from "~/utils/clickhouse/common";
+import { Badge } from "~/components/ui/badge";
+import { logger } from "~/utils/logger";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -55,6 +68,7 @@ export async function action({ request }: ActionFunctionArgs) {
     updated_at: formData.get("updated_at"),
     staled_at: null,
     source_inference_id: formData.get("source_inference_id"),
+    is_custom: true,
   };
 
   const cleanedData = Object.fromEntries(
@@ -64,7 +78,14 @@ export async function action({ request }: ActionFunctionArgs) {
     ParsedDatasetRowSchema.parse(cleanedData);
   const config = await getConfig();
   const functionConfig = config.functions[parsedFormData.function_name];
-  const functionType = functionConfig?.type;
+  if (!functionConfig) {
+    return new Response(
+      `Failed to find function config for function ${parsedFormData.function_name}`,
+      { status: 400 },
+    );
+  }
+  const functionType = functionConfig.type;
+
   const action = formData.get("action");
   if (action === "delete") {
     await staleDatapoint(
@@ -95,17 +116,14 @@ export async function action({ request }: ActionFunctionArgs) {
     try {
       // For future reference:
       // These two calls would be a transaction but ClickHouse doesn't support
-      await staleDatapoint(
-        parsedFormData.dataset_name,
-        parsedFormData.id,
-        functionType,
-      );
+
       const datapoint = {
         function_name: parsedFormData.function_name,
         input: transformedInput,
         output: transformedOutput,
         tags: parsedFormData.tags || {},
         auxiliary: parsedFormData.auxiliary,
+        is_custom: true, // we're saving it after an edit, so it's custom
         ...(functionType === "json"
           ? {
               output_schema:
@@ -120,18 +138,22 @@ export async function action({ request }: ActionFunctionArgs) {
           : {}),
         source_inference_id: parsedFormData.source_inference_id,
       };
-      const { id } = await tensorZeroClient.updateDatapoint(
+      const { id } = await getTensorZeroClient().updateDatapoint(
         parsedFormData.dataset_name,
         uuid(),
         datapoint,
-        formData.get("inputChanged") === "true",
+      );
+      await staleDatapoint(
+        parsedFormData.dataset_name,
+        parsedFormData.id,
+        functionType,
       );
 
       return redirect(
         `/datasets/${parsedFormData.dataset_name}/datapoint/${id}`,
       );
     } catch (error) {
-      console.error("Error updating datapoint:", error);
+      logger.error("Error updating datapoint:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
@@ -139,6 +161,10 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   }
 }
+
+export const handle: RouteHandle = {
+  crumb: (match) => [match.params.id!],
+};
 
 export async function loader({
   params,
@@ -165,32 +191,24 @@ export async function loader({
 export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const { datapoint } = loaderData;
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [variantInferenceIsLoading, setVariantInferenceIsLoading] =
-    useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
-  const originalInput = useMemo(() => datapoint.input, []);
+  const [originalInput] = useState(datapoint.input);
+  const [originalOutput] = useState(datapoint.output);
   const [output, setOutput] = useState<typeof datapoint.output>(
     datapoint.output,
   );
-  const originalOutput = useMemo(() => datapoint.output, []);
   const config = useConfig();
   const [isEditing, setIsEditing] = useState(false);
-  const [resetKey, setResetKey] = useState(0);
-  const [canSave, setCanSave] = useState(false);
-  const [inputChanged, setInputChanged] = useState(false);
-  const [outputChanged, setOutputChanged] = useState(false);
 
-  useEffect(() => {
+  const canSave = useMemo(() => {
     // Use JSON.stringify to compare object values rather than references
     const hasInputChanged =
       JSON.stringify(input) !== JSON.stringify(originalInput);
     const hasOutputChanged =
       JSON.stringify(output) !== JSON.stringify(originalOutput);
 
-    setInputChanged(hasInputChanged);
-    setOutputChanged(hasOutputChanged);
-    setCanSave(isEditing && (hasInputChanged || hasOutputChanged));
+    return isEditing && (hasInputChanged || hasOutputChanged);
   }, [isEditing, input, output, originalInput, originalOutput]);
 
   const toggleEditing = () => setIsEditing(!isEditing);
@@ -198,29 +216,13 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const handleReset = () => {
     setInput(datapoint.input);
     setOutput(datapoint.output);
-    setResetKey((prev) => prev + 1);
   };
 
-  const handleSystemChange = (system: string | object) => {
+  const handleSystemChange = (system: string | object) =>
     setInput({ ...input, system });
-  };
 
-  const handleMessagesChange = (messages: ResolvedInputMessage[]) => {
+  const handleMessagesChange = (messages: DisplayInputMessage[]) =>
     setInput({ ...input, messages });
-  };
-
-  const handleOutputChange = (newOutput: typeof datapoint.output | null) => {
-    if (newOutput === null) {
-      setCanSave(false);
-    } else {
-      const hasOutputChanged =
-        JSON.stringify(newOutput) !== JSON.stringify(originalOutput);
-      const hasInputChanged =
-        JSON.stringify(input) !== JSON.stringify(originalInput);
-      setOutput(newOutput);
-      setCanSave(isEditing && (hasOutputChanged || hasInputChanged));
-    }
-  };
 
   const fetcher = useFetcher();
   const saveError = fetcher.data?.success === false ? fetcher.data.error : null;
@@ -243,8 +245,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     });
 
     formData.append("action", action);
-    formData.append("inputChanged", String(inputChanged));
-    formData.append("outputChanged", String(outputChanged));
 
     // Submit to the local action by targeting the current route (".")
     fetcher.submit(formData, { method: "post", action: "." });
@@ -262,20 +262,40 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     config.functions[datapoint.function_name]?.variants || {},
   );
 
+  const variantInferenceFetcher = useInferenceActionFetcher();
+  const variantSource = "datapoint";
+  const variantInferenceIsLoading =
+    // only concerned with rendering loading state when the modal is open
+    isModalOpen &&
+    (variantInferenceFetcher.state === "submitting" ||
+      variantInferenceFetcher.state === "loading");
+
+  const { submit } = variantInferenceFetcher;
   const onVariantSelect = (variant: string) => {
     setSelectedVariant(variant);
     setIsModalOpen(true);
+    const request = prepareInferenceActionRequest({
+      resource: datapoint,
+      source: variantSource,
+      variant,
+    });
+    // TODO: handle JSON.stringify error
+    submit({ data: JSON.stringify(request) });
   };
 
   const handleModalClose = () => {
     setIsModalOpen(false);
     setSelectedVariant(null);
-    setVariantInferenceIsLoading(false);
   };
 
   return (
     <PageLayout>
-      <PageHeader label="Datapoint" name={datapoint.id} />
+      <PageHeader
+        label="Datapoint"
+        name={datapoint.id}
+        tag={datapoint.is_custom && <Badge className="ml-2">Custom</Badge>}
+      />
+
       {saveError && (
         <div className="mt-2 rounded-md bg-red-100 px-4 py-3 text-red-800">
           <p className="font-medium">Error saving datapoint</p>
@@ -285,7 +305,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
       <SectionsGroup>
         <SectionLayout>
-          <BasicInfo datapoint={datapoint} />
+          <DatapointBasicInfo datapoint={datapoint} />
         </SectionLayout>
 
         <SectionLayout>
@@ -309,7 +329,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         <SectionLayout>
           <SectionHeader heading="Input" />
           <Input
-            key={`input-${resetKey}`}
             input={input}
             isEditing={isEditing}
             onSystemChange={handleSystemChange}
@@ -321,10 +340,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           <SectionLayout>
             <SectionHeader heading="Output" />
             <Output
-              key={`output-${resetKey}`}
               output={output}
               isEditing={isEditing}
-              onOutputChange={handleOutputChange}
+              onOutputChange={(output) => setOutput(output ?? undefined)}
             />
           </SectionLayout>
         )}
@@ -334,7 +352,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         <VariantResponseModal
           isOpen={isModalOpen}
           isLoading={variantInferenceIsLoading}
-          setIsLoading={setVariantInferenceIsLoading}
+          error={variantInferenceFetcher.error?.message}
+          variantResponse={variantInferenceFetcher.data?.info ?? null}
+          rawResponse={variantInferenceFetcher.data?.raw ?? null}
           onClose={handleModalClose}
           item={datapoint}
           selectedVariant={selectedVariant}
@@ -345,32 +365,70 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   );
 }
 
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
-
+function getUserFacingError(error: unknown): {
+  heading: string;
+  message: ReactNode;
+} {
   if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
+    switch (error.status) {
+      case 400:
+        return {
+          heading: `${error.status}: Bad Request`,
+          message: "Please try again later.",
+        };
+      case 401:
+        return {
+          heading: `${error.status}: Unauthorized`,
+          message: "You do not have permission to access this resource.",
+        };
+      case 403:
+        return {
+          heading: `${error.status}: Forbidden`,
+          message: "You do not have permission to access this resource.",
+        };
+      case 404:
+        return {
+          heading: `${error.status}: Not Found`,
+          message:
+            "The requested resource was not found. Please check the URL and try again.",
+        };
+      case 500:
+      default:
+        return {
+          heading: "An unknown error occurred",
+          message: "Please try again later.",
+        };
+    }
   }
+  return {
+    heading: "An unknown error occurred",
+    message: "Please try again later.",
+  };
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  useEffect(() => {
+    logger.error(error);
+  }, [error]);
+  const { heading, message } = getUserFacingError(error);
+  const { dataset_name: datasetName } = useParams<{
+    dataset_name: string;
+    id: string;
+  }>();
+  return (
+    <div className="flex flex-col items-center justify-center md:h-full">
+      <div className="mt-8 flex flex-col items-center justify-center gap-2 rounded-xl bg-red-50 p-6 md:mt-0">
+        <h1 className="text-2xl font-bold">{heading}</h1>
+        {typeof message === "string" ? <p>{message}</p> : message}
+        <Link
+          to={`/datasets/${datasetName}`}
+          className="font-bold text-red-800 hover:text-red-600"
+        >
+          Go back &rarr;
+        </Link>
+      </div>
+    </div>
+  );
 }
 
 function transformOutputForTensorZero(

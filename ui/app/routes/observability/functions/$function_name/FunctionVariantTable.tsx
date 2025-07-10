@@ -9,12 +9,12 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import type { VariantCounts } from "~/utils/clickhouse/function";
-import { formatDate } from "~/utils/date";
 import { VariantLink } from "~/components/function/variant/VariantLink";
+import { TableItemTime } from "~/components/ui/TableItems";
 
 type VariantCountsWithMetadata = VariantCounts & {
   type: string;
-  weight: number;
+  weight: number | null;
 };
 
 export default function FunctionVariantTable({
@@ -60,7 +60,7 @@ export default function FunctionVariantTable({
               <TableCell>{variant_count.weight}</TableCell>
               <TableCell>{variant_count.count}</TableCell>
               <TableCell>
-                {formatDate(new Date(variant_count.last_used))}
+                <TableItemTime timestamp={variant_count.last_used} />
               </TableCell>
             </TableRow>
           ))
