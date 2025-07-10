@@ -181,9 +181,9 @@ async fn get_openai_fine_tuning_job(
         }
         if let Some(finish_at) = job.finish_at {
             if job.val["model"].as_str().unwrap().contains("error") {
-                job.val["status"] = "failed because the model is an error model".into();
+                job.val["status"] = "failed".into();
                 job.val["error"] = json!({
-                    "unexpected_error": "error model"
+                    "unexpected_error": "failed because the model is an error model"
                 });
             }
             if chrono::Utc::now() >= finish_at {
