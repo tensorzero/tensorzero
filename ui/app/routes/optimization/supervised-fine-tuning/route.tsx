@@ -169,7 +169,6 @@ function SupervisedFineTuningImpl(
 export default function SupervisedFineTuning(props: Route.ComponentProps) {
   const { loaderData } = props;
   if (loaderData.status === "error") {
-    console.log("Error", loaderData);
     return (
       <PageLayout>
         <PageHeader heading="Supervised Fine-Tuning" />

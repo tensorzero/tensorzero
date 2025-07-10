@@ -107,7 +107,7 @@ class NativeSFTJob extends SFTJob {
 
   async poll(): Promise<SFTJob> {
     const client = await getNativeTensorZeroClient();
-    logger.info("Polling job", this.jobHandle);
+    logger.debug("Polling job", this.jobHandle);
     try {
       const status = await client.experimentalPollOptimization(this.jobHandle);
       this.jobStatus = status;
@@ -119,7 +119,7 @@ class NativeSFTJob extends SFTJob {
         error: e as JsonValue,
       };
     }
-    logger.info("Job status", this.jobStatus);
+    logger.debug("Job status", this.jobStatus);
     return this;
   }
 }
