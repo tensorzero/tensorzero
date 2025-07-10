@@ -188,20 +188,7 @@ jobs:
         env:
           TENSORZERO_CI: 1
         continue-on-error: true
-        run: pnpm ui:test:e2e --grep-invert "fine-tune on image|fine-tune with a mocked Fireworks server"
-
-      - name: Restart UI container with native SFT flag
-        working-directory: ui
-        run: |
-          echo "TENSORZERO_UI_FF_USE_NATIVE_SFT=1" >> fixtures/.env
-          docker compose -f fixtures/docker-compose.ui.yml up --no-build -d ui
-
-      - name: Run Rust E2E tests
-        id: rust_e2e_tests
-        env:
-          TENSORZERO_CI: 1
-        continue-on-error: true
-        run: pnpm ui:test:e2e --grep "tuning"
+        run: pnpm ui:test:e2e
 
       - name: Print Docker Compose logs
         if: always()
