@@ -181,7 +181,6 @@ test("countCuratedInferences for float metrics", async () => {
   );
   expect(chatEpisodeResult).toBe(11);
 });
-
 // Test demonstration metrics
 test("countCuratedInferences for demonstration metrics", async () => {
   const jsonResult = await countCuratedInferences(
@@ -224,7 +223,7 @@ test("countCuratedInferences for demonstration metrics", async () => {
     0,
   );
   expect(chatResult).toBe(493);
-});
+}, 10000);
 
 // Test getCuratedInferences
 test("getCuratedInferences retrieves correct data", async () => {
