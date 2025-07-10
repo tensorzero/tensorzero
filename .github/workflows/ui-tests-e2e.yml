@@ -194,7 +194,7 @@ jobs:
         working-directory: ui
         run: |
           echo "TENSORZERO_UI_FF_USE_NATIVE_SFT=1" >> fixtures/.env
-          docker compose fixtures/docker-compose.ui.yml up --no-build -d ui
+          docker compose -f fixtures/docker-compose.ui.yml up --no-build -d ui
 
       - name: Run Rust E2E tests
         id: rust_e2e_tests
