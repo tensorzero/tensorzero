@@ -10,7 +10,11 @@ const clickhouseUrl = process.env.TENSORZERO_CLICKHOUSE_URL;
 if (!clickhouseUrl) {
   throw new Error("TENSORZERO_CLICKHOUSE_URL is not set");
 }
-const client = await TensorZeroClient.build(configPath, clickhouseUrl);
+const client = await TensorZeroClient.buildEmbedded(
+  configPath,
+  clickhouseUrl,
+  undefined,
+);
 
 describe("native sft", () => {
   // NOTE: This test hits a fake server so you can run it anytime without paying OpenAI

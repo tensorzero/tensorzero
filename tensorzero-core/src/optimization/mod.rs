@@ -1,5 +1,6 @@
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{DateTime, Utc};
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -7,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::model::UninitializedModelConfig;
 use crate::optimization::fireworks_sft::{
     FireworksSFTConfig, FireworksSFTJobHandle, UninitializedFireworksSFTConfig,
@@ -64,6 +65,33 @@ pub enum OptimizationJobHandle {
     GCPVertexGeminiSFT(GCPVertexGeminiSFTJobHandle),
 }
 
+impl OptimizationJobHandle {
+    pub fn to_base64_urlencoded(&self) -> Result<String, Error> {
+        let serialized_job_handle = serde_json::to_string(self).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize job handle: {e}"),
+            })
+        })?;
+        Ok(URL_SAFE_NO_PAD.encode(serialized_job_handle.as_bytes()))
+    }
+
+    pub fn from_base64_urlencoded(encoded_job_handle: &str) -> Result<Self, Error> {
+        let decoded_job_handle = URL_SAFE_NO_PAD
+            .decode(encoded_job_handle.as_bytes())
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to deserialize job handle: {e}"),
+                })
+            })?;
+        let job_handle = serde_json::from_slice(&decoded_job_handle).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to deserialize job handle: {e}"),
+            })
+        })?;
+        Ok(job_handle)
+    }
+}
+
 impl std::fmt::Display for OptimizationJobHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
@@ -92,7 +120,7 @@ impl JobHandle for OptimizationJobHandle {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OptimizerOutput {
@@ -101,7 +129,7 @@ pub enum OptimizerOutput {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum OptimizationJobInfo {
@@ -245,7 +273,7 @@ impl Optimizer for OptimizerInfo {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 pub struct UninitializedOptimizerInfo {
     #[serde(flatten)]
@@ -261,7 +289,7 @@ impl UninitializedOptimizerInfo {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UninitializedOptimizerConfig {

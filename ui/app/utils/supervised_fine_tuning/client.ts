@@ -18,9 +18,8 @@ export async function getNativeTensorZeroClient(): Promise<TensorZeroClient> {
   }
 
   const env = getEnv();
-  _tensorZeroClient = await TensorZeroClient.build(
-    env.TENSORZERO_UI_CONFIG_PATH,
-    env.TENSORZERO_CLICKHOUSE_URL,
+  _tensorZeroClient = await TensorZeroClient.buildHttp(
+    env.TENSORZERO_GATEWAY_URL,
   );
   return _tensorZeroClient;
 }

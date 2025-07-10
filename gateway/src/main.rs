@@ -261,6 +261,14 @@ async fn main() {
         .route(
             "/metrics",
             get(move || std::future::ready(metrics_handle.render())),
+        )
+        .route(
+            "/experimental_optimization_workflow",
+            post(endpoints::optimization::launch_optimization_workflow_handler),
+        )
+        .route(
+            "/experimental_optimization/{job_handle}",
+            get(endpoints::optimization::poll_optimization_handler),
         );
 
     let base_path = config.gateway.base_path.as_deref().unwrap_or("/");

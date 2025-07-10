@@ -1,7 +1,10 @@
-use crate::{optimization_test_case, OptimizationTestCase};
+use crate::{
+    embedded_workflow_test_case, http_workflow_test_case, optimization_test_case,
+    OptimizationTestCase,
+};
 use tensorzero_core::optimization::{
-    gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig, OptimizerInfo,
-    UninitializedOptimizerConfig, UninitializedOptimizerInfo,
+    gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig, UninitializedOptimizerConfig,
+    UninitializedOptimizerInfo,
 };
 
 struct GCPVertexGeminiSFTTestCase();
@@ -15,7 +18,7 @@ impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {
         true
     }
 
-    fn get_optimizer_info(&self) -> OptimizerInfo {
+    fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
         UninitializedOptimizerInfo {
             inner: UninitializedOptimizerConfig::GCPVertexGeminiSFT(
                 UninitializedGCPVertexGeminiSFTConfig {
@@ -26,7 +29,11 @@ impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {
                     export_last_checkpoint_only: None,
                     credentials: None,
                     seed: None,
-                    api_base: None,
+                    api_base: if use_mock_inference_provider {
+                        Some("http://localhost:3030/gcp_vertex_gemini/".parse().unwrap())
+                    } else {
+                        None
+                    },
                     service_account: None,
                     kms_key_name: None,
                     tuned_model_display_name: None,
@@ -37,9 +44,9 @@ impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {
                 },
             ),
         }
-        .load()
-        .expect("Failed to create GCPVertexGeminiSFT optimizer info")
     }
 }
 
 optimization_test_case!(gcp_vertex_gemini_sft, GCPVertexGeminiSFTTestCase());
+embedded_workflow_test_case!(gcp_vertex_gemini_sft, GCPVertexGeminiSFTTestCase());
+http_workflow_test_case!(gcp_vertex_gemini_sft, GCPVertexGeminiSFTTestCase());

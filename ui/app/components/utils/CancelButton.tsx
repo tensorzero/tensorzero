@@ -22,6 +22,8 @@ export function CancelButton({ onClick, className }: CancelButtonProps) {
             size="iconSm"
             onClick={onClick}
             className={className}
+            aria-label="Cancel"
+            title="Cancel"
           >
             <X className="h-4 w-4" />
           </Button>
