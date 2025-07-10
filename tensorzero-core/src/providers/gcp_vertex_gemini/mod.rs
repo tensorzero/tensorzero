@@ -1516,7 +1516,7 @@ fn stream_gcp_vertex_gemini(
 
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
-enum GCPVertexGeminiRole {
+pub enum GCPVertexGeminiRole {
     User,
     Model,
     System,
@@ -1539,7 +1539,7 @@ pub struct GCPVertexGeminiFunctionCall<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct GCPVertexGeminiFunctionResponse<'a> {
-    name: &'a str,
+    name: Cow<'a, str>,
     response: Value,
 }
 
@@ -1912,12 +1912,16 @@ pub(super) fn tensorzero_to_gcp_vertex_gemini_content<'a>(
 ) -> Result<GCPVertexGeminiContent<'a>, Error> {
     match message.role {
         Role::User => {
-            let message =
-                tensorzero_to_gcp_vertex_gemini_user_message(&message.content, provider_type)?;
+            let message = tensorzero_to_gcp_vertex_gemini_message(
+                GCPVertexGeminiRole::User,
+                Cow::Borrowed(&message.content),
+                provider_type,
+            )?;
             Ok(message)
         }
         Role::Assistant => {
-            let message = tensorzero_to_gcp_vertex_gemini_model_message(
+            let message = tensorzero_to_gcp_vertex_gemini_message(
+                GCPVertexGeminiRole::Model,
                 Cow::Borrowed(&message.content),
                 provider_type,
             )?;
@@ -1926,78 +1930,8 @@ pub(super) fn tensorzero_to_gcp_vertex_gemini_content<'a>(
     }
 }
 
-fn tensorzero_to_gcp_vertex_gemini_user_message<'a>(
-    content_blocks: &'a [ContentBlock],
-    provider_type: &str,
-) -> Result<GCPVertexGeminiContent<'a>, Error> {
-    let mut user_content_blocks = Vec::new();
-
-    for block in content_blocks.iter() {
-        match block {
-            ContentBlock::Text(Text { text }) => {
-                user_content_blocks.push(GCPVertexGeminiContentPart::Text {
-                    text: Cow::Borrowed(text),
-                });
-            }
-            ContentBlock::ToolCall(_) => {
-                return Err(Error::new(ErrorDetails::InvalidMessage {
-                    message: "Tool calls are not supported in user messages".to_string(),
-                }));
-            }
-            ContentBlock::ToolResult(tool_result) => {
-                let response = serde_json::json!({
-                    "name": tool_result.name,
-                    "content": tool_result.result
-                });
-
-                user_content_blocks.push(GCPVertexGeminiContentPart::FunctionResponse {
-                    function_response: GCPVertexGeminiFunctionResponse {
-                        name: &tool_result.name,
-                        response,
-                    },
-                });
-            }
-            ContentBlock::File(file) => {
-                user_content_blocks.push(GCPVertexGeminiContentPart::InlineData {
-                    inline_data: GCPVertexInlineData {
-                        mime_type: file.file.mime_type.to_string(),
-                        data: Cow::Borrowed(file.file.data()?),
-                    },
-                });
-            }
-            ContentBlock::Thought(thought) => {
-                warn_discarded_thought_block(provider_type, thought);
-            }
-            ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            } => {
-                user_content_blocks.push(GCPVertexGeminiContentPart::Unknown {
-                    data: Cow::Borrowed(data),
-                });
-            }
-        }
-    }
-
-    // Check if we have any content blocks
-    if user_content_blocks.is_empty() {
-        return Err(Error::new(ErrorDetails::InvalidMessage {
-            message: "User message must contain at least one content block".to_string(),
-        }));
-    }
-
-    let message = GCPVertexGeminiContent {
-        role: GCPVertexGeminiRole::User,
-        parts: user_content_blocks
-            .into_iter()
-            .map(FlattenUnknown::Normal)
-            .collect(),
-    };
-
-    Ok(message)
-}
-
-pub fn tensorzero_to_gcp_vertex_gemini_model_message<'a>(
+pub fn tensorzero_to_gcp_vertex_gemini_message<'a>(
+    role: GCPVertexGeminiRole,
     content_blocks: Cow<'a, [ContentBlock]>,
     provider_type: &str,
 ) -> Result<GCPVertexGeminiContent<'a>, Error> {
@@ -2011,14 +1945,18 @@ pub fn tensorzero_to_gcp_vertex_gemini_model_message<'a>(
     for block in content_block_cows {
         match block {
             Cow::Borrowed(ContentBlock::Text(Text { text })) => {
-                model_content_blocks.push(GCPVertexGeminiContentPart::Text {
-                    text: Cow::Borrowed(text),
-                });
+                model_content_blocks.push(FlattenUnknown::Normal(
+                    GCPVertexGeminiContentPart::Text {
+                        text: Cow::Borrowed(text),
+                    },
+                ));
             }
             Cow::Owned(ContentBlock::Text(Text { text })) => {
-                model_content_blocks.push(GCPVertexGeminiContentPart::Text {
-                    text: Cow::Owned(text),
-                });
+                model_content_blocks.push(FlattenUnknown::Normal(
+                    GCPVertexGeminiContentPart::Text {
+                        text: Cow::Owned(text),
+                    },
+                ));
             }
             Cow::Borrowed(ContentBlock::ToolCall(tool_call)) => {
                 // Convert the tool call arguments from String to JSON Value (GCP expects an object)
@@ -2046,12 +1984,14 @@ pub fn tensorzero_to_gcp_vertex_gemini_model_message<'a>(
                     .into());
                 }
 
-                model_content_blocks.push(GCPVertexGeminiContentPart::FunctionCall {
-                    function_call: GCPVertexGeminiFunctionCall {
-                        name: Cow::Borrowed(&tool_call.name),
-                        args,
+                model_content_blocks.push(FlattenUnknown::Normal(
+                    GCPVertexGeminiContentPart::FunctionCall {
+                        function_call: GCPVertexGeminiFunctionCall {
+                            name: Cow::Borrowed(&tool_call.name),
+                            args,
+                        },
                     },
-                });
+                ));
             }
             Cow::Owned(ContentBlock::ToolCall(tool_call)) => {
                 // Convert the tool call arguments from String to JSON Value (GCP expects an object)
@@ -2079,31 +2019,59 @@ pub fn tensorzero_to_gcp_vertex_gemini_model_message<'a>(
                     .into());
                 }
 
-                model_content_blocks.push(GCPVertexGeminiContentPart::FunctionCall {
-                    function_call: GCPVertexGeminiFunctionCall {
-                        name: Cow::Owned(tool_call.name),
-                        args,
+                model_content_blocks.push(FlattenUnknown::Normal(
+                    GCPVertexGeminiContentPart::FunctionCall {
+                        function_call: GCPVertexGeminiFunctionCall {
+                            name: Cow::Owned(tool_call.name),
+                            args,
+                        },
                     },
+                ));
+            }
+            Cow::Borrowed(ContentBlock::ToolResult(tool_result)) => {
+                let response = serde_json::json!({
+                    "name": tool_result.name,
+                    "content": tool_result.result
                 });
+
+                model_content_blocks.push(FlattenUnknown::Normal(
+                    GCPVertexGeminiContentPart::FunctionResponse {
+                        function_response: GCPVertexGeminiFunctionResponse {
+                            name: Cow::Borrowed(&tool_result.name),
+                            response,
+                        },
+                    },
+                ));
             }
-            Cow::Borrowed(ContentBlock::ToolResult(_))
-            | Cow::Owned(ContentBlock::ToolResult(_)) => {
-                return Err(Error::new(ErrorDetails::InvalidMessage {
-                    message: "Tool results are not supported in model messages".to_string(),
-                }));
+            Cow::Owned(ContentBlock::ToolResult(tool_result)) => {
+                let response = serde_json::json!({
+                    "name": tool_result.name,
+                    "content": tool_result.result
+                });
+
+                model_content_blocks.push(FlattenUnknown::Normal(
+                    GCPVertexGeminiContentPart::FunctionResponse {
+                        function_response: GCPVertexGeminiFunctionResponse {
+                            name: Cow::Owned(tool_result.name),
+                            response,
+                        },
+                    },
+                ));
             }
-            Cow::Borrowed(ContentBlock::File(ref file)) => {
+            Cow::Borrowed(ContentBlock::File(file)) => {
                 let FileWithPath {
                     file,
                     storage_path: _,
                 } = &**file;
 
-                model_content_blocks.push(GCPVertexGeminiContentPart::InlineData {
-                    inline_data: GCPVertexInlineData {
-                        mime_type: file.mime_type.to_string(),
-                        data: Cow::Borrowed(file.data()?),
+                model_content_blocks.push(FlattenUnknown::Normal(
+                    GCPVertexGeminiContentPart::InlineData {
+                        inline_data: GCPVertexInlineData {
+                            mime_type: file.mime_type.to_string(),
+                            data: Cow::Borrowed(file.data()?),
+                        },
                     },
-                });
+                ));
             }
             Cow::Owned(ContentBlock::File(file)) => {
                 let FileWithPath {
@@ -2111,12 +2079,14 @@ pub fn tensorzero_to_gcp_vertex_gemini_model_message<'a>(
                     storage_path: _,
                 } = &*file;
 
-                model_content_blocks.push(GCPVertexGeminiContentPart::InlineData {
-                    inline_data: GCPVertexInlineData {
-                        mime_type: file.mime_type.to_string(),
-                        data: Cow::Owned(file.data()?.to_string()), // Convert to owned String
+                model_content_blocks.push(FlattenUnknown::Normal(
+                    GCPVertexGeminiContentPart::InlineData {
+                        inline_data: GCPVertexInlineData {
+                            mime_type: file.mime_type.to_string(),
+                            data: Cow::Owned(file.data()?.to_string()), // Convert to owned String
+                        },
                     },
-                });
+                ));
             }
             Cow::Borrowed(ContentBlock::Thought(ref thought))
             | Cow::Owned(ContentBlock::Thought(ref thought)) => {
@@ -2126,17 +2096,13 @@ pub fn tensorzero_to_gcp_vertex_gemini_model_message<'a>(
                 data,
                 model_provider_name: _,
             }) => {
-                model_content_blocks.push(GCPVertexGeminiContentPart::Unknown {
-                    data: Cow::Borrowed(data),
-                });
+                model_content_blocks.push(FlattenUnknown::Unknown(Cow::Borrowed(data)));
             }
             Cow::Owned(ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
             }) => {
-                model_content_blocks.push(GCPVertexGeminiContentPart::Unknown {
-                    data: Cow::Owned(data),
-                });
+                model_content_blocks.push(FlattenUnknown::Unknown(Cow::Owned(data)));
             }
         }
     }
@@ -2149,11 +2115,8 @@ pub fn tensorzero_to_gcp_vertex_gemini_model_message<'a>(
     }
 
     let message = GCPVertexGeminiContent {
-        role: GCPVertexGeminiRole::Model,
-        parts: model_content_blocks
-            .into_iter()
-            .map(FlattenUnknown::Normal)
-            .collect(),
+        role,
+        parts: model_content_blocks,
     };
 
     Ok(message)
@@ -2718,7 +2681,7 @@ mod tests {
             content.parts[0],
             FlattenUnknown::Normal(GCPVertexGeminiContentPart::FunctionResponse {
                 function_response: GCPVertexGeminiFunctionResponse {
-                    name: "get_temperature",
+                    name: Cow::Owned("get_temperature".to_string()),
                     response: json!({
                         "name": "get_temperature",
                         "content": r#"{"temperature": 25, "conditions": "sunny"}"#

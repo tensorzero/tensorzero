@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
 use super::{
-    prepare_gcp_vertex_gemini_messages, tensorzero_to_gcp_vertex_gemini_model_message,
+    prepare_gcp_vertex_gemini_messages, tensorzero_to_gcp_vertex_gemini_message,
     GCPVertexGeminiFileURI, GCPVertexGeminiSupervisedRow,
 };
 use crate::{
@@ -98,7 +98,8 @@ impl<'a> TryFrom<&'a RenderedSample> for GCPVertexGeminiSupervisedRow<'a> {
         }
         let output_content_blocks: Vec<ContentBlock> =
             output.iter().map(|c| c.clone().into()).collect::<Vec<_>>();
-        let final_model_message = tensorzero_to_gcp_vertex_gemini_model_message(
+        let final_model_message = tensorzero_to_gcp_vertex_gemini_message(
+            GCPVertexGeminiRole::Model,
             Cow::Owned(output_content_blocks),
             PROVIDER_TYPE,
         )?;
