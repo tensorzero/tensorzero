@@ -24,6 +24,7 @@ use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
 use crate::variant::chat_completion::TemplateSchemaInfo;
+use crate::variant::mixture_of_n::stream_inference_from_non_stream;
 use crate::{
     endpoints::inference::InferenceParams,
     error::Error,
@@ -36,7 +37,7 @@ use crate::{
 use super::chat_completion::UninitializedChatCompletionConfig;
 use super::{InferenceConfig, JsonMode, ModelUsedInfo, Variant};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct BestOfNSamplingConfig {
@@ -61,7 +62,7 @@ fn default_timeout() -> f64 {
     300.0
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct BestOfNEvaluatorConfig {
@@ -138,17 +139,31 @@ impl Variant for BestOfNSamplingConfig {
 
     async fn infer_stream<'request>(
         &self,
-        _input: &ResolvedInput,
-        _models: &'request InferenceModels<'_>,
-        _function: &FunctionConfig,
-        _inference_config: &'request InferenceConfig<'static, 'request>,
-        _clients: &'request InferenceClients<'request>,
-        _inference_params: InferenceParams,
+        input: &ResolvedInput,
+        models: &'request InferenceModels<'_>,
+        function: &FunctionConfig,
+        inference_config: &'request InferenceConfig<'static, 'request>,
+        clients: &'request InferenceClients<'request>,
+        inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-        Err(ErrorDetails::InvalidRequest {
-            message: "Best of n variants do not support streaming inference.".to_string(),
-        }
-        .into())
+        let candidate_inference_results = self
+            .infer_candidates(input, models, function, inference_config, clients)
+            .await?;
+        let inference_result = self
+            .select_best_candidate(
+                input,
+                models.models,
+                inference_config,
+                clients,
+                candidate_inference_results,
+                function,
+            )
+            .await?;
+
+        // We always invoke our candidates in non-streaming mode (since we need to concatenate their responses
+        // to produce the judge input)
+        // Take the judge's chosen candidate, and convert the candidate response to a stream
+        stream_inference_from_non_stream(inference_result, inference_params)
     }
 
     async fn validate(
@@ -748,7 +763,7 @@ fn map_evaluator_to_actual_index(evaluator_idx: usize, skipped_indices: &[usize]
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, sync::Arc};
 
     use reqwest::Client;
     use uuid::Uuid;
@@ -1249,7 +1264,7 @@ mod tests {
         let function = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::from([(
                 "best_of_n_1".into(),
-                VariantInfo {
+                Arc::new(VariantInfo {
                     inner: VariantConfig::BestOfNSampling(BestOfNSamplingConfig {
                         candidates: vec![],
                         weight: None,
@@ -1259,7 +1274,7 @@ mod tests {
                         },
                     }),
                     timeouts: Default::default(),
-                },
+                }),
             )]),
             ..Default::default()
         });

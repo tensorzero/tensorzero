@@ -54,6 +54,7 @@ pub async fn inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        ..
     }): AppState,
     headers: HeaderMap,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
@@ -338,9 +339,9 @@ enum OpenAICompatibleFinishReason {
 impl From<FinishReason> for OpenAICompatibleFinishReason {
     fn from(finish_reason: FinishReason) -> Self {
         match finish_reason {
-            FinishReason::Stop |
-            FinishReason::StopSequence |
-            FinishReason::Unknown => OpenAICompatibleFinishReason::Stop, // OpenAI doesn't have an unknown finish reason so we coerce
+            FinishReason::Stop | FinishReason::StopSequence | FinishReason::Unknown => {
+                OpenAICompatibleFinishReason::Stop
+            } // OpenAI doesn't have an unknown finish reason so we coerce
             FinishReason::Length => OpenAICompatibleFinishReason::Length,
             FinishReason::ContentFilter => OpenAICompatibleFinishReason::ContentFilter,
             FinishReason::ToolCall => OpenAICompatibleFinishReason::ToolCalls,

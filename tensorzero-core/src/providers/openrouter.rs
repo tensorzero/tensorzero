@@ -102,8 +102,7 @@ impl TryFrom<Credential> for OpenRouterCredentials {
         match credentials {
             Credential::Static(key) => Ok(OpenRouterCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(OpenRouterCredentials::Dynamic(key_name)),
-            Credential::Missing |
-            Credential::None => Ok(OpenRouterCredentials::None),
+            Credential::Missing | Credential::None => Ok(OpenRouterCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for OpenRouter provider".to_string(),
             })),
@@ -1116,8 +1115,9 @@ impl From<OpenRouterFinishReason> for FinishReason {
             OpenRouterFinishReason::ContentFilter => FinishReason::ContentFilter,
             OpenRouterFinishReason::Length => FinishReason::Length,
             OpenRouterFinishReason::Stop => FinishReason::Stop,
-            OpenRouterFinishReason::FunctionCall |
-            OpenRouterFinishReason::ToolCalls => FinishReason::ToolCall,
+            OpenRouterFinishReason::FunctionCall | OpenRouterFinishReason::ToolCalls => {
+                FinishReason::ToolCall
+            }
             OpenRouterFinishReason::Unknown => FinishReason::Unknown,
         }
     }

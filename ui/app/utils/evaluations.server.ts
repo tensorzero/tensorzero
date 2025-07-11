@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
-import { getConfigPath } from "./config/index.server";
 import {
   EvaluationErrorSchema,
   type DisplayEvaluationError,
@@ -13,6 +12,9 @@ import { getEnv } from "./env.server";
  */
 function getEvaluationsPath(): string {
   return getEnv().TENSORZERO_EVALUATIONS_PATH || "evaluations";
+}
+function getConfigPath(): string {
+  return getEnv().TENSORZERO_UI_CONFIG_PATH;
 }
 
 export type InferenceCacheSetting = "on" | "off" | "read_only" | "write_only";

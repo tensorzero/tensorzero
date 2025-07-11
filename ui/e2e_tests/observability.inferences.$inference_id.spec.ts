@@ -336,3 +336,51 @@ test("should be able to add chat demonstration feedback via the inference page",
   // Assert that the feedback value is visible in its table cell
   await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
 });
+
+test("should be able to add a datapoint from the inference page", async ({
+  page,
+}) => {
+  // NOTE: this datapoint has auxiliary_content as "" so was failing to insert into dataset
+  // We want to make sure that we can add it to a dataset now that we've fixed that issue.
+  await page.goto(
+    "/observability/inferences/0196368f-1ae8-7551-b5df-9a61593eb307",
+  );
+  // Generate a dataset name
+  const datasetName =
+    "test_json_dataset_" + Math.random().toString(36).substring(2, 15);
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+  // Click on the Add to dataset button
+  await page.getByText("Add to dataset").click();
+
+  // Wait for the dropdown to appear
+  await page.waitForTimeout(500);
+
+  // Find the CommandInput by its placeholder text
+  const commandInput = page.getByPlaceholder("Create or find dataset...");
+  await commandInput.waitFor({ state: "visible" });
+  await commandInput.fill(datasetName);
+
+  // Wait a moment for the filtered results to appear
+  await page.waitForTimeout(500);
+
+  // Click on the CommandItem that contains the dataset name
+  // Using a more flexible selector that looks for text containing "Create"
+  const createOption = page
+    .locator("[cmdk-item]")
+    .filter({ hasText: "Create" });
+  await createOption.click();
+
+  // Click on the "Inference Output" button
+  await page.getByText("Inference Output").click();
+
+  // Wait for navigation to the new page
+  await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
+    timeout: 5000,
+  });
+
+  // Assert that the page URL starts with /datasets/test_json_dataset/datapoint/
+  await expect(page.url()).toMatch(
+    new RegExp(`/datasets/${datasetName}/datapoint/.*`),
+  );
+});

@@ -1,6 +1,9 @@
-use crate::{optimization_test_case, OptimizationTestCase};
+use crate::{
+    embedded_workflow_test_case, http_workflow_test_case, optimization_test_case,
+    OptimizationTestCase,
+};
 use tensorzero_core::optimization::{
-    openai_sft::UninitializedOpenAISFTConfig, OptimizerInfo, UninitializedOptimizerConfig,
+    openai_sft::UninitializedOpenAISFTConfig, UninitializedOptimizerConfig,
     UninitializedOptimizerInfo,
 };
 
@@ -15,7 +18,7 @@ impl OptimizationTestCase for OpenAISFTTestCase {
         true
     }
 
-    fn get_optimizer_info(&self) -> OptimizerInfo {
+    fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
         UninitializedOptimizerInfo {
             inner: UninitializedOptimizerConfig::OpenAISFT(UninitializedOpenAISFTConfig {
                 // This is the only model that supports images
@@ -26,12 +29,16 @@ impl OptimizationTestCase for OpenAISFTTestCase {
                 credentials: None,
                 seed: None,
                 suffix: None,
-                api_base: None,
+                api_base: if use_mock_inference_provider {
+                    Some("http://localhost:3030/openai/".parse().unwrap())
+                } else {
+                    None
+                },
             }),
         }
-        .load()
-        .expect("Failed to create OpenAISFT optimizer info")
     }
 }
 
 optimization_test_case!(openai_sft, OpenAISFTTestCase());
+embedded_workflow_test_case!(openai_sft, OpenAISFTTestCase());
+http_workflow_test_case!(openai_sft, OpenAISFTTestCase());

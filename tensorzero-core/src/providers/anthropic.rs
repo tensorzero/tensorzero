@@ -428,8 +428,7 @@ impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
                 name,
                 disable_parallel_tool_use,
             }),
-            ToolChoice::Auto |
-            ToolChoice::None => Ok(AnthropicToolChoice::Auto {
+            ToolChoice::Auto | ToolChoice::None => Ok(AnthropicToolChoice::Auto {
                 disable_parallel_tool_use,
             }),
         }

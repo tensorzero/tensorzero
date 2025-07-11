@@ -7,6 +7,7 @@ import {
   type JSONValue,
 } from "~/utils/tensorzero";
 import { getEnv } from "./env.server";
+import { getFeedbackConfig } from "./config/feedback";
 
 let _tensorZeroClient: TensorZeroClient | undefined;
 
@@ -27,13 +28,13 @@ export async function addHumanFeedback(formData: FormData) {
     );
   }
   const config = await getConfig();
-  const metric = config.metrics[metricName];
-  if (!metric) {
+  const metricConfig = getFeedbackConfig(metricName, config);
+  if (!metricConfig) {
     throw new TensorZeroServerError.UnknownMetric(
       `Metric ${metricName} not found`,
     );
   }
-  const metricType = metric.type;
+  const metricType = metricConfig.type;
   // Metrics can be of type boolean, float, comment, or demonstration.
   // In this case we need to handle the value differently depending on the metric type.
   const formValue = formData.get("value");

@@ -11,7 +11,6 @@ services:
       - OPENAI_BASE_URL
       - FIREWORKS_BASE_URL
       - FIREWORKS_ACCOUNT_ID
-      - TENSORZERO_UI_FF_USE_NATIVE_SFT
     volumes:
       - ./config:/app/config:ro
     env_file:
@@ -19,3 +18,5 @@ services:
     ports:
       - "4000:4000"
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

@@ -401,6 +401,10 @@ impl UninitializedEvaluatorConfig {
                 let output_schema = StaticJSONSchema::from_value(&output_schema_value)?;
                 let implicit_tool_call_config =
                     create_implicit_tool_call_config(output_schema.clone());
+                let variants = variants
+                    .into_iter()
+                    .map(|(name, variant)| (name, Arc::new(variant)))
+                    .collect();
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     system_schema: None,

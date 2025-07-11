@@ -1,4 +1,6 @@
-use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
+use crate::serde_util::{
+    deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
+};
 use crate::tool::ToolCallInput;
 use derive_builder::Builder;
 use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
@@ -804,7 +806,7 @@ pub struct ChatInferenceDatabaseInsert {
     pub processing_time_ms: Option<u32>,
     pub ttft_ms: Option<u32>,
     pub tags: HashMap<String, String>,
-    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_defaulted_json_string")]
     pub extra_body: UnfilteredInferenceExtraBody,
 }
 
@@ -818,7 +820,9 @@ pub struct JsonInferenceDatabaseInsert {
     pub input: ResolvedInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: JsonInferenceOutput,
-    #[serde(deserialize_with = "deserialize_json_string")]
+    // We at one point wrote empty auxiliary content to the database as "" but now write it as []
+    // In either case, we want to deserialize it as [] if empty
+    #[serde(deserialize_with = "deserialize_defaulted_json_string")]
     pub auxiliary_content: Vec<ContentBlockOutput>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: InferenceParams,
@@ -826,7 +830,7 @@ pub struct JsonInferenceDatabaseInsert {
     pub output_schema: Value,
     pub ttft_ms: Option<u32>,
     pub tags: HashMap<String, String>,
-    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_defaulted_json_string")]
     pub extra_body: UnfilteredInferenceExtraBody,
 }
 
@@ -1814,8 +1818,7 @@ impl From<JsonMode> for ModelInferenceRequestJsonMode {
         match json_enforcement {
             JsonMode::On => ModelInferenceRequestJsonMode::On,
             JsonMode::Strict => ModelInferenceRequestJsonMode::Strict,
-            JsonMode::ImplicitTool |
-            JsonMode::Off => ModelInferenceRequestJsonMode::Off,
+            JsonMode::ImplicitTool | JsonMode::Off => ModelInferenceRequestJsonMode::Off,
         }
     }
 }

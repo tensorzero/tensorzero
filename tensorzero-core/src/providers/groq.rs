@@ -86,8 +86,7 @@ impl TryFrom<Credential> for GroqCredentials {
         match credentials {
             Credential::Static(key) => Ok(GroqCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(GroqCredentials::Dynamic(key_name)),
-            Credential::Missing |
-            Credential::None => Ok(GroqCredentials::None),
+            Credential::Missing | Credential::None => Ok(GroqCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Groq provider".to_string(),
             })),
@@ -1035,8 +1034,7 @@ impl From<GroqFinishReason> for FinishReason {
             GroqFinishReason::Stop => FinishReason::Stop,
             GroqFinishReason::Length => FinishReason::Length,
             GroqFinishReason::ContentFilter => FinishReason::ContentFilter,
-            GroqFinishReason::FunctionCall |
-            GroqFinishReason::ToolCalls => FinishReason::ToolCall,
+            GroqFinishReason::FunctionCall | GroqFinishReason::ToolCalls => FinishReason::ToolCall,
             GroqFinishReason::Unknown => FinishReason::Unknown,
         }
     }

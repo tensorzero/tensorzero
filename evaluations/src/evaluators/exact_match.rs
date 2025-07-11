@@ -107,6 +107,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: false,
         });
         let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
             inference_id: Uuid::now_v7(),
@@ -165,6 +166,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, None);
@@ -204,6 +206,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let inference_response = InferenceResponse::Json(JsonInferenceResponse {
             inference_id: Uuid::now_v7(),
@@ -271,6 +274,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, None);
@@ -307,6 +311,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, None);

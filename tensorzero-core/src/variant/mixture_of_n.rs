@@ -39,7 +39,7 @@ use super::{
     InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant,
 };
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct MixtureOfNConfig {
@@ -64,7 +64,7 @@ fn default_timeout() -> f64 {
     300.0
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct FuserConfig {
@@ -154,40 +154,7 @@ impl Variant for MixtureOfNConfig {
         {
             // We get a NonStream result if we don't have fuser result (either the fuser failed, or it wasn't run at all due to only one candidate existing)
             InferenceOrStreamResult::NonStream(inference_result) => {
-                // Use the first model inference result to construct our top-level result (since we don't have a fuser result)
-                let model_inference_result = inference_result
-                    .model_inference_results()
-                    .first()
-                    .ok_or_else(|| {
-                        Error::new(ErrorDetails::Inference {
-                            message: format!(
-                                "Expected one candidate but found none. {IMPOSSIBLE_ERROR_MESSAGE}"
-                            ),
-                        })
-                    })?;
-                // Copy the actual usage from the model inference result (without considering cached)
-                // We set the 'cached' flag on the 'ModelUsedInfo, which will adjust the usage as needed when producing
-                // the HTTP response stream.
-                let usage = model_inference_result.usage;
-                let model_used_info = ModelUsedInfo {
-                    model_name: model_inference_result.model_name.clone(),
-                    model_provider_name: model_inference_result.model_provider_name.clone(),
-                    raw_request: model_inference_result.raw_request.clone(),
-                    inference_params: inference_params.clone(),
-                    // Preserve the raw response from the candidate we chose (rather than attempting
-                    // to concatenate the raw_response from the chunks in our fake stream)
-                    raw_response: Some(model_inference_result.raw_response.clone()),
-                    // Preserve any other model inference results (we already processed the first one),
-                    // in case we're doing something like chained best-of-n/mixture-of-n variants.
-                    previous_model_inference_results: inference_result.model_inference_results()
-                        [1..]
-                        .to_vec(),
-                    system: model_inference_result.system.clone(),
-                    input_messages: model_inference_result.input_messages.clone(),
-                    cached: model_inference_result.cached,
-                };
-                let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
-                Ok((stream, model_used_info))
+                stream_inference_from_non_stream(inference_result, inference_params)
             }
             InferenceOrStreamResult::Stream(stream, model_used_info) => {
                 Ok((stream, model_used_info))
@@ -275,6 +242,49 @@ enum InferenceOrStreamResult {
     /// We only produce `InferenceOrStreamResult::Stream` if the user requested a streaming inference,
     /// and the fuser successfully starts a stream.
     Stream(InferenceResultStream, ModelUsedInfo),
+}
+
+/// Constructs an `infer_stream` response `(InferenceResultStream, ModelUsedInfo)`,
+/// built from the information contained in the `InferenceResult`.
+/// Each content block in the `InferenceResult` is converted into a chunk in the `InferenceResultStream`.
+/// This is used by `best_of_n` and `mixture_of_n` when the user requests a stream response,
+/// but our candidate/judge has a non-streaming response.
+pub fn stream_inference_from_non_stream(
+    inference_result: InferenceResult,
+    inference_params: InferenceParams,
+) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
+    // Use the first model inference result to construct our top-level result (since we don't have a fuser/judge result)
+    let model_inference_result = inference_result
+        .model_inference_results()
+        .first()
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::Inference {
+                message: format!(
+                    "Expected one candidate but found none. {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
+            })
+        })?;
+    // Copy the actual usage from the model inference result (without considering cached)
+    // We set the 'cached' flag on the 'ModelUsedInfo, which will adjust the usage as needed when producing
+    // the HTTP response stream.
+    let usage = model_inference_result.usage;
+    let model_used_info = ModelUsedInfo {
+        model_name: model_inference_result.model_name.clone(),
+        model_provider_name: model_inference_result.model_provider_name.clone(),
+        raw_request: model_inference_result.raw_request.clone(),
+        inference_params: inference_params.clone(),
+        // Preserve the raw response from the candidate we chose (rather than attempting
+        // to concatenate the raw_response from the chunks in our fake stream)
+        raw_response: Some(model_inference_result.raw_response.clone()),
+        // Preserve any other model inference results (we already processed the first one),
+        // in case we're doing something like chained best-of-n/mixture-of-n variants.
+        previous_model_inference_results: inference_result.model_inference_results()[1..].to_vec(),
+        system: model_inference_result.system.clone(),
+        input_messages: model_inference_result.input_messages.clone(),
+        cached: model_inference_result.cached,
+    };
+    let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
+    Ok((stream, model_used_info))
 }
 
 fn make_stream_from_non_stream(

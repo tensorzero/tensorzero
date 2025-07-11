@@ -496,8 +496,8 @@ fn bedrock_to_tensorzero_stream_message(
                 .into()),
             }
         }
-        ConverseStreamOutputType::ContentBlockStop(_) |
-        ConverseStreamOutputType::MessageStart(_) => Ok(None),
+        ConverseStreamOutputType::ContentBlockStop(_)
+        | ConverseStreamOutputType::MessageStart(_) => Ok(None),
         ConverseStreamOutputType::MessageStop(message_stop) => {
             let raw_message = serialize_aws_bedrock_struct(&message_stop)?;
             Ok(Some(ProviderInferenceResponseChunk::new(
@@ -781,8 +781,9 @@ struct ConverseOutputWithMetadata<'a> {
 
 fn aws_stop_reason_to_tensorzero_finish_reason(stop_reason: StopReason) -> Option<FinishReason> {
     match stop_reason {
-        StopReason::ContentFiltered |
-        StopReason::GuardrailIntervened => Some(FinishReason::ContentFilter),
+        StopReason::ContentFiltered | StopReason::GuardrailIntervened => {
+            Some(FinishReason::ContentFilter)
+        }
         StopReason::EndTurn => Some(FinishReason::Stop),
         StopReason::MaxTokens => Some(FinishReason::Length),
         StopReason::StopSequence => Some(FinishReason::StopSequence),

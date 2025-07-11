@@ -140,8 +140,7 @@ impl TryFrom<Credential> for OpenAICredentials {
         match credentials {
             Credential::Static(key) => Ok(OpenAICredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(OpenAICredentials::Dynamic(key_name)),
-            Credential::Missing |
-            Credential::None => Ok(OpenAICredentials::None),
+            Credential::Missing | Credential::None => Ok(OpenAICredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for OpenAI provider".to_string(),
             })),
@@ -1089,8 +1088,7 @@ impl OpenAIRequestMessage<'_> {
                 content,
                 tool_calls,
             }) => content.is_none() && tool_calls.is_none(),
-            OpenAIRequestMessage::System(_) |
-            OpenAIRequestMessage::Tool(_) => false,
+            OpenAIRequestMessage::System(_) | OpenAIRequestMessage::Tool(_) => false,
         }
     }
     pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
@@ -1830,8 +1828,9 @@ impl From<OpenAIFinishReason> for FinishReason {
             OpenAIFinishReason::ContentFilter => FinishReason::ContentFilter,
             OpenAIFinishReason::Length => FinishReason::Length,
             OpenAIFinishReason::Stop => FinishReason::Stop,
-            OpenAIFinishReason::FunctionCall |
-            OpenAIFinishReason::ToolCalls => FinishReason::ToolCall,
+            OpenAIFinishReason::FunctionCall | OpenAIFinishReason::ToolCalls => {
+                FinishReason::ToolCall
+            }
             OpenAIFinishReason::Unknown => FinishReason::Unknown,
         }
     }

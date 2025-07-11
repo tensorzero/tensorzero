@@ -2116,15 +2116,15 @@ impl From<GCPVertexGeminiFinishReason> for FinishReason {
         match finish_reason {
             GCPVertexGeminiFinishReason::Stop => FinishReason::Stop,
             GCPVertexGeminiFinishReason::MaxTokens => FinishReason::Length,
-            GCPVertexGeminiFinishReason::Blocklist |
-            GCPVertexGeminiFinishReason::ProhibitedContent |
-            GCPVertexGeminiFinishReason::Safety |
-            GCPVertexGeminiFinishReason::Spii => FinishReason::ContentFilter,
-            GCPVertexGeminiFinishReason::MalformedFunctionCall |
-            GCPVertexGeminiFinishReason::Recitation => FinishReason::ToolCall,
-            GCPVertexGeminiFinishReason::FinishReasonUnspecified |
-            GCPVertexGeminiFinishReason::Other |
-            GCPVertexGeminiFinishReason::Unknown => FinishReason::Unknown,
+            GCPVertexGeminiFinishReason::Blocklist
+            | GCPVertexGeminiFinishReason::ProhibitedContent
+            | GCPVertexGeminiFinishReason::Safety
+            | GCPVertexGeminiFinishReason::Spii => FinishReason::ContentFilter,
+            GCPVertexGeminiFinishReason::MalformedFunctionCall
+            | GCPVertexGeminiFinishReason::Recitation => FinishReason::ToolCall,
+            GCPVertexGeminiFinishReason::FinishReasonUnspecified
+            | GCPVertexGeminiFinishReason::Other
+            | GCPVertexGeminiFinishReason::Unknown => FinishReason::Unknown,
         }
     }
 }

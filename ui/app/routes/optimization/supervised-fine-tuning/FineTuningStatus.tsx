@@ -7,7 +7,6 @@
 import { ExternalLink } from "lucide-react";
 import { Calendar, Function } from "~/components/icons/Icons";
 import type { SFTJobStatus } from "~/utils/supervised_fine_tuning/common";
-import { SFTAnalysis } from "./SFTAnalysis";
 import { extractTimestampFromUUIDv7 } from "~/utils/common";
 import { RawDataAccordion } from "./RawDataAccordion";
 import { ProgressIndicator } from "./ProgressIndicator";
@@ -23,11 +22,14 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
+import { SFTResult } from "./SFTResult";
 
 export default function LLMFineTuningStatus({
   status,
+  result,
 }: {
   status: SFTJobStatus;
+  result: string | null;
 }) {
   if (status.status === "idle") return null;
   const createdAt = extractTimestampFromUUIDv7(status.formData.jobId);
@@ -97,6 +99,7 @@ export default function LLMFineTuningStatus({
             </div>
           </SectionLayout>
         )}
+      <SFTResult finalResult={result} />
 
       <SectionLayout>
         <a
@@ -110,11 +113,6 @@ export default function LLMFineTuningStatus({
         </a>
 
         <RawDataAccordion rawData={status.rawData} />
-      </SectionLayout>
-
-      <SectionLayout>
-        <SectionHeader heading="Dataset analysis" />
-        <SFTAnalysis status={status} />
       </SectionLayout>
     </SectionsGroup>
   );

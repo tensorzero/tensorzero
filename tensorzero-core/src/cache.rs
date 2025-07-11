@@ -48,11 +48,13 @@ pub struct CacheParamsOptions {
 impl From<(CacheParamsOptions, bool)> for CacheOptions {
     fn from((options, dryrun): (CacheParamsOptions, bool)) -> Self {
         let enabled = match (options.enabled, dryrun) {
-            (CacheEnabledMode::ReadOnly, _) |
-            (CacheEnabledMode::On, true) => CacheEnabledMode::ReadOnly,
+            (CacheEnabledMode::ReadOnly, _) | (CacheEnabledMode::On, true) => {
+                CacheEnabledMode::ReadOnly
+            }
             (CacheEnabledMode::On, false) => CacheEnabledMode::On,
-            (CacheEnabledMode::Off, _) |
-            (CacheEnabledMode::WriteOnly, true) => CacheEnabledMode::Off,
+            (CacheEnabledMode::Off, _) | (CacheEnabledMode::WriteOnly, true) => {
+                CacheEnabledMode::Off
+            }
             (CacheEnabledMode::WriteOnly, false) => CacheEnabledMode::WriteOnly,
         };
         Self {
@@ -442,10 +444,10 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
     let result = clickhouse_connection_info
         .run_query_synchronous(query.to_string(), &query_params)
         .await?;
-    if result.is_empty() {
+    if result.response.is_empty() {
         return Ok(None);
     }
-    let result: CacheData<T> = serde_json::from_str(&result).map_err(|e| {
+    let result: CacheData<T> = serde_json::from_str(&result.response).map_err(|e| {
         Error::new(ErrorDetails::Cache {
             message: format!("Failed to deserialize output: {e}"),
         })

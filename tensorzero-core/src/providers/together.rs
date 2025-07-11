@@ -459,10 +459,10 @@ impl From<TogetherFinishReason> for FinishReason {
     fn from(finish_reason: TogetherFinishReason) -> Self {
         match finish_reason {
             TogetherFinishReason::Length => FinishReason::Length,
-            TogetherFinishReason::Eos |
-            TogetherFinishReason::Stop => FinishReason::Stop,
-            TogetherFinishReason::ToolCalls |
-            TogetherFinishReason::FunctionCall => FinishReason::ToolCall,
+            TogetherFinishReason::Eos | TogetherFinishReason::Stop => FinishReason::Stop,
+            TogetherFinishReason::ToolCalls | TogetherFinishReason::FunctionCall => {
+                FinishReason::ToolCall
+            }
             TogetherFinishReason::Unknown => FinishReason::Unknown,
         }
     }
