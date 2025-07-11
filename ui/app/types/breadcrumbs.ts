@@ -2,6 +2,8 @@ import type { UIMatch } from "react-router";
 
 declare module "react-router" {
   interface RouteHandle {
+    /** Should the page be wrapped in common wrapper with border & breadcrumbs? */
+    excludeContentWrapper?: boolean;
     /** Should it hide breadcrumbs for this route? */
     hideBreadcrumbs?: boolean;
     /** Append 0, 1 or more breadcrumbs given current segment. Used to hierarchically generate page title. */

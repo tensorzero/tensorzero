@@ -16,6 +16,7 @@ import { SidebarProvider } from "./components/ui/sidebar";
 import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
 import { ReactQueryProvider } from "./providers/react-query";
+import { useGeneratedPageTitle } from "./hooks/use-breadcrumbs";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -35,6 +36,7 @@ export const links: Route.LinksFunction = () => [
   },
 ];
 
+// TODO Does this block all other loaders...?
 export async function loader() {
   // Initialize evaluation cleanup when the app loads
   startPeriodicCleanup();
@@ -61,19 +63,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App({ loaderData: config }: Route.ComponentProps) {
+  const pageTitle = useGeneratedPageTitle();
   return (
-    <ReactQueryProvider>
-      <ConfigProvider value={config}>
-        <SidebarProvider>
-          <div className="fixed inset-0 flex">
-            <AppSidebar />
-            <ContentLayout>
-              <Outlet />
-            </ContentLayout>
-          </div>
-        </SidebarProvider>
-      </ConfigProvider>
-    </ReactQueryProvider>
+    <>
+      <title>{pageTitle}</title>
+      <ReactQueryProvider>
+        <ConfigProvider value={config}>
+          <SidebarProvider>
+            <div className="fixed inset-0 flex">
+              <AppSidebar />
+              <ContentLayout>
+                <Outlet />
+              </ContentLayout>
+            </div>
+          </SidebarProvider>
+        </ConfigProvider>
+      </ReactQueryProvider>
+    </>
   );
 }
 
