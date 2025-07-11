@@ -26,7 +26,7 @@ clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --
 # If TENSORZERO_SKIP_LARGE_FIXTURES equals 1, exit
 if [ "${TENSORZERO_SKIP_LARGE_FIXTURES:-}" = "1" ]; then
     echo "TENSORZERO_SKIP_LARGE_FIXTURES is set to 1 - exiting without loading large fixtures"
-    touch /tmp/load_complete.marker
+    touch /load_complete.marker
     exit 0
 fi
 
