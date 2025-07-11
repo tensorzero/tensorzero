@@ -145,24 +145,23 @@ impl UninitializedGCPVertexGeminiSFTConfig {
         })
     }
 
-    /// Initialize the GCPVertexGeminiSFTConfig. All parameters are optional except for `model`.
+    /// Initialize the GCPVertexGeminiSFTConfig. All parameters are optional except for `model`, `bucket_name`, `project_id`, and `region`.
     ///
     /// :param model: The model to use for the fine-tuning job.
+    /// :param bucket_name: The GCS bucket name to store training data.
+    /// :param project_id: The GCP project ID where the fine-tuning job will run.
+    /// :param region: The GCP region where the fine-tuning job will run.
     /// :param learning_rate_multiplier: The learning rate multiplier to use for the fine-tuning job.
     /// :param adapter_size: The adapter size to use for the fine-tuning job.
     /// :param n_epochs: The number of epochs to use for the fine-tuning job.
     /// :param export_last_checkpoint_only: Whether to export the last checkpoint only.
-    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::OPENAI_API_KEY". See docs for more details.
-    /// :param credential_location: The location of the credentials to use for the fine-tuning job.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::GCP_VERTEX_CREDENTIALS_PATH". See docs for more details.
     /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
     /// :param seed: The seed to use for the fine-tuning job.
     /// :param service_account: The service account to use for the fine-tuning job.
     /// :param kms_key_name: The KMS key name to use for the fine-tuning job.
     /// :param tuned_model_display_name: The display name to use for the fine-tuning job.
-    /// :param bucket_name: The bucket name to use for the fine-tuning job.
     /// :param bucket_path_prefix: The bucket path prefix to use for the fine-tuning job.
-    /// :param project_id: The project ID to use for the fine-tuning job.
-    /// :param region: The region to use for the fine-tuning job.
     #[expect(unused_variables, clippy::too_many_arguments)]
     #[pyo3(signature = (*, model, bucket_name, project_id, region, learning_rate_multiplier=None, adapter_size=None, n_epochs=None, export_last_checkpoint_only=None, credentials=None, api_base=None, seed=None, service_account=None, kms_key_name=None, tuned_model_display_name=None, bucket_path_prefix=None))]
     fn __init__(
@@ -303,16 +302,16 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             export_last_checkpoint_only: self.export_last_checkpoint_only,
         };
 
-        let encryption_spec = EncryptionSpec {
-            kms_key_name: self.kms_key_name.clone(),
-        };
+        let encryption_spec = self.kms_key_name.as_ref().map(|kms_key| EncryptionSpec {
+            kms_key_name: Some(kms_key.clone()),
+        });
 
         let body = GCPVertexGeminiFineTuningRequest {
             base_model: self.model.clone(),
             supervised_tuning_spec,
             tuned_model_display_name: self.tuned_model_display_name.clone(),
             service_account: self.service_account.clone(),
-            encryption_spec: Some(encryption_spec),
+            encryption_spec,
         };
 
         let url = gcp_vertex_gemini_base_url(&self.project_id, &self.region).map_err(|e| {
@@ -337,7 +336,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             Error::new(ErrorDetails::InferenceClient {
                 status_code: e.status(),
                 message: format!(
-                    "Error sending request to OpenAI: {}",
+                    "Error sending request to GCP Vertex Gemini: {}",
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
