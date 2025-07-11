@@ -40,7 +40,7 @@ pub trait OptimizationTestCase {
     fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo;
 }
 
-#[allow(dead_code)]
+#[allow(clippy::allow_attributes, dead_code)]
 pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let optimizer_info = test_case
         .get_optimizer_info(use_mock_inference_provider())
@@ -126,7 +126,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
 }
 
 /// Runs launch_optimization_workflow and then polls for the workflow using the Rust client
-#[allow(dead_code)]
+#[allow(clippy::allow_attributes, dead_code)]
 pub async fn run_workflow_test_case_with_tensorzero_client(
     test_case: &impl OptimizationTestCase,
     client: &tensorzero::Client,
@@ -350,7 +350,7 @@ fn generate_image_example() -> RenderedSample {
     }
 }
 
-#[allow(dead_code)]
+#[allow(clippy::allow_attributes, dead_code)]
 pub async fn make_embedded_gateway() -> Client {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
@@ -365,7 +365,7 @@ pub async fn make_embedded_gateway() -> Client {
     .unwrap()
 }
 
-#[allow(dead_code)]
+#[allow(clippy::allow_attributes, dead_code)]
 pub async fn make_http_gateway() -> Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
         url: "http://localhost:3000".parse().unwrap(),
