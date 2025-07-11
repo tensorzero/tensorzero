@@ -57,12 +57,15 @@ use super::openai::convert_stream_error;
 const PROVIDER_NAME: &str = "GCP Vertex Anthropic";
 const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct GCPVertexAnthropicProvider {
     model_id: String,
     request_url: String,
     streaming_request_url: String,
     audience: String,
+    #[serde(skip)]
     credentials: GCPVertexCredentials,
 }
 

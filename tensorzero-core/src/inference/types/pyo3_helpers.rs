@@ -4,11 +4,18 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::types::{IntoPyDict, PyDict};
 use pyo3::{intern, prelude::*};
 use pyo3::{sync::GILOnceCell, types::PyModule, Bound, Py, PyAny, PyErr, PyResult, Python};
+use serde::Deserialize;
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::inference::types::{ContentBlockChatOutput, ResolvedInputMessageContent};
-use crate::stored_inference::StoredInference;
+use crate::endpoints::datasets::Datapoint;
+use crate::inference::types::{ContentBlockChatOutput, ResolvedInput, ResolvedInputMessageContent};
+use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
+use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
+use crate::optimization::UninitializedOptimizerConfig;
+use crate::stored_inference::{
+    RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredSample,
+};
 
 use super::ContentBlock;
 
@@ -273,23 +280,89 @@ pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> Py
         .call1(py, (json_str.into_pyobject(py)?,))
 }
 
-/// In the `render_inferences` function, we need to be able to accept both
-/// StoredInference objects passed in from the output of the `list_inferences` function
-/// and arbitrary Python objects that match the serialization pattern of the `StoredInference`
+/// In the `render_samples` function, we need to be able to accept both
+/// impl StoredSample objects passed in from the output of the `list_inferences` and `list_datapoints` functions
+/// and arbitrary Python objects that match the serialization pattern of the `StoredSample`
 /// type.
 /// This is necessary since developers might construct data for rendering by hand.
-/// In order to support this, we first check if the object is a `StoredInference` object.
+/// In order to support this, we first check if the object is a `StoredSample` object.
 /// If it is, we return it directly.
 /// If it is not, we assume it is a Python object that matches the serialization pattern of the
-/// `StoredInference` type and deserialize it (and throw an error if it doesn't match).
-pub fn deserialize_from_stored_inference<'a>(
+/// `StoredSample` type and deserialize it (and throw an error if it doesn't match).
+pub fn deserialize_from_stored_sample<'a>(
     py: Python<'a>,
     obj: &Bound<'a, PyAny>,
-) -> PyResult<StoredInference> {
+) -> PyResult<StoredSampleItem> {
     if obj.is_instance_of::<StoredInference>() {
-        obj.extract()
+        Ok(StoredSampleItem::StoredInference(obj.extract()?))
+    } else if obj.is_instance_of::<Datapoint>() {
+        Ok(StoredSampleItem::Datapoint(obj.extract()?))
     } else {
         deserialize_from_pyobj(py, obj)
+    }
+}
+
+/// In the `experimental_launch_optimization` function, we need to be able to accept
+/// either an arbitrary Python object that matches the serialization pattern of the
+/// `RenderedSample` type or a `RenderedSample` object.
+pub fn deserialize_from_rendered_sample<'a>(
+    py: Python<'a>,
+    obj: &Bound<'a, PyAny>,
+) -> PyResult<RenderedSample> {
+    if obj.is_instance_of::<RenderedSample>() {
+        Ok(obj.extract()?)
+    } else {
+        deserialize_from_pyobj(py, obj)
+    }
+}
+
+pub fn deserialize_optimization_config(
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<UninitializedOptimizerConfig> {
+    if obj.is_instance_of::<UninitializedOpenAISFTConfig>() {
+        Ok(UninitializedOptimizerConfig::OpenAISFT(obj.extract()?))
+    } else if obj.is_instance_of::<UninitializedFireworksSFTConfig>() {
+        Ok(UninitializedOptimizerConfig::FireworksSFT(obj.extract()?))
+    } else {
+        Err(PyValueError::new_err(
+            "Invalid optimization config. Expected OpenAISFTConfig or FireworksSFTConfig",
+        ))
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub enum StoredSampleItem {
+    StoredInference(StoredInference),
+    Datapoint(Datapoint),
+}
+
+impl StoredSample for StoredSampleItem {
+    fn function_name(&self) -> &str {
+        match self {
+            StoredSampleItem::StoredInference(inference) => inference.function_name(),
+            StoredSampleItem::Datapoint(datapoint) => datapoint.function_name(),
+        }
+    }
+
+    fn input(&self) -> &ResolvedInput {
+        match self {
+            StoredSampleItem::StoredInference(inference) => inference.input(),
+            StoredSampleItem::Datapoint(datapoint) => datapoint.input(),
+        }
+    }
+
+    fn input_mut(&mut self) -> &mut ResolvedInput {
+        match self {
+            StoredSampleItem::StoredInference(inference) => inference.input_mut(),
+            StoredSampleItem::Datapoint(datapoint) => datapoint.input_mut(),
+        }
+    }
+
+    fn owned_simple_info(self) -> SimpleStoredSampleInfo {
+        match self {
+            StoredSampleItem::StoredInference(inference) => inference.owned_simple_info(),
+            StoredSampleItem::Datapoint(datapoint) => datapoint.owned_simple_info(),
+        }
     }
 }
 

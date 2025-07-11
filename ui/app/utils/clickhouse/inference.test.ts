@@ -24,13 +24,23 @@ import type {
   JsonInferenceOutput,
   TextContent,
 } from "./common";
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 
 // Test countInferencesForFunction
 test("countInferencesForFunction returns correct counts", async () => {
   const jsonCount = await countInferencesForFunction("extract_entities", {
     type: "json",
     variants: {},
+    system_schema: null,
+    user_schema: null,
+    assistant_schema: null,
+    description: "",
+    output_schema: { value: {} },
+    implicit_tool_call_config: {
+      tools_available: [],
+      tool_choice: "none",
+      parallel_tool_calls: false,
+    },
   });
   expect(jsonCount).toBe(604);
 
@@ -40,6 +50,10 @@ test("countInferencesForFunction returns correct counts", async () => {
     tools: [],
     tool_choice: "none",
     parallel_tool_calls: false,
+    system_schema: null,
+    user_schema: null,
+    assistant_schema: null,
+    description: "",
   });
   expect(chatCount).toBe(804);
 });
@@ -48,7 +62,20 @@ test("countInferencesForFunction returns correct counts", async () => {
 test("countInferencesForVariant returns correct counts", async () => {
   const jsonCount = await countInferencesForVariant(
     "extract_entities",
-    { type: "json", variants: {} },
+    {
+      type: "json",
+      variants: {},
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
+      output_schema: { value: {} },
+      implicit_tool_call_config: {
+        tools_available: [],
+        tool_choice: "none",
+        parallel_tool_calls: false,
+      },
+    },
     "gpt4o_initial_prompt",
   );
   expect(jsonCount).toBe(132);
@@ -61,6 +88,10 @@ test("countInferencesForVariant returns correct counts", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
     },
     "initial_prompt_gpt4o_mini",
   );
@@ -569,7 +600,7 @@ describe("getAdjacentInferenceIds", () => {
   });
 
   test("returns null for previous inference id if current inference is first", async () => {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query:
         "SELECT uint_to_uuid(min(id_uint)) as first_inference_id FROM InferenceById",
       format: "JSON",
@@ -587,7 +618,7 @@ describe("getAdjacentInferenceIds", () => {
   });
 
   test("returns null for next inference id if current inference is last", async () => {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query:
         "SELECT uint_to_uuid(max(id_uint)) as last_inference_id FROM InferenceById",
       format: "JSON",
@@ -619,7 +650,7 @@ describe("getAdjacentEpisodeIds", () => {
   });
 
   test("returns null for previous episode id if current episode is first", async () => {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query:
         "SELECT uint_to_uuid(min(episode_id_uint)) as first_episode_id FROM InferenceByEpisodeId",
       format: "JSON",
@@ -638,7 +669,7 @@ describe("getAdjacentEpisodeIds", () => {
   });
 
   test("returns null for next episode id if current episode is last", async () => {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query:
         "SELECT uint_to_uuid(max(episode_id_uint)) as last_episode_id FROM InferenceByEpisodeId",
       format: "JSON",

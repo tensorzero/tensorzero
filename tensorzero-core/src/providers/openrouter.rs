@@ -55,9 +55,12 @@ fn default_api_key_location() -> CredentialLocation {
 const PROVIDER_NAME: &str = "OpenRouter";
 const PROVIDER_TYPE: &str = "openrouter";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct OpenRouterProvider {
     model_name: String,
+    #[serde(skip)]
     credentials: OpenRouterCredentials,
 }
 

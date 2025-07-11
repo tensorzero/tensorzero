@@ -66,13 +66,6 @@ repos:
         types: [rust]
         pass_filenames: false
 
-      - id: cargo-test-unit
-        name: cargo test-unit
-        entry: cargo test-unit
-        language: system
-        types: [rust]
-        pass_filenames: false
-
       - id: "prettier: ui"
         name: "prettier: ui"
         entry: bash -c 'pnpm --filter=tensorzero-ui run format'

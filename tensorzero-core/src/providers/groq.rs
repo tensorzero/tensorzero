@@ -39,9 +39,12 @@ fn default_api_key_location() -> CredentialLocation {
 const PROVIDER_NAME: &str = "Groq";
 const PROVIDER_TYPE: &str = "groq";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct GroqProvider {
     model_name: String,
+    #[serde(skip)]
     credentials: GroqCredentials,
 }
 

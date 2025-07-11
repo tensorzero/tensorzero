@@ -10,7 +10,7 @@ import {
 import FeedbackValue from "~/components/feedback/FeedbackValue";
 import { getMetricName } from "~/utils/clickhouse/helpers";
 import type { FeedbackRow } from "~/utils/clickhouse/feedback";
-import MetricBadges from "~/components/metric/MetricBadges";
+import FeedbackBadges from "~/components/feedback/FeedbackBadges";
 import { useConfig } from "~/context/config";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import { cn } from "~/utils/common";
@@ -96,10 +96,12 @@ export default function FeedbackTable({
 
                 <TableCell className="flex items-center gap-2">
                   <span className="font-mono">{getMetricName(item)}</span>
-                  <MetricBadges
-                    metric={metrics[getMetricName(item)]}
-                    row={item}
-                  />
+                  {metrics[getMetricName(item)] && (
+                    <FeedbackBadges
+                      metric={metrics[getMetricName(item)]!}
+                      row={item}
+                    />
+                  )}
                 </TableCell>
 
                 {anyOverwrites && (

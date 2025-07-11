@@ -8,6 +8,7 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import { logger } from "~/utils/logger";
 
 export async function loader() {
   const countsInfo = await countInferencesByFunction();
@@ -30,7 +31,7 @@ export default function FunctionsPage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

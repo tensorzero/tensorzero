@@ -18,7 +18,7 @@ import {
 } from "./datasets.server";
 import { expect, test, describe } from "vitest";
 import { v7 as uuid } from "uuid";
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 
 describe("countRowsForDataset", () => {
   test("returns the correct number of rows for a specific function", async () => {
@@ -450,6 +450,7 @@ describe("getDatapoint", () => {
       staled_at: null,
       updated_at: "2025-02-19T00:26:06Z",
       source_inference_id: null,
+      is_custom: false,
     });
   });
 
@@ -491,6 +492,7 @@ describe("getDatapoint", () => {
       updated_at: "2025-02-19T00:25:04Z",
       source_inference_id: null,
       tool_params: undefined,
+      is_custom: false,
     });
   });
 
@@ -540,6 +542,7 @@ describe("datapoint operations", () => {
       is_deleted: false,
       staled_at: null,
       source_inference_id,
+      is_custom: false,
     };
 
     // Test insertion
@@ -636,6 +639,7 @@ describe("datapoint operations", () => {
       is_deleted: false,
       staled_at: null,
       source_inference_id,
+      is_custom: false,
     };
 
     // Test insertion
@@ -724,6 +728,7 @@ describe("datapoint operations", () => {
       is_deleted: false,
       staled_at: null,
       source_inference_id,
+      is_custom: false,
     };
 
     // First insertion
@@ -899,6 +904,7 @@ describe("insertDatapoint", () => {
         is_deleted: false,
         staled_at: null,
         source_inference_id: null,
+        is_custom: true,
       }),
     ).rejects.toThrow();
   });
@@ -917,7 +923,7 @@ describe("getAdjacentDatapointIds", () => {
   });
 
   test("returns null for next_id if there is no next datapoint", async () => {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query: `SELECT uint_to_uuid(max(id_uint)) as id FROM
       ( SELECT toUInt128(id) as id_uint FROM ChatInferenceDatapoint WHERE dataset_name={dataset_name:String} AND staled_at IS NULL
        UNION ALL
@@ -938,7 +944,7 @@ describe("getAdjacentDatapointIds", () => {
   });
 
   test("returns null for previous_id if there is no previous datapoint", async () => {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query: `SELECT uint_to_uuid(min(id_uint)) as id FROM
       ( SELECT toUInt128(id) as id_uint FROM ChatInferenceDatapoint WHERE dataset_name={dataset_name:String} AND staled_at IS NULL
        UNION ALL

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Deref, sync::Arc};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     error::{Error, ErrorDetails},
@@ -22,9 +22,13 @@ lazy_static! {
     };
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+// TODO: investigate why derive(TS) doesn't work if we add bounds to BaseModelTable itself
+#[serde(bound(deserialize = "T: ShorthandModelConfig + Deserialize<'de>"))]
 #[serde(try_from = "HashMap<Arc<str>, T>")]
-pub struct BaseModelTable<T: ShorthandModelConfig>(HashMap<Arc<str>, T>);
+pub struct BaseModelTable<T>(HashMap<Arc<str>, T>);
 
 impl<T: ShorthandModelConfig> Default for BaseModelTable<T> {
     fn default() -> Self {

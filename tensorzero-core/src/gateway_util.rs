@@ -19,15 +19,21 @@ use crate::error::{Error, ErrorDetails};
 
 /// State for the API
 #[derive(Clone)]
+// `#[non_exhaustive]` only affects downstream crates, so we can't use it here
+#[expect(clippy::manual_non_exhaustive)]
 pub struct AppStateData {
-    pub config: Arc<Config<'static>>,
+    pub config: Arc<Config>,
     pub http_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
+    // Prevent `AppStateData` from being directly constructed outside of this module
+    // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
+    // which can ensure that we update global state.
+    _private: (),
 }
 pub type AppState = axum::extract::State<AppStateData>;
 
 impl AppStateData {
-    pub async fn new(config: Arc<Config<'static>>) -> Result<Self, Error> {
+    pub async fn new(config: Arc<Config>) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
             .ok()
             .or_else(|| {
@@ -39,7 +45,7 @@ impl AppStateData {
     }
 
     async fn new_with_clickhouse(
-        config: Arc<Config<'static>>,
+        config: Arc<Config>,
         clickhouse_url: Option<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
@@ -49,12 +55,38 @@ impl AppStateData {
             config,
             http_client,
             clickhouse_connection_info,
+            _private: (),
         })
+    }
+
+    pub fn new_with_clickhouse_and_http_client(
+        config: Arc<Config>,
+        clickhouse_connection_info: ClickHouseConnectionInfo,
+        http_client: Client,
+    ) -> Self {
+        Self {
+            config,
+            http_client,
+            clickhouse_connection_info,
+            _private: (),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn new_unit_test_data(config: Arc<Config>, clickhouse_healthy: bool) -> Self {
+        let http_client = reqwest::Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_mock(clickhouse_healthy);
+        AppStateData {
+            config,
+            http_client,
+            clickhouse_connection_info,
+            _private: (),
+        }
     }
 }
 
 pub async fn setup_clickhouse(
-    config: &Config<'static>,
+    config: &Config,
     clickhouse_url: Option<String>,
     embedded_client: bool,
 ) -> Result<ClickHouseConnectionInfo, Error> {

@@ -284,6 +284,8 @@ pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CachedProviderInferenceResponseChunk {
     pub content: Vec<ContentBlockChunk>,
+    #[serde(default)]
+    pub usage: Option<Usage>,
     pub raw_response: String,
 }
 
@@ -311,6 +313,7 @@ pub fn start_cache_write_streaming(
             .into_iter()
             .map(|c| CachedProviderInferenceResponseChunk {
                 content: c.content,
+                usage: c.usage,
                 raw_response: c.raw_response,
             })
             .collect(),
@@ -439,10 +442,10 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
     let result = clickhouse_connection_info
         .run_query_synchronous(query.to_string(), &query_params)
         .await?;
-    if result.is_empty() {
+    if result.response.is_empty() {
         return Ok(None);
     }
-    let result: CacheData<T> = serde_json::from_str(&result).map_err(|e| {
+    let result: CacheData<T> = serde_json::from_str(&result.response).map_err(|e| {
         Error::new(ErrorDetails::Cache {
             message: format!("Failed to deserialize output: {e}"),
         })

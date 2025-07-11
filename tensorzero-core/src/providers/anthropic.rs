@@ -56,9 +56,12 @@ fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("ANTHROPIC_API_KEY".to_string())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct AnthropicProvider {
     model_name: String,
+    #[serde(skip)]
     credentials: AnthropicCredentials,
 }
 

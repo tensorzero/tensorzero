@@ -10,6 +10,7 @@ use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::json;
 use tensorzero_core::clickhouse::migration_manager::migration_trait::Migration;
+use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tokio::runtime::Handle;
 use tracing_test::traced_test;
 use uuid::Uuid;
@@ -25,7 +26,9 @@ use tensorzero_core::clickhouse::migration_manager::migrations::migration_0009::
 use tensorzero_core::clickhouse::migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_core::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
 
-use tensorzero_core::clickhouse::migration_manager::{self, make_all_migrations};
+use tensorzero_core::clickhouse::migration_manager::{
+    self, make_all_migrations, MigrationRecordDatabaseInsert,
+};
 use tensorzero_core::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
 
@@ -159,6 +162,7 @@ async fn count_table_rows(clickhouse: &ClickHouseConnectionInfo, table: &str) ->
         .run_query_synchronous_no_params(format!("SELECT count(*) FROM {table}"))
         .await
         .unwrap()
+        .response
         .trim()
         .parse()
         .unwrap()
@@ -352,7 +356,8 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .await
         .unwrap();
 
-    let sample_chat_row_json = serde_json::from_str::<serde_json::Value>(&sample_chat_row).unwrap();
+    let sample_chat_row_json =
+        serde_json::from_str::<serde_json::Value>(&sample_chat_row.response).unwrap();
     let sample_chat_id = sample_chat_row_json["id_uint"].as_str().unwrap();
     let sample_chat_episode_id = sample_chat_row_json["episode_id_uint"].as_str().unwrap();
 
@@ -365,10 +370,10 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .await
         .unwrap();
 
-    println!("Matching chat by id: `{matching_chat_by_id}`");
+    println!("Matching chat by id: `{}`", matching_chat_by_id.response);
 
     let matching_chat_by_id_json =
-        serde_json::from_str::<serde_json::Value>(&matching_chat_by_id).unwrap();
+        serde_json::from_str::<serde_json::Value>(&matching_chat_by_id.response).unwrap();
     assert_eq!(
         matching_chat_by_id_json["episode_id_uint"]
             .as_str()
@@ -384,7 +389,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .unwrap();
 
     let matching_chat_by_episode_id_json =
-        serde_json::from_str::<serde_json::Value>(&matching_chat_by_episode_id).unwrap();
+        serde_json::from_str::<serde_json::Value>(&matching_chat_by_episode_id.response).unwrap();
     assert_eq!(
         matching_chat_by_episode_id_json["id_uint"]
             .as_str()
@@ -399,7 +404,8 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .await
         .unwrap();
 
-    let sample_json_row_json = serde_json::from_str::<serde_json::Value>(&sample_json_row).unwrap();
+    let sample_json_row_json =
+        serde_json::from_str::<serde_json::Value>(&sample_json_row.response).unwrap();
     let sample_json_id = sample_json_row_json["id_uint"].as_str().unwrap();
     let sample_json_episode_id = sample_json_row_json["episode_id_uint"].as_str().unwrap();
 
@@ -411,7 +417,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .unwrap();
 
     let matching_json_by_id_json =
-        serde_json::from_str::<serde_json::Value>(&matching_json_by_id).unwrap();
+        serde_json::from_str::<serde_json::Value>(&matching_json_by_id.response).unwrap();
     assert_eq!(
         matching_json_by_id_json["episode_id_uint"]
             .as_str()
@@ -427,7 +433,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .unwrap();
 
     let matching_json_by_episode_id_json =
-        serde_json::from_str::<serde_json::Value>(&matching_json_by_episode_id).unwrap();
+        serde_json::from_str::<serde_json::Value>(&matching_json_by_episode_id.response).unwrap();
     assert_eq!(
         matching_json_by_episode_id_json["id_uint"]
             .as_str()
@@ -465,7 +471,7 @@ async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bo
     for migration in &migrations[..=migration_num] {
         let name = migration.name();
         println!("Running migration: {name}");
-        migration_manager::run_migration(migration.as_ref(), false)
+        migration_manager::run_migration(&fresh_clickhouse, migration.as_ref(), false)
             .await
             .unwrap();
         // Migration0029 only runs if `StaticEvaluationHumanFeedbackFloatView` or `StaticEvaluationHumanFeedbackBooleanView`
@@ -494,7 +500,10 @@ async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bo
 invoke_all_separate_tests!(
     test_rollback_helper,
     test_rollback_up_to_migration_index_,
-    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+    [
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+        25, 26
+    ]
 );
 
 #[tokio::test(flavor = "multi_thread")]
@@ -506,7 +515,7 @@ async fn test_rollback_apply_rollback() {
     for migration in migrations {
         let name = migration.name();
         println!("Running migration: {name}");
-        migration_manager::run_migration(migration.as_ref(), false)
+        migration_manager::run_migration(&clickhouse, migration.as_ref(), false)
             .await
             .unwrap();
 
@@ -528,7 +537,7 @@ async fn test_rollback_apply_rollback() {
         }
 
         println!("Re-apply migration: {name}");
-        migration_manager::run_migration(migration.as_ref(), false)
+        migration_manager::run_migration(&clickhouse, migration.as_ref(), false)
             .await
             .unwrap();
         if should_succeed {
@@ -557,9 +566,10 @@ async fn test_clickhouse_migration_manager() {
         async move {
             // All of the previous migrations should have already been run
             for (i, migration) in migrations.iter().enumerate().take(migration_num) {
-                let clean_start = migration_manager::run_migration(migration.as_ref(), false)
-                    .await
-                    .unwrap();
+                let clean_start =
+                    migration_manager::run_migration(clickhouse, migration.as_ref(), false)
+                        .await
+                        .unwrap();
                 if i == 0 {
                     // We know that the first migration was run in a previous test, so clean start should be false
                     assert!(!clean_start);
@@ -577,6 +587,7 @@ async fn test_clickhouse_migration_manager() {
 
             let run_migration = || async {
                 migration_manager::run_migration(
+                    clickhouse,
                     migrations[migration_num].as_ref(),
                     initial_clean_start.get(),
                 )
@@ -630,12 +641,16 @@ async fn test_clickhouse_migration_manager() {
     };
 
     #[traced_test]
-    async fn run_all(migrations: &[Box<dyn Migration + Send + Sync + '_>]) {
+    async fn run_all(
+        clickhouse: &ClickHouseConnectionInfo,
+        migrations: &[Box<dyn Migration + Send + Sync + '_>],
+    ) {
         // Now, run all of the migrations, and verify that none of them apply
         for (i, migration) in migrations.iter().enumerate() {
-            let clean_start = migration_manager::run_migration(migration.as_ref(), true)
-                .await
-                .unwrap();
+            let clean_start =
+                migration_manager::run_migration(clickhouse, migration.as_ref(), true)
+                    .await
+                    .unwrap();
             if i == 0 {
                 // We know that the first migration was run in a previous test, so clean start should be false
                 assert!(!clean_start);
@@ -660,10 +675,63 @@ async fn test_clickhouse_migration_manager() {
         // for each element in the array.
         [
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24
+            24, 25, 26
         ]
     );
-    run_all(&migrations).await;
+    let rows = get_all_migration_records(&clickhouse).await;
+    println!("Rows: {rows:#?}");
+    // Migration0029 is currently skipped, because 'StaticEvaluationHumanFeedbackFloatView' is created
+    // by a banned migration
+    let expected_migrations = migrations
+        .iter()
+        .filter(|m| m.name() != "Migration0029")
+        .collect::<Vec<_>>();
+
+    // Check that we wrote out migration records for all migrations
+    assert_eq!(rows.len(), expected_migrations.len());
+    for (migration_record, migration) in rows.iter().zip(expected_migrations.iter()) {
+        let MigrationRecordDatabaseInsert {
+            migration_id,
+            migration_name,
+            gateway_version,
+            gateway_git_sha,
+            execution_time_ms,
+            applied_at,
+        } = migration_record;
+        assert_eq!(*migration_id, migration.migration_num().unwrap());
+        assert_eq!(*migration_name, migration.name());
+        assert_eq!(gateway_version, TENSORZERO_VERSION);
+        assert_eq!(
+            gateway_git_sha,
+            tensorzero_core::built_info::GIT_COMMIT_HASH.unwrap_or("unknown")
+        );
+        assert!(*execution_time_ms > 0);
+        assert!(applied_at.is_some());
+    }
+    run_all(&clickhouse, &migrations).await;
+    let new_rows = get_all_migration_records(&clickhouse).await;
+    // Since we've already ran all of the migrations, we shouldn't have written any new records
+
+    assert_eq!(new_rows, rows);
+}
+
+async fn get_all_migration_records(
+    clickhouse: &ClickHouseConnectionInfo,
+) -> Vec<MigrationRecordDatabaseInsert> {
+    let mut rows = Vec::new();
+    for row in clickhouse
+        .run_query_synchronous_no_params(
+            "SELECT * FROM TensorZeroMigration ORDER BY migration_id FORMAT JSONEachRow"
+                .to_string(),
+        )
+        .await
+        .unwrap()
+        .response
+        .lines()
+    {
+        rows.push(serde_json::from_str::<MigrationRecordDatabaseInsert>(row).unwrap());
+    }
+    rows
 }
 
 #[tokio::test]
@@ -687,6 +755,34 @@ async fn test_bad_clickhouse_write() {
 async fn test_clean_clickhouse_start() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
     migration_manager::run(&clickhouse).await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_deployment_id_oldest() {
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    migration_manager::run(&clickhouse).await.unwrap();
+    // Add a row to the DeploymentID table and make sure that it isn't returned
+    let new_deployment_id = "foo";
+    clickhouse
+        .write(
+            &[serde_json::json!({
+                "deployment_id": new_deployment_id,
+            })],
+            "DeploymentID",
+        )
+        .await
+        .unwrap();
+    // Run a query that gets the newest deployment ID but since it's final it shouldn't be foo
+    let deployment_id = clickhouse
+        .run_query_synchronous_no_params(
+            "SELECT deployment_id FROM DeploymentID FINAL ORDER BY created_at DESC LIMIT 1"
+                .to_string(),
+        )
+        .await
+        .unwrap()
+        .response;
+
+    assert_ne!(deployment_id, new_deployment_id);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -749,7 +845,7 @@ async fn test_migration_0013_old_table() {
 
     // Run migrations up to right before 0013
     for migration in migrations.iter() {
-        migration_manager::run_migration(migration.as_ref(), true)
+        migration_manager::run_migration(&clickhouse, migration.as_ref(), true)
             .await
             .unwrap();
     }
@@ -770,6 +866,7 @@ async fn test_migration_0013_old_table() {
         .await
         .unwrap();
     let err = migration_manager::run_migration(
+        &clickhouse,
         &Migration0013 {
             clickhouse: &clickhouse,
         },
@@ -826,7 +923,7 @@ async fn test_migration_0013_data_no_table() {
 
     // Run migrations up to right before 0013
     for migration in migrations.iter() {
-        migration_manager::run_migration(migration.as_ref(), true)
+        migration_manager::run_migration(&clickhouse, migration.as_ref(), true)
             .await
             .unwrap();
     }
@@ -842,6 +939,7 @@ async fn test_migration_0013_data_no_table() {
         .await
         .unwrap();
     let err = migration_manager::run_migration(
+        &clickhouse,
         &Migration0013 {
             clickhouse: &clickhouse,
         },

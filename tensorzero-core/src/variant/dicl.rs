@@ -40,7 +40,7 @@ use super::{
 /// We need a helper to deserialize the config because it relies on
 /// a path to a file for system instructions and we need to use the
 /// load() step to get the fully qualified path.
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct DiclConfig {
@@ -374,6 +374,7 @@ impl DiclConfig {
 
         // Parse each line into RawExample (since we will have some serialized JSON strings inside it)
         let raw_examples: Vec<RawExample> = result
+            .response
             .lines()
             .map(serde_json::from_str::<RawExample>)
             .collect::<Result<Vec<_>, _>>()
