@@ -6,7 +6,7 @@ import {
   type DatasetBuilderFormValues,
 } from "./types";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
-import { FunctionSelector } from "~/components/function/FunctionSelector";
+import { FunctionSelectorFormField } from "~/components/function/FunctionSelectorFormField";
 import { useConfig } from "~/context/config";
 import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
@@ -130,7 +130,7 @@ export function DatasetBuilderForm({
             dataset_counts={dataset_counts}
             setIsNewDataset={setIsNewDataset}
           />
-          <FunctionSelector<DatasetBuilderFormValues>
+          <FunctionSelectorFormField<DatasetBuilderFormValues>
             control={form.control}
             name="function"
             inferenceCount={counts.inferenceCount}
