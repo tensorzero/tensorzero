@@ -15,6 +15,13 @@ const meta: Meta<typeof CodeEditor> = {
       options: ["json", "markdown", "jinja2", "text"],
     },
   },
+  decorators: [
+    (Story) => (
+      <div className="max-w-md">
+        <Story />
+      </div>
+    ),
+  ],
 };
 
 export default meta;
