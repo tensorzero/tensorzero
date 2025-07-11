@@ -274,7 +274,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             highlightActiveLine: !readOnly,
             highlightActiveLineGutter: !readOnly,
           }}
-          className="max-h-64 min-h-8 overflow-auto"
+          className="min-h-8 overflow-auto"
         />
       </div>
     </div>
