@@ -28,6 +28,7 @@ required-features = ["optimization_tests"]
 [[test]]
 name = "optimization-mock"
 path = "tests/optimization/mock_tests.rs"
+required-features = ["e2e_tests"]
 
 [lints]
 workspace = true
