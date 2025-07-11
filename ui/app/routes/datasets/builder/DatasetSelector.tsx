@@ -32,8 +32,8 @@ export const DatasetCountResponse = z.object({
 const useDatasetCounts = () => {
   return useQuery({
     queryKey: ["DATASETS_COUNT"],
-    queryFn: async () => {
-      const response = await fetch("/api/datasets/counts");
+    queryFn: async ({ signal }) => {
+      const response = await fetch("/api/datasets/counts", { signal });
       const data = await response.json();
       const parsedData = DatasetCountResponse.parse(data);
       return parsedData.datasets;
