@@ -4,7 +4,6 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
 use async_trait::async_trait;
 
-
 /// This migration adds a `TensorZeroError` table and associated materialized views
 pub struct Migration0034<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
