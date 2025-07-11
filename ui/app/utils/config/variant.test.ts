@@ -1,4 +1,4 @@
-import { type ChatCompletionConfig } from "./variant";
+import type { ChatCompletionConfig } from "tensorzero-node";
 
 import { describe, it, expect } from "vitest";
 import { create_dump_variant_config } from "./variant.server";
@@ -6,13 +6,31 @@ import { create_dump_variant_config } from "./variant.server";
 describe("create_dump_variant_config", () => {
   it("should create correct variant config TOML with string templates", () => {
     const oldVariant: ChatCompletionConfig = {
-      type: "chat_completion" as const,
       weight: 1,
       model: "old-model",
       json_mode: "strict" as const,
       system_template: {
         path: "/templates/system.j2",
-        content: "This content should not appear in output",
+        contents: "This content should not appear in output",
+      },
+      user_template: null,
+      assistant_template: null,
+      temperature: 0.5,
+      top_p: 0.5,
+      max_tokens: 100,
+      presence_penalty: 0,
+      frequency_penalty: 0,
+      seed: 0,
+      retries: {
+        num_retries: 0,
+        max_delay_s: 0,
+      },
+      stop_sequences: [],
+      extra_body: {
+        data: [],
+      },
+      extra_headers: {
+        data: [],
       },
     };
 
@@ -29,21 +47,37 @@ describe("create_dump_variant_config", () => {
 
   it("should handle template objects and only serialize paths", () => {
     const oldVariant: ChatCompletionConfig = {
-      type: "chat_completion" as const,
       weight: 1,
       model: "old-model",
       json_mode: "strict" as const,
       system_template: {
         path: "/templates/system.j2",
-        content: "This content should not appear in output",
+        contents: "This content should not appear in output",
       },
       user_template: {
         path: "/templates/user.j2",
-        content: "This content should not appear in output",
+        contents: "This content should not appear in output",
       },
       assistant_template: {
         path: "/templates/assistant.j2",
-        content: "This content should not appear in output",
+        contents: "This content should not appear in output",
+      },
+      temperature: 0.5,
+      top_p: 0.5,
+      max_tokens: 100,
+      presence_penalty: 0,
+      frequency_penalty: 0,
+      seed: 0,
+      retries: {
+        num_retries: 0,
+        max_delay_s: 0,
+      },
+      stop_sequences: [],
+      extra_body: {
+        data: [],
+      },
+      extra_headers: {
+        data: [],
       },
     };
 

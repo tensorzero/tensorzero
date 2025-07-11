@@ -1,3 +1,8 @@
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+#[cfg(feature = "pyo3")]
+use pyo3::exceptions::PyValueError;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use tokio::try_join;
@@ -7,7 +12,7 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model::{build_creds_caching_default, CredentialLocation},
-    optimization::{JobHandle, Optimizer, OptimizerStatus},
+    optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::openai::{
         default_api_key_location,
         optimization::{
@@ -40,8 +45,9 @@ pub struct OpenAISFTConfig {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISFTConfig"))]
 pub struct UninitializedOpenAISFTConfig {
     pub model: String,
     pub batch_size: Option<usize>,
@@ -52,6 +58,83 @@ pub struct UninitializedOpenAISFTConfig {
     pub api_base: Option<Url>,
     pub seed: Option<u64>,
     pub suffix: Option<String>,
+}
+
+impl std::fmt::Display for UninitializedOpenAISFTConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl UninitializedOpenAISFTConfig {
+    // We allow too many arguments since it is a Python constructor
+    /// NOTE: This signature currently does not work:
+    /// print(OpenAISFTConfig.__init__.__text_signature__)
+    /// prints out signature:
+    /// ($self, /, *args, **kwargs)
+    /// Same is true for FireworksSFTConfig
+    #[expect(clippy::too_many_arguments)]
+    #[new]
+    #[pyo3(signature = (*, model, batch_size=None, learning_rate_multiplier=None, n_epochs=None, credentials=None, api_base=None, seed=None, suffix=None))]
+    pub fn new(
+        model: String,
+        batch_size: Option<usize>,
+        learning_rate_multiplier: Option<f64>,
+        n_epochs: Option<usize>,
+        credentials: Option<String>,
+        api_base: Option<String>,
+        seed: Option<u64>,
+        suffix: Option<String>,
+    ) -> PyResult<Self> {
+        // Use Deserialize to convert the string to a CredentialLocation
+        let credentials =
+            credentials.map(|s| serde_json::from_str(&s).unwrap_or(CredentialLocation::Env(s)));
+        let api_base = api_base
+            .map(|s| {
+                Url::parse(&s)
+                    .map_err(|e| PyErr::new::<PyValueError, std::string::String>(e.to_string()))
+            })
+            .transpose()?;
+        Ok(Self {
+            model,
+            batch_size,
+            learning_rate_multiplier,
+            n_epochs,
+            credentials,
+            api_base,
+            seed,
+            suffix,
+        })
+    }
+
+    /// Initialize the OpenAISFTConfig. All parameters are optional except for `model`.
+    ///
+    /// :param model: The model to use for the fine-tuning job.
+    /// :param batch_size: The batch size to use for the fine-tuning job.
+    /// :param learning_rate_multiplier: The learning rate multiplier to use for the fine-tuning job.
+    /// :param n_epochs: The number of epochs to use for the fine-tuning job.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::OPENAI_API_KEY". See docs for more details.
+    /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
+    /// :param seed: The seed to use for the fine-tuning job.
+    /// :param suffix: The suffix to use for the fine-tuning job (this is for naming in OpenAI).
+    #[expect(unused_variables, clippy::too_many_arguments)]
+    #[pyo3(signature = (*, model, batch_size=None, learning_rate_multiplier=None, n_epochs=None, credentials=None, api_base=None, seed=None, suffix=None))]
+    fn __init__(
+        this: Py<Self>,
+        model: String,
+        batch_size: Option<usize>,
+        learning_rate_multiplier: Option<f64>,
+        n_epochs: Option<usize>,
+        credentials: Option<String>,
+        api_base: Option<String>,
+        seed: Option<u64>,
+        suffix: Option<String>,
+    ) -> Py<Self> {
+        this
+    }
 }
 
 impl UninitializedOpenAISFTConfig {
@@ -76,13 +159,23 @@ impl UninitializedOpenAISFTConfig {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct OpenAISFTJobHandle {
     pub job_id: String,
+    /// A url to a human-readable page for the job.
     pub job_url: Url,
+    pub job_api_url: Url,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocation>,
+}
+
+impl std::fmt::Display for OpenAISFTJobHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 impl Optimizer for OpenAISFTConfig {
@@ -204,13 +297,22 @@ impl Optimizer for OpenAISFTConfig {
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        let job_url = get_fine_tuning_url(
+        let job_api_url = get_fine_tuning_url(
             self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
             Some(&job.id),
         )?;
         Ok(OpenAISFTJobHandle {
             job_id: job.id.clone(),
-            job_url,
+            job_url: format!("https://platform.openai.com/finetune/{}", job.id)
+                .parse()
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!(
+                            "Failed to construct job url: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"
+                        ),
+                    })
+                })?,
+            job_api_url,
             credential_location: self.credential_location.clone(),
         })
     }
@@ -221,14 +323,14 @@ impl JobHandle for OpenAISFTJobHandle {
         &self,
         client: &reqwest::Client,
         credentials: &InferenceCredentials,
-    ) -> Result<OptimizerStatus, Error> {
+    ) -> Result<OptimizationJobInfo, Error> {
         let openai_credentials = build_creds_caching_default(
             self.credential_location.clone(),
             default_api_key_location(),
             PROVIDER_TYPE,
             &DEFAULT_CREDENTIALS,
         )?;
-        let mut request = client.get(self.job_url.clone());
+        let mut request = client.get(self.job_api_url.clone());
         let api_key = openai_credentials.get_api_key(credentials)?;
         if let Some(api_key) = api_key {
             request = request.bearer_auth(api_key.expose_secret());

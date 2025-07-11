@@ -183,7 +183,7 @@ pub async fn create_fine_tuning_job(
         "mock-fireworks-{}",
         Alphanumeric.sample_string(&mut rand::rng(), 10)
     );
-    let path = format!("accounts/{account_id}/fineTuningJobs/{job_id}");
+    let path = format!("accounts/{account_id}/supervisedFineTuningJobs/{job_id}");
 
     FIREWORKS_FINE_TUNING_JOBS
         .get_or_init(Default::default)
@@ -199,6 +199,9 @@ pub async fn create_fine_tuning_job(
 
     Ok(Json(serde_json::json!({
         "name": path,
+        "state": "JOB_STATE_UNSPECIFIED",
+        "status": null,
+        "outputModel": null,
     })))
 }
 
@@ -250,14 +253,14 @@ pub async fn create_deployed_model(
         Ok((
             status_code,
             Json(serde_json::json!({
-                "message": "PENDING"
+                "state": "DEPLOYING"
             })),
         ))
     } else {
         Ok((
             status_code,
             Json(serde_json::json!({
-                "message": "DEPLOYED",
+                "state": "DEPLOYED",
             })),
         ))
     }
@@ -285,7 +288,7 @@ pub async fn get_fine_tuning_job(
         .unwrap();
     let job = jobs
         .get_mut(&FineTuningJobKey {
-            account_id: params.account_id,
+            account_id: params.account_id.clone(),
             job_id: params.job_id.clone(),
         })
         .ok_or_else(|| anyhow!("Job not found"))?;
@@ -293,12 +296,23 @@ pub async fn get_fine_tuning_job(
     job.poll_count += 1;
     if job.poll_count < POLLS_UNTIL_READY {
         Ok(Json(serde_json::json!({
-            "state": "RUNNING",
+            "name": format!("accounts/{}/supervisedFineTuningJobs/{}", params.account_id, params.job_id),
+            "state": "JOB_STATE_RUNNING",
         })))
     } else {
+        if params.account_id.contains("error") {
+            return Ok(Json(serde_json::json!({
+                "name": format!("accounts/{}/supervisedFineTuningJobs/{}", params.account_id, params.job_id),
+                "state": "JOB_STATE_FAILED",
+                "error": serde_json::json!({
+                    "unexpected_error": "Model error"
+                }),
+            })));
+        }
         Ok(Json(serde_json::json!({
-            "state": "COMPLETED",
-            "modelId": format!("mock-fireworks-model"),
+            "name": format!("accounts/{}/supervisedFineTuningJobs/{}", params.account_id, params.job_id),
+            "state": "JOB_STATE_COMPLETED",
+            "outputModel": format!("accounts/{}/models/mock-fireworks-model", params.account_id),
         })))
     }
 }

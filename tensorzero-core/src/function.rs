@@ -1,3 +1,18 @@
+#[cfg(feature = "pyo3")]
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+#[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::serialize_to_dict;
+#[cfg(feature = "pyo3")]
+use crate::variant::{
+    BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
+    DiclConfigPyClass, MixtureOfNConfigPyClass, VariantConfig,
+};
+#[cfg(feature = "pyo3")]
+use pyo3::exceptions::{PyKeyError, PyValueError};
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::IntoPyObjectExt;
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -30,7 +45,20 @@ pub enum FunctionConfig {
     Json(FunctionConfigJson),
 }
 
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "FunctionConfigChat")]
+pub struct FunctionConfigChatPyClass {
+    pub inner: Arc<FunctionConfig>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "FunctionConfigJson")]
+pub struct FunctionConfigJsonPyClass {
+    pub inner: Arc<FunctionConfig>,
+}
+
 #[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub enum FunctionConfigType {
     Chat,
     Json,
@@ -52,11 +80,143 @@ impl FunctionConfig {
     }
 }
 
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl FunctionConfigChatPyClass {
+    #[getter]
+    fn get_type(&self) -> FunctionConfigType {
+        self.inner.config_type()
+    }
+
+    #[getter]
+    fn get_variants(&self) -> VariantsConfigPyClass {
+        VariantsConfigPyClass {
+            inner: self.inner.variants().clone(),
+        }
+    }
+
+    #[getter]
+    fn get_system_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .system_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+    #[getter]
+    fn get_user_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .user_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+
+    #[getter]
+    fn get_assistant_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .assistant_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl FunctionConfigJsonPyClass {
+    #[getter]
+    fn get_type(&self) -> FunctionConfigType {
+        self.inner.config_type()
+    }
+
+    #[getter]
+    fn get_variants(&self) -> VariantsConfigPyClass {
+        VariantsConfigPyClass {
+            inner: self.inner.variants().clone(),
+        }
+    }
+
+    #[getter]
+    fn get_system_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .system_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+
+    #[getter]
+    fn get_user_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .user_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+
+    #[getter]
+    fn get_assistant_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .assistant_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+
+    #[getter]
+    fn get_output_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        let FunctionConfig::Json(params) = &*self.inner else {
+            return Err(PyValueError::new_err(format!(
+                "FunctionConfig is not a JSON function: {IMPOSSIBLE_ERROR_MESSAGE}"
+            )));
+        };
+        serialize_to_dict(py, params.output_schema.value)
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(mapping, name = "VariantsConfig")]
+pub struct VariantsConfigPyClass {
+    pub inner: HashMap<String, Arc<VariantInfo>>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl VariantsConfigPyClass {
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn __getitem__<'py>(&self, py: Python<'py>, key: &str) -> PyResult<Bound<'py, PyAny>> {
+        let v = self
+            .inner
+            .get(key)
+            .cloned()
+            .ok_or_else(|| PyKeyError::new_err(key.to_string()))?;
+        match &v.inner {
+            VariantConfig::ChatCompletion(_) => {
+                ChatCompletionConfigPyClass { inner: v }.into_bound_py_any(py)
+            }
+            VariantConfig::BestOfNSampling(_) => {
+                BestOfNSamplingConfigPyClass { inner: v }.into_bound_py_any(py)
+            }
+            VariantConfig::Dicl(_) => DiclConfigPyClass { inner: v }.into_bound_py_any(py),
+            VariantConfig::MixtureOfN(_) => {
+                MixtureOfNConfigPyClass { inner: v }.into_bound_py_any(py)
+            }
+            VariantConfig::ChainOfThought(_) => {
+                ChainOfThoughtConfigPyClass { inner: v }.into_bound_py_any(py)
+            }
+        }
+    }
+}
+
 #[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct FunctionConfigChat {
-    pub variants: HashMap<String, VariantInfo>, // variant name => variant config
+    pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub system_schema: Option<StaticJSONSchema>,
     pub user_schema: Option<StaticJSONSchema>,
     pub assistant_schema: Option<StaticJSONSchema>,
@@ -70,7 +230,7 @@ pub struct FunctionConfigChat {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct FunctionConfigJson {
-    pub variants: HashMap<String, VariantInfo>, // variant name => variant config
+    pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub system_schema: Option<StaticJSONSchema>,
     pub user_schema: Option<StaticJSONSchema>,
     pub assistant_schema: Option<StaticJSONSchema>,
@@ -80,7 +240,7 @@ pub struct FunctionConfigJson {
 }
 
 impl FunctionConfig {
-    pub fn variants(&self) -> &HashMap<String, VariantInfo> {
+    pub fn variants(&self) -> &HashMap<String, Arc<VariantInfo>> {
         match self {
             FunctionConfig::Chat(params) => &params.variants,
             FunctionConfig::Json(params) => &params.variants,
@@ -437,10 +597,10 @@ fn validate_single_message(
 /// Sample a variant from the function based on variant weights (uniform random selection)
 pub fn sample_variant<'a>(
     candidate_variant_names: &mut Vec<&'a str>,
-    variants: &'a HashMap<String, VariantInfo>,
+    variants: &'a HashMap<String, Arc<VariantInfo>>,
     function_name: &str,
     episode_id: &Uuid,
-) -> Result<(&'a str, &'a VariantInfo), Error> {
+) -> Result<(&'a str, &'a Arc<VariantInfo>), Error> {
     // Compute the total weight of variants present in variant_names
     let total_weight = candidate_variant_names
         .iter()
@@ -1380,20 +1540,20 @@ mod tests {
     #[test]
     fn test_sample_variant() {
         // Helper function to create a HashMap of variant names to their weights
-        fn create_variants(variant_weights: &[(&str, f64)]) -> HashMap<String, VariantInfo> {
+        fn create_variants(variant_weights: &[(&str, f64)]) -> HashMap<String, Arc<VariantInfo>> {
             variant_weights
                 .iter()
                 .map(|&(name, weight)| {
                     (
                         name.to_string(),
-                        VariantInfo {
+                        Arc::new(VariantInfo {
                             inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
                                 weight: Some(weight),
                                 model: "model-name".into(),
                                 ..Default::default()
                             }),
                             timeouts: Default::default(),
-                        },
+                        }),
                     )
                 })
                 .collect()
@@ -1402,7 +1562,7 @@ mod tests {
         // Helper function to test the distribution of variant weights by sampling them many times
         // and checking if the observed distribution is close to the expected distribution
         fn test_variant_distribution(
-            variants: &HashMap<String, VariantInfo>,
+            variants: &HashMap<String, Arc<VariantInfo>>,
             sample_size: usize,
             tolerance: f64,
         ) {
