@@ -13,7 +13,7 @@ import {
   BlocksIcon,
 } from "lucide-react";
 import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
-import { CodeEditor, useFormattedJson } from "../ui/code-editor";
+import { CodeEditor, formatJson, useMemoizedFormat } from "../ui/code-editor";
 
 export function EmptyMessage({ message = "No content" }: { message?: string }) {
   return (
@@ -93,8 +93,8 @@ export function CodeMessage({
 }
 
 interface TextMessageProps {
+  content: string;
   label?: string;
-  content?: string;
   emptyMessage?: string;
 }
 
@@ -103,26 +103,26 @@ export function TextMessage({
   content,
   emptyMessage,
 }: TextMessageProps) {
-  const formattedContent = useFormattedJson(content || "");
+  const formattedContent = useMemoizedFormat(content, formatJson);
 
   return !content ? (
     <EmptyMessage message={emptyMessage} />
   ) : (
-    <div className="flex max-w-240 min-w-80 flex-col gap-1">
+    <div className="flex max-w-240 flex-col gap-1">
       <Label
         text={label}
         icon={<AlignLeftIcon className="text-fg-muted h-3 w-3" />}
       />
-      <CodeEditor value={formattedContent} readOnly />
+      <CodeEditor value={formattedContent} readOnly className="shrink-0" />
     </div>
   );
 }
 
 export function ParameterizedMessage({ parameters }: { parameters?: unknown }) {
-  const formattedJson = useFormattedJson(parameters ?? {});
+  const formattedJson = useMemoizedFormat(parameters ?? {}, formatJson);
 
   return (
-    <div className="flex max-w-240 min-w-80 flex-col gap-1">
+    <div className="flex max-w-240 flex-col gap-1">
       <Label
         text="Template Arguments"
         icon={<BlocksIcon className="text-fg-muted h-3 w-3" />}
@@ -143,10 +143,10 @@ function ToolDetails({
   payload: string;
   payloadLabel: string;
 }) {
-  const formattedPayload = useFormattedJson(payload);
+  const formattedPayload = useMemoizedFormat(payload, formatJson);
 
   return (
-    <div className="border-border bg-bg-tertiary/50 grid grid-flow-row grid-cols-[min-content_1fr] grid-rows-[repeat(3,min-content)] place-content-center gap-x-4 gap-y-1 rounded-sm px-3 py-2 text-xs">
+    <div className="border-border bg-bg-tertiary/50 grid grid-flow-row grid-cols-[min-content_1fr] grid-rows-[repeat(3,max-content)] place-content-center gap-x-4 gap-y-1 rounded-sm px-3 py-2 text-xs">
       <p className="text-fg-secondary font-medium">Name</p>
       <p className="self-center truncate font-mono text-[0.6875rem]">{name}</p>
 
@@ -175,7 +175,7 @@ export function ToolCallMessage({
   toolCallId,
 }: ToolCallMessageProps) {
   return (
-    <div className="flex max-w-240 min-w-80 flex-col gap-1">
+    <div className="flex max-w-240 flex-col gap-1">
       <Label
         text="Tool Call"
         icon={<Terminal className="text-fg-muted h-3 w-3" />}
@@ -202,7 +202,7 @@ export function ToolResultMessage({
   toolResultId,
 }: ToolResultMessageProps) {
   return (
-    <div className="flex max-w-240 min-w-80 flex-col gap-1">
+    <div className="flex max-w-240 flex-col gap-1">
       <Label
         text="Tool Result"
         icon={<ArrowRight className="text-fg-muted h-3 w-3" />}

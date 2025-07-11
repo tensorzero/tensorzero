@@ -27,34 +27,42 @@ import type { JsonValue } from "tensorzero-node";
 export type Language = "json" | "markdown" | "jinja2" | "text";
 
 /** Try to format the given string/object if it's JSON. Passthrough gracefully if it's not JSON. */
-export function useFormattedJson(initialValue: string | JsonValue): string {
-  return useMemo(() => {
-    // If it's already a string
-    if (typeof initialValue === "string") {
-      try {
-        // Only attempt to parse/format if it looks like JSON
-        const trimmed = initialValue.trim();
-        if (
-          (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-          (trimmed.startsWith("[") && trimmed.endsWith("]"))
-        ) {
-          const parsed = JSON.parse(trimmed);
-          return JSON.stringify(parsed, null, 2);
-        }
-      } catch {
-        // Not valid JSON, return as-is
-      }
-      return initialValue;
-    }
-
-    // If it's an object/array/other JSON value, format it
+export function formatJson(initialValue: string | JsonValue): string {
+  // If it's already a string
+  if (typeof initialValue === "string") {
     try {
-      return JSON.stringify(initialValue, null, 2);
+      // Only attempt to parse/format if it looks like JSON
+      const trimmed = initialValue.trim();
+      if (
+        (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+        (trimmed.startsWith("[") && trimmed.endsWith("]"))
+      ) {
+        const parsed = JSON.parse(trimmed);
+        return JSON.stringify(parsed, null, 2);
+      }
     } catch {
-      // Fallback for circular references or other stringify errors
-      return String(initialValue);
+      // Not valid JSON, return as-is
     }
-  }, [initialValue]);
+    return initialValue;
+  }
+
+  // If it's an object/array/other JSON value, format it
+  try {
+    return JSON.stringify(initialValue, null, 2);
+  } catch {
+    // Fallback for circular references or other stringify errors
+    return String(initialValue);
+  }
+}
+
+export const formatOptionalJson = (value?: JsonValue) =>
+  typeof value === "undefined" ? value : formatJson(value);
+
+export function useMemoizedFormat<T, R>(
+  value: T,
+  formatter: (value: T) => R,
+): R {
+  return useMemo(() => formatter(value), [value, formatter]);
 }
 
 export interface CodeEditorProps {
