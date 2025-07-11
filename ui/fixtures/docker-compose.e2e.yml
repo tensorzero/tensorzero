@@ -49,6 +49,7 @@ services:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
     env_file:
       - .env
+      - .env-gateway
     ports:
       - "3000:3000"
     extra_hosts:
