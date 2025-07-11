@@ -56,8 +56,6 @@ jobs:
       - name: Start Docker containers and apply fixtures
         working-directory: ui
         run: |
-          echo "OPENAI_API_KEY=not_used" >> fixtures/.env
-          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
