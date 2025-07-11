@@ -5,6 +5,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use url::Url;
+use uuid::Uuid;
 
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -22,6 +23,9 @@ use crate::{
     },
     stored_inference::RenderedSample,
 };
+
+#[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::tensorzero_core_error;
 
 pub fn gcp_vertex_gemini_base_url(project_id: &str, region: &str) -> Result<Url, url::ParseError> {
     let subdomain_prefix = location_subdomain_prefix(region);
@@ -91,6 +95,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
     #[new]
     #[pyo3(signature = (*, model, bucket_name, project_id, region, learning_rate_multiplier=None, adapter_size=None, n_epochs=None, export_last_checkpoint_only=None, credentials=None, api_base=None, seed=None, service_account=None, kms_key_name=None, tuned_model_display_name=None, bucket_path_prefix=None))]
     pub fn new(
+        py: Python<'_>,
         model: String,
         bucket_name: String,
         project_id: String,
@@ -108,8 +113,13 @@ impl UninitializedGCPVertexGeminiSFTConfig {
         bucket_path_prefix: Option<String>,
     ) -> PyResult<Self> {
         // Use Deserialize to convert the string to a CredentialLocation
-        let credentials =
-            credentials.map(|s| serde_json::from_str(&s).unwrap_or(CredentialLocation::Env(s)));
+        let credentials = match credentials {
+            Some(s) => match serde_json::from_str(&s) {
+                Ok(parsed) => Some(parsed),
+                Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+            },
+            None => None,
+        };
         let api_base = api_base
             .map(|s| {
                 Url::parse(&s)
@@ -250,7 +260,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             })
             .transpose()?;
 
-        let train_filename = format!("train_{}.jsonl", uuid::Uuid::now_v7()); // or use job ID
+        let train_filename = format!("train_{}.jsonl", Uuid::now_v7()); // or use job ID
         let train_gs_url = match &self.bucket_path_prefix {
             Some(prefix) => format!("gs://{}/{}/{}", self.bucket_name, prefix, train_filename),
             None => format!("gs://{}/{}", self.bucket_name, train_filename),
@@ -264,7 +274,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         );
 
         let val_gs_url = if let Some(val_rows) = &val_rows {
-            let val_filename = format!("val_{}.jsonl", uuid::Uuid::now_v7());
+            let val_filename = format!("val_{}.jsonl", Uuid::now_v7());
             let val_url = match &self.bucket_path_prefix {
                 Some(prefix) => format!("gs://{}/{}/{}", self.bucket_name, prefix, val_filename),
                 None => format!("gs://{}/{}", self.bucket_name, val_filename),
