@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { useConfig } from "~/context/config";
 
-import { useVariantSelection, playgroundAtom } from "./state";
+import { useVariantSelection, lastViewedFunctionAtom } from "./state";
 import { useEffect, useMemo } from "react";
 import clsx from "clsx";
 import DataSection from "./DataSection/DataSection";
@@ -31,7 +31,10 @@ export default function PlaygroundRoute() {
    * However, if user opens the Playground directly/in a new tab,
    * default to the mostly recently viewed function.
    */
-  const [{ lastViewedFunction }, setPlaygroundState] = useAtom(playgroundAtom);
+  const [lastViewedFunction, setLastViewedFunction] = useAtom(
+    lastViewedFunctionAtom,
+  );
+
   const [searchParams, setSearchParams] = useSearchParams(
     lastViewedFunction && {
       function: lastViewedFunction,
@@ -39,13 +42,11 @@ export default function PlaygroundRoute() {
   );
   const functionName = searchParams.get("function") ?? undefined;
 
+  // TODO Ensure there isn't a re-render loop here - I don't believe so because `lastViewedFunction` is only used as an initializer
   useEffect(() => {
     // On navigation, save in localStorage
-    setPlaygroundState((state) => ({
-      ...state,
-      lastViewedFunction: functionName,
-    }));
-  }, [functionName, setPlaygroundState]);
+    setLastViewedFunction(functionName);
+  }, [functionName, setLastViewedFunction]);
 
   const config = useConfig();
   const functionConfig = functionName

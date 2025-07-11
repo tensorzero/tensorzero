@@ -21,6 +21,12 @@ export const playgroundAtom = atomWithStorage<PlaygroundState>(
   createStorage(PlaygroundState),
 );
 
+export const lastViewedFunctionAtom = createRecordAtom(
+  playgroundAtom,
+  ["lastViewedFunction"],
+  undefined as string | undefined,
+);
+
 export const usePlaygroundFunctionAtom = (functionName: string) =>
   useMemo(
     () =>
