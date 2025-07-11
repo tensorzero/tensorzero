@@ -7,7 +7,6 @@ import {
   SelectTrigger,
 } from "~/components/ui/select";
 import FeedbackBadges from "~/components/feedback/FeedbackBadges";
-import React from "react";
 import { useConfig } from "~/context/config";
 
 type MetricSelectorProps = {
