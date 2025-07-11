@@ -129,8 +129,10 @@ export interface SnippetTab {
   id: string;
   label: string;
   content?: ReactNode;
-  indicator?: "none" | "empty" | "content" | "fail" | "warning";
+  indicator?: SnippetIndicator;
 }
+
+type SnippetIndicator = "none" | "empty" | "content" | "fail" | "warning";
 
 interface SnippetTabsProps {
   tabs: SnippetTab[];
@@ -155,17 +157,22 @@ export function SnippetTabs({
   };
 
   // Function to get indicator color based on indicator type
-  const getIndicatorColor = (indicator?: string) => {
+  const getIndicatorColor = (indicator?: SnippetIndicator) => {
     switch (indicator) {
       case "empty":
         return "bg-gray-300";
+
       case "content":
         return "bg-green-500";
+
       case "fail":
         return "bg-red-500";
+
       case "warning":
         return "bg-yellow-500";
-      default:
+
+      case "none":
+      case undefined:
         return "";
     }
   };
