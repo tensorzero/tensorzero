@@ -16,6 +16,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 use crate::error::{Error, ErrorDetails};
 
+pub mod errors;
+
 #[derive(Clone, Debug, Default, ValueEnum)]
 pub enum LogFormat {
     #[default]

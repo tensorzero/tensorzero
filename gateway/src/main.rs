@@ -182,6 +182,13 @@ async fn main() {
         .await
         .expect_pretty("Failed to initialize AppState");
 
+    // Note that we *only* call this in the gateway process, and *not* for an embedded gateway
+    // Embedded gateway support will require a way to track the client that 'owns' a particular
+    // error, so that we can use the correct ClickHouse connection.
+    observability::errors::initialize_clickhouse_errors(
+        app_state.clickhouse_connection_info.clone(),
+    );
+
     // Create a new observability_enabled_pretty string for the log message below
     let observability_enabled_pretty = match &app_state.clickhouse_connection_info {
         ClickHouseConnectionInfo::Disabled => "disabled".to_string(),

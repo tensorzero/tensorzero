@@ -3,6 +3,7 @@ pub mod migrations;
 
 use std::time::{Duration, Instant};
 
+use crate::clickhouse::migration_manager::migrations::migration_0034::Migration0034;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails};
@@ -40,7 +41,7 @@ use serde::{Deserialize, Serialize};
 
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
 /// will panic if they don't match.
-pub const NUM_MIGRATIONS: usize = 27;
+pub const NUM_MIGRATIONS: usize = 28;
 
 /// Constructs (but does not run) a vector of all our database migrations.
 /// This is the single source of truth for all migration - it's used during startup to migrate
@@ -89,6 +90,7 @@ pub fn make_all_migrations<'a>(
         Box::new(Migration0031 { clickhouse }),
         Box::new(Migration0032 { clickhouse }),
         Box::new(Migration0033 { clickhouse }),
+        Box::new(Migration0034 { clickhouse }),
     ];
     assert_eq!(
         migrations.len(),
