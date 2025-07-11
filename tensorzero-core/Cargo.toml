@@ -18,7 +18,7 @@ name = "e2e"
 path = "tests/e2e/tests.rs"
 required-features = ["e2e_tests"]
 
-# Runs live optimizations tests (which start actual SFT jobs and pol lthem)
+# Runs live optimizations tests (which start actual SFT jobs and poll them)
 [[test]]
 name = "optimization-live"
 path = "tests/optimization/live_tests.rs"
