@@ -1,5 +1,5 @@
 import { useForm, useWatch } from "react-hook-form";
-import { Form } from "~/components/ui/form";
+import { Form, FormField, FormItem, FormLabel } from "~/components/ui/form";
 import { DatasetSelector } from "./DatasetSelector";
 import {
   DatasetBuilderFormValuesResolver,
@@ -130,12 +130,25 @@ export function DatasetBuilderForm({
             dataset_counts={dataset_counts}
             setIsNewDataset={setIsNewDataset}
           />
-          <FunctionSelector<DatasetBuilderFormValues>
+
+          <FormField
             control={form.control}
             name="function"
-            inferenceCount={counts.inferenceCount}
-            config={config}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="sr-only">Function</FormLabel>
+                <FunctionSelector
+                  selected={field.value}
+                  onSelect={(value) => {
+                    field.onChange(value);
+                    form.resetField("variant");
+                  }}
+                  functions={config.functions}
+                />
+              </FormItem>
+            )}
           />
+
           <CurationMetricSelector<DatasetBuilderFormValues>
             control={form.control}
             name="metric_name"
