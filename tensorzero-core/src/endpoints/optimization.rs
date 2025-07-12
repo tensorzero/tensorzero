@@ -181,8 +181,8 @@ pub async fn poll_optimization(
 }
 
 /// Randomly split examples into train and val sets.
-/// Returns a tuple of (train_examples, val_examples).
-/// val_examples is None if val_fraction is None.
+/// Returns a tuple of (`train_examples`, `val_examples`).
+/// `val_examples` is `None` if `val_fraction` is `None`.
 fn split_examples<T>(
     stored_inferences: Vec<T>,
     val_fraction: Option<f64>,

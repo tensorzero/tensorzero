@@ -12,7 +12,7 @@ use aws_smithy_runtime_api::http::Request;
 use aws_smithy_types::body::SdkBody;
 use reqwest::Client as ReqwestClient;
 
-/// A wrapper around [reqwest::Client] that implements [HttpClient].
+/// A wrapper around `request::Client` that implements `HttpClient`.
 ///
 /// This is required to support using proxy servers with the AWS SDK.
 #[derive(Debug, Clone)]

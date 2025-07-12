@@ -11,7 +11,7 @@ use async_trait::async_trait;
 /// `ChatInference` and `JsonInference` to be nullable.
 /// This is required since we don't really get latency measurements for batch requests.
 ///
-/// It also adds a raw_request and raw_response column to the `BatchRequest` table for
+/// It also adds a `raw_request` and `raw_response` column to the `BatchRequest` table for
 /// debugging and observability of batch requests.
 pub struct Migration0008<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,

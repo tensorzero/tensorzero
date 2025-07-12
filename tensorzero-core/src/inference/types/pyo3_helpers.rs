@@ -265,7 +265,7 @@ pub fn resolved_input_message_content_to_python(
     }
 }
 
-/// Serializes a Rust type to JSON via serde_json, then converts to a Python dictionary
+/// Serializes a Rust type to JSON via `serde_json`, then converts to a Python dictionary
 /// using `json.loads`
 pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> PyResult<Py<PyAny>> {
     let json_str = serde_json::to_string(&val)
@@ -281,7 +281,7 @@ pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> Py
 }
 
 /// In the `render_samples` function, we need to be able to accept both
-/// impl StoredSample objects passed in from the output of the `list_inferences` and `list_datapoints` functions
+/// impl `StoredSample` objects passed in from the output of the `list_inferences` and `list_datapoints` functions
 /// and arbitrary Python objects that match the serialization pattern of the `StoredSample`
 /// type.
 /// This is necessary since developers might construct data for rendering by hand.

@@ -7,7 +7,7 @@ use super::{check_column_exists, check_table_exists};
 
 /// This migration updates the cache to begin storing usage data for cached examples
 /// To do this we update the `ModelInferenceCache` table by adding a column for `input_tokens` and `output_tokens`
-/// These are UInt32 valued columns that will default to 0 for previously cached examples.
+/// These are `UInt32` valued columns that will default to 0 for previously cached examples.
 pub struct Migration0017<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }

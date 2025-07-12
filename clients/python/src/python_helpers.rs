@@ -1,5 +1,5 @@
 //! This module defines several serialization/deserialization helpers that we use to convert
-//! between Python classes and the corresponding Rust types in the Rust `tensorzero` client.
+//! between Python classes and the corresponding Rust types in the Rust TensorZero client.
 
 use std::collections::HashMap;
 

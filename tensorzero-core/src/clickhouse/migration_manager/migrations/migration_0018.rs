@@ -6,10 +6,10 @@ use async_trait::async_trait;
 use super::{check_column_exists, check_table_exists};
 
 /// This migration adds a column to the `ModelInference` table to store the
-/// finish_reason field from the model inference.
-/// It is an enum Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))
+/// `finish_reason` field from the model inference.
+/// It is an enum `Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))`
 ///
-/// We also add the same column to the ModelInferenceCache table so that we can restore it from cache.
+/// We also add the same column to the `ModelInferenceCache` table so that we can restore it from cache.
 pub struct Migration0018<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }

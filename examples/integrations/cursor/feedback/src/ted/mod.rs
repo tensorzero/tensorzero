@@ -1,7 +1,7 @@
 //! A modified Zhang–Shasha tree‑edit‑distance implementation.
 //! This is based on the paper "Simple Fast Algorithms for the Editing Distance between Trees and Related Problems"
 //! by K. Zhang and D. Shasha.
-//! Adapted from MIT-licensed code (license at https://github.com/anonymrepo/tree-edit-distance/blob/master/LICENSE)
+//! Adapted from MIT-licensed code (license at [Tree Edit Distance License](https://github.com/anonymrepo/tree-edit-distance/blob/master/LICENSE))
 //!
 //!  * Computes all metadata in **one DFS** (O(n)) instead of repeatedly walking
 //!    subtrees.
@@ -125,10 +125,10 @@ impl PartialEq for TsNodeWrapper<'_> {
 impl Eq for TsNodeWrapper<'_> {}
 
 /// To execute Zhang-Shasha tree edit distance, we need to traverse each subtree in postorder.
-/// This function does a postorder traversal of the tree while wrapping each node in our TsNodeWrapper
+/// This function does a postorder traversal of the tree while wrapping each node in our `TsNodeWrapper`
 /// and returns the ordered list of node wrappers as well as the starting index of each subtree.
 /// Since postorder traversal lets you visit all the children before visiting the node this is straightforward.
-/// This function assumes previously initialized empty vectors for post and subtree_start as the base case.
+/// This function assumes previously initialized empty vectors for post and `subtree_start` as the base case.
 fn dfs_postorder<'tree>(
     cursor: &mut TreeCursor<'tree>,
     src: &'tree [u8],
@@ -165,7 +165,7 @@ struct Tree<'tree, L: Eq> {
 
     /// For every node *i* (in post‑order), `left_most_leaf_descendant[i]` is the
     /// index (also in post‑order) of the left‑most leaf in the subtree rooted at *i*.
-    /// This is computed from the post_order traversal of the root tree. We have to compute
+    /// This is computed from the `post_order` traversal of the root tree. We have to compute
     /// the left-most leaf descendant for Zhang-Sasha by subtracting the parent offset from
     /// each value in this array.
     left_most_leaf_descendant_root: &'tree [usize], // length == n, O(1) lookup

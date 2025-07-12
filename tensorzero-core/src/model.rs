@@ -129,7 +129,7 @@ impl StreamResponse {
         cache_lookup: CacheData<StreamingCacheData>,
         model_provider_name: Arc<str>,
     ) -> Self {
-        let chunks = cache_lookup.output.chunks;
+        let chunks = cache_lookup.0.chunks;
         let chunks_len = chunks.len();
 
         Self {
@@ -150,7 +150,7 @@ impl StreamResponse {
                         // For all chunks but the last one, the finish reason is None
                         // For the last chunk, the finish reason is the same as the cache lookup
                         finish_reason: if index == chunks_len - 1 {
-                            cache_lookup.finish_reason
+                            cache_lookup.5
                         } else {
                             None
                         },
@@ -162,7 +162,7 @@ impl StreamResponse {
                     "stream_from_cache",
                     otel.name = "stream_from_cache"
                 )),
-            raw_request: cache_lookup.raw_request,
+            raw_request: cache_lookup.1,
             model_provider_name,
             cached: true,
         }
@@ -171,7 +171,7 @@ impl StreamResponse {
 
 /// Creates a fully-qualified name from a model and provider name, suitable for using
 /// in `ContentBlock::Unknown.model_provider_name`
-/// Note that 'model_name' is a name from `[models]`, which is not necessarily
+/// Note that `model_name` is a name from `[models]`, which is not necessarily
 /// the same as the underlying name passed to a specific provider api
 pub fn fully_qualified_name(model_name: &str, provider_name: &str) -> String {
     format!("tensorzero::model_name::{model_name}::provider_name::{provider_name}")

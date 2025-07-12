@@ -2,7 +2,7 @@
 /// Overall structure of the crate:
 /// * `src/lib.rs` - the main entrypoint of the Python native module - the `#[pymodule]` function
 ///   initializes the Python module.
-/// * `tensorzero/` - this contains the Python code for the overall `tensorzero` package.
+/// * `tensorzero/` - this contains the Python code for the overall TensorZero package.
 ///   This re-exports types from the Rust native module, and also defines several pure-Python
 ///   classes/functions used by the Rust code.
 ///
@@ -1221,13 +1221,13 @@ impl AsyncTensorZeroGateway {
         Ok(())
     }
 
-    // We make this a class method rather than adding parameters to the `__init__` method,
-    // becaues this needs to return a python `Future` (since we need to connect to ClickHouse
-    // and run DB migrations.
-    //
-    // While we could block in the `__init__` method, this would be very suprising to consumers,
-    // as `AsyncTensorZeroGateway` would be completely async *except* for this one method
-    // (which potentially takes a very long time due to running DB migrations).
+    /// We make this a class method rather than adding parameters to the `__init__` method,
+    /// becaues this needs to return a python `Future` (since we need to connect to ClickHouse
+    /// and run DB migrations.
+    ///
+    /// While we could block in the `__init__` method, this would be very suprising to consumers,
+    /// as `AsyncTensorZeroGateway` would be completely async *except* for this one method
+    /// (which potentially takes a very long time due to running DB migrations).
     #[classmethod]
     #[pyo3(signature = (*, config_file=None, clickhouse_url=None, timeout=None, async_setup=true))]
     /// Initialize the TensorZero client, using an embedded gateway.

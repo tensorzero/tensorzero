@@ -26,8 +26,8 @@ pub enum BatchStatus {
     Failed,
 }
 
-/// Returned from start_batch_inference from an InferenceProvider
-/// This is the original response type for start_batch_inference.
+/// Returned from `start_batch_inference` from an `InferenceProvider`
+/// This is the original response type for `start_batch_inference`.
 /// The types below add additional context to the response as it is returned
 /// through the call stack.
 pub struct StartBatchProviderInferenceResponse {
@@ -40,7 +40,7 @@ pub struct StartBatchProviderInferenceResponse {
     pub errors: Vec<Value>,
 }
 
-/// Returned from start_batch_inference from a model
+/// Returned from `start_batch_inference` from a model
 /// Adds the model provider name to the response
 pub struct StartBatchModelInferenceResponse {
     pub batch_id: Uuid,
@@ -71,9 +71,9 @@ impl StartBatchModelInferenceResponse {
     }
 }
 
-/// Returned from poll_batch_inference from a variant.
+/// Returned from `poll_batch_inference` from a variant.
 /// Here, we add context from the variant, such as the original inputs, templated input messages,
-/// systems, tool configs, inference params, model_name, and output schemas.
+/// systems, tool configs, inference params, `model_name`, and output schemas.
 pub struct StartBatchModelInferenceWithMetadata<'a> {
     pub batch_id: Uuid,
     pub errors: Vec<Value>,
@@ -142,7 +142,7 @@ pub enum PollBatchInferenceResponse {
     },
 }
 
-/// Data retrieved from the BatchRequest table in ClickHouse
+/// Data retrieved from the `BatchRequest` table in ClickHouse
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BatchRequestRow<'a> {
     pub batch_id: Uuid,
@@ -189,7 +189,7 @@ pub struct BatchInferenceDatabaseInsertMetadata<'a> {
 /// Data needed to write to the `BatchModelInference` table in ClickHouse
 ///
 /// Design constraint: this should contain all the information needed from
-/// starting batch inference to eventually populate ChatInference, JsonInference, and ModelInference
+/// starting batch inference to eventually populate `ChatInference`, `JsonInference`, and `ModelInference`
 /// tables.
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct BatchModelInferenceRow<'a> {
@@ -305,7 +305,7 @@ impl TryFrom<BatchEpisodeIdsWithSize> for BatchEpisodeIds {
     }
 }
 
-/// InferenceParams is the top-level struct for inference parameters.
+/// `InferenceParams` is the top-level struct for inference parameters.
 /// We backfill these from the configs given in the variants used and ultimately write them to the database.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 pub struct BatchInferenceParams {

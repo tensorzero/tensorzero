@@ -162,14 +162,14 @@ pub async fn run_llm_judge_evaluator(
 /// We prepare the input for the LLM judge evaluator.
 /// This is heavily informed by the config for the evaluator.
 /// There are two flags that matter here:
-///  - include.reference_output: Whether we include the reference output in the input.
-///  - input_format: Serialized or Messages.
+///  - `include.reference_output`: Whether we include the reference output in the input.
+///  - `input_format`: Serialized or Messages.
 ///
 /// If we are using the serialized format, we serialize the input and include it the generated and reference outputs in a
-/// TextKind::Arguments block that should get templated into the first user message by the LLM Judge.
+/// `TextKind::Arguments` block that should get templated into the first user message by the LLM Judge.
 ///
 /// If we are using the messages format, we first convert the original system message to a user message by serializing it,
-/// append all the other messages as is, and finally append the generated and reference outputs in a TextKind::Text block that we format here.
+/// append all the other messages as is, and finally append the generated and reference outputs in a `TextKind::Text` block that we format here.
 /// Since we don't want to use a template on the gateway side, we must format this here.
 fn prepare_llm_judge_input(
     llm_judge_config: &LLMJudgeConfig,
@@ -372,7 +372,7 @@ fn serialize_content_for_messages_input(
 }
 
 /// We prepare the serialized output by converting the content blocks to a string.
-/// The only reason this doesn't directly use serde_json::to_string is because we want to
+/// The only reason this doesn't directly use `serde_json::to_string` is because we want to
 /// strip out the Unknown content blocks, which we don't want to include in the output.
 fn prepare_serialized_chat_output(content: &Vec<ContentBlockChatOutput>) -> Result<String> {
     let mut blocks_to_serialized = Vec::new();

@@ -95,7 +95,7 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Install Node.js (we use v22) and `npm` [→](https://nodejs.org/en)
 - Install pnpm `npm install -g pnpm@10` [→](https://pnpm.io/installation)
 
-**macOS users:** If you see Rust build errors about missing dynamic libraries for Python, set up a Python virtual environment at `tensorzero/.venv` (e.g. `uv venv` from the `tensorzero` directory)
+**macOS users:** If you see Rust build errors about missing dynamic libraries for Python, set up a Python virtual environment at `tensorzero/.venv` (e.g. `uv venv` from the TensorZero directory)
 This ensures the correct Python libraries are available for the build.
 
 ### Optimization Recipes
