@@ -881,7 +881,7 @@ async fn write_inference(
     futures::future::join_all(futures).await;
 }
 
-/// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
+/// `InferenceResponse` and `InferenceResultChunk` determine what gets serialized and sent to the client
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged, rename_all = "snake_case")]
@@ -1140,7 +1140,7 @@ pub struct InferenceModels<'a> {
     pub embedding_models: &'a EmbeddingModelTable,
 }
 
-/// InferenceParams is the top-level struct for inference parameters.
+/// `InferenceParams` is the top-level struct for inference parameters.
 /// We backfill these from the configs given in the variants used and ultimately write them to the database.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]

@@ -1,8 +1,8 @@
 //! OpenAI-compatible API endpoint implementation.
 //!
 //! This module provides compatibility with the OpenAI Chat Completions API format,
-//! translating between OpenAI's request/response format and our internal types.
-//! It implements request handling, parameter conversion, and response formatting
+//! translating between OpenAI's `request`/`response` format and our internal types.
+//! It implements request handling, parameter conversion, and `response` formatting
 //! to match OpenAI's API specification.
 //!
 //! We convert the request into our internal types, call `endpoints::inference::inference` to perform the actual inference,
@@ -339,12 +339,12 @@ enum OpenAICompatibleFinishReason {
 impl From<FinishReason> for OpenAICompatibleFinishReason {
     fn from(finish_reason: FinishReason) -> Self {
         match finish_reason {
-            FinishReason::Stop => OpenAICompatibleFinishReason::Stop,
-            FinishReason::StopSequence => OpenAICompatibleFinishReason::Stop,
+            FinishReason::Stop | FinishReason::StopSequence | FinishReason::Unknown => {
+                OpenAICompatibleFinishReason::Stop
+            } // OpenAI doesn't have an unknown finish reason so we coerce
             FinishReason::Length => OpenAICompatibleFinishReason::Length,
             FinishReason::ContentFilter => OpenAICompatibleFinishReason::ContentFilter,
             FinishReason::ToolCall => OpenAICompatibleFinishReason::ToolCalls,
-            FinishReason::Unknown => OpenAICompatibleFinishReason::Stop, // OpenAI doesn't have an unknown finish reason so we coerce
         }
     }
 }

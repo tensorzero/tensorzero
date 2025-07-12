@@ -204,12 +204,12 @@ impl EmbeddingResponse {
             id: Uuid::now_v7(),
             created: current_timestamp(),
             input: request.request.input.clone(),
-            embedding: cache_lookup.output.embedding,
-            raw_request: cache_lookup.raw_request,
-            raw_response: cache_lookup.raw_response,
+            embedding: cache_lookup.0.embedding,
+            raw_request: cache_lookup.1,
+            raw_response: cache_lookup.2,
             usage: Usage {
-                input_tokens: cache_lookup.input_tokens,
-                output_tokens: cache_lookup.output_tokens,
+                input_tokens: cache_lookup.3,
+                output_tokens: cache_lookup.4,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),

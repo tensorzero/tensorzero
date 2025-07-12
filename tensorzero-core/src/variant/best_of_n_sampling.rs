@@ -404,9 +404,9 @@ impl BestOfNSamplingConfig {
 }
 
 /// Attempts to select the best candidate for best of n.
-/// If this function returns an error or the index is None, we will randomly select one
+/// If this function returns an error or the index is `None`, we will randomly select one
 /// of the candidates in the outer function.
-/// If a model inference actually occurs, we return None and the model inference result instead of Err() so
+/// If a model inference actually occurs, we return `None` and the model inference result instead of `Err()` so
 /// that we can still observe the model inference result in ClickHouse.
 ///
 /// Here are the steps in the function:
@@ -530,7 +530,7 @@ async fn inner_select_best_candidate<'a, 'request>(
 
 impl BestOfNEvaluatorConfig {
     /// Prepares the system message for the evaluator variant.
-    /// We use the system_template of the evaluator variant to generate a system message as if we
+    /// We use the `system_template` of the evaluator variant to generate a system message as if we
     /// were using the evaluator variant directly to solve the problem.
     /// Then, we template that system message into a broader set of instructions that includes
     /// information about what the evaluator will be asked to do (choose a candidate).

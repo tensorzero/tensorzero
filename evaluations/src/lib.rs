@@ -282,7 +282,7 @@ pub async fn run_evaluation(
 
 /// Checks if evaluator results meet their cutoff thresholds
 ///
-/// Returns a vector of failures with (evaluator_name, cutoff, actual_value)
+/// Returns a vector of failures with (`evaluator_name`, cutoff, `actual_value`)
 pub fn check_evaluator_cutoffs(
     stats: &HashMap<String, stats::EvaluatorStats>,
     evaluator_configs: &HashMap<String, EvaluatorConfig>,

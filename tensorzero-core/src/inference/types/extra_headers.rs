@@ -32,7 +32,7 @@ pub enum ExtraHeaderKind {
     Delete,
 }
 
-/// The 'InferenceExtraHeaders' options provided directly in an inference request
+/// The `InferenceExtraHeaders` options provided directly in an inference request
 /// These have not yet been filtered by variant name
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
@@ -45,7 +45,7 @@ impl UnfilteredInferenceExtraHeaders {
         self.headers.is_empty()
     }
 
-    /// Filter the 'InferenceExtraHeader' options by variant name
+    /// Filter the `InferenceExtraHeader` options by variant name
     /// If the variant name is `None`, then all variant-specific extra header options are removed
     pub fn filter(self, variant_name: Option<&str>) -> FilteredInferenceExtraHeaders {
         FilteredInferenceExtraHeaders {

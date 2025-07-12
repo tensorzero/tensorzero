@@ -101,8 +101,7 @@ impl TryFrom<Credential> for TGICredentials {
         match credentials {
             Credential::Static(key) => Ok(TGICredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(TGICredentials::Dynamic(key_name)),
-            Credential::None => Ok(TGICredentials::None),
-            Credential::Missing => Ok(TGICredentials::None),
+            Credential::Missing | Credential::None => Ok(TGICredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for TGI provider".to_string(),
             })),
@@ -390,9 +389,9 @@ fn stream_tgi(
 /// This struct defines the supported parameters for the TGI API
 /// See the [TGI documentation](https://huggingface.co/docs/text-generation-inference/en/reference/api_reference#openai-messages-api)
 /// for more details.
-/// We are not handling logprobs, top_logprobs, n,
-/// presence_penalty, seed, service_tier, stop, user,
-/// or the deprecated function_call and functions arguments.
+/// We are not handling `logprobs`, `top_logprobs`, `n`,
+/// `presence_penalty`, `seed`, `service_tier`, `stop`, `user`,
+/// or the deprecated `function_call` and `functions` arguments.
 #[derive(Debug, Serialize)]
 struct TGIRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
@@ -639,12 +638,11 @@ pub(super) enum TGIFinishReason {
 impl From<TGIFinishReason> for FinishReason {
     fn from(finish_reason: TGIFinishReason) -> Self {
         match finish_reason {
+            TGIFinishReason::ContentFilter => FinishReason::ContentFilter,
+            TGIFinishReason::Length => FinishReason::Length,
             TGIFinishReason::Stop => FinishReason::Stop,
             TGIFinishReason::StopSequence => FinishReason::StopSequence,
-            TGIFinishReason::Length => FinishReason::Length,
-            TGIFinishReason::ContentFilter => FinishReason::ContentFilter,
-            TGIFinishReason::ToolCalls => FinishReason::ToolCall,
-            TGIFinishReason::FunctionCall => FinishReason::ToolCall,
+            TGIFinishReason::FunctionCall | TGIFinishReason::ToolCalls => FinishReason::ToolCall,
             TGIFinishReason::Unknown => FinishReason::Unknown,
         }
     }

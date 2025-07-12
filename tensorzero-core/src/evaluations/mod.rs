@@ -815,8 +815,8 @@ fn read_system_instructions<P1: AsRef<Path>, P2: AsRef<Path>>(
 }
 
 /// NOTE: this function should not be called.
-/// In the code we already have a conversion from UninitializedLLMJudgeVariantConfig to VariantConfig.
-/// We want to make sure that there is an UninitializedLLMJudgeVariantConfig for each VariantConfig.
+/// In the code we already have a conversion from `UninitializedLLMJudgeVariantConfig` to `VariantConfig`.
+/// We want to make sure that there is an `UninitializedLLMJudgeVariantConfig` for each `VariantConfig`.
 /// This function should complain at compile time if we forget to update it when adding a new variant type.
 #[expect(dead_code)]
 fn check_convert_variant_to_llm_judge_variant(

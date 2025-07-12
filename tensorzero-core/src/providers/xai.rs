@@ -91,10 +91,9 @@ impl TryFrom<Credential> for XAICredentials {
 
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
-            Credential::Static(key) => Ok(XAICredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(XAICredentials::Dynamic(key_name)),
-            Credential::None => Ok(XAICredentials::None),
-            Credential::Missing => Ok(XAICredentials::None),
+            Credential::Static(key) => Ok(XAICredentials::Static(key)),
+            Credential::Missing | Credential::None => Ok(XAICredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for xAI provider".to_string(),
             })),
@@ -297,9 +296,9 @@ impl InferenceProvider for XAIProvider {
 /// This struct defines the supported parameters for the xAI API
 /// See the [xAI API documentation](https://docs.x.ai/api/endpoints#chat-completions)
 /// for more details.
-/// We are not handling logprobs, top_logprobs, n,
-/// logit_bias, seed, service_tier, stop, user or response_format.
-/// or the deprecated function_call and functions arguments.
+/// We are not handling `logprobs`, `top_logprobs`, `n`,
+/// `logit_bias`, `seed`, `service_tier`, `stop`, `user` or `response_format`.
+/// or the deprecated `function_call` and `functions` arguments.
 #[derive(Debug, Serialize)]
 struct XAIRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,

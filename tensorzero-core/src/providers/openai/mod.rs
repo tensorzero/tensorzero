@@ -140,8 +140,7 @@ impl TryFrom<Credential> for OpenAICredentials {
         match credentials {
             Credential::Static(key) => Ok(OpenAICredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(OpenAICredentials::Dynamic(key_name)),
-            Credential::None => Ok(OpenAICredentials::None),
-            Credential::Missing => Ok(OpenAICredentials::None),
+            Credential::Missing | Credential::None => Ok(OpenAICredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for OpenAI provider".to_string(),
             })),
@@ -1084,13 +1083,12 @@ pub enum OpenAIRequestMessage<'a> {
 impl OpenAIRequestMessage<'_> {
     pub fn no_content(&self) -> bool {
         match self {
-            OpenAIRequestMessage::System(_) => false,
             OpenAIRequestMessage::User(OpenAIUserRequestMessage { content }) => content.is_empty(),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                 content,
                 tool_calls,
             }) => content.is_none() && tool_calls.is_none(),
-            OpenAIRequestMessage::Tool(_) => false,
+            OpenAIRequestMessage::System(_) | OpenAIRequestMessage::Tool(_) => false,
         }
     }
     pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
@@ -1098,7 +1096,7 @@ impl OpenAIRequestMessage<'_> {
             OpenAIRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
             OpenAIRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => false,
+                OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } |
                 // Don't inspect the contents of 'unknown' blocks
                 OpenAIContentBlock::Unknown { data: _ } => false,
             }),
@@ -1106,9 +1104,7 @@ impl OpenAIRequestMessage<'_> {
                 if let Some(content) = &msg.content {
                     content.iter().any(|c| match c {
                         OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                        OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => {
-                            false
-                        }
+                        OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } |
                         // Don't inspect the contents of 'unknown' blocks
                         OpenAIContentBlock::Unknown { data: _ } => false,
                     })
@@ -1139,7 +1135,7 @@ pub fn prepare_openai_messages<'a>(
     Ok(openai_messages)
 }
 
-/// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
+/// If there are no tools passed or the tools are empty, return `None` for both tools and `tool_choice`
 /// Otherwise convert the tool choice and tools to OpenAI format
 pub(super) fn prepare_openai_tools<'a>(
     request: &'a ModelInferenceRequest,
@@ -1171,7 +1167,7 @@ pub(super) fn prepare_openai_tools<'a>(
 /// This function is complicated only by the fact that OpenAI and Azure require
 /// different instructions depending on the json mode and the content of the messages.
 ///
-/// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
+/// If `ModelInferenceRequestJsonMode::On` and the system message or instructions does not contain "JSON"
 /// the request will return an error.
 /// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
 pub(super) fn tensorzero_to_openai_system_message<'a>(
@@ -1632,9 +1628,9 @@ pub(super) struct StreamOptions {
 /// This struct defines the supported parameters for the OpenAI API
 /// See the [OpenAI API documentation](https://platform.openai.com/docs/api-reference/chat/create)
 /// for more details.
-/// We are not handling logprobs, top_logprobs, n,
-/// presence_penalty, seed, service_tier, stop, user,
-/// or the deprecated function_call and functions arguments.
+/// We are not handling `logprobs`, `top_logprobs`, `n`,
+/// `presence_penalty`, `seed`, `service_tier`, `stop`, `user`,
+/// or the deprecated `function_call` and functions arguments.
 #[derive(Debug, Serialize)]
 struct OpenAIRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
@@ -1829,11 +1825,12 @@ pub(super) enum OpenAIFinishReason {
 impl From<OpenAIFinishReason> for FinishReason {
     fn from(finish_reason: OpenAIFinishReason) -> Self {
         match finish_reason {
-            OpenAIFinishReason::Stop => FinishReason::Stop,
-            OpenAIFinishReason::Length => FinishReason::Length,
             OpenAIFinishReason::ContentFilter => FinishReason::ContentFilter,
-            OpenAIFinishReason::ToolCalls => FinishReason::ToolCall,
-            OpenAIFinishReason::FunctionCall => FinishReason::ToolCall,
+            OpenAIFinishReason::Length => FinishReason::Length,
+            OpenAIFinishReason::Stop => FinishReason::Stop,
+            OpenAIFinishReason::FunctionCall | OpenAIFinishReason::ToolCalls => {
+                FinishReason::ToolCall
+            }
             OpenAIFinishReason::Unknown => FinishReason::Unknown,
         }
     }

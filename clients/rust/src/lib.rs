@@ -96,8 +96,8 @@ struct HTTPGateway {
 }
 
 impl HTTPGateway {
-    /// Sets the gateway version on the HTTPGateway struct.
-    /// This should be called if the HTTPGateway is constructed within an async context.
+    /// Sets the gateway version on the `HTTPGateway` struct.
+    /// This should be called if the `HTTPGateway` is constructed within an async context.
     pub async fn discover_initialize_gateway_version(
         &self,
         client: &Client,
@@ -202,9 +202,9 @@ impl<T: Debug + Display> Display for DisplayOrDebug<T> {
 
 /// Controls how a `Client` is run
 pub enum ClientBuilderMode {
-    /// In HTTPGateway mode, we make HTTP requests to a TensorZero gateway server.
+    /// In `HTTPGateway` mode, we make HTTP requests to a TensorZero gateway server.
     HTTPGateway { url: Url },
-    /// In EmbeddedGateway mode, we run an embedded gateway using a config file.
+    /// In `EmbeddedGateway` mode, we run an embedded gateway using a config file.
     /// We do not launch an HTTP server - we only make outgoing HTTP requests to model providers and to ClickHouse.
     EmbeddedGateway {
         config_file: Option<PathBuf>,
@@ -314,7 +314,7 @@ impl ClientBuilder {
         }
     }
 
-    /// Builds a `Client` in HTTPGateway mode, erroring if the mode is not HTTPGateway
+    /// Builds a `Client` in `HTTPGateway` mode, erroring if the mode is not `HTTPGateway`.
     /// This allows avoiding calling the async `build` method
     pub fn build_http(self) -> Result<Client, ClientBuilderError> {
         let ClientBuilderMode::HTTPGateway { mut url } = self.mode else {
@@ -367,7 +367,7 @@ impl Client {
     }
 
     /// Assigns feedback for a TensorZero inference.
-    /// See https://www.tensorzero.com/docs/gateway/api-reference#post-feedback
+    /// See [TensorZero API Reference: Post Feedback](https://www.tensorzero.com/docs/gateway/api-reference#post-feedback)
     pub async fn feedback(
         &self,
         params: FeedbackParams,
@@ -751,7 +751,7 @@ impl Client {
 
     /// Stales all datapoints in a dataset that have not been staled yet.
     /// This is a soft deletion, so evaluation runs will still refer to it.
-    /// Returns the number of datapoints that were staled as {num_staled_datapoints: u64}.
+    /// Returns the number of datapoints that were staled as `{num_staled_datapoints: u64}`.
     pub async fn stale_dataset(
         &self,
         dataset_name: String,
@@ -778,7 +778,7 @@ impl Client {
 
     /// Query the Clickhouse database for inferences.
     ///
-    /// This function is only available in EmbeddedGateway mode.
+    /// This function is only available in `EmbeddedGateway` mode.
     ///
     /// # Arguments
     ///
@@ -788,7 +788,7 @@ impl Client {
     /// * `output_source` - The source of the output to query. "inference" or "demonstration"
     /// * `limit` - The maximum number of inferences to return. Optional
     /// * `offset` - The offset to start from. Optional
-    /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
+    /// * `format` - The format to return the inferences in. For now, only `JSONEachRow` is supported.
     pub async fn experimental_list_inferences(
         &self,
         params: ListInferencesParams<'_>,

@@ -102,7 +102,7 @@ pub struct ChainOfThoughtConfigPyClass {
 }
 
 /// This type is used to determine how to enforce JSON mode for a given variant.
-/// Variants represent JSON mode in a slightly more abstract sense than ModelInferenceRequests, as
+/// Variants represent JSON mode in a slightly more abstract sense than `ModelInferenceRequests`, as
 /// we support coercing tool calls into JSON mode.
 /// This is represented as a tool config in the
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -128,7 +128,7 @@ pub struct InferenceConfig<'a, 'request> {
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     /// Optional arbitrary data, only used when constructing the cache key.
-    /// This is used by best_of_n/mixture_of_n to force different sub-variants
+    /// This is used by `best_of_n`/`mixture_of_n` to force different sub-variants
     /// to have different cache keys.
     /// This field should only ever be forwarded to `ModelInferenceRequest`
     pub extra_cache_key: Option<String>,

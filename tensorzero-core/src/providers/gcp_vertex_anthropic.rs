@@ -361,7 +361,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 
 /// Maps events from Anthropic into the TensorZero format
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
-/// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResultChunk` type
+/// At a high level, this function is handling low-level `EventSource` details and mapping the objects returned by Anthropic into our `InferenceResultChunk` type
 fn stream_anthropic(
     mut event_source: EventSource,
     start_time: Instant,
@@ -451,9 +451,9 @@ impl<'a> TryFrom<&'a ToolChoice> for GCPVertexAnthropicToolChoice<'a> {
     type Error = Error;
     fn try_from(tool_choice: &'a ToolChoice) -> Result<Self, Error> {
         match tool_choice {
-            ToolChoice::Auto => Ok(GCPVertexAnthropicToolChoice::Auto),
             ToolChoice::Required => Ok(GCPVertexAnthropicToolChoice::Any),
             ToolChoice::Specific(name) => Ok(GCPVertexAnthropicToolChoice::Tool { name }),
+            ToolChoice::Auto |
             // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
             // for tool choice. Instead, we return Auto but the request construction will ensure
             // that no tools are sent in the request payload. This achieves the same effect
@@ -1003,10 +1003,10 @@ enum GCPVertexAnthropicStreamMessage {
 }
 
 /// This function converts an Anthropic stream message to a TensorZero stream message.
-/// It must keep track of the current tool ID and name in order to correctly handle ToolCallChunks (which we force to always contain the tool name and ID)
-/// Anthropic only sends the tool ID and name in the ToolUse chunk so we need to keep the most recent ones as mutable references so
-/// subsequent InputJSONDelta chunks can be initialized with this information as well.
-/// There is no need to do the same bookkeeping for TextDelta chunks since they come with an index (which we use as an ID for a text chunk).
+/// It must keep track of the current tool ID and name in order to correctly handle `ToolCallChunks` (which we force to always contain the tool name and ID)
+/// Anthropic only sends the tool ID and name in the `ToolUse` chunk so we need to keep the most recent ones as mutable references so
+/// subsequent `InputJSONDelta` chunks can be initialized with this information as well.
+/// There is no need to do the same bookkeeping for `TextDelta` chunks since they come with an index (which we use as an ID for a text chunk).
 /// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details on the types of events and their semantics.
 fn anthropic_to_tensorzero_stream_message(
     raw_message: String,

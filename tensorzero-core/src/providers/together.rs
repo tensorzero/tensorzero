@@ -312,9 +312,9 @@ enum TogetherResponseFormat<'a> {
 /// This struct defines the supported parameters for the Together inference API
 /// See the [Together API documentation](https://docs.together.ai/docs/chat-overview)
 /// for more details.
-/// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
-/// presence_penalty, frequency_penalty, seed, service_tier, stop, user,
-/// or context_length_exceeded_behavior
+/// We are not handling `logprobs`, `top_logprobs`, `n`, `prompt_truncate_len`,
+/// `presence_penalty`, `frequency_penalty`, `seed`, `service_tier`, `stop`, `user`,
+/// or `context_length_exceeded_behavior`
 #[derive(Debug, Serialize)]
 struct TogetherRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
@@ -460,11 +460,11 @@ enum TogetherFinishReason {
 impl From<TogetherFinishReason> for FinishReason {
     fn from(finish_reason: TogetherFinishReason) -> Self {
         match finish_reason {
-            TogetherFinishReason::Stop => FinishReason::Stop,
-            TogetherFinishReason::Eos => FinishReason::Stop,
             TogetherFinishReason::Length => FinishReason::Length,
-            TogetherFinishReason::ToolCalls => FinishReason::ToolCall,
-            TogetherFinishReason::FunctionCall => FinishReason::ToolCall,
+            TogetherFinishReason::Eos | TogetherFinishReason::Stop => FinishReason::Stop,
+            TogetherFinishReason::ToolCalls | TogetherFinishReason::FunctionCall => {
+                FinishReason::ToolCall
+            }
             TogetherFinishReason::Unknown => FinishReason::Unknown,
         }
     }

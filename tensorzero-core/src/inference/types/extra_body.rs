@@ -33,7 +33,7 @@ pub enum ExtraBodyReplacementKind {
     Delete,
 }
 
-/// The 'InferenceExtraBody' options provided directly in an inference request
+/// The `InferenceExtraBody` options provided directly in an inference request
 /// These have not yet been filtered by variant name
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
@@ -45,7 +45,7 @@ impl UnfilteredInferenceExtraBody {
     pub fn is_empty(&self) -> bool {
         self.extra_body.is_empty()
     }
-    /// Filter the 'InferenceExtraBody' options by variant name
+    /// Filter the `InferenceExtraBody` options by variant name
     /// If the variant name is `None`, then all variant-specific extra body options are removed
     pub fn filter(self, variant_name: Option<&str>) -> FilteredInferenceExtraBody {
         FilteredInferenceExtraBody {

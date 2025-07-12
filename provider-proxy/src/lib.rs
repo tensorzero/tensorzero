@@ -1,5 +1,5 @@
 //! An HTTP/HTTPS proxy that caches non-error responses to disk.
-//! Heavily based on https://github.com/hatoo/http-mitm-proxy (MIT-licensed),
+//! Heavily based on [http-mitm-proxy](https://github.com/hatoo/http-mitm-proxy) (MIT-licensed),
 //! with the openssl dependency and `default_client` removed.
 #![expect(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
 
@@ -238,8 +238,7 @@ async fn check_cache<
 
             let write = match args.mode {
                 CacheMode::ReadOnly => false,
-                CacheMode::ReadWrite => true,
-                CacheMode::ReadOldWriteNew => true,
+                CacheMode::ReadWrite | CacheMode::ReadOldWriteNew => true,
             };
 
             // Start streaming the response to the client, running the provided callback once the whole body has been received

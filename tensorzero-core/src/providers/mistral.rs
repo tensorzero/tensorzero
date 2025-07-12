@@ -451,13 +451,13 @@ fn prepare_mistral_tools<'a>(
     }
 }
 
-/// This struct defines the supported parameters for the Mistral inference API
+/// This struct defines the supported parameters for the `Mistral` inference API
 /// See the [Mistral API documentation](https://docs.mistral.ai/api/#tag/chat)
 /// for more details.
-/// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
-/// presence_penalty, frequency_penalty, service_tier, stop, user,
-/// or context_length_exceeded_behavior.
-/// NOTE: Mistral does not support seed.
+/// We are not handling `logprobs`, `top_logprobs`, `n`, `prompt_truncate_len`
+/// `presence_penalty`, `frequency_penalty`, `service_tier`, `stop`, `user`,
+/// or `context_length_exceeded_behavior`.
+/// NOTE: `Mistral` does not support seed.
 #[derive(Debug, Serialize)]
 struct MistralRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
@@ -579,11 +579,9 @@ impl From<MistralFinishReason> for FinishReason {
     fn from(reason: MistralFinishReason) -> Self {
         match reason {
             MistralFinishReason::Stop => FinishReason::Stop,
-            MistralFinishReason::Length => FinishReason::Length,
-            MistralFinishReason::ModelLength => FinishReason::Length,
-            MistralFinishReason::Error => FinishReason::Unknown,
+            MistralFinishReason::Length | MistralFinishReason::ModelLength => FinishReason::Length,
             MistralFinishReason::ToolCalls => FinishReason::ToolCall,
-            MistralFinishReason::Unknown => FinishReason::Unknown,
+            MistralFinishReason::Error | MistralFinishReason::Unknown => FinishReason::Unknown,
         }
     }
 }
@@ -713,7 +711,7 @@ struct MistralChatChunk {
     usage: Option<MistralUsage>,
 }
 
-/// Maps a Mistral chunk to a TensorZero chunk for streaming inferences
+/// Maps a `Mistral` chunk to a TensorZero chunk for streaming inferences
 fn mistral_to_tensorzero_chunk(
     raw_message: String,
     mut chunk: MistralChatChunk,

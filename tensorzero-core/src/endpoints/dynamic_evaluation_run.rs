@@ -270,9 +270,9 @@ async fn write_dynamic_evaluation_run_episode(
     Ok(())
 }
 
-/// For dynamic evaluation runs, we generate episode IDs that are DYNAMIC_EVALUATION_OFFSET in the future.
-/// If we come across an episode ID that is at least DYNAMIC_EVALUATION_THRESHOLD, we need to look up the
-/// appropriate DynamicEvaluationRun and then apply the variant_name if unset and the tags if unset.
+/// For dynamic evaluation runs, we generate episode `ID`s that are `DYNAMIC_EVALUATION_OFFSET` in the future.
+/// If we come across an episode `ID` that is at least `DYNAMIC_EVALUATION_THRESHOLD`, we need to look up the
+/// appropriate `DynamicEvaluationRun` and then apply the `variant_name` if unset and the tags if unset.
 /// We'll warn if the variant name is set in two places and then take the inference-level one.
 pub async fn validate_inference_episode_id_and_apply_dynamic_evaluation_run(
     episode_id: Uuid,
@@ -305,12 +305,12 @@ pub async fn validate_inference_episode_id_and_apply_dynamic_evaluation_run(
             (Some(_), Some(_)) => {
                 tracing::warn!("Variant name set in both inference and dynamic evaluation run");
             }
-            // If the inference pinned the variant_name and the dynamic run did not, leave as is
-            (Some(_), None) => {}
             // If the dynamic run pinned the variant_name and the inference did not, use the dynamic run variant_name
             (None, Some(dynamic_run_variant_name)) => {
                 *variant_name = Some(dynamic_run_variant_name.clone());
             }
+            // If the inference pinned the variant_name and the dynamic run did not, leave as is
+            (Some(_), None) |
             // If both are unset, leave as is
             (None, None) => {}
         }

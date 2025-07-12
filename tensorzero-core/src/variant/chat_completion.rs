@@ -213,7 +213,7 @@ impl ChatCompletionConfig {
     }
 }
 
-/// Prepare a ModelInput using the same machinery as is used by core TensorZero to prepare
+/// Prepare a `ModelInput` using the same machinery as is used by core TensorZero to prepare
 /// chat completions requests.
 pub fn prepare_model_input(
     system: Option<&Value>,

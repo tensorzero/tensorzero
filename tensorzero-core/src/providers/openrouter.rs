@@ -102,8 +102,7 @@ impl TryFrom<Credential> for OpenRouterCredentials {
         match credentials {
             Credential::Static(key) => Ok(OpenRouterCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(OpenRouterCredentials::Dynamic(key_name)),
-            Credential::None => Ok(OpenRouterCredentials::None),
-            Credential::Missing => Ok(OpenRouterCredentials::None),
+            Credential::Missing | Credential::None => Ok(OpenRouterCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for OpenRouter provider".to_string(),
             })),
@@ -559,7 +558,7 @@ impl OpenRouterRequestMessage<'_> {
             OpenRouterRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
             OpenRouterRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 OpenRouterContentBlock::Text { text } => text.to_lowercase().contains(value),
-                OpenRouterContentBlock::ImageUrl { .. } => false,
+                OpenRouterContentBlock::ImageUrl { .. } |
                 // Don't inspect the contents of 'unknown' blocks
                 OpenRouterContentBlock::Unknown { data: _ } => false,
             }),
@@ -569,7 +568,7 @@ impl OpenRouterRequestMessage<'_> {
                         OpenRouterContentBlock::Text { text } => {
                             text.to_lowercase().contains(value)
                         }
-                        OpenRouterContentBlock::ImageUrl { .. } => false,
+                        OpenRouterContentBlock::ImageUrl { .. } |
                         // Don't inspect the contents of 'unknown' blocks
                         OpenRouterContentBlock::Unknown { data: _ } => false,
                     })
@@ -599,7 +598,7 @@ pub(super) fn prepare_openrouter_messages<'a>(
     Ok(messages)
 }
 
-/// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
+/// If there are no tools passed or the tools are empty, return None for both tools and `tool_choice`
 /// Otherwise convert the tool choice and tools to OpenRouter format
 pub(super) fn prepare_openrouter_tools<'a>(
     request: &'a ModelInferenceRequest,
@@ -631,7 +630,7 @@ pub(super) fn prepare_openrouter_tools<'a>(
 /// This function is complicated only by the fact that OpenRouter and Azure require
 /// different instructions depending on the json mode and the content of the messages.
 ///
-/// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
+/// If `ModelInferenceRequestJsonMode::On` and the system message or instructions does not contain "JSON"
 /// the request will return an error.
 /// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
 pub(super) fn tensorzero_to_openrouter_system_message<'a>(
@@ -963,9 +962,9 @@ pub(super) struct StreamOptions {
 /// This struct defines the supported parameters for the OpenRouter API
 /// See the [OpenRouter API documentation](https://platform.openrouter.com/docs/api-reference/chat/create)
 /// for more details.
-/// We are not handling logprobs, top_logprobs, n,
-/// presence_penalty, seed, service_tier, stop, user,
-/// or the deprecated function_call and functions arguments.
+/// We are not handling `logprobs`, `top_logprobs`, `n`,
+/// `presence_penalty`, `seed`, `service_tier`, `stop`, `user`,
+/// or the deprecated `function_call` and functions arguments.
 #[derive(Debug, Serialize)]
 struct OpenRouterRequest<'a> {
     messages: Vec<OpenRouterRequestMessage<'a>>,
@@ -1113,11 +1112,12 @@ pub(super) enum OpenRouterFinishReason {
 impl From<OpenRouterFinishReason> for FinishReason {
     fn from(finish_reason: OpenRouterFinishReason) -> Self {
         match finish_reason {
-            OpenRouterFinishReason::Stop => FinishReason::Stop,
-            OpenRouterFinishReason::Length => FinishReason::Length,
             OpenRouterFinishReason::ContentFilter => FinishReason::ContentFilter,
-            OpenRouterFinishReason::ToolCalls => FinishReason::ToolCall,
-            OpenRouterFinishReason::FunctionCall => FinishReason::ToolCall,
+            OpenRouterFinishReason::Length => FinishReason::Length,
+            OpenRouterFinishReason::Stop => FinishReason::Stop,
+            OpenRouterFinishReason::FunctionCall | OpenRouterFinishReason::ToolCalls => {
+                FinishReason::ToolCall
+            }
             OpenRouterFinishReason::Unknown => FinishReason::Unknown,
         }
     }

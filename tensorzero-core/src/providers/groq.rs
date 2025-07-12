@@ -86,8 +86,7 @@ impl TryFrom<Credential> for GroqCredentials {
         match credentials {
             Credential::Static(key) => Ok(GroqCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(GroqCredentials::Dynamic(key_name)),
-            Credential::None => Ok(GroqCredentials::None),
-            Credential::Missing => Ok(GroqCredentials::None),
+            Credential::Missing | Credential::None => Ok(GroqCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Groq provider".to_string(),
             })),
@@ -506,7 +505,7 @@ impl GroqRequestMessage<'_> {
             GroqRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
             GroqRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 GroqContentBlock::Text { text } => text.to_lowercase().contains(value),
-                GroqContentBlock::ImageUrl { .. } => false,
+                GroqContentBlock::ImageUrl { .. } |
                 // Don't inspect the contents of 'unknown' blocks
                 GroqContentBlock::Unknown { data: _ } => false,
             }),
@@ -514,7 +513,7 @@ impl GroqRequestMessage<'_> {
                 if let Some(content) = &msg.content {
                     content.iter().any(|c| match c {
                         GroqContentBlock::Text { text } => text.to_lowercase().contains(value),
-                        GroqContentBlock::ImageUrl { .. } => false,
+                        GroqContentBlock::ImageUrl { .. } |
                         // Don't inspect the contents of 'unknown' blocks
                         GroqContentBlock::Unknown { data: _ } => false,
                     })
@@ -542,8 +541,8 @@ pub(super) fn prepare_groq_messages<'a>(
     Ok(messages)
 }
 
-/// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
-/// Otherwise convert the tool choice and tools to Groq format
+/// If there are no tools passed or the tools are empty, return `None` for both `tools` and `tool_choice`.
+/// Otherwise convert the tool choice and tools to `Groq` format
 /// NOTE: parallel tool calls are unreliable, and specific tool choice doesn't work
 pub(super) fn prepare_groq_tools<'a>(
     request: &'a ModelInferenceRequest,
@@ -572,9 +571,9 @@ pub(super) fn prepare_groq_tools<'a>(
     }
 }
 
-/// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
+/// If `ModelInferenceRequestJsonMode::On` and the system message or instructions does not contain `JSON`
 /// the request will return an error.
-/// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
+/// So, we need to format the instructions to include `Respond using JSON.` if it doesn't already.
 pub(super) fn tensorzero_to_groq_system_message<'a>(
     system: Option<&'a str>,
     json_mode: &ModelInferenceRequestJsonMode,
@@ -880,9 +879,9 @@ pub(super) struct StreamOptions {
 /// This struct defines the supported parameters for the Groq API
 /// See the [Groq API documentation](https://platform.groq.com/docs/api-reference/chat/create)
 /// for more details.
-/// We are not handling logprobs, top_logprobs, n,
-/// presence_penalty, seed, service_tier, stop, user,
-/// or the deprecated function_call and functions arguments.
+/// We are not handling `logprobs`, `top_logprobs`, `n`,
+/// `presence_penalty`, `seed`, `service_tier`, `stop`, `user`,
+/// or the deprecated `function_call` and functions arguments.
 #[derive(Debug, Serialize)]
 struct GroqRequest<'a> {
     messages: Vec<GroqRequestMessage<'a>>,
@@ -1035,8 +1034,7 @@ impl From<GroqFinishReason> for FinishReason {
             GroqFinishReason::Stop => FinishReason::Stop,
             GroqFinishReason::Length => FinishReason::Length,
             GroqFinishReason::ContentFilter => FinishReason::ContentFilter,
-            GroqFinishReason::ToolCalls => FinishReason::ToolCall,
-            GroqFinishReason::FunctionCall => FinishReason::ToolCall,
+            GroqFinishReason::FunctionCall | GroqFinishReason::ToolCalls => FinishReason::ToolCall,
             GroqFinishReason::Unknown => FinishReason::Unknown,
         }
     }
@@ -1191,7 +1189,7 @@ struct GroqChatChunk {
     usage: Option<GroqUsage>,
 }
 
-/// Maps an Groq chunk to a TensorZero chunk for streaming inferences
+/// Maps an `Groq` chunk to a TensorZero chunk for streaming inferences
 fn groq_to_tensorzero_chunk(
     mut chunk: GroqChatChunk,
     latency: Duration,

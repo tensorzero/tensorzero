@@ -612,7 +612,7 @@ async fn test_config_validate_model_duplicate_routing_entry() {
         toml::Value::Array(vec!["openai".into(), "openai".into()]);
     let result = Config::load_from_toml(config, PathBuf::new()).await;
     let error = result.unwrap_err().to_string();
-    assert!(error.contains("`models.gpt-3.5-turbo.routing`: duplicate entry `openai`"));
+    assert!(error.contains("`models.gpt-3.5-turbo.routing`: duplicate entry OpenAI"));
 }
 
 /// Ensure that the config validation fails when a routing entry does not exist in providers
@@ -1155,7 +1155,7 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
         .as_table_mut()
         .unwrap()
         .remove("openai")
-        .expect("Did not find provider `openai` under `gpt-3.5-turbo`");
+        .expect("Did not find provider OpenAI under `gpt-3.5-turbo`");
     config["models"]["gpt-3.5-turbo"]["providers"]
         .as_table_mut()
         .unwrap()

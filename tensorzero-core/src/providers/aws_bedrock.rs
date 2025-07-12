@@ -496,8 +496,8 @@ fn bedrock_to_tensorzero_stream_message(
                 .into()),
             }
         }
-        ConverseStreamOutputType::ContentBlockStop(_) => Ok(None),
-        ConverseStreamOutputType::MessageStart(_) => Ok(None),
+        ConverseStreamOutputType::ContentBlockStop(_)
+        | ConverseStreamOutputType::MessageStart(_) => Ok(None),
         ConverseStreamOutputType::MessageStop(message_stop) => {
             let raw_message = serialize_aws_bedrock_struct(&message_stop)?;
             Ok(Some(ProviderInferenceResponseChunk::new(
@@ -781,9 +781,10 @@ struct ConverseOutputWithMetadata<'a> {
 
 fn aws_stop_reason_to_tensorzero_finish_reason(stop_reason: StopReason) -> Option<FinishReason> {
     match stop_reason {
-        StopReason::ContentFiltered => Some(FinishReason::ContentFilter),
+        StopReason::ContentFiltered | StopReason::GuardrailIntervened => {
+            Some(FinishReason::ContentFilter)
+        }
         StopReason::EndTurn => Some(FinishReason::Stop),
-        StopReason::GuardrailIntervened => Some(FinishReason::ContentFilter),
         StopReason::MaxTokens => Some(FinishReason::Length),
         StopReason::StopSequence => Some(FinishReason::StopSequence),
         StopReason::ToolUse => Some(FinishReason::ToolCall),
@@ -880,7 +881,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
 /// Therefore, we construct this unusual JSON object to store the raw output
 ///
 /// This feature request has been pending since 2022:
-/// https://github.com/awslabs/aws-sdk-rust/issues/645
+/// [AWS Rust SDK Issue 645](https://github.com/awslabs/aws-sdk-rust/issues/645)
 fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String, Error> {
     serde_json::to_string(&serde_json::json!({"debug": format!("{:?}", output)})).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
@@ -944,7 +945,7 @@ impl TryFrom<ToolChoice> for AWSBedrockToolChoice {
             // that no tools are sent in the request payload. This achieves the same effect
             // as explicitly telling the model not to use tools, since without any tools
             // being provided, the model cannot make tool calls.
-            ToolChoice::None => Ok(AWSBedrockToolChoice::Auto(AutoToolChoice::builder().build())),
+            ToolChoice::None |
             ToolChoice::Auto => Ok(AWSBedrockToolChoice::Auto(
                 AutoToolChoice::builder().build(),
             )),

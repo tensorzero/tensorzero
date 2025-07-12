@@ -41,7 +41,7 @@ pub enum ClientInputMessageContent {
     #[serde(alias = "image")]
     File(File),
     /// An unknown content block type, used to allow passing provider-specific
-    /// content blocks (e.g. Anthropic's "redacted_thinking") in and out
+    /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
     /// of TensorZero.
     /// The 'data' field hold the original content block from the provider,
     /// without any validation or transformation by TensorZero.
