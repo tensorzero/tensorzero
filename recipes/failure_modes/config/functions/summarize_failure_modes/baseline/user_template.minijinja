@@ -1,0 +1,8 @@
+**System Template:**
+
+{{ system_template }}
+
+**Root Causes:**
+{% for cause in root_causes %}
+- {{ cause }}
+{% endfor %}

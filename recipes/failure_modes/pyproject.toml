@@ -1,0 +1,28 @@
+[project]
+name = "tensorzero-recipes"
+version = "0.0.0"
+requires-python = ">=3.9"
+dependencies = [
+  "altair",
+  "clickhouse-connect",
+  "ipykernel",
+  "jupyter>=1.0.0",
+  "minijinja",
+  "openai",
+  "pandas",
+  "scikit-learn",
+  "tensorzero",
+  "toml",
+  "tqdm",
+]
+
+[tool.uv.workspace]
+members = ["tensorzero-recipes"]
+
+[dependency-groups]
+dev = [
+    "pandas-stubs",
+    "pyright",
+    "pytest-asyncio",
+    "pytest",
+]
