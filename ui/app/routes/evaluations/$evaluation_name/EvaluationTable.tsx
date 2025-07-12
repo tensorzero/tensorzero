@@ -415,7 +415,7 @@ export function EvaluationTable({
                                 .map(([runId]) => runId)
                                 .join(",");
                               navigate(
-                                `/evaluations/${evaluation_name}/${datapoint.id}?evaluation_run_ids=${evaluation_run_ids}`,
+                                `/evaluations/${encodeURIComponent(evaluation_name)}/${datapoint.id}?evaluation_run_ids=${evaluation_run_ids}`,
                               );
                             }}
                           >

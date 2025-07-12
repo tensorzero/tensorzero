@@ -72,7 +72,7 @@ export default function BasicInfo({
             <Chip
               label={dynamicEvaluationRun.project_name}
               font="mono"
-              link={`/dynamic_evaluations/projects/${dynamicEvaluationRun.project_name}`}
+              link={`/dynamic_evaluations/projects/${encodeURIComponent(dynamicEvaluationRun.project_name)}`}
             />
           </BasicInfoItemContent>
         </BasicInfoItem>
@@ -87,8 +87,8 @@ export default function BasicInfo({
                 key={k}
                 k={k}
                 v={v}
-                k_href={`/observability/functions/${k}`}
-                v_href={`/observability/functions/${k}/variants/${v}`}
+                k_href={`/observability/functions/${encodeURIComponent(k)}`}
+                v_href={`/observability/functions/${encodeURIComponent(k)}/variants/${encodeURIComponent(v)}`}
               />
             ))}
           </div>

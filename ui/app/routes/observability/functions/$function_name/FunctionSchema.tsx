@@ -4,7 +4,6 @@ import {
   SnippetContent,
   SnippetTabs,
   type SnippetTab,
-  SnippetMessage,
 } from "~/components/layout/SnippetLayout";
 import { CodeMessage } from "~/components/layout/SnippetContent";
 
@@ -86,13 +85,11 @@ export default function FunctionSchema({
 
           return (
             <SnippetContent maxHeight={240}>
-              <SnippetMessage>
-                <CodeMessage
-                  content={formattedContent}
-                  showLineNumbers={true}
-                  emptyMessage={tab?.emptyMessage}
-                />
-              </SnippetMessage>
+              <CodeMessage
+                content={formattedContent}
+                showLineNumbers={true}
+                emptyMessage={tab?.emptyMessage}
+              />
             </SnippetContent>
           );
         }}

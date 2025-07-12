@@ -45,7 +45,7 @@ export function TagsTable({ tags }: TagsTableProps) {
             return;
           }
           navigate(
-            `/evaluations/${evaluationName}?evaluation_run_ids=${value}`,
+            `/evaluations/${encodeURIComponent(evaluationName)}?evaluation_run_ids=${value}`,
           );
           break;
         }
@@ -55,14 +55,16 @@ export function TagsTable({ tags }: TagsTableProps) {
           if (!datasetName) {
             return;
           }
-          navigate(`/datasets/${datasetName}/datapoint/${value}`);
+          navigate(
+            `/datasets/${encodeURIComponent(datasetName)}/datapoint/${value}`,
+          );
           break;
         }
         case "tensorzero::evaluation_name":
-          navigate(`/evaluations/${value}`);
+          navigate(`/evaluations/${encodeURIComponent(value)}`);
           break;
         case "tensorzero::dataset_name":
-          navigate(`/datasets/${value}`);
+          navigate(`/datasets/${encodeURIComponent(value)}`);
           break;
         case "tensorzero::evaluator_inference_id":
           navigate(`/observability/inferences/${value}`);

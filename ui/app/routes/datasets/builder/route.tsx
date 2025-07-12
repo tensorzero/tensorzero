@@ -35,6 +35,13 @@ export async function action({ request }: ActionFunctionArgs) {
   try {
     const queryParams = serializedFormDataToDatasetQueryParams(jsonData);
 
+    if (!queryParams.dataset_name) {
+      return data(
+        { errors: { message: "`dataset_name` is required" } },
+        { status: 400 },
+      );
+    }
+
     const [writtenRows, totalRows] = await Promise.all([
       insertRowsForDataset(queryParams),
       countRowsForDataset(queryParams),
@@ -42,7 +49,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const skippedRows = totalRows - writtenRows;
 
     return redirect(
-      `/datasets/${queryParams.dataset_name}?rowsAdded=${writtenRows}&rowsSkipped=${skippedRows}`,
+      `/datasets/${encodeURIComponent(queryParams.dataset_name)}?rowsAdded=${writtenRows}&rowsSkipped=${skippedRows}`,
     );
   } catch (error) {
     logger.error("Error creating dataset:", error);
