@@ -1,0 +1,6 @@
+report_weather:
+  description: >
+    Report the weather for the current day based on the location provided.
+  expected_output: >
+    Report the weather for the current day for the provided location: {location}
+  agent: weather_analyst
