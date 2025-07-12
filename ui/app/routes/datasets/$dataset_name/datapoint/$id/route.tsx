@@ -101,7 +101,9 @@ export async function action({ request }: ActionFunctionArgs) {
     if (datasetCount === undefined) {
       return redirect("/datasets");
     }
-    return redirect(`/datasets/${parsedFormData.dataset_name}`);
+    return redirect(
+      `/datasets/${encodeURIComponent(parsedFormData.dataset_name)}`,
+    );
   } else if (action === "save") {
     // If the input changed, we should remove the source_inference_id
     // because it will no longer be valid
@@ -150,7 +152,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
 
       return redirect(
-        `/datasets/${parsedFormData.dataset_name}/datapoint/${id}`,
+        `/datasets/${encodeURIComponent(parsedFormData.dataset_name)}/datapoint/${id}`,
       );
     } catch (error) {
       logger.error("Error updating datapoint:", error);
@@ -420,12 +422,14 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       <div className="mt-8 flex flex-col items-center justify-center gap-2 rounded-xl bg-red-50 p-6 md:mt-0">
         <h1 className="text-2xl font-bold">{heading}</h1>
         {typeof message === "string" ? <p>{message}</p> : message}
-        <Link
-          to={`/datasets/${datasetName}`}
-          className="font-bold text-red-800 hover:text-red-600"
-        >
-          Go back &rarr;
-        </Link>
+        {datasetName && (
+          <Link
+            to={`/datasets/${encodeURIComponent(datasetName)}`}
+            className="font-bold text-red-800 hover:text-red-600"
+          >
+            Go back &rarr;
+          </Link>
+        )}
       </div>
     </div>
   );

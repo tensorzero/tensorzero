@@ -196,7 +196,7 @@ export async function action({ request }: Route.ActionArgs) {
           episodeId.toString(),
         );
         return data<ActionData>({
-          redirectTo: `/datasets/${dataset.toString()}/datapoint/${datapoint.id}`,
+          redirectTo: `/datasets/${encodeURIComponent(dataset.toString())}/datapoint/${datapoint.id}`,
         });
       } catch (error) {
         logger.error(error);

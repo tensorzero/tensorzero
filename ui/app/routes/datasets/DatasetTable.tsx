@@ -34,7 +34,7 @@ export default function DatasetTable({
               <TableRow key={count.dataset_name} id={count.dataset_name}>
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={`/datasets/${count.dataset_name}`}
+                    to={`/datasets/${encodeURIComponent(count.dataset_name)}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">

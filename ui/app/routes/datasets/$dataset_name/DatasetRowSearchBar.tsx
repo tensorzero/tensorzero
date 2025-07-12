@@ -33,7 +33,9 @@ export default function DatasetRowSearchBar({
   });
 
   const onSubmit = (data: FormValues) => {
-    navigate(`/datasets/${dataset_name}/datapoint/${data.datasetRowId}`);
+    navigate(
+      `/datasets/${encodeURIComponent(dataset_name)}/datapoint/${data.datasetRowId}`,
+    );
     form.reset();
   };
 

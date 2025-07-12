@@ -34,7 +34,7 @@ export default function DynamicEvaluationProjectsTable({
               <TableRow key={project.name}>
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={`/dynamic_evaluations/projects/${project.name}`}
+                    to={`/dynamic_evaluations/projects/${encodeURIComponent(project.name)}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">

@@ -51,7 +51,7 @@ export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
           <Chip
             icon={<Dataset className="text-fg-tertiary" />}
             label={datapoint.dataset_name}
-            link={`/datasets/${datapoint.dataset_name}`}
+            link={`/datasets/${encodeURIComponent(datapoint.dataset_name)}`}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -65,7 +65,7 @@ export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
             iconBg={functionIconConfig.iconBg}
             label={datapoint.function_name}
             secondaryLabel={type}
-            link={`/observability/functions/${datapoint.function_name}`}
+            link={`/observability/functions/${encodeURIComponent(datapoint.function_name)}`}
             font="mono"
           />
         </BasicInfoItemContent>

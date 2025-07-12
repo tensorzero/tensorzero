@@ -4,7 +4,6 @@ import {
   SnippetContent,
   SnippetTabs,
   type SnippetTab,
-  SnippetMessage,
 } from "~/components/layout/SnippetLayout";
 import { TextMessage } from "~/components/layout/SnippetContent";
 
@@ -88,12 +87,10 @@ export default function VariantTemplate({
 
             return (
               <SnippetContent maxHeight={240}>
-                <SnippetMessage>
-                  <TextMessage
-                    content={template}
-                    emptyMessage={tab?.emptyMessage}
-                  />
-                </SnippetMessage>
+                <TextMessage
+                  content={template}
+                  emptyMessage={tab?.emptyMessage}
+                />
               </SnippetContent>
             );
           }}
@@ -119,12 +116,10 @@ export default function VariantTemplate({
         <SnippetTabs tabs={tabs} defaultTab="system_instructions">
           {() => (
             <SnippetContent maxHeight={240}>
-              <SnippetMessage>
-                <TextMessage
-                  content={content}
-                  emptyMessage="No system instructions defined."
-                />
-              </SnippetMessage>
+              <TextMessage
+                content={content}
+                emptyMessage="No system instructions defined."
+              />
             </SnippetContent>
           )}
         </SnippetTabs>

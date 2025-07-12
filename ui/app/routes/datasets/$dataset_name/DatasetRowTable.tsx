@@ -41,7 +41,7 @@ export default function DatasetRowTable({
                 <TableCell className="max-w-[200px]">
                   <TableItemShortUuid
                     id={row.id}
-                    link={`/datasets/${dataset_name}/datapoint/${row.id}`}
+                    link={`/datasets/${encodeURIComponent(dataset_name)}/datapoint/${row.id}`}
                   />
                 </TableCell>
                 <TableCell>
@@ -54,7 +54,6 @@ export default function DatasetRowTable({
                   <TableItemFunction
                     functionName={row.function_name}
                     functionType={row.type}
-                    link={`/observability/functions/${row.function_name}`}
                   />
                 </TableCell>
                 <TableCell>

@@ -55,14 +55,16 @@ export default function DynamicEvaluationRunsTable({
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <Link
-                    to={`/dynamic_evaluations/projects/${run.project_name}?run_ids=${run.id}`}
-                    className="block no-underline"
-                  >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                      {run.project_name}
-                    </code>
-                  </Link>
+                  {run.project_name && (
+                    <Link
+                      to={`/dynamic_evaluations/projects/${encodeURIComponent(run.project_name)}?run_ids=${run.id}`}
+                      className="block no-underline"
+                    >
+                      <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                        {run.project_name}
+                      </code>
+                    </Link>
+                  )}
                 </TableCell>
                 <TableCell>{run.num_episodes}</TableCell>
                 <TableCell>{formatDate(new Date(run.timestamp))}</TableCell>

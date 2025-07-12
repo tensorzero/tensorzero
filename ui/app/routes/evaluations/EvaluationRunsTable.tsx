@@ -53,12 +53,12 @@ export default function EvaluationRunsTable({
                   <TableCell className="max-w-[200px]">
                     <TableItemShortUuid
                       id={evaluationRun.evaluation_run_id}
-                      link={`/evaluations/${evaluationRun.evaluation_name}?evaluation_run_ids=${evaluationRun.evaluation_run_id}`}
+                      link={`/evaluations/${encodeURIComponent(evaluationRun.evaluation_name)}?evaluation_run_ids=${evaluationRun.evaluation_run_id}`}
                     />
                   </TableCell>
                   <TableCell className="max-w-[200px]">
                     <Link
-                      to={`/evaluations/${evaluationRun.evaluation_name}`}
+                      to={`/evaluations/${encodeURIComponent(evaluationRun.evaluation_name)}`}
                       className="block no-underline"
                     >
                       <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
@@ -68,7 +68,7 @@ export default function EvaluationRunsTable({
                   </TableCell>
                   <TableCell>
                     <Link
-                      to={`/datasets/${evaluationRun.dataset_name}`}
+                      to={`/datasets/${encodeURIComponent(evaluationRun.dataset_name)}`}
                       className="block no-underline"
                     >
                       <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
@@ -80,7 +80,6 @@ export default function EvaluationRunsTable({
                     <TableItemFunction
                       functionName={evaluationRun.function_name}
                       functionType={functionType ?? ""}
-                      link={`/functions/${evaluationRun.function_name}`}
                     />
                   </TableCell>
                   <TableCell>

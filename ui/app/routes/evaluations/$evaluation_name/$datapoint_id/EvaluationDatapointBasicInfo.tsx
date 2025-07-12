@@ -36,7 +36,7 @@ export default function BasicInfo({
         <BasicInfoItemContent>
           <Chip
             label={evaluation_name}
-            link={`/evaluations/${evaluation_name}`}
+            link={`/evaluations/${encodeURIComponent(evaluation_name)}`}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -50,7 +50,7 @@ export default function BasicInfo({
               iconBg={functionIconConfig.iconBg}
               label={functionName}
               secondaryLabel={`· ${functionType}`}
-              link={`/observability/functions/${functionName}`}
+              link={`/observability/functions/${encodeURIComponent(functionName)}`}
               font="mono"
             />
           )}
@@ -62,7 +62,7 @@ export default function BasicInfo({
         <BasicInfoItemContent>
           <Chip
             label={dataset_name}
-            link={`/datasets/${dataset_name}`}
+            link={`/datasets/${encodeURIComponent(dataset_name)}`}
             font="mono"
           />
         </BasicInfoItemContent>
