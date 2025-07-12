@@ -1,7 +1,6 @@
 import { z } from "zod";
 import {
   contentBlockOutputSchema,
-  contentBlockSchema,
   inputSchema,
   jsonInferenceOutputSchema,
   displayInputSchema,
@@ -195,7 +194,7 @@ export const parsedModelInferenceRowSchema = modelInferenceRowSchema
   })
   .extend({
     input_messages: z.array(displayModelInferenceInputMessageSchema),
-    output: z.array(contentBlockSchema),
+    output: z.array(contentBlockOutputSchema),
   });
 
 export type ParsedModelInferenceRow = z.infer<
