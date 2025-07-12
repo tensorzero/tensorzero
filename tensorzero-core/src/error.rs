@@ -89,6 +89,7 @@ pub struct Error(Box<ErrorDetails>);
 impl Error {
     pub fn new(details: ErrorDetails) -> Self {
         details.log();
+        crate::observability::errors::spawn_write_error(&details);
         Error(Box::new(details))
     }
 
@@ -656,6 +657,24 @@ impl ErrorDetails {
             ErrorDetails::UuidInFuture { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::RouteNotFound { .. } => StatusCode::NOT_FOUND,
         }
+    }
+
+    /// Normally, constructing an error causes it to be logged with `tracing::error!`,
+    /// and written to the `TensorZeroError` table in ClickHouse.
+    /// However, we don't attempt to store errors related to ClickHouse itself - these are likely
+    /// to just trigger an error again (e.g. if we originally produced an error due to ClickHouse being down,
+    /// attempting to write that error would just trigger another error).
+    ///
+    /// We do write *ClickHouseDeserialization* errors to ClickHouse, as this indicates a problem
+    /// with the particular query we originally ran, and shouldn't affect whether or not we
+    /// can write to the `TensorZeroError` table.
+    pub fn should_write_to_clickhouse(&self) -> bool {
+        !matches!(
+            self,
+            ErrorDetails::ClickHouseConnection { .. }
+                | ErrorDetails::ClickHouseQuery { .. }
+                | ErrorDetails::ClickHouseMigration { .. }
+        )
     }
 
     /// Log the error using the `tracing` library
