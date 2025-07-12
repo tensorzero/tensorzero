@@ -27,6 +27,7 @@ use tensorzero_core::{
 
 mod fireworks_sft;
 mod openai_sft;
+mod together_sft;
 
 static FERRIS_PNG: &[u8] = include_bytes!("../e2e/providers/ferris.png");
 
