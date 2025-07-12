@@ -24,7 +24,7 @@ import {
 import { queryMetricsWithFeedback } from "~/utils/clickhouse/feedback";
 import { getInferenceTableName } from "~/utils/clickhouse/common";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import FunctionVariantTable from "./FunctionVariantTable";
 import {
@@ -184,6 +184,15 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
+  const metricsExcludingDemonstrations = useMemo(
+    () => ({
+      metrics: metricsWithFeedback.metrics.filter(
+        ({ metric_type }) => metric_type !== "demonstration",
+      ),
+    }),
+    [metricsWithFeedback],
+  );
+
   const [time_granularity, setTimeGranularity] =
     useState<TimeWindowUnit>("week");
   const handleTimeGranularityChange = (granularity: TimeWindowUnit) => {
@@ -218,7 +227,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
         <SectionLayout>
           <SectionHeader heading="Metrics" />
           <MetricSelector
-            metricsWithFeedback={metricsWithFeedback}
+            metricsWithFeedback={metricsExcludingDemonstrations}
             selectedMetric={metric_name || ""}
             onMetricChange={handleMetricChange}
           />

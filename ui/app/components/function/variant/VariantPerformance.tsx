@@ -173,16 +173,32 @@ export type VariantPerformanceData = {
   [key: string]: string | number; // Allow date as string and all other fields as numbers
 };
 
+type PerformanceDataGroupedByDate = {
+  date: string;
+  variants: Record<
+    string,
+    {
+      num_inferences: number;
+      avg_metric: number;
+      stdev: number | null;
+      ci_error: number | null;
+    }
+  >;
+}[];
+
 export function transformVariantPerformances(
   parsedRows: VariantPerformanceRow[],
 ): {
   data: VariantPerformanceData[];
   variantNames: string[];
 } {
-  const variantNames = [...new Set(parsedRows.map((row) => row.variant_name))];
+  // Remove rows with n=0 inferences
+  const filtered = parsedRows.filter((row) => row.count > 0);
+
+  const variantNames = [...new Set(filtered.map((row) => row.variant_name))];
 
   // First group by date
-  const groupedByDate = parsedRows.reduce(
+  const groupedByDate = filtered.reduce<PerformanceDataGroupedByDate>(
     (acc, row) => {
       const { period_start, variant_name, count, avg_metric, stdev, ci_error } =
         row;
@@ -207,18 +223,7 @@ export function transformVariantPerformances(
 
       return acc;
     },
-    [] as {
-      date: string;
-      variants: Record<
-        string,
-        {
-          num_inferences: number;
-          avg_metric: number;
-          stdev: number | null;
-          ci_error: number | null;
-        }
-      >;
-    }[],
+    [],
   );
 
   // Sort by date in descending order and take only the 10 most recent periods
