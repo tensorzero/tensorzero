@@ -351,7 +351,7 @@ struct SGLangChatChunk {
     usage: Option<OpenAIUsage>,
 }
 
-/// Streams the SGLang response events and converts them into ProviderInferenceResponseChunks
+/// Streams the SGLang response events and converts them into `ProviderInferenceResponseChunks`
 /// This function handles parsing and processing of thinking blocks with proper state tracking
 fn stream_sglang(
     mut event_source: EventSource,
@@ -512,9 +512,9 @@ impl SGLangResponseFormat {
 /// This struct defines the supported parameters for the OpenAI API
 /// See the [OpenAI API documentation](https://platform.openai.com/docs/api-reference/chat/create)
 /// for more details.
-/// We are not handling logprobs, top_logprobs, n,
-/// presence_penalty, seed, service_tier, stop, user,
-/// or the deprecated function_call and functions arguments.
+/// We are not handling `logprobs`, `top_logprobs`, `n`,
+/// `presence_penalty`, `seed`, `service_tier`, `stop`, `user`,
+/// or the deprecated `function_call` and `functions` arguments.
 #[derive(Debug, Serialize)]
 struct SGLangRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,

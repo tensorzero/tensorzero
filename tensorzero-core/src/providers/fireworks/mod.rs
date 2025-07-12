@@ -148,10 +148,10 @@ pub fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("FIREWORKS_API_KEY".to_string())
 }
 
-/// Key differences between Fireworks and OpenAI inference:
-/// - Fireworks allows you to specify output format in JSON mode
-/// - Fireworks automatically returns usage in streaming inference, we don't have to ask for it
-/// - Fireworks allows you to auto-truncate requests that have too many tokens
+/// Key differences between `Fireworks` and OpenAI inference:
+/// - `Fireworks` allows you to specify output format in JSON mode
+/// - `Fireworks` automatically returns usage in streaming inference, we don't have to ask for it
+/// - `Fireworks` allows you to auto-truncate requests that have too many tokens
 ///   (there are 2 ways to do it, we have the default of auto-truncation to the max window size)
 impl InferenceProvider for FireworksProvider {
     async fn infer<'a>(
@@ -325,10 +325,10 @@ enum FireworksResponseFormat<'a> {
 /// This struct defines the supported parameters for the Fireworks inference API
 /// See the [Fireworks API documentation](https://docs.fireworks.ai/api-reference/post-chatcompletions)
 /// for more details.
-/// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
-/// presence_penalty, frequency_penalty, service_tier, stop, user,
-/// or context_length_exceeded_behavior.
-/// NOTE: Fireworks does not support seed.
+/// We are not handling `logprobs`, `top_logprobs`, `n`, `prompt_truncate_len`
+/// `presence_penalty`, `frequency_penalty`, `service_tier`, `stop`, `user`,
+/// or `context_length_exceeded_behavior`.
+/// NOTE: `Fireworks` does not support seed.
 #[derive(Debug, Serialize)]
 struct FireworksRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
@@ -548,7 +548,7 @@ struct FireworksChatChunk {
     usage: Option<OpenAIUsage>,
 }
 
-/// Streams the Fireworks response events and converts them into ProviderInferenceResponseChunks
+/// Streams the `Fireworks` response events and converts them into `ProviderInferenceResponseChunks`
 /// This function handles parsing and processing of thinking blocks with proper state tracking
 fn stream_fireworks(
     mut event_source: EventSource,
@@ -601,10 +601,10 @@ fn stream_fireworks(
     })
 }
 
-/// Maps a Fireworks chunk to a TensorZero chunk for streaming inferences
+/// Maps a `Fireworks` chunk to a TensorZero chunk for streaming inferences
 ///
-/// This function handles the conversion of Fireworks chat chunks into TensorZero chunks.
-/// It processes the content and tool calls from the Fireworks response, updating the tool call IDs and names.
+/// This function handles the conversion of `Fireworks` chat chunks into TensorZero chunks.
+/// It processes the content and tool calls from the `Fireworks` response, updating the tool call IDs and names.
 /// If parsing think blocks is enabled, it also processes the thinking state and extracts reasoning.
 fn fireworks_to_tensorzero_chunk(
     raw_message: String,

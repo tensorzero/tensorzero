@@ -201,16 +201,16 @@ pub enum InferenceFilterTreeNode {
 }
 
 impl InferenceFilterTreeNode {
-    /// Converts the filter tree to a ClickHouse SQL string.
+    /// Converts the filter tree to a ClickHouse `SQL` string.
     ///
     /// The returned string will contain the filter condition that should be added to the WHERE clause.
     /// The `params_map` is updated with the parameters used in the filter condition.
     /// The `param_idx_counter` is updated with the current index of the parameter.
-    /// The `_select_clauses` is not used *yet*--we will want to add metric columns to the SELECT clause for visibility and debugging.
-    /// The `joins` is updated with the JOIN clauses.
+    /// The `_select_clauses` is not used *yet*--we will want to add metric columns to the `SELECT` clause for visibility and debugging.
+    /// The `joins` is updated with the `JOIN` clauses.
     ///
-    /// NOTE: This is not efficient at all yet. We are doing a lot of JOINs and GROUP BYs.
-    /// We may be able to do this more efficiently by using subqueries and CTEs.
+    /// NOTE: This is not efficient at all yet. We are doing a lot of `JOIN`s and `GROUP BY`s.
+    /// We may be able to do this more efficiently by using subqueries and `CTE`s.
     /// We're also doing a join per filter. In principle if there is a subtree of the tree that uses the same joined table,
     /// we could push the condition down into the query before the join
     fn to_clickhouse_sql(
@@ -516,7 +516,7 @@ impl Display for ClickhouseType {
 }
 
 /// Helper to add a parameter and return its SQL placeholder {name:CHType}
-/// The internal_name (e.g. p0, p1) is stored in params_map with its value.
+/// The `internal_name` (e.g. `p0`, `p1`) is stored in `params_map` with its value.
 fn add_parameter<T: ToString>(
     value: T,
     ch_type: ClickhouseType,

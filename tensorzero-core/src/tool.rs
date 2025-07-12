@@ -336,7 +336,7 @@ impl ToolCall {
 /// This is like `ToolCallOutput`, but more relaxed (`raw_arguments` and `raw_name` are optional)
 /// This allows round-tripping a `ToolCallOutput` without needing to modify the json object,
 /// but also allows manually-constructed `ToolCallInput` where users don't care about the
-/// name/raw_name distinction.
+/// `name`/`raw_name` distinction.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ToolCallInput {
@@ -417,9 +417,9 @@ impl ToolCallOutput {
 }
 
 impl ToolCallOutput {
-    /// Validates that a ToolCall is compliant with the ToolCallConfig
-    /// First, it finds the ToolConfig for the ToolCall
-    /// Then, it validates the ToolCall arguments against the ToolConfig
+    /// Validates that a `ToolCall` is compliant with the `ToolCallConfig`.
+    /// First, it finds the `ToolConfig` for the `ToolCall`
+    /// Then, it validates the `ToolCall` arguments against the `ToolConfig`
     pub async fn new(tool_call: ToolCall, tool_cfg: Option<&ToolCallConfig>) -> Self {
         let tool = tool_cfg.and_then(|t| t.get_tool(&tool_call.name));
         let parsed_name = match tool {
@@ -741,7 +741,7 @@ impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
 }
 
 /// For use in initializing JSON functions
-/// Creates a ToolCallConfig with a single implicit tool that takes the schema as arguments
+/// Creates a `ToolCallConfig` with a single implicit tool that takes the schema as arguments
 pub fn create_implicit_tool_call_config(schema: StaticJSONSchema) -> ToolCallConfig {
     let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig { parameters: schema });
     ToolCallConfig {

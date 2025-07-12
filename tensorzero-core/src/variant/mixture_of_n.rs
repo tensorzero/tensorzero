@@ -647,7 +647,7 @@ async fn inner_fuse_candidates_stream<'a, 'request>(
 
 impl FuserConfig {
     /// Prepares the system message for the fuser variant.
-    /// We use the system_template of the fuser variant to generate a system message as if we
+    /// We use the `system_template` of the fuser variant to generate a system message as if we
     /// were using the fuser variant directly to solve the problem.
     /// Then, we template that system message into a broader set of instructions that includes
     /// information about what the fuser will be asked to do (choose a candidate).

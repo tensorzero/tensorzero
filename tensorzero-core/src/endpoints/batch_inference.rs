@@ -670,8 +670,8 @@ pub async fn write_batch_request_row(
 
 /// Writes the status of a batch inference request to the database
 /// This is a light operation unless the batch is freshly completed, in which case it writes
-/// ChatInferences / JsonInferences and ModelInferences as well as updating the
-/// BatchRequest table with a new row.
+/// `ChatInferences` / `JsonInferences` and `ModelInferences` as well as updating the
+/// `BatchRequest` table with a new row.
 ///
 /// Note: only call this function if the batch was Pending prior to being polled.
 /// We don't need to poll if the batch is failed or completed because the status will not change.
@@ -767,8 +767,8 @@ async fn write_batch_request_status_update(
     Ok(())
 }
 
-/// This function writes ChatInferences / JsonInferences and ModelInferences to the database
-/// and updates the BatchRequest table with a new row.
+/// This function writes `ChatInferences` / `JsonInferences` and `ModelInferences` to the database
+/// and updates the `BatchRequest` table with a new row.
 ///
 /// It takes a `ProviderBatchInferenceResponse` which is the response from the model provider
 /// and converts it into a `Vec<InferenceResponse>` which is what gets written to the database.

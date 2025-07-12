@@ -11,7 +11,7 @@ use async_trait::async_trait;
 /// hard to use in any structured way, though useful for debugging.
 ///
 /// In this migration, we add columns `system`, `input_messages`, and `output` that all will be strings with the latter two structured as JSON.
-/// These will contain the system message, the input messages (as a List[List[ContentBlock]]) and the output (as a List[ContentBlock]).
+/// These will contain the system message, the input messages (as a `List[List[ContentBlock]]`) and the output (as a `List[ContentBlock]`).
 ///
 /// This will be useful to all who need to understand exactly what went in and out of the LLM.
 pub struct Migration0004<'a> {

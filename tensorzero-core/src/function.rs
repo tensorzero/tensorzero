@@ -267,7 +267,7 @@ impl FunctionConfig {
     /// - For a chat function, the input is validated against the system, user, and assistant schemas.
     /// - For a JSON function, the input is validated against the system, user, and assistant schemas.
     ///
-    /// We do not validate ContentBlocks that are not text (tool calls and tool responses).
+    /// We do not validate `ContentBlocks` that are not text (tool calls and tool responses).
     pub fn validate_input(&self, input: &Input) -> Result<(), Error> {
         match &self {
             FunctionConfig::Chat(params) => {
@@ -293,7 +293,7 @@ impl FunctionConfig {
     /// Prepare the tool config for the function.
     /// For a Chat function, this will incorporate the tool information configured in the function as
     /// well as the dynamic tool calling information passed in `dynamic_tool_params`.
-    /// JSON functions do not get tool_configs even if they end up using tools under the hood.
+    /// `JSON` functions do not get `tool_configs` even if they end up using tools under the hood.
     pub fn prepare_tool_config(
         &self,
         dynamic_tool_params: DynamicToolParams,
@@ -525,7 +525,7 @@ fn get_json_output_from_content_blocks(
     (raw_output, content_blocks, json_block_index)
 }
 
-/// Validate all input messages that contain text (not raw_text).
+/// Validate all input messages that contain text (not `raw_text`).
 /// The validation is done based on the input's role and the function's schemas.
 /// We first validate the system message (if it exists)
 /// Next we validate all messages containing text blocks.

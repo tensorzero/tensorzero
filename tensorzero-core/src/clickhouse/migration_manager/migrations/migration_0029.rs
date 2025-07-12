@@ -5,8 +5,8 @@ use async_trait::async_trait;
 
 use super::check_table_exists;
 
-/// This migration completes the process started by migration_0028 of migrating away from 0023. We drop the old view
-/// StaticEvaluationHumanFeedbackFloatView and StaticEvaluationHumanFeedbackBooleanView, which were subsumed in 0028.
+/// This migration completes the process started by `migration_0028` of migrating away from 0023. We drop the old view
+/// `StaticEvaluationHumanFeedbackFloatView` and `StaticEvaluationHumanFeedbackBooleanView`, which were subsumed in 0028.
 pub struct Migration0029<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }

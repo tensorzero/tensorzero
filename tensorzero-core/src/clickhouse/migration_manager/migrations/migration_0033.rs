@@ -9,7 +9,7 @@ use uuid::Uuid;
 /// This migration adds a `DeploymentID` table with a single column `deployment_id`
 /// It should be initialized once on initial deployment of the gateway against a ClickHouse instance.
 /// We will use the oldest deployment ID in the table as the canonical deployment ID.
-/// The deployment ID in the ClickHouse will be the blake3 hash of a UUIDv7 generated at migration runtime.
+/// The deployment ID in the ClickHouse will be the `blake3` hash of a `UUIDv7` generated at migration runtime.
 pub struct Migration0033<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }

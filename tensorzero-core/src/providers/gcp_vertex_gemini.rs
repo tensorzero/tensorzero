@@ -145,7 +145,7 @@ struct StoreAndPath {
 }
 
 /// Joins a Google Cloud Storage directory path (with an optional trailing slash) with a file name.
-/// This is used to support both "gs://bucket/path" and "gs://bucket/path/" formats in tensorzero.toml
+/// This is used to support both `gs://bucket/path` and `gs://bucket/path/` formats in `tensorzero.toml`
 fn join_cloud_paths(dir: &str, file: &str) -> String {
     dir.strip_suffix("/").unwrap_or(dir).to_string() + "/" + file
 }
@@ -816,7 +816,7 @@ struct GCPVertexBatchParams {
 ///
 /// We implement below the JWT request signing as documented [here](https://developers.google.com/identity/protocols/oauth2/service-account).
 ///
-/// GCPCredentials contains the pieces of information required to successfully make a request using a service account JWT
+/// `GCPCredentials` contains the pieces of information required to successfully make a request using a service account `JWT`
 /// key. The way this works is that there are "claims" about who is making the request and we sign those claims using the key.
 #[derive(Clone)]
 pub struct GCPServiceAccountCredentials {

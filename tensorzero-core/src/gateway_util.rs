@@ -205,7 +205,7 @@ pub struct ShutdownHandle {
     sender: Sender<()>,
 }
 
-/// Starts a new HTTP TensorZero gateway on an unused port, with only the openai-compatible endpoint enabled.
+/// Starts a new HTTP TensorZero gateway on an unused port, with only the OpenAI-compatible endpoint enabled.
 /// This is used in by `patch_openai_client` in the Python client to allow pointing the OpenAI client
 /// at a local gateway (via `base_url`).
 ///

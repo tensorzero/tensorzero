@@ -881,7 +881,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
 /// Therefore, we construct this unusual JSON object to store the raw output
 ///
 /// This feature request has been pending since 2022:
-/// https://github.com/awslabs/aws-sdk-rust/issues/645
+/// [AWS Rust SDK Issue 645](https://github.com/awslabs/aws-sdk-rust/issues/645)
 fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String, Error> {
     serde_json::to_string(&serde_json::json!({"debug": format!("{:?}", output)})).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {

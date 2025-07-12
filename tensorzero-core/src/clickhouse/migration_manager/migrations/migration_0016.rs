@@ -16,7 +16,7 @@ use super::{check_table_exists, table_is_nonempty};
 /// This migration should subsume migration 0014.
 /// They should have been removed from the binary upon merging of this migration.
 ///
-/// This migration differs from 0014 in that it uses DateTime64(6, 'UTC') instead of DateTime('UTC')
+/// This migration differs from 0014 in that it uses `DateTime64(6, 'UTC')` instead of `DateTime('UTC')`
 pub struct Migration0016<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }

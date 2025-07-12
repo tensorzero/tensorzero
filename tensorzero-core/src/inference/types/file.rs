@@ -219,7 +219,7 @@ pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, E
 /// Tries to convert a filename to a mime type, based on the file extension.
 /// This picks an arbitrary mime type if there are multiple mime types for the extension.
 ///
-/// This is used by the openai-compatible endpoint to determine the mime type for
+/// This is used by the OpenAI-compatible endpoint to determine the mime type for
 /// a file input (the OpenAI chat-completions endpoint doesn't provide a mime type for
 /// file inputs)
 pub fn filename_to_mime_type(filename: &str) -> Result<MediaType, Error> {

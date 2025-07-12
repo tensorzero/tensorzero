@@ -196,14 +196,14 @@ struct FullCacheRow<T: CacheOutput> {
 /// The underlying cached input/output data. These are the fields that we actually retrieve from
 /// ClickHouse when going a cache fetch
 #[derive(Debug, Deserialize, Serialize)]
-pub struct CacheData<T: CacheOutput> {
-    pub output: T,
-    pub raw_request: String,
-    pub raw_response: String,
-    pub input_tokens: u32,
-    pub output_tokens: u32,
-    pub finish_reason: Option<FinishReason>,
-}
+pub struct CacheData<T: CacheOutput>(
+    pub T,
+    pub String,
+    pub String,
+    pub u32,
+    pub u32,
+    pub Option<FinishReason>,
+);
 
 /// A marker trait for types that can be used in the 'output' field of `CacheData`
 /// This ensures that we don't accidentally try to serialize/deserialize the wrong type
@@ -261,14 +261,14 @@ pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
                 &[FullCacheRow {
                     short_cache_key,
                     long_cache_key,
-                    data: CacheData {
+                    data: CacheData(
                         output,
                         raw_request,
                         raw_response,
                         input_tokens,
                         output_tokens,
                         finish_reason,
-                    },
+                    ),
                 }],
                 "ModelInferenceCache",
             )
@@ -328,14 +328,14 @@ pub fn start_cache_write_streaming(
                 &[FullCacheRow {
                     short_cache_key,
                     long_cache_key,
-                    data: CacheData {
+                    data: CacheData(
                         output,
                         raw_request,
-                        raw_response: String::new(),
+                        String::new(),
                         input_tokens,
                         output_tokens,
                         finish_reason,
-                    },
+                    ),
                 }],
                 "ModelInferenceCache",
             )
@@ -464,7 +464,7 @@ mod tests {
 
     use super::*;
 
-    /// This test ensures that if we make a small change to the ModelInferenceRequest,
+    /// This test ensures that if we make a small change to the `ModelInferenceRequest`,
     /// the cache key will change.
     #[test]
     fn test_get_cache_key() {

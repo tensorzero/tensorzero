@@ -149,11 +149,11 @@ impl Intercept for TensorZeroInterceptor {
     }
 }
 
-/// Builds our custom interceptor to the request builder, which injects our 'extra_body' parameters into
+/// Builds our custom interceptor to the request builder, which injects our `extra_body` parameters into
 /// the request body.
 /// Returns the interceptor, and a function to retrieve the raw request.
 /// This awkward signature is due to the fact that we cannot call `send()` from a generic
-/// function, as one of the needed traits is private: https://github.com/awslabs/aws-sdk-rust/issues/987
+/// function, as one of the needed traits is private: [AWK Rust SDK issue 987](https://github.com/awslabs/aws-sdk-rust/issues/987)
 pub fn build_interceptor(
     request: &ModelInferenceRequest<'_>,
     model_provider: &ModelProvider,

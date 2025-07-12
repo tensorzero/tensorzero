@@ -44,7 +44,7 @@ impl ClickHouseConnectionInfo {
     /// For e2e tests, you should use the `get_clickhouse` function.
     ///
     /// This function returns an error if anything is malformed but if the connection is unhealthy it logs that and
-    /// returns Ok(Production{ ... })
+    /// returns `Ok(Production{ ... })`
     ///
     /// However, for tests that directly test ClickHouse behavior, you can directly create the struct.
     pub async fn new(database_url: &str) -> Result<Self, Error> {
@@ -296,7 +296,7 @@ impl ClickHouseConnectionInfo {
     /// Sometimes you might want to treat the data you're sending as a table if you're going
     /// to do some analysis or filtering prior to inserting it into ClickHouse.
     /// This function allows you to do this with ClickHouse's external data feature.
-    /// https://clickhouse.com/docs/engines/table-engines/special/external-data
+    /// See [ClickHouse external-data](https://clickhouse.com/docs/engines/table-engines/special/external-data)
     pub async fn run_query_with_external_data(
         &self,
         external_data: ExternalDataInfo,
@@ -495,7 +495,7 @@ impl ClickHouseConnectionInfo {
 /// ClickHouse uses backslashes to escape quotes and all other special sequences in strings.
 /// In certain cases, we'll need to use a string as a literal in a ClickHouse query.
 /// e.g. to compare a raw string containing user input to strings in the database.
-/// These may contain single quotes and backslashes, for example, if the user input contains doubly-serialized JSON.
+/// These may contain single quotes and backslashes, for example, if the user input contains doubly-serialized `JSON`.
 /// This function will escape single quotes and backslashes in the input string so that the comparison will be accurate.
 pub fn escape_string_for_clickhouse_literal(s: &str) -> String {
     s.replace(r#"\"#, r#"\\"#).replace(r#"'"#, r#"\'"#)
