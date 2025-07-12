@@ -134,11 +134,13 @@ export function ParameterizedMessage({ parameters }: { parameters?: unknown }) {
 
 function ToolDetails({
   name,
+  nameLabel,
   id,
   payload,
   payloadLabel,
 }: {
   name: string;
+  nameLabel: string;
   id: string;
   payload: string;
   payloadLabel: string;
@@ -147,7 +149,7 @@ function ToolDetails({
 
   return (
     <div className="border-border bg-bg-tertiary/50 grid grid-flow-row grid-cols-[min-content_1fr] grid-rows-[repeat(3,min-content)] place-content-center gap-x-4 gap-y-1 rounded-sm px-3 py-2 text-xs">
-      <p className="text-fg-secondary font-medium">Name</p>
+      <p className="text-fg-secondary font-medium">{nameLabel}</p>
       <p className="self-center truncate font-mono text-[0.6875rem]">{name}</p>
 
       <p className="text-fg-secondary font-medium">ID</p>
@@ -164,14 +166,18 @@ function ToolDetails({
 }
 
 interface ToolCallMessageProps {
-  toolName: string;
-  toolArguments: string;
+  toolName: string | null;
+  toolRawName: string;
+  toolArguments: string | null;
+  toolRawArguments: string;
   toolCallId: string;
 }
 
 export function ToolCallMessage({
   toolName,
+  toolRawName,
   toolArguments,
+  toolRawArguments,
   toolCallId,
 }: ToolCallMessageProps) {
   return (
@@ -181,10 +187,11 @@ export function ToolCallMessage({
         icon={<Terminal className="text-fg-muted h-3 w-3" />}
       />
       <ToolDetails
-        name={toolName}
+        name={toolName || toolRawName}
+        nameLabel={toolName ? "Name" : "Name (Invalid)"}
         id={toolCallId}
-        payload={toolArguments}
-        payloadLabel="Arguments"
+        payload={toolArguments || toolRawArguments}
+        payloadLabel={toolArguments ? "Arguments" : "Arguments (Invalid)"}
       />
     </div>
   );
@@ -209,6 +216,7 @@ export function ToolResultMessage({
       />
       <ToolDetails
         name={toolName}
+        nameLabel="Name"
         id={toolResultId}
         payload={toolResult}
         payloadLabel="Result"

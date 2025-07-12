@@ -52,7 +52,9 @@ function renderContentBlock(block: DisplayInputMessageContent, index: number) {
         <ToolCallMessage
           key={index}
           toolName={block.name}
+          toolRawName={block.name} // tool calls in the input aren't parsed, so there's no "raw"
           toolArguments={block.arguments}
+          toolRawArguments={block.arguments} // tool calls in the input aren't parsed, so there's no "raw"
           toolCallId={block.id}
         />
       );
