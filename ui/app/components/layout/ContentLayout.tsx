@@ -3,7 +3,10 @@ import { useBreadcrumbs } from "~/hooks/use-breadcrumbs";
 
 export function ContentLayout({ children }: React.PropsWithChildren) {
   const { segments, hideBreadcrumbs } = useBreadcrumbs();
-  const pageTitle = [...segments.map((b) => b.label), "TensorZero"].join(" • ");
+  const pageTitle =
+    segments.length > 0
+      ? [...segments.map((b) => b.label), "TensorZero"].join(" • ")
+      : "Dashboard • TensorZero";
 
   return (
     <>
