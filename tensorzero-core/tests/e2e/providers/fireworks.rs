@@ -22,7 +22,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "fireworks-extra-body".to_string(),
-        model_name: "qwen2p5-72b-instruct".into(),
+        model_name: "fireworks::accounts/fireworks/models/deepseek-r1-0528".into(),
         model_provider_name: "fireworks".into(),
         credentials: HashMap::new(),
     }];
@@ -30,7 +30,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "fireworks-extra-headers".to_string(),
-        model_name: "qwen2p5-72b-instruct".into(),
+        model_name: "fireworks::accounts/fireworks/models/deepseek-r1-0528".into(),
         model_provider_name: "fireworks".into(),
         credentials: HashMap::new(),
     }];

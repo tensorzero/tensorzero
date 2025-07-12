@@ -981,14 +981,14 @@ max_tokens = 500
 
 [functions.basic_test.variants.fireworks-extra-body]
 type = "chat_completion"
-model = "qwen2p5-72b-instruct"
+model = "fireworks::accounts/fireworks/models/deepseek-r1-0528"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.fireworks-extra-headers]
 type = "chat_completion"
-model = "qwen2p5-72b-instruct"
+model = "fireworks::accounts/fireworks/models/deepseek-r1-0528"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [{ name = "Authorization", value = "invalid_fireworks_auth" }]
