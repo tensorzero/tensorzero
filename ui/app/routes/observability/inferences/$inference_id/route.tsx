@@ -42,7 +42,6 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
-import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import {
@@ -82,7 +81,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const inferencePromise = queryInferenceById(inference_id);
   const modelInferencesPromise =
     queryModelInferencesByInferenceId(inference_id);
-  const datasetCountsPromise = getDatasetCounts();
   const demonstrationFeedbackPromise = queryDemonstrationFeedbackByInferenceId({
     inference_id,
     page_size: 1, // Only need to know if *any* exist
@@ -108,7 +106,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const [
     inference,
     model_inferences,
-    dataset_counts,
     demonstration_feedback,
     feedback_bounds,
     feedback,
@@ -116,7 +113,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ] = await Promise.all([
     inferencePromise,
     modelInferencesPromise,
-    datasetCountsPromise,
     demonstrationFeedbackPromise,
     feedbackBoundsPromise,
     feedbackDataPromise,
@@ -151,7 +147,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     model_inferences,
     feedback,
     feedback_bounds,
-    dataset_counts,
     hasDemonstration: demonstration_feedback.length > 0,
     newFeedbackId,
     latestFeedbackByMetric,
@@ -249,7 +244,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     model_inferences,
     feedback,
     feedback_bounds,
-    dataset_counts,
     hasDemonstration,
     newFeedbackId,
     latestFeedbackByMetric,
@@ -388,7 +382,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
             isLoading={variantInferenceIsLoading}
           />
           <AddToDatasetButton
-            dataset_counts={dataset_counts}
             onDatasetSelect={handleAddToDataset}
             hasDemonstration={hasDemonstration}
           />

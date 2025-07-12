@@ -1,14 +1,12 @@
-import type { Control } from "react-hook-form";
-import { FormField, FormItem, FormLabel } from "~/components/ui/form";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "~/components/ui/popover";
-import { Button } from "~/components/ui/button";
-import { Badge } from "~/components/ui/badge";
-import { Check, ChevronsUpDown, Plus } from "lucide-react";
+import { Button, ButtonIcon } from "~/components/ui/button";
+import { ChevronDown } from "lucide-react";
+import { Table, TablePlus, TableCheck } from "~/components/icons/Icons";
 import {
   Command,
   CommandEmpty,
@@ -18,169 +16,224 @@ import {
   CommandList,
 } from "~/components/ui/command";
 import clsx from "clsx";
-import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
-import type { DatasetBuilderFormValues } from "./types";
+import { useQuery } from "@tanstack/react-query";
+import { z } from "zod";
+
+export const DatasetCountResponse = z.object({
+  datasets: z.array(
+    z.object({
+      name: z.string(),
+      count: z.number(),
+      lastUpdated: z.string().datetime(),
+    }),
+  ),
+});
+
+const useDatasetCounts = () => {
+  return useQuery({
+    queryKey: ["DATASETS_COUNT"],
+    queryFn: async ({ signal }) => {
+      const response = await fetch("/api/datasets/counts", { signal });
+      const data = await response.json();
+      const parsedData = DatasetCountResponse.parse(data);
+      return parsedData.datasets;
+    },
+  });
+};
+
+interface DatasetSelectorProps {
+  selected?: string;
+  onSelect: (dataset: string, isNew: boolean) => void;
+  placeholder?: string;
+  className?: string;
+  allowCreation?: boolean;
+  buttonProps?: React.ComponentProps<typeof Button>;
+}
+
+// TODO Create new datasets within this component
 
 export function DatasetSelector({
-  control,
-  dataset_counts,
-  setIsNewDataset,
-}: {
-  control: Control<DatasetBuilderFormValues>;
-  dataset_counts: DatasetCountInfo[];
-  setIsNewDataset: (isNewDataset: boolean | null) => void;
-}) {
+  selected,
+  onSelect,
+  placeholder = "Select a dataset",
+  allowCreation = true,
+  className,
+  buttonProps,
+}: DatasetSelectorProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  const sortedDatasets = [...dataset_counts].sort(
-    (a, b) =>
-      new Date(b.last_updated).getTime() - new Date(a.last_updated).getTime(),
+  const { data: datasets = [], isLoading } = useDatasetCounts();
+
+  // Datasets sorted by last updated date for initial display
+  const recentlyUpdatedDatasets = useMemo(
+    () =>
+      [...datasets].sort((a, b) => {
+        return (
+          new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
+        );
+      }),
+    [datasets],
   );
 
-  // We would probably want to remove the creation command element if there is an exact match
-  // But, it was hard to implement because command has its own state management that conflicts
-  // const hasExactMatch = sortedDatasets.some(
-  //   (d) => d.dataset_name.toLowerCase() === inputValue.trim().toLowerCase(),
-  // );
-
-  const handleInputChange = (input: string) => {
-    setInputValue(input);
-  };
+  // Selected dataset, if an existing one was selected
+  const existingSelectedDataset = useMemo(
+    () => datasets.find((dataset) => dataset.name === selected),
+    [datasets, selected],
+  );
 
   return (
-    <FormField
-      control={control}
-      name="dataset"
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>Dataset</FormLabel>
-          <div className="grid gap-x-8 md:grid-cols-2">
-            <div className="w-full space-y-2">
-              <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger className="border-gray-200 bg-gray-50" asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    className="w-full justify-between font-normal"
-                  >
-                    <div>
-                      {field.value ? (
-                        <div className="flex items-center">
-                          {dataset_counts.find(
-                            (d) => d.dataset_name === field.value,
-                          ) ? (
-                            <div className="flex items-center">
-                              {field.value}
-                              <span className="ml-2">
-                                <Badge variant="secondary" className="ml-2">
-                                  {dataset_counts
-                                    .find((d) => d.dataset_name === field.value)
-                                    ?.count.toLocaleString()}{" "}
-                                  rows
-                                </Badge>
-                              </span>
-                            </div>
+    <div className={clsx("flex min-w-64 flex-col space-y-2", className)}>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="group w-full justify-between border font-normal"
+            {...buttonProps}
+          >
+            {selected ? (
+              <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
+                {existingSelectedDataset ? (
+                  <Table
+                    size={16}
+                    className="h-4 w-4 shrink-0 text-green-700"
+                  />
+                ) : (
+                  <TablePlus className="h-4 w-4 shrink-0 text-blue-600" />
+                )}
+                <span className="truncate font-mono text-sm">
+                  {existingSelectedDataset?.name ?? selected}
+                </span>
+              </div>
+            ) : (
+              <span className="flex flex-row items-center gap-2">
+                <ButtonIcon as={Table} variant="tertiary" />
+                {placeholder}
+              </span>
+            )}
+
+            <ChevronDown
+              className={clsx(
+                "text-fg-muted ml-2 h-4 w-4 shrink-0 transition duration-300 ease-out",
+                open ? "-rotate-180" : "rotate-0",
+              )}
+            />
+          </Button>
+        </PopoverTrigger>
+
+        <PopoverContent
+          className="w-[var(--radix-popover-trigger-width)] p-0"
+          align="start"
+        >
+          <Command>
+            {/* TODO Naming/character constraints/disallow typing certain characters? */}
+            <CommandInput
+              placeholder={
+                allowCreation
+                  ? recentlyUpdatedDatasets.length > 0
+                    ? "Create or find a dataset..."
+                    : "Create a new dataset..."
+                  : "Find a dataset..."
+              }
+              value={inputValue}
+              onValueChange={setInputValue}
+              className="h-9"
+            />
+
+            {isLoading ? (
+              <div className="text-fg-muted flex items-center justify-center py-4 text-sm">
+                Loading datasets...
+              </div>
+            ) : (
+              <CommandList>
+                <CommandEmpty className="flex items-center justify-center px-4 py-4 text-sm">
+                  No datasets found.
+                </CommandEmpty>
+
+                {recentlyUpdatedDatasets.length > 0 && (
+                  <CommandGroup>
+                    {recentlyUpdatedDatasets.map((dataset) => (
+                      <CommandItem
+                        key={dataset.name}
+                        value={dataset.name}
+                        onSelect={() => {
+                          onSelect(dataset.name, false);
+                          setInputValue("");
+                          setOpen(false);
+                        }}
+                        className="group flex w-full items-center gap-2"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          {selected === dataset.name ? (
+                            <TableCheck size={16} className="text-green-700" />
                           ) : (
-                            <>
-                              <Plus className="mr-2 h-4 w-4 text-blue-500" />
-                              {field.value}
-                              <Badge
-                                variant="outline"
-                                className="ml-2 bg-blue-50 text-blue-500"
-                              >
-                                New Dataset
-                              </Badge>
-                            </>
+                            <Table size={16} className="text-fg-muted" />
                           )}
+                          <span
+                            className={clsx(
+                              "group-hover:text-fg-primary truncate font-mono",
+                              selected === dataset.name
+                                ? "font-medium"
+                                : "font-normal",
+                            )}
+                          >
+                            {dataset.name}
+                          </span>
                         </div>
-                      ) : (
-                        "Create or select a dataset..."
-                      )}
-                    </div>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent
-                  className="w-[var(--radix-popover-trigger-width)] p-0"
-                  align="start"
-                >
-                  <Command>
-                    <CommandInput
-                      placeholder="Search datasets..."
-                      value={inputValue}
-                      onValueChange={handleInputChange}
-                      className="h-9"
-                    />
-                    <CommandList>
-                      <CommandEmpty className="px-4 py-2 text-sm">
-                        No datasets found.
-                      </CommandEmpty>
-                      <CommandGroup heading="New Dataset">
-                        <CommandItem
-                          onSelect={() => {
-                            field.onChange(inputValue.trim());
-                            setInputValue("");
-                            setOpen(false);
-                            setIsNewDataset(true);
-                          }}
-                          className="flex items-center justify-between"
+                        <span
+                          className={clsx(
+                            "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
+                            selected === dataset.name
+                              ? "text-fg-secondary font-medium"
+                              : "text-fg-tertiary font-normal",
+                          )}
                         >
-                          <div className="flex items-center">
-                            <Plus className="mr-2 h-4 w-4 text-blue-500" />
-                            <span>
-                              {inputValue.trim() || "Start typing..."}
-                            </span>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className="bg-blue-50 text-blue-500"
-                          >
-                            Create New Dataset
-                          </Badge>
-                        </CommandItem>
-                      </CommandGroup>
-                      <CommandGroup heading="Existing Datasets">
-                        {sortedDatasets.map((dataset) => (
-                          <CommandItem
-                            key={dataset.dataset_name}
-                            value={dataset.dataset_name}
-                            onSelect={() => {
-                              field.onChange(dataset.dataset_name);
-                              setInputValue("");
-                              setOpen(false);
-                              setIsNewDataset(false);
-                            }}
-                            className="flex items-center justify-between"
-                          >
-                            <div className="flex items-center">
-                              <Check
-                                className={clsx(
-                                  "mr-2 h-4 w-4",
-                                  field.value === dataset.dataset_name
-                                    ? "opacity-100"
-                                    : "opacity-0",
-                                )}
-                              />
-                              <span>{dataset.dataset_name}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="secondary">
-                                {dataset.count.toLocaleString()} rows
-                              </Badge>
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-        </FormItem>
-      )}
-    />
+                          {dataset.count.toLocaleString()}
+                        </span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+              </CommandList>
+            )}
+
+            {
+              // If creation is allowed...
+              allowCreation &&
+                // ...and the user has typed something...
+                inputValue.trim() &&
+                // ...and the dataset doesn't exist in the list of recently updated datasets...
+                !recentlyUpdatedDatasets.some(
+                  (dataset) =>
+                    dataset.name.toLowerCase() ===
+                    inputValue.trim().toLowerCase(),
+                ) && (
+                  // ...then show the "New dataset" group
+                  <CommandGroup heading="New dataset">
+                    <CommandItem
+                      value={`create-${inputValue.trim()}`}
+                      onSelect={() => {
+                        onSelect(inputValue.trim(), true);
+                        setInputValue("");
+                        setOpen(false);
+                      }}
+                      className="flex items-center justify-between"
+                    >
+                      <div className="flex items-center truncate">
+                        <TablePlus className="mr-2 h-4 w-4 text-blue-600" />
+                        <span className="text-fg-primary truncate font-mono text-sm">
+                          {inputValue.trim()}
+                        </span>
+                      </div>
+                    </CommandItem>
+                  </CommandGroup>
+                )
+            }
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }
