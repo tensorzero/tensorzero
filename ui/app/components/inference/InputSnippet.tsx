@@ -20,11 +20,6 @@ import {
 } from "~/components/layout/SnippetContent";
 import type { JsonObject } from "type-fest";
 
-interface InputSnippetProps {
-  messages: DisplayInputMessage[];
-  system?: string | JsonObject | null;
-}
-
 function renderContentBlock(block: DisplayInputMessageContent, index: number) {
   switch (block.type) {
     case "structured_text":
@@ -95,7 +90,17 @@ function renderContentBlock(block: DisplayInputMessageContent, index: number) {
   }
 }
 
-export default function InputSnippet({ system, messages }: InputSnippetProps) {
+interface InputSnippetProps {
+  messages: DisplayInputMessage[];
+  system?: string | JsonObject | null;
+  maxHeight?: number | "Content";
+}
+
+export default function InputSnippet({
+  system,
+  messages,
+  maxHeight,
+}: InputSnippetProps) {
   return (
     <SnippetLayout>
       {!system && messages.length === 0 && (
@@ -105,7 +110,7 @@ export default function InputSnippet({ system, messages }: InputSnippetProps) {
       )}
 
       {system && (
-        <SnippetContent>
+        <SnippetContent maxHeight={maxHeight}>
           <SnippetMessage role="system">
             {typeof system === "object" ? (
               <ParameterizedMessage parameters={system} />
@@ -117,7 +122,7 @@ export default function InputSnippet({ system, messages }: InputSnippetProps) {
       )}
 
       {messages.length > 0 && (
-        <SnippetContent>
+        <SnippetContent maxHeight={maxHeight}>
           {messages.map((message, messageIndex) => (
             <SnippetMessage role={message.role} key={messageIndex}>
               {message.content.map(renderContentBlock)}

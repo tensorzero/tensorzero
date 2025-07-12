@@ -28,3 +28,11 @@ export function useBreadcrumbs(): {
     [matches],
   );
 }
+
+export function useGeneratedPageTitle() {
+  const { segments } = useBreadcrumbs();
+  return useMemo(
+    () => segments.map((b) => b.label).join(" • ") + " • TensorZero",
+    [segments],
+  );
+}

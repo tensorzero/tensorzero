@@ -13,8 +13,10 @@
   "packageManager": "pnpm@10.12.4",
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@tailwindcss/oxide",
       "esbuild",
-      "msw"
+      "msw",
+      "storybook-addon-remix-react-router"
     ]
   }
 }
