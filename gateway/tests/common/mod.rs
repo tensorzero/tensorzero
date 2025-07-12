@@ -62,7 +62,7 @@ pub async fn start_gateway_on_random_port(
         .split_once("listening on 0.0.0.0:")
         .expect("Gateway didn't log listening line")
         .1
-        .split(" ")
+        .split("\"")
         .next()
         .unwrap()
         .parse::<u16>()
