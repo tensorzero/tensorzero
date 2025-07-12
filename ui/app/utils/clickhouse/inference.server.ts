@@ -4,7 +4,8 @@ import {
   type JsonInferenceOutput,
   modelInferenceInputMessageSchema,
   type TableBounds,
-  TableBoundsSchema,
+  type TableBoundsWithCount,
+  TableBoundsWithCountSchema,
 } from "./common";
 import {
   contentBlockSchema,
@@ -45,6 +46,8 @@ import { getConfig } from "../config/index.server";
  * - If `after` is provided, returns the earliest `page_size` Inferences after the given `after` ID.
  *
  * All returned data should be ordered by `id` in descending order.
+ *
+ * TODO (#2788): Create MVs for sorting episodes and inferences by ID DESC
  */
 export async function queryInferenceTable(params: {
   page_size: number;
@@ -175,10 +178,11 @@ export async function queryInferenceTable(params: {
   }
 }
 
+/// TODO (#2788): Create MVs for sorting episodes and inferences by ID DESC
 export async function queryInferenceTableBounds(params?: {
   extraWhere?: string[];
   extraParams?: Record<string, string | number>;
-}): Promise<TableBounds> {
+}): Promise<TableBoundsWithCount> {
   const { extraWhere = [], extraParams = {} } = params ?? {};
 
   // Build WHERE clause
@@ -186,11 +190,14 @@ export async function queryInferenceTableBounds(params?: {
   const whereClause =
     whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
+  // IMPORTANT: This query will return zero UUIDs if there are no results, so we need to handle this case below.
   const query = `
   SELECT
-    (SELECT uint_to_uuid(id_uint) FROM InferenceById FINAL WHERE id_uint = (SELECT MIN(id_uint) FROM InferenceById FINAL ${whereClause})) AS first_id,
-    (SELECT uint_to_uuid(id_uint) FROM InferenceById FINAL WHERE id_uint = (SELECT MAX(id_uint) FROM InferenceById FINAL ${whereClause})) AS last_id
+    uint_to_uuid(MIN(id_uint)) AS first_id,
+    uint_to_uuid(MAX(id_uint)) AS last_id,
+    toUInt32(COUNT()) AS count
   FROM InferenceById FINAL
+  ${whereClause}
   LIMIT 1
   `;
 
@@ -200,33 +207,33 @@ export async function queryInferenceTableBounds(params?: {
       format: "JSONEachRow",
       query_params: extraParams,
     });
+    const rows = await resultSet.json<TableBoundsWithCount>();
 
-    const rows = await resultSet.json<TableBounds>();
-    if (!rows.length) {
+    // Handle the case where there are no results
+    if (!rows.length || rows[0].count === 0) {
       return {
         first_id: null,
         last_id: null,
+        count: 0,
       };
     }
 
-    return TableBoundsSchema.parse(rows[0]);
+    return TableBoundsWithCountSchema.parse(rows[0]);
   } catch (error) {
     logger.error("Failed to query inference table bounds:", error);
-    return {
-      first_id: null,
-      last_id: null,
-    };
+    throw data("Error querying inference table bounds", { status: 500 });
   }
 }
 
-/// Query a table of at most `page_size` Episodes that are before the given `before` ID or after the given `after` ID.
-/// Important: The ordering is on the last inference in the episode, not the first (we want to show the freshest episodes first)
-/// So we should paginate on the last_inference_ids not the Episode IDs
-/// If `before` and `after` are both not provided, the query will return the most recent `page_size` Inferences.
+/// Query a table of at most `page_size` episodes that are before the given `before` ID or after the given `after` ID.
+/// If neither `before` nor `after` are provided, the query will return the most recent `page_size` episodes.
 /// If `before` and `after` are both provided, we will throw an error.
-/// If `before` is provided, the query will return the most recent `page_size` Inferences before the given `before` ID.
-/// If `after` is provided, the query will return the earliest `page_size` Inferences after the given `after` ID.
-/// All returned data should be ordered by `id` in descending order.
+/// If `before` is provided, the query will return the most recent `page_size` episodes before the given `before` ID.
+/// If `after` is provided, the query will return the earliest `page_size` episodes after the given `after` ID.
+///
+/// All returned data should be ordered by `episode_id_uint` in descending order.
+///
+/// TODO (#2788): Create MVs for sorting episodes and inferences by ID DESC
 export async function queryEpisodeTable(params: {
   page_size: number;
   before?: string; // UUIDv7 string
@@ -234,17 +241,22 @@ export async function queryEpisodeTable(params: {
 }): Promise<EpisodeByIdRow[]> {
   const { page_size, before, after } = params;
   if (before && after) {
-    throw new Error("Cannot specify both 'before' and 'after' parameters");
+    throw new Error("Cannot specify both `before` and `after` parameters");
   }
   let query = "";
   const query_params: Record<string, string | number> = {
     page_size,
   };
   if (!before && !after) {
-    // No before/after => just the most recent page_size items
-    // The weird 'WHERE' clause lowers the peak memory usage (and also seems to speed up the query),
-    // though it unfortunately still does a full table scan.
     query = `
+      WITH latest_episode_ids_uint AS (
+        SELECT DISTINCT episode_id_uint
+        FROM InferenceByEpisodeId FINAL
+        -- Filter out episodes in the future i.e. dynamic evaluations
+        WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now)
+        ORDER BY episode_id_uint DESC
+        LIMIT {page_size:UInt32}
+      )
       SELECT
         uint_to_uuid(episode_id_uint) as episode_id,
         toUInt32(count(*)) as count,
@@ -252,13 +264,21 @@ export async function queryEpisodeTable(params: {
         formatDateTime(max(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
         uint_to_uuid(max(id_uint)) as last_inference_id
       FROM InferenceByEpisodeId FINAL
-      WHERE episode_id_uint in (SELECT DISTINCT ON (episode_id) toUInt128(episode_id) FROM InferenceById FINAL ORDER BY id_uint DESC LIMIT {page_size:UInt32})
-      GROUP BY episode_id
-      ORDER BY toUInt128(last_inference_id) DESC
-      LIMIT {page_size:UInt32}
+      WHERE episode_id_uint IN latest_episode_ids_uint
+      GROUP BY episode_id_uint
+      ORDER BY episode_id_uint DESC
     `;
   } else if (before) {
     query = `
+      WITH latest_episode_ids_uint AS (
+        SELECT DISTINCT episode_id_uint
+        FROM InferenceByEpisodeId FINAL
+        -- Filter out episodes in the future i.e. dynamic evaluations
+        WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now)
+          AND episode_id_uint < toUInt128(toUUID({before:String}))
+        ORDER BY episode_id_uint DESC
+        LIMIT {page_size:UInt32}
+      )
       SELECT
         uint_to_uuid(episode_id_uint) as episode_id,
         toUInt32(count(*)) as count,
@@ -266,36 +286,32 @@ export async function queryEpisodeTable(params: {
         formatDateTime(max(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
         uint_to_uuid(max(id_uint)) as last_inference_id
       FROM InferenceByEpisodeId FINAL
-      GROUP BY episode_id
-      HAVING toUInt128(last_inference_id) < toUInt128(toUUID({before:String}))
-      ORDER BY toUInt128(last_inference_id) DESC
-      LIMIT {page_size:UInt32}
+      WHERE episode_id_uint IN latest_episode_ids_uint
+      GROUP BY episode_id_uint
+      ORDER BY episode_id_uint DESC
     `;
     query_params.before = before;
   } else if (after) {
     query = `
-      SELECT
-        episode_id,
-        count,
-        start_time,
-        end_time,
-        last_inference_id
-      FROM
-      (
-        SELECT
-          uint_to_uuid(episode_id_uint) as episode_id,
-          toUInt32(count(*)) as count,
-          formatDateTime(min(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
-          formatDateTime(max(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
-          uint_to_uuid(max(id_uint)) as last_inference_id,
-          max(id_uint) as last_inference_id_uint
+      WITH latest_episode_ids_uint AS (
+        SELECT DISTINCT episode_id_uint
         FROM InferenceByEpisodeId FINAL
-        GROUP BY episode_id
-        HAVING last_inference_id_uint > toUInt128(toUUID({after:String}))
-        ORDER BY last_inference_id_uint ASC
+        -- Filter out episodes in the future i.e. dynamic evaluations
+        WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now)
+          AND episode_id_uint > toUInt128(toUUID({after:String}))
+        ORDER BY episode_id_uint ASC
         LIMIT {page_size:UInt32}
       )
-      ORDER BY last_inference_id_uint DESC
+      SELECT
+        uint_to_uuid(episode_id_uint) as episode_id,
+        toUInt32(count(*)) as count,
+        formatDateTime(min(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+        formatDateTime(max(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
+        uint_to_uuid(max(id_uint)) as last_inference_id
+      FROM InferenceByEpisodeId FINAL
+      WHERE episode_id_uint IN latest_episode_ids_uint
+      GROUP BY episode_id_uint
+      ORDER BY episode_id_uint DESC
     `;
     query_params.after = after;
   }
@@ -321,33 +337,37 @@ export async function queryEpisodeTable(params: {
   }
 }
 
-/// NOTE: these are the last inference IDs of the episodes that have the earliest and latest last inferences,
-/// i.e. the first and last episodes in the table sort order
-/// You should still paginate on the Inference IDs not the Episode IDs
-export async function queryEpisodeTableBounds(): Promise<TableBounds> {
+/// TODO (#2788): Create MVs for sorting episodes and inferences by ID DESC
+export async function queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
+  // IMPORTANT: This query will return zero UUIDs if there are no results, so we need to handle this case below.
   const query = `
     SELECT
-     (SELECT uint_to_uuid(id_uint) FROM InferenceByEpisodeId FINAL WHERE id_uint = (SELECT MIN(id_uint) FROM InferenceByEpisodeId FINAL)) AS first_id,
-     (SELECT uint_to_uuid(id_uint) FROM InferenceByEpisodeId FINAL WHERE id_uint = (SELECT MAX(id_uint) FROM InferenceByEpisodeId FINAL)) AS last_id
+      uint_to_uuid(MIN(episode_id_uint)) AS first_id,
+      uint_to_uuid(MAX(episode_id_uint)) AS last_id,
+      toUInt32(COUNT()) AS count
     FROM InferenceByEpisodeId FINAL
-    LIMIT 1
+    -- Filter out episodes in the future i.e. dynamic evaluations
+    WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now)
   `;
+
   try {
     const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
     });
-    const rows = await resultSet.json<TableBounds>();
-    if (!rows.length) {
+    const rows = await resultSet.json<TableBoundsWithCount>();
+    // Handle the case where there are no results
+    if (!rows.length || rows[0].count === 0) {
       return {
         first_id: null,
         last_id: null,
+        count: 0,
       };
     }
-    return TableBoundsSchema.parse(rows[0]);
+    return TableBoundsWithCountSchema.parse(rows[0]);
   } catch (error) {
     logger.error(error);
-    throw data("Error querying inference table bounds", { status: 500 });
+    throw data("Error querying episode table bounds", { status: 500 });
   }
 }
 

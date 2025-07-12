@@ -355,6 +355,11 @@ export const TableBoundsSchema = z.object({
 });
 export type TableBounds = z.infer<typeof TableBoundsSchema>;
 
+export const TableBoundsWithCountSchema = TableBoundsSchema.extend({
+  count: z.number(),
+});
+export type TableBoundsWithCount = z.infer<typeof TableBoundsWithCountSchema>;
+
 export const FeedbackBoundsSchema = TableBoundsSchema.extend({
   by_type: z.object({
     boolean: TableBoundsSchema,
