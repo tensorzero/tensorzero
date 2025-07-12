@@ -68,7 +68,6 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
   // These are swapped because the table is sorted in descending order
   const disablePrevious =
     !bounds?.last_id || bounds.last_id === topEpisode?.episode_id;
-
   const disableNext =
     !bounds?.first_id || bounds.first_id === bottomEpisode?.episode_id;
 

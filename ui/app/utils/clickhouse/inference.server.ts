@@ -4,7 +4,6 @@ import {
   type JsonInferenceOutput,
   modelInferenceInputMessageSchema,
   type TableBounds,
-  TableBoundsSchema,
   type TableBoundsWithCount,
   TableBoundsWithCountSchema,
 } from "./common";
@@ -183,7 +182,7 @@ export async function queryInferenceTable(params: {
 export async function queryInferenceTableBounds(params?: {
   extraWhere?: string[];
   extraParams?: Record<string, string | number>;
-}): Promise<TableBounds> {
+}): Promise<TableBoundsWithCount> {
   const { extraWhere = [], extraParams = {} } = params ?? {};
 
   // Build WHERE clause
@@ -191,11 +190,14 @@ export async function queryInferenceTableBounds(params?: {
   const whereClause =
     whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
+  // IMPORTANT: This query will return zero UUIDs if there are no results, so we need to handle this case below.
   const query = `
   SELECT
-    (SELECT uint_to_uuid(id_uint) FROM InferenceById FINAL WHERE id_uint = (SELECT MIN(id_uint) FROM InferenceById FINAL ${whereClause})) AS first_id,
-    (SELECT uint_to_uuid(id_uint) FROM InferenceById FINAL WHERE id_uint = (SELECT MAX(id_uint) FROM InferenceById FINAL ${whereClause})) AS last_id
+    uint_to_uuid(MIN(id_uint)) AS first_id,
+    uint_to_uuid(MAX(id_uint)) AS last_id,
+    toUInt32(COUNT()) AS count
   FROM InferenceById FINAL
+  ${whereClause}
   LIMIT 1
   `;
 
@@ -205,22 +207,21 @@ export async function queryInferenceTableBounds(params?: {
       format: "JSONEachRow",
       query_params: extraParams,
     });
+    const rows = await resultSet.json<TableBoundsWithCount>();
 
-    const rows = await resultSet.json<TableBounds>();
-    if (!rows.length) {
+    // Handle the case where there are no results
+    if (!rows.length || rows[0].count === 0) {
       return {
         first_id: null,
         last_id: null,
+        count: 0,
       };
     }
 
-    return TableBoundsSchema.parse(rows[0]);
+    return TableBoundsWithCountSchema.parse(rows[0]);
   } catch (error) {
     logger.error("Failed to query inference table bounds:", error);
-    return {
-      first_id: null,
-      last_id: null,
-    };
+    throw data("Error querying inference table bounds", { status: 500 });
   }
 }
 
@@ -366,7 +367,7 @@ export async function queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
     return TableBoundsWithCountSchema.parse(rows[0]);
   } catch (error) {
     logger.error(error);
-    throw data("Error querying inference table bounds", { status: 500 });
+    throw data("Error querying episode table bounds", { status: 500 });
   }
 }
 
