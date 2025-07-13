@@ -50,11 +50,11 @@ impl Migration for Migration0017<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Add the `input_tokens` and `output_tokens` columns to the `ModelInferenceCache` table
-        let query = r#"
+        let query = r"
             ALTER TABLE ModelInferenceCache
             ADD COLUMN IF NOT EXISTS input_tokens UInt32,
             ADD COLUMN IF NOT EXISTS output_tokens UInt32
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

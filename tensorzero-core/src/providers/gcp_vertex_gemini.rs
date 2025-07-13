@@ -1,9 +1,3 @@
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::io::Write;
-use std::sync::{Arc, OnceLock};
-use std::time::Duration;
-
 use axum::http;
 use futures::StreamExt;
 use google_cloud_auth::credentials::{CacheableResource, Credentials};
@@ -18,6 +12,11 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use serde_json::Value;
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::io::Write;
+use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
 use uuid::Uuid;
@@ -2349,6 +2348,7 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
+    use crate::inference::types::extra_body::FullExtraBodyConfig;
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{ToolCallConfig, ToolResult};
@@ -2534,7 +2534,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro", false);
@@ -2572,7 +2572,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro", false);
@@ -2623,7 +2623,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         // JSON schema should be supported for Gemini Pro models
@@ -2692,7 +2692,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         // JSON mode should be supported for Gemini Flash models but without a schema
@@ -2755,7 +2755,7 @@ mod tests {
         );
         assert_eq!(
             request.generation_config.as_ref().unwrap().response_schema,
-            Some(serde_json::Value::Object(Default::default()))
+            Some(serde_json::Value::Object(serde_json::Map::new()))
         );
     }
 
@@ -2798,7 +2798,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let request_body = GCPVertexGeminiRequest {
@@ -2900,7 +2900,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let request_body = GCPVertexGeminiRequest {
@@ -3100,7 +3100,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let (tools, tool_choice) =
@@ -3145,7 +3145,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-2.0-flash-lite");

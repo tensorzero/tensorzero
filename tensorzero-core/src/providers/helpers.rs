@@ -714,11 +714,11 @@ mod tests {
     fn test_inject_nothing() {
         let mut body = serde_json::json!({});
         inject_extra_request_data(
-            &Default::default(),
-            &Default::default(),
+            &FullExtraBodyConfig::default(),
+            &FullExtraHeadersConfig::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
-                extra_body: Default::default(),
+                extra_body: Some(ExtraBodyConfig::default()),
                 extra_headers: None,
             },
             "dummy_model",
@@ -757,7 +757,7 @@ mod tests {
             ModelProviderRequestInfo {
                 extra_headers: None,
                 provider_name: "dummy_provider".into(),
-                extra_body: Default::default(),
+                extra_body: Some(ExtraBodyConfig::default()),
             },
             "dummy_model",
             &mut body,
@@ -770,11 +770,11 @@ mod tests {
     #[test]
     fn test_inject_to_non_map() {
         let err = inject_extra_request_data(
-            &Default::default(),
-            &Default::default(),
+            &FullExtraBodyConfig::default(),
+            &FullExtraHeadersConfig::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
-                extra_body: Default::default(),
+                extra_body: Some(ExtraBodyConfig::default()),
                 extra_headers: None,
             },
             "dummy_model",
@@ -791,7 +791,7 @@ mod tests {
     #[test]
     fn test_inject_headers() {
         let headers = inject_extra_request_data(
-            &Default::default(),
+            &FullExtraBodyConfig::default(),
             &FullExtraHeadersConfig {
                 variant_extra_headers: Some(ExtraHeadersConfig {
                     data: vec![
@@ -836,7 +836,7 @@ mod tests {
             },
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
-                extra_body: Default::default(),
+                extra_body: Some(ExtraBodyConfig::default()),
                 extra_headers: Some(ExtraHeadersConfig {
                     data: vec![
                         ExtraHeader {
@@ -913,10 +913,10 @@ mod tests {
                     }],
                 },
             },
-            &Default::default(),
+            &FullExtraHeadersConfig::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
-                extra_body: Default::default(),
+                extra_body: Some(ExtraBodyConfig::default()),
                 extra_headers: None,
             },
             "dummy_model",
@@ -989,7 +989,7 @@ mod tests {
                     }],
                 },
             },
-            &Default::default(),
+            &FullExtraHeadersConfig::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Some(ExtraBodyConfig {

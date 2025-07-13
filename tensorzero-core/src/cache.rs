@@ -399,7 +399,7 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
     let long_cache_key = cache_key.get_long_key();
     // The clickhouse query args look like rust format string args, but they're not.
     let query = if max_age_s.is_some() {
-        r#"
+        r"
             SELECT
                 output,
                 raw_request,
@@ -414,9 +414,9 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
             ORDER BY timestamp DESC
             LIMIT 1
             FORMAT JSONEachRow
-        "#
+        "
     } else {
-        r#"
+        r"
             SELECT
                 output,
                 raw_request,
@@ -430,7 +430,7 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
             ORDER BY timestamp DESC
             LIMIT 1
             FORMAT JSONEachRow
-        "#
+        "
     };
     let mut query_params = HashMap::from([
         ("short_cache_key", short_cache_key.as_str()),
@@ -460,7 +460,10 @@ mod tests {
 
     use uuid::Uuid;
 
-    use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
+    use crate::inference::types::{
+        extra_body::FullExtraBodyConfig, extra_headers::FullExtraHeadersConfig, FunctionType,
+        ModelInferenceRequestJsonMode,
+    };
 
     use super::*;
 
@@ -483,8 +486,8 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
+            extra_headers: FullExtraHeadersConfig::default(),
             extra_cache_key: None,
             stop_sequences: None,
         };
@@ -509,8 +512,8 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
+            extra_headers: FullExtraHeadersConfig::default(),
             extra_cache_key: None,
             stop_sequences: None,
         };
@@ -537,8 +540,8 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
+            extra_headers: FullExtraHeadersConfig::default(),
             extra_cache_key: None,
             stop_sequences: None,
         };

@@ -763,6 +763,7 @@ mod tests {
 
     use super::*;
 
+    use crate::inference::types::extra_body::FullExtraBodyConfig;
     use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
     use crate::providers::openai::{
         OpenAIToolType, OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
@@ -789,7 +790,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -887,7 +888,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let together_response_with_metadata = TogetherResponseWithMetadata {
@@ -1049,7 +1050,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 

@@ -261,7 +261,7 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
-    use crate::config_parser::{GatewayConfig, ObservabilityConfig};
+    use crate::config_parser::{ExportConfig, GatewayConfig, ObservabilityConfig};
 
     #[tokio::test]
     #[traced_test]
@@ -275,7 +275,7 @@ mod tests {
             bind_address: None,
             debug: false,
             enable_template_filesystem_access: false,
-            export: Default::default(),
+            export: ExportConfig::default(),
             base_path: None,
         };
 
@@ -327,7 +327,7 @@ mod tests {
             bind_address: None,
             debug: false,
             enable_template_filesystem_access: false,
-            export: Default::default(),
+            export: ExportConfig::default(),
             base_path: None,
         };
 
@@ -350,7 +350,7 @@ mod tests {
             bind_address: None,
             debug: false,
             enable_template_filesystem_access: false,
-            export: Default::default(),
+            export: ExportConfig::default(),
             base_path: None,
         };
         let config = Box::leak(Box::new(Config {
@@ -375,7 +375,7 @@ mod tests {
             bind_address: None,
             debug: false,
             enable_template_filesystem_access: false,
-            export: Default::default(),
+            export: ExportConfig::default(),
             base_path: None,
         };
         let config = Config {

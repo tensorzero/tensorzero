@@ -28,6 +28,8 @@ use crate::inference::types::batch::{
     BatchOutputSchemasWithSize, BatchRequestRow, BatchStatus, PollBatchInferenceResponse,
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
+use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
+use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::{batch::StartBatchModelInferenceWithMetadata, Input};
 use crate::inference::types::{
     current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext,
@@ -442,7 +444,7 @@ pub async fn get_batch_request(
             inference_id: None,
         } => {
             let query = format!(
-                r#"
+                r"
                     SELECT
                         batch_id,
                         id,
@@ -460,7 +462,7 @@ pub async fn get_batch_request(
                     ORDER BY timestamp DESC
                     LIMIT 1
                     FORMAT JSONEachRow
-                "#
+                "
             );
             let response = clickhouse.run_query_synchronous_no_params(query).await?;
             if response.response.is_empty() {
@@ -473,7 +475,7 @@ pub async fn get_batch_request(
             inference_id: Some(inference_id),
         } => {
             let query = format!(
-                r#"
+                r"
                     SELECT br.batch_id as batch_id,
                         br.id as id,
                         br.batch_params as batch_params,
@@ -491,7 +493,7 @@ pub async fn get_batch_request(
                     ORDER BY br.timestamp DESC
                     LIMIT 1
                     FORMAT JSONEachRow
-                "#,
+                ",
             );
             let response = clickhouse.run_query_synchronous_no_params(query).await?;
             if response.response.is_empty() {
@@ -869,8 +871,8 @@ pub async fn write_completed_batch_inference<'a>(
                 episode_id,
             },
             // Not currently supported as a batch inference parameter
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
             extra_cache_key: None,
         };
         let inference_result = function
@@ -898,8 +900,8 @@ pub async fn write_completed_batch_inference<'a>(
             ttft_ms: None,
             tags: HashMap::new(),
             // Not currently supported as a batch inference parameter
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
         model_inference_rows_to_write.extend(inference_result.get_serialized_model_inferences());
         match inference_result {
