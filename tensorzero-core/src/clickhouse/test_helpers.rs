@@ -240,12 +240,12 @@ pub async fn select_batch_model_inference_clickhouse(
     inference_id: Uuid,
 ) -> Option<Value> {
     let query = format!(
-        r#"
+        r"
         SELECT bmi.*
         FROM BatchModelInference bmi
         INNER JOIN BatchIdByInferenceId bid ON bmi.inference_id = bid.inference_id
         WHERE bid.inference_id = '{inference_id}'
-        FORMAT JSONEachRow"#
+        FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
@@ -260,11 +260,11 @@ pub async fn select_batch_model_inferences_clickhouse(
     batch_id: Uuid,
 ) -> Option<Vec<Value>> {
     let query = format!(
-        r#"
+        r"
         SELECT bmi.*
         FROM BatchModelInference bmi
         WHERE bmi.batch_id = '{batch_id}'
-        FORMAT JSONEachRow"#
+        FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info

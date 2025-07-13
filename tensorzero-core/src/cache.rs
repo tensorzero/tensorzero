@@ -397,7 +397,7 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
     let long_cache_key = cache_key.get_long_key();
     // The clickhouse query args look like rust format string args, but they're not.
     let query = if max_age_s.is_some() {
-        r#"
+        r"
             SELECT
                 output,
                 raw_request,
@@ -412,9 +412,9 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
             ORDER BY timestamp DESC
             LIMIT 1
             FORMAT JSONEachRow
-        "#
+        "
     } else {
-        r#"
+        r"
             SELECT
                 output,
                 raw_request,
@@ -428,7 +428,7 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
             ORDER BY timestamp DESC
             LIMIT 1
             FORMAT JSONEachRow
-        "#
+        "
     };
     let mut query_params = HashMap::from([
         ("short_cache_key", short_cache_key.as_str()),
