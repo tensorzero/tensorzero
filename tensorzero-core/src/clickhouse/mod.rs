@@ -85,6 +85,7 @@ impl ClickHouseConnectionInfo {
         Ok(connection_info)
     }
 
+    #[must_use]
     pub fn new_mock(healthy: bool) -> Self {
         Self::Mock {
             mock_data: Arc::new(RwLock::new(HashMap::new())),
@@ -92,10 +93,12 @@ impl ClickHouseConnectionInfo {
         }
     }
 
+    #[must_use]
     pub fn new_disabled() -> Self {
         Self::Disabled
     }
 
+    #[must_use]
     pub fn database(&self) -> &str {
         match self {
             Self::Disabled => "",
@@ -497,6 +500,7 @@ impl ClickHouseConnectionInfo {
 /// e.g. to compare a raw string containing user input to strings in the database.
 /// These may contain single quotes and backslashes, for example, if the user input contains doubly-serialized `JSON`.
 /// This function will escape single quotes and backslashes in the input string so that the comparison will be accurate.
+#[must_use]
 pub fn escape_string_for_clickhouse_literal(s: &str) -> String {
     #![expect(clippy::needless_raw_string_hashes)]
     s.replace(r#"\"#, r#"\\"#).replace(r#"'"#, r#"\'"#)

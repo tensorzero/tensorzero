@@ -831,7 +831,7 @@ pub async fn write_completed_batch_inference<'a>(
         } = match response.elements.remove(&inference_id) {
             Some(inference_response) => inference_response,
             None => {
-                Error::new(ErrorDetails::MissingBatchInferenceResponse {
+                _ = Error::new(ErrorDetails::MissingBatchInferenceResponse {
                     inference_id: Some(inference_id),
                 });
                 continue;

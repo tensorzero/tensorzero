@@ -83,6 +83,7 @@ impl OpenRouterProvider {
         })
     }
 
+    #[must_use]
     pub fn model_name(&self) -> &str {
         &self.model_name
     }

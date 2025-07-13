@@ -196,6 +196,7 @@ pub struct EmbeddingResponse {
 }
 
 impl EmbeddingResponse {
+    #[must_use]
     pub fn from_cache(
         cache_lookup: CacheData<EmbeddingCacheData>,
         request: &EmbeddingModelProviderRequest,
@@ -234,6 +235,7 @@ pub struct EmbeddingResponseWithMetadata {
 }
 
 impl EmbeddingResponse {
+    #[must_use]
     pub fn new(
         embedding_provider_response: EmbeddingProviderResponse,
         embedding_provider_name: Arc<str>,
@@ -254,6 +256,7 @@ impl EmbeddingResponse {
 }
 
 impl EmbeddingResponseWithMetadata {
+    #[must_use]
     pub fn new(embedding_response: EmbeddingResponse, embedding_model_name: Arc<str>) -> Self {
         Self {
             id: embedding_response.id,
@@ -356,6 +359,7 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
 }
 
 impl EmbeddingProviderResponse {
+    #[must_use]
     pub fn new(
         embedding: Vec<f32>,
         input: String,

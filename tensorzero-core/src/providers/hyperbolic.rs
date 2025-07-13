@@ -35,6 +35,7 @@ lazy_static! {
     };
 }
 
+#[must_use]
 pub fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("HYPERBOLIC_API_KEY".to_string())
 }
@@ -70,6 +71,7 @@ impl HyperbolicProvider {
         })
     }
 
+    #[must_use]
     pub fn model_name(&self) -> &str {
         &self.model_name
     }

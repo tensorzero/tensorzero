@@ -144,6 +144,7 @@ pub struct EvaluationInfo {
 }
 
 impl EvaluationInfo {
+    #[must_use]
     pub fn new(
         datapoint: Datapoint,
         response: InferenceResponse,

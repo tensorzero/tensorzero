@@ -316,7 +316,7 @@ impl BestOfNSamplingConfig {
                 Err(_timeout_error) => {
                     // Map the Tokio timeout error to our own TimeoutError type
                     // It logs on construction
-                    Error::new(ErrorDetails::InferenceTimeout {
+                    _ = Error::new(ErrorDetails::InferenceTimeout {
                         variant_name: candidate_name.clone(),
                     });
                 }
@@ -479,7 +479,7 @@ async fn inner_select_best_candidate<'a, 'request>(
         }) {
         Some(text) => text,
         None => {
-            Error::new(ErrorDetails::Inference {
+            _ = Error::new(ErrorDetails::Inference {
                 message: "The evaluator did not return a text response".to_string(),
             });
             return Ok((None, Some(model_inference_result)));
@@ -488,7 +488,7 @@ async fn inner_select_best_candidate<'a, 'request>(
     let parsed_output = match serde_json::from_str::<Value>(raw) {
         Ok(value) => value,
         Err(e) => {
-            Error::new(ErrorDetails::Inference {
+            _ = Error::new(ErrorDetails::Inference {
                 message: format!("The evaluator did not return a valid JSON response: {e}"),
             });
             return Ok((None, Some(model_inference_result)));
@@ -498,7 +498,7 @@ async fn inner_select_best_candidate<'a, 'request>(
         Some(val) => match val.as_u64() {
             Some(num) => num as usize,
             None => {
-                Error::new(ErrorDetails::Inference {
+                _ = Error::new(ErrorDetails::Inference {
                     message: format!(
                         "The evaluator did not return a valid integer answer choice: {val}"
                     ),
@@ -507,7 +507,7 @@ async fn inner_select_best_candidate<'a, 'request>(
             }
         },
         None => {
-            Error::new(ErrorDetails::Inference {
+            _ = Error::new(ErrorDetails::Inference {
                 message: format!(
                     "The evaluator returned a JSON response without an answer_choice field: {parsed_output}"
                 ),
@@ -518,7 +518,7 @@ async fn inner_select_best_candidate<'a, 'request>(
     // Map the evaluator's index to the actual index
     let answer_choice = map_evaluator_to_actual_index(answer_choice, &skipped_indices);
     if answer_choice >= candidates.len() {
-        Error::new(ErrorDetails::Inference {
+        _ = Error::new(ErrorDetails::Inference {
             message: format!(
                 "The index chosen by the evaluator is out of bounds: {} >= {}",
                 answer_choice,

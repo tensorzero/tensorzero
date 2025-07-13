@@ -58,6 +58,7 @@ lazy_static! {
     };
 }
 
+#[must_use]
 pub fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("OPENAI_API_KEY".to_string())
 }
@@ -102,6 +103,7 @@ impl OpenAIProvider {
         })
     }
 
+    #[must_use]
     pub fn model_name(&self) -> &str {
         &self.model_name
     }
@@ -1081,6 +1083,7 @@ pub enum OpenAIRequestMessage<'a> {
 }
 
 impl OpenAIRequestMessage<'_> {
+    #[must_use]
     pub fn no_content(&self) -> bool {
         match self {
             OpenAIRequestMessage::User(OpenAIUserRequestMessage { content }) => content.is_empty(),
@@ -1091,6 +1094,7 @@ impl OpenAIRequestMessage<'_> {
             OpenAIRequestMessage::System(_) | OpenAIRequestMessage::Tool(_) => false,
         }
     }
+    #[must_use]
     pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
         match self {
             OpenAIRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),

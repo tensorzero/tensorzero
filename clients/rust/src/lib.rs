@@ -218,6 +218,7 @@ pub enum ClientBuilderMode {
 
 /// A `ClientBuilder` is used to construct a `Client`.
 impl ClientBuilder {
+    #[must_use]
     pub fn new(mode: ClientBuilderMode) -> Self {
         Self {
             mode,
@@ -230,6 +231,7 @@ impl ClientBuilder {
     /// In `EmbeddedGateway` mode, this is used for making requests to model endpoints,
     /// as well as ClickHouse.
     /// In `HTTPGateway` mode, this is used for making requests to the gateway.
+    #[must_use]
     pub fn with_http_client(mut self, client: reqwest::Client) -> Self {
         self.http_client = Some(client);
         self
@@ -240,6 +242,7 @@ impl ClientBuilder {
     /// in error messages.
     ///
     /// This is `false` by default.
+    #[must_use]
     pub fn with_verbose_errors(mut self, verbose_errors: bool) -> Self {
         self.verbose_errors = verbose_errors;
         self
@@ -1276,6 +1279,7 @@ fn try_adjust_tool_call_arguments(
 // errors for certain embedded gateway errors. For example, a config parsing error
 // should be `TensorZeroError::Other`, not `TensorZeroError::Http`.
 #[doc(hidden)]
+#[must_use]
 pub fn err_to_http(e: tensorzero_core::error::Error) -> TensorZeroError {
     TensorZeroError::Http {
         status_code: e.status_code().as_u16(),

@@ -107,6 +107,7 @@ impl std::fmt::Display for StoragePath {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl StoragePath {
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }

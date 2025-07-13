@@ -146,6 +146,7 @@ pub struct OptimizationJobInfoPyClass(OptimizationJobInfo);
 
 #[cfg(feature = "pyo3")]
 impl OptimizationJobInfoPyClass {
+    #[must_use]
     pub fn new(status: OptimizationJobInfo) -> Self {
         Self(status)
     }

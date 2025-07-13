@@ -316,6 +316,7 @@ pub fn check_evaluator_cutoffs(
 }
 
 /// Formats a list of cutoff failures into a human-readable string
+#[must_use]
 pub fn format_cutoff_failures(failures: &[(String, f32, f32)]) -> String {
     failures
         .iter()

@@ -28,10 +28,12 @@ pub enum CacheEnabledMode {
 }
 
 impl CacheEnabledMode {
+    #[must_use]
     pub fn write(&self) -> bool {
         matches!(self, CacheEnabledMode::On | CacheEnabledMode::WriteOnly)
     }
 
+    #[must_use]
     pub fn read(&self) -> bool {
         matches!(self, CacheEnabledMode::On | CacheEnabledMode::ReadOnly)
     }
@@ -101,6 +103,7 @@ impl CacheKey {
         Ok(u64::from_le_bytes(bytes))
     }
 
+    #[must_use]
     pub fn get_long_key(&self) -> String {
         hex::encode(self.0)
     }

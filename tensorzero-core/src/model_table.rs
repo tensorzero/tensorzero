@@ -142,6 +142,7 @@ impl<T: ShorthandModelConfig> BaseModelTable<T> {
     }
 
     #[cfg(any(test, feature = "e2e_tests"))]
+    #[must_use]
     pub fn static_model_len(&self) -> usize {
         self.0.len()
     }

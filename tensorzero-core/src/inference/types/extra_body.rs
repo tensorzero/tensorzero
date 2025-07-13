@@ -42,11 +42,13 @@ pub struct UnfilteredInferenceExtraBody {
 }
 
 impl UnfilteredInferenceExtraBody {
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.extra_body.is_empty()
     }
     /// Filter the `InferenceExtraBody` options by variant name
     /// If the variant name is `None`, then all variant-specific extra body options are removed
+    #[must_use]
     pub fn filter(self, variant_name: Option<&str>) -> FilteredInferenceExtraBody {
         FilteredInferenceExtraBody {
             data: self
@@ -93,6 +95,7 @@ pub enum InferenceExtraBody {
 }
 
 impl InferenceExtraBody {
+    #[must_use]
     pub fn should_apply_variant(&self, variant_name: Option<&str>) -> bool {
         match (self, variant_name) {
             (InferenceExtraBody::Provider { .. }, _) => true,

@@ -271,6 +271,7 @@ impl std::fmt::Display for Role {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Role {
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -302,6 +303,7 @@ impl std::fmt::Display for Text {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Text {
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -329,6 +331,7 @@ impl std::fmt::Display for Thought {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Thought {
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -453,6 +456,7 @@ impl RequestMessage {
         self.role.to_string()
     }
 
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -532,6 +536,7 @@ impl std::fmt::Display for ModelInput {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl ModelInput {
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -630,6 +635,7 @@ impl ModelInferenceResponseWithMetadata {
     /// in the HTTP response.
     /// However, we store the number of tokens that would have been used in the database.
     /// So we need this function to compute the actual usage in order to send it in the HTTP response.
+    #[must_use]
     pub fn usage_considering_cached(&self) -> Usage {
         if self.cached {
             Usage {
@@ -922,6 +928,7 @@ impl From<String> for ContentBlockOutput {
 }
 
 impl ModelInferenceResponse {
+    #[must_use]
     pub fn new(
         provider_inference_response: ProviderInferenceResponse,
         model_provider_name: Arc<str>,
@@ -943,6 +950,7 @@ impl ModelInferenceResponse {
         }
     }
 
+    #[must_use]
     pub fn from_cache(
         cache_lookup: CacheData<NonStreamingCacheData>,
         request: &ModelInferenceRequest<'_>,
@@ -971,6 +979,7 @@ impl ModelInferenceResponse {
 }
 
 impl ModelInferenceResponseWithMetadata {
+    #[must_use]
     pub fn new(model_inference_response: ModelInferenceResponse, model_name: Arc<str>) -> Self {
         Self {
             id: model_inference_response.id,
@@ -991,6 +1000,7 @@ impl ModelInferenceResponseWithMetadata {
 }
 
 impl ModelInferenceDatabaseInsert {
+    #[must_use]
     pub fn new(result: ModelInferenceResponseWithMetadata, inference_id: Uuid) -> Self {
         let (latency_ms, ttft_ms) = match result.latency {
             Latency::Streaming {
@@ -1055,6 +1065,7 @@ pub struct ProviderInferenceResponseArgs {
 }
 
 impl ProviderInferenceResponse {
+    #[must_use]
     pub fn new(args: ProviderInferenceResponseArgs) -> Self {
         let sanitized_raw_request = sanitize_raw_request(&args.input_messages, args.raw_request);
         Self {
@@ -1073,6 +1084,7 @@ impl ProviderInferenceResponse {
 }
 
 impl InferenceResult {
+    #[must_use]
     pub fn model_inference_results(&self) -> &Vec<ModelInferenceResponseWithMetadata> {
         match self {
             InferenceResult::Chat(chat_result) => &chat_result.model_inference_results,
@@ -1080,6 +1092,7 @@ impl InferenceResult {
         }
     }
 
+    #[must_use]
     pub fn get_serialized_model_inferences(&self) -> Vec<serde_json::Value> {
         let model_inference_responses = self.model_inference_results();
         let inference_id = match self {
@@ -1106,6 +1119,7 @@ impl InferenceResult {
             .collect()
     }
 
+    #[must_use]
     pub fn usage_considering_cached(&self) -> Usage {
         self.model_inference_results()
             .iter()
@@ -1127,6 +1141,7 @@ impl InferenceResult {
         }
     }
 
+    #[must_use]
     pub fn owned_model_inference_results(self) -> Vec<ModelInferenceResponseWithMetadata> {
         match self {
             InferenceResult::Chat(chat_result) => chat_result.model_inference_results,
@@ -1137,6 +1152,7 @@ impl InferenceResult {
 
 impl JsonInferenceResult {
     #[expect(clippy::too_many_arguments)]
+    #[must_use]
     pub fn new(
         inference_id: Uuid,
         raw: Option<String>,
@@ -1208,7 +1224,7 @@ pub async fn parse_chat_output(
     tool_config: Option<&ToolCallConfig>,
 ) -> Vec<ContentBlockChatOutput> {
     if content.is_empty() {
-        Error::new(ErrorDetails::Inference {
+        _ = Error::new(ErrorDetails::Inference {
             message: "No content blocks in inference result".to_string(),
         });
     }
@@ -1272,6 +1288,7 @@ impl ChatInferenceDatabaseInsert {
 }
 
 impl JsonInferenceDatabaseInsert {
+    #[must_use]
     pub fn new(
         json_result: JsonInferenceResult,
         input: ResolvedInput,
@@ -1309,6 +1326,7 @@ impl JsonInferenceDatabaseInsert {
 }
 
 // Function to get the current timestamp in seconds
+#[must_use]
 pub fn current_timestamp() -> u64 {
     #[expect(clippy::expect_used)]
     SystemTime::now()
@@ -1318,6 +1336,7 @@ pub fn current_timestamp() -> u64 {
 }
 
 impl ProviderInferenceResponseChunk {
+    #[must_use]
     pub fn new(
         content: Vec<ContentBlockChunk>,
         usage: Option<Usage>,
@@ -1337,6 +1356,7 @@ impl ProviderInferenceResponseChunk {
 }
 
 impl InferenceResultChunk {
+    #[must_use]
     pub fn latency(&self) -> Duration {
         match self {
             InferenceResultChunk::Chat(chunk) => chunk.latency,
@@ -1344,6 +1364,7 @@ impl InferenceResultChunk {
         }
     }
 
+    #[must_use]
     pub fn usage(&self) -> Option<&Usage> {
         match self {
             InferenceResultChunk::Chat(chunk) => chunk.usage.as_ref(),
@@ -1351,6 +1372,7 @@ impl InferenceResultChunk {
         }
     }
 
+    #[must_use]
     pub fn raw_response(&self) -> &str {
         match self {
             InferenceResultChunk::Chat(chunk) => &chunk.raw_response,
@@ -1358,6 +1380,7 @@ impl InferenceResultChunk {
         }
     }
 
+    #[must_use]
     pub fn finish_reason(&self) -> Option<&FinishReason> {
         match self {
             InferenceResultChunk::Chat(chunk) => chunk.finish_reason.as_ref(),
@@ -1367,6 +1390,7 @@ impl InferenceResultChunk {
 }
 
 impl InferenceResultChunk {
+    #[must_use]
     pub fn new(chunk: ProviderInferenceResponseChunk, function: FunctionConfigType) -> Self {
         match function {
             FunctionConfigType::Chat => Self::Chat(chunk.into()),
@@ -1853,7 +1877,7 @@ pub fn serialize_or_log<T: Serialize>(value: &T) -> String {
     match serde_json::to_string(value) {
         Ok(serialized) => serialized,
         Err(e) => {
-            Error::new(ErrorDetails::Serialization {
+            _ = Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize value: {e}"),
             });
             String::new()
