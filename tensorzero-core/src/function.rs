@@ -65,6 +65,7 @@ pub enum FunctionConfigType {
 }
 
 impl FunctionConfig {
+    #[must_use]
     pub fn config_type(&self) -> FunctionConfigType {
         match self {
             FunctionConfig::Chat(_) => FunctionConfigType::Chat,
@@ -72,6 +73,7 @@ impl FunctionConfig {
         }
     }
 
+    #[must_use]
     pub fn table_name(&self) -> &str {
         match self {
             FunctionConfig::Chat(_) => "ChatInference",
@@ -240,6 +242,7 @@ pub struct FunctionConfigJson {
 }
 
 impl FunctionConfig {
+    #[must_use]
     pub fn variants(&self) -> &HashMap<String, Arc<VariantInfo>> {
         match self {
             FunctionConfig::Chat(params) => &params.variants,
@@ -408,6 +411,7 @@ impl FunctionConfig {
         }
     }
 
+    #[must_use]
     pub fn template_schema_info(&self) -> TemplateSchemaInfo {
         TemplateSchemaInfo {
             has_system_schema: self.system_schema().is_some(),
@@ -416,6 +420,7 @@ impl FunctionConfig {
         }
     }
 
+    #[must_use]
     pub fn system_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
             FunctionConfig::Chat(params) => params.system_schema.as_ref(),
@@ -423,6 +428,7 @@ impl FunctionConfig {
         }
     }
 
+    #[must_use]
     pub fn user_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
             FunctionConfig::Chat(params) => params.user_schema.as_ref(),
@@ -430,6 +436,7 @@ impl FunctionConfig {
         }
     }
 
+    #[must_use]
     pub fn assistant_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
             FunctionConfig::Chat(params) => params.assistant_schema.as_ref(),
@@ -437,6 +444,7 @@ impl FunctionConfig {
         }
     }
 
+    #[must_use]
     pub fn description(&self) -> Option<&String> {
         match self {
             FunctionConfig::Chat(params) => params.description.as_ref(),

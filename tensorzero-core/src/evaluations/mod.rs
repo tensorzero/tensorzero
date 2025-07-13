@@ -64,6 +64,7 @@ pub enum EvaluatorConfig {
 }
 
 impl EvaluatorConfig {
+    #[must_use]
     pub fn cutoff(&self) -> Option<f32> {
         match self {
             EvaluatorConfig::ExactMatch(config) => config.cutoff,
@@ -71,6 +72,7 @@ impl EvaluatorConfig {
         }
     }
 
+    #[must_use]
     pub fn optimize(&self) -> MetricConfigOptimize {
         match self {
             EvaluatorConfig::ExactMatch(_) => MetricConfigOptimize::Max,
@@ -152,10 +154,12 @@ impl From<LLMJudgeOptimize> for MetricConfigOptimize {
     }
 }
 
+#[must_use]
 pub fn get_llm_judge_function_name(evaluation_name: &str, evaluator_name: &str) -> String {
     format!("tensorzero::llm_judge::{evaluation_name}::{evaluator_name}")
 }
 
+#[must_use]
 pub fn get_evaluator_metric_name(evaluation_name: &str, evaluator_name: &str) -> String {
     format!("tensorzero::evaluation_name::{evaluation_name}::evaluator_name::{evaluator_name}")
 }

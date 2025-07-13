@@ -53,6 +53,7 @@ lazy_static! {
 }
 
 // For use in tests which need a mutable tool config.
+#[must_use]
 pub fn get_temperature_tool_config() -> ToolCallConfig {
     let weather_tool = ToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone());
     ToolCallConfig {

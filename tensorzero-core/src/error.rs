@@ -87,23 +87,28 @@ impl<T: Debug + Display> Display for DisplayOrDebugGateway<T> {
 pub struct Error(Box<ErrorDetails>);
 
 impl Error {
+    #[must_use]
     pub fn new(details: ErrorDetails) -> Self {
         details.log();
         Error(Box::new(details))
     }
 
+    #[must_use]
     pub fn new_without_logging(details: ErrorDetails) -> Self {
         Error(Box::new(details))
     }
 
+    #[must_use]
     pub fn status_code(&self) -> StatusCode {
         self.0.status_code()
     }
 
+    #[must_use]
     pub fn get_details(&self) -> &ErrorDetails {
         &self.0
     }
 
+    #[must_use]
     pub fn get_owned_details(self) -> ErrorDetails {
         *self.0
     }

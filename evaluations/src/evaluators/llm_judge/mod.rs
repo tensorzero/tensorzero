@@ -27,6 +27,7 @@ pub struct LLMJudgeEvaluationResult {
 }
 
 impl LLMJudgeEvaluationResult {
+    #[must_use]
     pub fn tags(&self) -> HashMap<String, String> {
         if self.human_feedback {
             HashMap::from([(

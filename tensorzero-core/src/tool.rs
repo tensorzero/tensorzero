@@ -55,20 +55,24 @@ impl Tool {
     }
 
     #[getter]
+    #[must_use]
     pub fn get_description(&self) -> &str {
         &self.description
     }
 
     #[getter]
+    #[must_use]
     pub fn get_name(&self) -> &str {
         &self.name
     }
 
     #[getter]
+    #[must_use]
     pub fn get_strict(&self) -> bool {
         self.strict
     }
 
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -230,6 +234,7 @@ impl ToolCallConfig {
         Ok(tool_call_config_option)
     }
 
+    #[must_use]
     pub fn get_tool(&self, name: &str) -> Option<&ToolConfig> {
         self.tools_available.iter().find(|tool_cfg| match tool_cfg {
             ToolConfig::Static(config) => config.name == name,
@@ -266,15 +271,18 @@ impl std::fmt::Display for ToolCallConfigDatabaseInsert {
 #[pymethods]
 impl ToolCallConfigDatabaseInsert {
     #[getter]
+    #[must_use]
     pub fn get_tools_available(&self) -> Vec<Tool> {
         self.tools_available.clone()
     }
 
     #[getter]
+    #[must_use]
     pub fn get_parallel_tool_calls(&self) -> Option<bool> {
         self.parallel_tool_calls
     }
 
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -328,6 +336,7 @@ impl std::fmt::Display for ToolCall {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl ToolCall {
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -412,6 +421,7 @@ impl std::fmt::Display for ToolCallOutput {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl ToolCallOutput {
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -453,6 +463,7 @@ impl ToolCallOutput {
 
 impl ToolCallConfig {
     #[cfg(test)]
+    #[must_use]
     pub fn implicit_from_value(value: &Value) -> Self {
         let parameters = StaticJSONSchema::from_value(value).unwrap();
         let implicit_tool_config = ToolConfig::Implicit(ImplicitToolConfig { parameters });
@@ -486,6 +497,7 @@ impl std::fmt::Display for ToolResult {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl ToolResult {
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -543,6 +555,7 @@ impl ToolConfig {
         }
     }
 
+    #[must_use]
     pub fn description(&self) -> &str {
         match self {
             ToolConfig::Static(config) => &config.description,
@@ -552,6 +565,7 @@ impl ToolConfig {
         }
     }
 
+    #[must_use]
     pub fn parameters(&self) -> &Value {
         match self {
             ToolConfig::Static(config) => config.parameters.value,
@@ -561,6 +575,7 @@ impl ToolConfig {
         }
     }
 
+    #[must_use]
     pub fn name(&self) -> &str {
         match self {
             ToolConfig::Static(config) => &config.name,
@@ -570,6 +585,7 @@ impl ToolConfig {
         }
     }
 
+    #[must_use]
     pub fn strict(&self) -> bool {
         match self {
             ToolConfig::Static(config) => config.strict,
@@ -605,6 +621,7 @@ impl From<ToolConfig> for Tool {
     }
 }
 
+#[must_use]
 pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
     let tool_schema = DynamicJSONSchema::new(schema);
     let implicit_tool = ToolConfig::DynamicImplicit(DynamicImplicitToolConfig {
@@ -742,7 +759,8 @@ impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
 }
 
 /// For use in initializing JSON functions
-/// Creates a ToolCallConfig with a single implicit tool that takes the schema as arguments
+/// Creates a `ToolCallConfig` with a single implicit tool that takes the schema as arguments
+#[must_use]
 pub fn create_implicit_tool_call_config(schema: StaticJSONSchema) -> ToolCallConfig {
     let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig { parameters: schema });
     ToolCallConfig {

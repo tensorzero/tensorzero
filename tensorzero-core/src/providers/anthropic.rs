@@ -84,6 +84,7 @@ impl AnthropicProvider {
         })
     }
 
+    #[must_use]
     pub fn model_name(&self) -> &str {
         &self.model_name
     }
@@ -765,7 +766,7 @@ pub(crate) fn prefill_json_response(
         }
     }
     // If it's not a single text block, return content as-is but log an error
-    Error::new(ErrorDetails::OutputParsing {
+    _ = Error::new(ErrorDetails::OutputParsing {
         message: "Expected a single text block in the response from Anthropic".to_string(),
         raw_output: serde_json::to_string(&content).map_err(|e| Error::new(ErrorDetails::Inference {
             message: format!("Error serializing content as JSON: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new", DisplayOrDebugGateway::new(e)),
@@ -789,7 +790,7 @@ pub(crate) fn prefill_json_chunk_response(chunk: &mut ProviderInferenceResponseC
             })];
         }
     } else {
-        Error::new(ErrorDetails::OutputParsing {
+        _ = Error::new(ErrorDetails::OutputParsing {
             message: "Expected a single text block in the response from Anthropic".to_string(),
             raw_output: serde_json::to_string(&chunk.content).map_err(|e| Error::new(ErrorDetails::Inference {
                 message: format!("Error serializing content as JSON: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new", DisplayOrDebugGateway::new(e)),

@@ -48,6 +48,7 @@ tokio::task_local! {
     pub(crate) static SKIP_CREDENTIAL_VALIDATION: ();
 }
 
+#[must_use]
 pub fn skip_credential_validation() -> bool {
     // tokio::task_local doesn't have an 'is_set' method, so we call 'try_with'
     // (which returns an `Err` if the task-local is not set)
@@ -404,6 +405,7 @@ impl std::fmt::Display for MetricConfigLevel {
 }
 
 impl MetricConfigLevel {
+    #[must_use]
     pub fn inference_column_name(&self) -> &'static str {
         match self {
             MetricConfigLevel::Inference => "id",

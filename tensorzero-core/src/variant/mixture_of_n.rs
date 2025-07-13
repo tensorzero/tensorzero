@@ -443,7 +443,7 @@ impl MixtureOfNConfig {
                 }
                 Err(_timeout_error) => {
                     // Map the Tokio timeout error to our own TimeoutError type
-                    Error::new(ErrorDetails::InferenceTimeout {
+                    _ = Error::new(ErrorDetails::InferenceTimeout {
                         variant_name: candidate_name.clone(),
                     });
                 }

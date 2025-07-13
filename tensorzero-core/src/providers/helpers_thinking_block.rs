@@ -59,6 +59,7 @@ pub enum ThinkingState {
 }
 
 impl ThinkingState {
+    #[must_use]
     pub fn get_id(&self) -> String {
         match self {
             ThinkingState::Normal => "0".to_string(),

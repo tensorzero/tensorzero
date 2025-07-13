@@ -68,6 +68,7 @@ impl AWSBedrockProvider {
         })
     }
 
+    #[must_use]
     pub fn model_id(&self) -> &str {
         &self.model_id
     }
