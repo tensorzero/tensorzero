@@ -15,7 +15,7 @@ import {
 } from "~/components/layout/PageLayout";
 import {
   Timer,
-  Input,
+  InputIcon,
   Output,
   Calendar,
   Cached,
@@ -68,7 +68,7 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
             <BasicInfoItemContent>
               <div className="flex flex-row gap-1">
                 <Chip
-                  icon={<Input className="text-fg-tertiary" />}
+                  icon={<InputIcon className="text-fg-tertiary" />}
                   label={`${inference.input_tokens} tok`}
                   tooltip="Input Tokens"
                 />
