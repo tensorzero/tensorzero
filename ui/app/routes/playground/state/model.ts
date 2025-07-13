@@ -10,13 +10,14 @@ export const VariantState = z.object({
 export type VariantState = z.infer<typeof VariantState>;
 
 export const FunctionState = z.object({
-  showSystemPrompt: z.boolean(),
-  showAssistantPrompt: z.boolean(),
-  showUserPrompt: z.boolean(),
-  showOutputSchema: z.boolean(),
+  showSystemPrompt: z.boolean().default(false),
+  showAssistantPrompt: z.boolean().default(false),
+  showUserPrompt: z.boolean().default(false),
+  showOutputSchema: z.boolean().default(false),
+  showAdvanced: z.boolean().default(false),
 
   /** Order of variants to display */
-  selectedVariants: z.array(z.string()),
+  selectedVariants: z.array(z.string()).default([]),
 
   /** Edited templates for each variant */
   variants: z
@@ -55,6 +56,7 @@ export const DEFAULT_FUNCTION_STATE: FunctionState = {
   showAssistantPrompt: false,
   showUserPrompt: false,
   showOutputSchema: false,
+  showAdvanced: false,
   variants: {},
 };
 

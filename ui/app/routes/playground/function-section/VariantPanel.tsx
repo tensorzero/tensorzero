@@ -6,7 +6,7 @@ import {
   usePlaygroundFunctionAtom,
   usePlaygroundVariantAtom,
 } from "../state";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import clsx from "clsx";
 import AnimatedCollapsible from "../ui/AnimatedCollapsible";
 import { cn } from "~/utils/common";
@@ -38,10 +38,13 @@ export function VariantPanel({
   className?: string;
 }) {
   const functionAtom = usePlaygroundFunctionAtom(functionName);
-  const [functionLayout, setFunctionLayout] = useAtom(functionAtom);
-  const { showSystemPrompt, showAssistantPrompt, showUserPrompt } =
-    functionLayout;
-  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const [layout, setLayout] = useAtom(functionAtom);
+  const {
+    showSystemPrompt,
+    showAssistantPrompt,
+    showUserPrompt,
+    showAdvanced,
+  } = layout;
 
   const variantAtom = usePlaygroundVariantAtom(functionName, variantName);
   const setVariantState = useSetAtom(variantAtom);
@@ -119,7 +122,7 @@ export function VariantPanel({
               label="System"
               isOpen={showSystemPrompt}
               onOpenChange={(showSystemPrompt) =>
-                setFunctionLayout((prev) => ({ ...prev, showSystemPrompt }))
+                setLayout((prev) => ({ ...prev, showSystemPrompt }))
               }
             >
               <CodeEditor
@@ -143,7 +146,7 @@ export function VariantPanel({
               label="Assistant"
               isOpen={showAssistantPrompt}
               onOpenChange={(showAssistantPrompt) =>
-                setFunctionLayout((prev) => ({ ...prev, showAssistantPrompt }))
+                setLayout((prev) => ({ ...prev, showAssistantPrompt }))
               }
             >
               <CodeEditor
@@ -168,7 +171,7 @@ export function VariantPanel({
               label="User"
               isOpen={showUserPrompt}
               onOpenChange={(showUserPrompt) =>
-                setFunctionLayout((prev) => ({ ...prev, showUserPrompt }))
+                setLayout((prev) => ({ ...prev, showUserPrompt }))
               }
             >
               <CodeEditor
@@ -189,8 +192,10 @@ export function VariantPanel({
           >
             <AnimatedCollapsible
               label="Advanced"
-              isOpen={isAdvancedOpen}
-              onOpenChange={setIsAdvancedOpen}
+              isOpen={showAdvanced}
+              onOpenChange={(showAdvanced) =>
+                setLayout((prev) => ({ ...prev, showAdvanced }))
+              }
               className="pt-2"
             >
               <VariantAdvancedMetadata variant={variant} />
