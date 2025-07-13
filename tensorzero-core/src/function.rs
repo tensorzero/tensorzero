@@ -694,7 +694,10 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use crate::config_parser::TimeoutsConfig;
     use crate::endpoints::inference::InferenceIds;
+    use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
+    use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
     use crate::inference::types::FinishReason;
     use crate::inference::types::InputMessage;
     use crate::inference::types::Latency;
@@ -1552,7 +1555,7 @@ mod tests {
                                 model: "model-name".into(),
                                 ..Default::default()
                             }),
-                            timeouts: Default::default(),
+                            timeouts: TimeoutsConfig::default(),
                         }),
                     )
                 })
@@ -1787,8 +1790,8 @@ mod tests {
             variant_name: Some(""),
             templates: &templates,
             dynamic_output_schema: None,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
             extra_cache_key: None,
         };
         let response = function_config
@@ -2098,8 +2101,8 @@ mod tests {
             variant_name: Some(""),
             templates: &templates,
             dynamic_output_schema: Some(&dynamic_output_schema),
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
             extra_cache_key: None,
         };
         // Test with a correct content block

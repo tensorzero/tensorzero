@@ -1276,7 +1276,7 @@ mod tests {
     use serde_json::json;
 
     use crate::{
-        inference::types::{FunctionType, RequestMessage},
+        inference::types::{extra_body::FullExtraBodyConfig, FunctionType, RequestMessage},
         providers::test_helpers::{
             MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
         },
@@ -1403,7 +1403,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -1446,7 +1446,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -1505,7 +1505,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -1553,7 +1553,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -1620,7 +1620,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -1718,7 +1718,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -1900,7 +1900,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request_with_tools);
@@ -1942,7 +1942,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request_without_tools);

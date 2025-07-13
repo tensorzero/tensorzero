@@ -765,7 +765,10 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
-        inference::types::{FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
+        inference::types::{
+            extra_body::FullExtraBodyConfig, FunctionType, ModelInferenceRequestJsonMode,
+            RequestMessage, Role,
+        },
         providers::{
             openai::{OpenAIToolType, SpecificToolChoice, SpecificToolFunction},
             test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG},
@@ -801,7 +804,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let tgi_request = TGIRequest::new(&model_name, &basic_request).unwrap();
@@ -838,7 +841,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -886,7 +889,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -922,7 +925,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -1001,7 +1004,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let tgi_response_with_metadata = TGIResponseWithMetadata {

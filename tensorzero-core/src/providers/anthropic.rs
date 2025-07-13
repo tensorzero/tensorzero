@@ -1286,6 +1286,7 @@ mod tests {
     use std::borrow::Cow;
 
     use super::*;
+    use crate::inference::types::extra_body::FullExtraBodyConfig;
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
@@ -1498,7 +1499,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
@@ -1530,7 +1531,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
@@ -1581,7 +1582,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
@@ -1636,7 +1637,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
@@ -1691,7 +1692,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Json,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
@@ -2032,7 +2033,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let latency = Latency::NonStreaming {
@@ -2742,8 +2743,8 @@ mod tests {
                 index: 0,
             },
             Duration::from_secs(0),
-            &mut Default::default(),
-            &mut Default::default(),
+            &mut Some(String::default()),
+            &mut Some(String::default()),
             false,
         )
         .unwrap_err()
@@ -2768,8 +2769,8 @@ mod tests {
                 index: 0,
             },
             Duration::from_secs(0),
-            &mut Default::default(),
-            &mut Default::default(),
+            &mut Some(String::default()),
+            &mut Some(String::default()),
             true,
         )
         .unwrap();

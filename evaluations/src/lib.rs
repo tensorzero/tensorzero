@@ -19,6 +19,8 @@ use tensorzero::{
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::config_parser::MetricConfigOptimize;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
+use tensorzero_core::inference::types::extra_body::UnfilteredInferenceExtraBody;
+use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use tensorzero_core::{
     clickhouse::ClickHouseConnectionInfo, config_parser::Config, endpoints::datasets::Datapoint,
     function::FunctionConfig,
@@ -414,8 +416,8 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         params: InferenceParams::default(),
         include_original_response: false,
         internal: true,
-        extra_body: Default::default(),
-        extra_headers: Default::default(),
+        extra_body: UnfilteredInferenceExtraBody::default(),
+        extra_headers: UnfilteredInferenceExtraHeaders::default(),
     };
     debug!("Making inference request");
     let inference_result = clients.tensorzero_client.inference(params).await?;
