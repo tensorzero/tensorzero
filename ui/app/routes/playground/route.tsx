@@ -5,7 +5,7 @@ import { useConfig } from "~/context/config";
 import { useVariantSelection } from "./state";
 import { useMemo } from "react";
 import clsx from "clsx";
-import DataSection from "./DataSection/DataSection";
+import DataSection from "./data-section/DataSection";
 import ResizableQuadrant, {
   HorizontalResizeHandle,
   resizableGrid,
@@ -13,8 +13,8 @@ import ResizableQuadrant, {
 } from "./ui/ResizableQuadrant";
 import type { FunctionConfig } from "tensorzero-node";
 import { LayoutGroup } from "motion/react";
-import FunctionPanel from "./FunctionSection/FunctionPanel";
-import { VariantPanel } from "./FunctionSection/VariantPanel";
+import FunctionPanel from "./function-section/FunctionPanel";
+import { VariantPanel } from "./function-section/VariantPanel";
 import { PLAYGROUND_GRID_ROWS } from "./layout";
 import { useSelectedFunction } from "./hooks/use-selected-function";
 

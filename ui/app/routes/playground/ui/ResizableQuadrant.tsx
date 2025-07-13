@@ -1,7 +1,7 @@
 import { createRef, useCallback, useRef } from "react";
 import { cn } from "~/utils/common";
 import { atom, useAtom } from "jotai";
-import { useDrag, type DragConfig } from "../hooks/useDrag";
+import { useDrag, type DragConfig } from "../hooks/use-drag";
 import { clsx } from "clsx";
 import { cva } from "class-variance-authority";
 
