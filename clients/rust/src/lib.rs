@@ -287,7 +287,7 @@ impl ClientBuilder {
                                 source: e.into(),
                             })
                         })?;
-                setup_howdy(clickhouse_connection_info.clone()).await;
+                setup_howdy(clickhouse_connection_info.clone());
                 let http_client = if let Some(http_client) = self.http_client {
                     http_client
                 } else {

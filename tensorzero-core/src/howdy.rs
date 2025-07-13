@@ -15,17 +15,15 @@ lazy_static! {
         env::var("TENSORZERO_HOWDY_URL").unwrap_or("https://howdy.tensorzero.com".to_string());
 }
 
-pub async fn setup_howdy(clickhouse: ClickHouseConnectionInfo) -> () {
+pub fn setup_howdy(clickhouse: ClickHouseConnectionInfo) {
     if env::var("TENSORZERO_DISABLE_USAGE_DATA").unwrap_or_default() == "1" {
         info!("Usage data is disabled");
         return;
     }
-    if tokio::spawn(howdy_loop(clickhouse)).await.is_err() {
-        tracing::debug!("Failed to spawn howdy loop");
-    }
+    tokio::spawn(howdy_loop(clickhouse));
 }
 
-pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo) -> () {
+pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo) {
     let client = Client::new();
     let deployment_id = match get_deployment_id(&clickhouse).await {
         Ok(deployment_id) => deployment_id,
@@ -38,7 +36,7 @@ pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo) -> () {
         interval.tick().await;
         // TODO: do we need to spawn this? it can't fail in theory
         if let Err(e) = send_howdy(&clickhouse, &client, &deployment_id).await {
-            debug!("Failed to send howdy: {e}");
+            debug!("{e}");
         }
     }
 }
@@ -55,7 +53,7 @@ async fn send_howdy(
     Ok(())
 }
 
-async fn get_deployment_id(clickhouse: &ClickHouseConnectionInfo) -> Result<String, ()> {
+pub async fn get_deployment_id(clickhouse: &ClickHouseConnectionInfo) -> Result<String, ()> {
     let response = clickhouse
         .run_query_synchronous_no_params(
             "SELECT deployment_id FROM DeploymentID LIMIT 1".to_string(),
@@ -69,7 +67,7 @@ async fn get_deployment_id(clickhouse: &ClickHouseConnectionInfo) -> Result<Stri
     Ok(response.response)
 }
 
-async fn get_howdy_report<'a>(
+pub async fn get_howdy_report<'a>(
     clickhouse: &ClickHouseConnectionInfo,
     deployment_id: &'a str,
 ) -> Result<HowdyReportBody<'a>, String> {
@@ -103,14 +101,15 @@ async fn count_inferences(clickhouse: &ClickHouseConnectionInfo) -> Result<Strin
     else {
         return Err("Failed to query ClickHouse for inference count".to_string());
     };
+    let response_str = response.response.trim().to_string();
     // make sure this parses as a u64
-    if response.response.parse::<u64>().is_err() {
+    if response_str.parse::<u64>().is_err() {
         return Err(format!(
             "Failed to parse inference count as u64: {}",
             response.response
         ));
     }
-    Ok(response.response)
+    Ok(response_str)
 }
 
 /// Count all feedbacks in the ClickHouse DB.
@@ -136,13 +135,14 @@ async fn count_feedbacks(clickhouse: &ClickHouseConnectionInfo) -> Result<String
     else {
         return Err("Failed to query ClickHouse for feedback count".to_string());
     };
-    if response.response.parse::<u64>().is_err() {
+    let response_str = response.response.trim().to_string();
+    if response_str.parse::<u64>().is_err() {
         return Err(format!(
             "Failed to parse feedback count as u64: {}",
             response.response
         ));
     }
-    Ok(response.response)
+    Ok(response_str)
 }
 
 #[derive(Debug, Serialize)]
