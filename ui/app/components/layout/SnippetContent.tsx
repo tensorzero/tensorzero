@@ -138,12 +138,14 @@ function ToolDetails({
   id,
   payload,
   payloadLabel,
+  enforceJson = false,
 }: {
   name: string;
   nameLabel: string;
   id: string;
   payload: string;
   payloadLabel: string;
+  enforceJson?: boolean;
 }) {
   const formattedPayload = useFormattedJson(payload);
 
@@ -157,6 +159,7 @@ function ToolDetails({
 
       <p className="text-fg-secondary font-medium">{payloadLabel}</p>
       <CodeEditor
+        allowedLanguages={enforceJson ? ["json"] : undefined}
         value={formattedPayload}
         className="bg-bg-secondary"
         readOnly
@@ -192,6 +195,7 @@ export function ToolCallMessage({
         id={toolCallId}
         payload={toolArguments || toolRawArguments}
         payloadLabel={toolArguments ? "Arguments" : "Arguments (Invalid)"}
+        enforceJson={true}
       />
     </div>
   );

@@ -522,55 +522,14 @@ export const AudioInput: Story = {
 
 export const BadToolInput: Story = {
   args: {
-    system: {
-      question:
-        "Do adolescents associate with 'cliques' on a large or small scale?",
-    },
     messages: [
       {
-        role: "user",
-        content: [
-          {
-            type: "unstructured_text",
-            text: 'Do adolescents associate with "cliques" on a large or small scale?',
-          },
-        ],
-      },
-      {
-        role: "assistant",
-        content: [
-          {
-            type: "unstructured_text",
-            text: 'Compact Research Summary: Do Adolescents Associate with "Cliques" on a Large or Small Scale?\n\nKey Findings:\n1. Scale of Clique Association:\n- Cliques typically consist of 5-6 people\n- Most adolescents fall into three categories:\n  a) Group members (less than half of school population)\n  b) Liaisons (connect across multiple groups)\n  c) Isolates (few or no close peer relationships)\n\n2. Prevalence:\n- Cliques are extremely common during adolescence\n- Form in early adolescence (girls around 11, boys around 13-14)\n- Present across different demographics, ethnicities, and socioeconomic backgrounds\n\n3. Characteristics:\n- Most cliques are homogeneous in:\n  - Age\n  - Gender\n  - Race\n  - Social status\n  - Socioeconomic background\n\n4. Duration and Stability:\n- Cliques are relatively stable, losing about one-third of members per year\n- Membership type (group member, liaison, isolate) is more consistent than specific clique membership\n- Typically dissolve by late adolescence, replaced by dating relationships\n\n5. Demographic Factors:\n- Strongly influenced by:\n  - School environment\n  - Shared interests\n  - Orientation toward school/teen culture\n  - Potential antisocial behaviors\n\nConclusion: Adolescents do associate with cliques on a moderate to large scale, with most students belonging to some form of social group during their teenage years.',
-          },
-          {
-            type: "tool_call",
-            name: "think",
-            arguments:
-              '{"thought":"I notice that my previous response was generated without using Wikipedia search tools, which goes against the established protocol. I should systematically search Wikipedia to provide a well-sourced answer about adolescent cliques."}',
-            id: "toolu_01B8b7WQWmT2XHE6AQo1Ms7E",
-          },
-        ],
-      },
-      {
-        role: "user",
-        content: [
-          {
-            type: "tool_result",
-            name: "think",
-            result: "",
-            id: "toolu_01B8b7WQWmT2XHE6AQo1Ms7E",
-          },
-        ],
-      },
-      {
         role: "assistant",
         content: [
           {
             type: "tool_call",
             name: "search_wikipedia",
-            arguments:
-              '{"query":"Adolescent cliques social groups peer relationships"}',
+            arguments: '{"query":"Adolescent cliques social groups peer ',
             id: "toolu_011BJUPo2bXLyXMjzfDhZFVx",
           },
         ],
@@ -580,56 +539,10 @@ export const BadToolInput: Story = {
         content: [
           {
             type: "tool_result",
-            name: "search_wikipedia",
+            name: "bad_name",
             result:
               "Peer group\nClique\nAdolescent clique\nPeer pressure\nAdolescence\nElaboration principle\nSocial emotional development\nSocial software\nCrowds (adolescence)\nSocial network analysis",
-            id: "toolu_011BJUPo2bXLyXMjzfDhZFVx",
-          },
-        ],
-      },
-      {
-        role: "assistant",
-        content: [
-          {
-            type: "tool_call",
-            name: "think",
-            arguments:
-              '{"thought":"The search results provide several promising pages to investigate. I\'ll start by loading the \\"Adolescent clique\\" page to get direct information about the scale and nature of cliques among adolescents."}',
-            id: "toolu_01UbpVHwqoY3QvUBmVE32HdA",
-          },
-        ],
-      },
-      {
-        role: "user",
-        content: [
-          {
-            type: "tool_result",
-            name: "think",
-            result: "",
-            id: "toolu_01UbpVHwqoY3QvUBmVE32HdA",
-          },
-        ],
-      },
-      {
-        role: "assistant",
-        content: [
-          {
-            type: "tool_call",
-            name: "load_wikipedia_page",
-            arguments: '{"title":"Adolescent clique"}',
-            id: "toolu_019Wm8MrB7ECsV3ubbce9MJf",
-          },
-        ],
-      },
-      {
-        role: "user",
-        content: [
-          {
-            type: "tool_result",
-            name: "load_wikipedia_page",
-            result:
-              '# URL\n\nhttps://en.wikipedia.org/wiki/Adolescent_clique\n\n# CONTENT\n\n|  |  |\n| --- | --- |\n|  | This article needs to be **updated**. The reason given is: article is largely based on late 2000s and early 2010s conceptions of cliques (for example, the inclusion of virtually non-existent cliques that used to be prominent like skaters). Please help update this article to reflect recent events or newly available information. *(March 2023)* |\n\nCliques that develop among adolescents\n\n**Adolescent cliques** are [cliques](/wiki/Clique "Clique") that develop amongst [adolescents](/wiki/Adolescence "Adolescence"). In the social sciences, the word "**clique**" is used to describe a large group of 6 to 12 "who interact with each other more regularly and intensely than others in the same setting".[[1]](#cite_note-EEP-1) Cliques are distinguished from "[crowds](/wiki/Crowds_(adolescence) "Crowds (adolescence)")" in that their members socially interact with one another more than the typical crowd (e.g. hang out together, go shopping, play sports etc.). Crowds, on the other hand, are defined by reputation. Although the word \'clique\' or \'cliquey\' is often used in day-to-day conversation to describe [relational aggression](/wiki/Relational_aggression "Relational aggression") or snarky, gossipy behaviors of groups of socially dominant teenage girls, that is not always accurate.[[2]](#cite_note-2) Interacting with cliques is part of normative social development regardless of gender, ethnicity, or popularity. Although cliques are most commonly studied during [adolescence](/wiki/Adolescence "Adolescence") and in educational settings, they can exist in all age groups and settings.\n\nContents\n--------\n\n* [1 Definition](#Definition)\n* [2 Clique membership](#Clique_membership)\n  + [2.1 Common misconceptions](#Common_misconceptions)\n  + [2.2 Forms of association](#Forms_of_association)\n  + [2.3 Stability over time](#Stability_over_time)\n* [3 Within clique structure](#Within_clique_structure)\n  + [3.1 Popularity](#Popularity)\n* [4 Between clique structure](#Between_clique_structure)\n  + [4.1 Personal factors](#Personal_factors)\n    - [4.1.1 Orientation toward school](#Orientation_toward_school)\n    - [4.1.2 Orientation toward teen culture](#Orientation_toward_teen_culture)\n    - ',
-            id: "toolu_019Wm8MrB7ECsV3ubbce9MJf",
+            id: "bad_id",
           },
         ],
       },
