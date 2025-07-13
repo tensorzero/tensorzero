@@ -1,10 +1,9 @@
 import type { RouteHandle } from "react-router";
-import { useSearchParams } from "react-router";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { useConfig } from "~/context/config";
 
-import { useVariantSelection, lastViewedFunctionAtom } from "./state";
-import { useEffect, useMemo } from "react";
+import { useVariantSelection } from "./state";
+import { useMemo } from "react";
 import clsx from "clsx";
 import DataSection from "./DataSection/DataSection";
 import ResizableQuadrant, {
@@ -13,11 +12,11 @@ import ResizableQuadrant, {
   VerticalResizeHandle,
 } from "./ui/ResizableQuadrant";
 import type { FunctionConfig } from "tensorzero-node";
-import { useAtom } from "jotai";
 import { LayoutGroup } from "motion/react";
 import FunctionPanel from "./FunctionSection/FunctionPanel";
 import { VariantPanel } from "./FunctionSection/VariantPanel";
 import { PLAYGROUND_GRID_ROWS } from "./layout";
+import { useSelectedFunction } from "./hooks/use-selected-function";
 
 export const handle: RouteHandle = {
   excludeContentWrapper: true,
@@ -25,28 +24,7 @@ export const handle: RouteHandle = {
 };
 
 export default function PlaygroundRoute() {
-  /**
-   * Prefer browser history for current function state - store function in query param.
-   *
-   * However, if user opens the Playground directly/in a new tab,
-   * default to the mostly recently viewed function.
-   */
-  const [lastViewedFunction, setLastViewedFunction] = useAtom(
-    lastViewedFunctionAtom,
-  );
-
-  const [searchParams, setSearchParams] = useSearchParams(
-    lastViewedFunction && {
-      function: lastViewedFunction,
-    },
-  );
-  const functionName = searchParams.get("function") ?? undefined;
-
-  // TODO Ensure there isn't a re-render loop here - I don't believe so because `lastViewedFunction` is only used as an initializer
-  useEffect(() => {
-    // On navigation, save in localStorage
-    setLastViewedFunction(functionName);
-  }, [functionName, setLastViewedFunction]);
+  const [functionName, setSelectedFunction] = useSelectedFunction();
 
   const config = useConfig();
   const functionConfig = functionName
@@ -60,9 +38,7 @@ export default function PlaygroundRoute() {
         <div className="w-84">
           <FunctionSelector
             selected={functionName ?? null}
-            onSelect={(functionName) =>
-              setSearchParams({ function: functionName })
-            }
+            onSelect={setSelectedFunction}
             functions={config.functions}
           />
         </div>
