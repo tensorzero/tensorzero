@@ -1,10 +1,10 @@
-use crate::{common::OptimizationTestCase, optimization_test_case};
+use crate::common::OptimizationTestCase;
 use tensorzero_core::optimization::{
     gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig, UninitializedOptimizerConfig,
     UninitializedOptimizerInfo,
 };
 
-struct GCPVertexGeminiSFTTestCase();
+pub struct GCPVertexGeminiSFTTestCase();
 
 impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {
     fn supports_image_data(&self) -> bool {
@@ -43,5 +43,3 @@ impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {
         }
     }
 }
-
-optimization_test_case!(gcp_vertex_gemini_sft, GCPVertexGeminiSFTTestCase());

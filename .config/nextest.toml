@@ -33,6 +33,10 @@ default-filter = 'test(test_dummy_only) | test(clickhouse)'
 [profile.optimization]
 default-filter = 'binary(optimization-live)'
 
+[profile.optimization-mock]
+default-filter = 'binary(optimization-live)'
+
+
 [[profile.optimization.overrides]]
 # Settings for running optimization tests
 # We may have to update this as we add faster optimization methods that shouldn't

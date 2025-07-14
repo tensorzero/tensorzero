@@ -25,5 +25,3 @@ impl OptimizationTestCase for TogetherSFTTestCase {
         }
     }
 }
-
-optimization_test_case!(together_sft, TogetherSFTTestCase());
