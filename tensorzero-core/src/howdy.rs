@@ -1,3 +1,24 @@
+//! This module is responsible for sending usage data to the Howdy service.
+//! It is configured via the `TENSORZERO_HOWDY_URL` environment variable.
+//! If the `TENSORZERO_DISABLE_USAGE_DATA` environment variable is set to `1`,
+//! the usage data will not be sent.
+//!
+//! The usage data is sent every 6 hours.
+//!
+//! The usage data is sent to the Howdy service in the following format:
+//!
+//! ```json
+//! {
+//!     "deployment_id": "123",
+//!     "inferences": 100,
+//!     "feedbacks": 50,
+//!     "dryrun": false
+//! }
+//! ```
+//!
+//! We only send an opaque and unidentifiable deployment ID (64 char hex hash)
+//! and the number of inferences and feedbacks to the Howdy service.
+
 use lazy_static::lazy_static;
 use reqwest::Client;
 use serde::Serialize;
@@ -11,10 +32,14 @@ use tracing::{debug, info};
 use crate::clickhouse::ClickHouseConnectionInfo;
 
 lazy_static! {
+    /// The URL to send usage data to.
+    /// Configurable via the `TENSORZERO_HOWDY_URL` environment variable for testing.
     pub static ref HOWDY_URL: String =
         env::var("TENSORZERO_HOWDY_URL").unwrap_or("https://howdy.tensorzero.com".to_string());
 }
 
+/// Setup the howdy loop.
+/// This is called from the main function in the gateway or embedded client.
 pub fn setup_howdy(clickhouse: ClickHouseConnectionInfo) {
     if env::var("TENSORZERO_DISABLE_USAGE_DATA").unwrap_or_default() == "1" {
         info!("Usage data is disabled");
@@ -23,6 +48,7 @@ pub fn setup_howdy(clickhouse: ClickHouseConnectionInfo) {
     tokio::spawn(howdy_loop(clickhouse));
 }
 
+/// Loops and sends usage data to the Howdy service every 6 hours.
 pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo) {
     let client = Client::new();
     let deployment_id = match get_deployment_id(&clickhouse).await {
@@ -41,6 +67,7 @@ pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo) {
     }
 }
 
+/// Sends usage data to the Howdy service.
 async fn send_howdy(
     clickhouse: &ClickHouseConnectionInfo,
     client: &Client,
@@ -54,6 +81,9 @@ async fn send_howdy(
     Ok(())
 }
 
+/// Gets the deployment ID from the ClickHouse DB.
+/// This is a 64 char hex hash that is used to identify the deployment.
+/// It is stored in the `DeploymentID` table.
 pub async fn get_deployment_id(clickhouse: &ClickHouseConnectionInfo) -> Result<String, ()> {
     let response = clickhouse
         .run_query_synchronous_no_params(
@@ -68,6 +98,10 @@ pub async fn get_deployment_id(clickhouse: &ClickHouseConnectionInfo) -> Result<
     Ok(response.response.trim().to_string())
 }
 
+/// Gets the howdy report.
+/// This is the data that is sent to the Howdy service.
+/// It contains the deployment ID, the number of inferences, and the number of feedbacks.
+/// It is also configurable to run in dryrun mode for testing.
 pub async fn get_howdy_report<'a>(
     clickhouse: &ClickHouseConnectionInfo,
     deployment_id: &'a str,
