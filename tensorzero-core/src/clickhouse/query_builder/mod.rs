@@ -152,7 +152,7 @@ impl JoinRegistry {
             param_idx_counter,
         );
         format!(
-            r#"
+            r"
 LEFT JOIN (
     SELECT
         target_id,
@@ -160,7 +160,7 @@ LEFT JOIN (
     FROM {table_name}
     WHERE metric_name = {metric_name_placeholder}
     GROUP BY target_id
-) AS {alias} ON i.{inference_table_column_name} = {alias}.target_id"#
+) AS {alias} ON i.{inference_table_column_name} = {alias}.target_id"
         )
     }
 }
@@ -450,11 +450,11 @@ pub fn generate_list_inferences_sql(
     }
 
     let mut sql = format!(
-        r#"
+        r"
 SELECT
     {select_clauses}
 FROM
-    {inference_table_name} AS i"#,
+    {inference_table_name} AS i",
         select_clauses = select_clauses.iter().join(",\n    "),
         inference_table_name = inference_table_name,
     );
@@ -702,7 +702,7 @@ mod tests {
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     i.episode_id as episode_id,
@@ -717,7 +717,7 @@ FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String}
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![QueryParameter {
             name: "p0".to_string(),
@@ -739,7 +739,7 @@ FORMAT JSONEachRow"#;
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'chat' as type,
     i.episode_id as episode_id,
@@ -754,7 +754,7 @@ FROM
     ChatInference AS i
 WHERE
     i.function_name = {p0:String}
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![QueryParameter {
             name: "p0".to_string(),
@@ -781,7 +781,7 @@ FORMAT JSONEachRow"#;
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     i.episode_id as episode_id,
@@ -804,7 +804,7 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND j0.value > {p2:Float64}
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -881,7 +881,7 @@ FORMAT JSONEachRow"#;
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     [i.output] as dispreferred_outputs,
@@ -898,7 +898,7 @@ FROM
 JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationFeedback GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id
 WHERE
     i.function_name = {p0:String}
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![QueryParameter {
             name: "p0".to_string(),
@@ -924,7 +924,7 @@ FORMAT JSONEachRow"#;
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     i.episode_id as episode_id,
@@ -947,7 +947,7 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND j0.value = {p2:Bool}
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -983,7 +983,7 @@ FORMAT JSONEachRow"#;
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     i.episode_id as episode_id,
@@ -1006,7 +1006,7 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND j0.value = {p2:Bool}
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -1058,7 +1058,7 @@ FORMAT JSONEachRow"#;
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     i.episode_id as episode_id,
@@ -1090,7 +1090,7 @@ LEFT JOIN (
 ) AS j1 ON i.id = j1.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE(j0.value > {p2:Float64}, 0) AND COALESCE(j0.value < {p3:Float64}, 0) AND COALESCE(j1.value < {p5:Float64}, 0))
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -1152,7 +1152,7 @@ FORMAT JSONEachRow"#;
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     i.episode_id as episode_id,
@@ -1193,7 +1193,7 @@ LEFT JOIN (
 ) AS j2 ON i.episode_id = j2.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE(j0.value >= {p2:Float64}, 0) OR COALESCE(j1.value = {p4:Bool}, 0) OR COALESCE(j2.value = {p6:Bool}, 0))
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -1255,7 +1255,7 @@ FORMAT JSONEachRow"#;
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     i.episode_id as episode_id,
@@ -1278,7 +1278,7 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND NOT (COALESCE((COALESCE(j0.value = {p2:Bool}, 0) OR COALESCE(j0.value = {p3:Bool}, 0)), 1))
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -1338,7 +1338,7 @@ FORMAT JSONEachRow"#;
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     i.episode_id as episode_id,
@@ -1379,7 +1379,7 @@ LEFT JOIN (
 ) AS j2 ON i.id = j2.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE((COALESCE(j0.value > {p2:Float64}, 0) OR COALESCE(j1.value <= {p4:Float64}, 0)), 0) AND COALESCE(NOT (COALESCE(j2.value = {p6:Bool}, 1)), 0))
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         assert_eq!(params.len(), 7); // p0 (function) + 6 metric-related params
     }
@@ -1397,7 +1397,7 @@ FORMAT JSONEachRow"#;
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     i.episode_id as episode_id,
@@ -1412,7 +1412,7 @@ FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND i.variant_name = {p1:String}
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -1440,7 +1440,7 @@ FORMAT JSONEachRow"#;
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     i.episode_id as episode_id,
@@ -1457,7 +1457,7 @@ WHERE
     i.function_name = {p0:String}
 LIMIT {p1:UInt64}
 OFFSET {p2:UInt64}
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -1505,7 +1505,7 @@ FORMAT JSONEachRow"#;
             };
             let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
             let expected_sql = format!(
-                r#"
+                r"
 SELECT
     'json' as type,
     i.episode_id as episode_id,
@@ -1528,7 +1528,7 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {{p0:String}} AND j0.value {expected_op_str} {{p2:Float64}}
-FORMAT JSONEachRow"#,
+FORMAT JSONEachRow",
             );
             assert_eq!(sql, expected_sql);
             let expected_params = vec![
@@ -1575,7 +1575,7 @@ FORMAT JSONEachRow"#,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     [i.output] as dispreferred_outputs,
@@ -1612,7 +1612,7 @@ WHERE
     i.function_name = {p0:String} AND i.variant_name = {p1:String} AND (COALESCE(j0.value > {p3:Float64}, 0) AND COALESCE(j1.value = {p5:Bool}, 0))
 LIMIT {p6:UInt64}
 OFFSET {p7:UInt64}
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
 
         let expected_params = vec![

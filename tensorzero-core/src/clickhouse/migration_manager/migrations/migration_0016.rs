@@ -82,7 +82,7 @@ impl Migration for Migration0016<'_> {
             .await?;
 
         // Create the `ChatInferenceDatapoint` table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS ChatInferenceDatapoint
             (
                 dataset_name LowCardinality(String),
@@ -105,14 +105,14 @@ impl Migration for Migration0016<'_> {
                 updated_at DateTime64(6, 'UTC') DEFAULT now()
             ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `JsonInferenceDatapoint` table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS JsonInferenceDatapoint
             (
                 dataset_name LowCardinality(String),
@@ -128,7 +128,7 @@ impl Migration for Migration0016<'_> {
                 updated_at DateTime64(6, 'UTC') DEFAULT now()
             ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

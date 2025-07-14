@@ -176,14 +176,14 @@ First, you should analyze each response itself against the conversation history 
 Then you should think out loud about which is best and most faithful to instructions.
 In the "answer_choice" block: you should output the index of the best response."#;
 
-const BEST_OF_N_EVALUATOR_CANDIDATES: &str = r#"Here are the candidate answers (with the index and a row of ------ separating):{% for candidate in candidates %}
+const BEST_OF_N_EVALUATOR_CANDIDATES: &str = r"Here are the candidate answers (with the index and a row of ------ separating):{% for candidate in candidates %}
 {{ loop.index0 }}: {{ candidate }}
 ------
 {%- endfor %}
-Please evaluate these candidates and provide the index of the best one."#;
+Please evaluate these candidates and provide the index of the best one.";
 
 // Lightly edited from Table 6 in the [Archon paper](https://arxiv.org/abs/2409.15254).
-const MIXTURE_OF_N_FUSER_SYSTEM: &str = r#"{%- if inner_system_message is defined -%}You have been provided with a set of responses from various models to the following problem:
+const MIXTURE_OF_N_FUSER_SYSTEM: &str = r"{%- if inner_system_message is defined -%}You have been provided with a set of responses from various models to the following problem:
 ------
 {{ inner_system_message }}
 ------
@@ -192,13 +192,13 @@ You have been provided with a set of responses from various models to the latest
 query.
 
 {%- endif %}
-Your task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses."#;
+Your task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses.";
 
-const MIXTURE_OF_N_FUSER_CANDIDATES: &str = r#"Here are the candidate answers (with the index and a row of ------ separating):{% for candidate in candidates %}
+const MIXTURE_OF_N_FUSER_CANDIDATES: &str = r"Here are the candidate answers (with the index and a row of ------ separating):{% for candidate in candidates %}
 {{ loop.index0 }}:
 {{ candidate }}
 ------
-{%- endfor %}"#;
+{%- endfor %}";
 
 #[cfg(test)]
 pub(crate) mod tests {
@@ -435,12 +435,12 @@ In the "answer_choice" block: you should output the index of the best response."
         //   ------"
 
         // Because there's no extra text beyond that, the exact text should be:
-        let expected = r#"Here are the candidate answers (with the index and a row of ------ separating):
+        let expected = r"Here are the candidate answers (with the index and a row of ------ separating):
 0: Candidate A
 ------
 1: Candidate B
 ------
-Please evaluate these candidates and provide the index of the best one."#;
+Please evaluate these candidates and provide the index of the best one.";
 
         assert_eq!(
             output, expected,
@@ -459,11 +459,11 @@ Please evaluate these candidates and provide the index of the best one."#;
             .template_message("t0:mixture_of_n_fuser_system", &context_with_message)
             .expect("Should render mixture_of_n_fuser_system with inner_system_message");
 
-        let expected_with_message = r#"You have been provided with a set of responses from various models to the following problem:
+        let expected_with_message = r"You have been provided with a set of responses from various models to the following problem:
 ------
 some system message
 ------
-Your task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses."#;
+Your task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses.";
 
         assert_eq!(
             output_with_message, expected_with_message,
@@ -476,9 +476,9 @@ Your task is to synthesize these responses into a single, high-quality response.
             .template_message("t0:mixture_of_n_fuser_system", &context_no_message)
             .expect("Should render mixture_of_n_fuser_system without inner_system_message");
 
-        let expected_no_message = r#"You have been provided with a set of responses from various models to the latest user
+        let expected_no_message = r"You have been provided with a set of responses from various models to the latest user
 query.
-Your task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses."#;
+Your task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses.";
 
         assert_eq!(
             output_no_message, expected_no_message,
@@ -509,13 +509,13 @@ Your task is to synthesize these responses into a single, high-quality response.
         //  ------
         //  {%- endfor %}"
 
-        let expected = r#"Here are the candidate answers (with the index and a row of ------ separating):
+        let expected = r"Here are the candidate answers (with the index and a row of ------ separating):
 0:
 Candidate response #1
 ------
 1:
 Candidate response #2
-------"#;
+------";
 
         assert_eq!(
             output, expected,

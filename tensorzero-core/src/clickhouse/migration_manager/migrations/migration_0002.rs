@@ -32,7 +32,7 @@ impl Migration for Migration0002<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `DynamicInContextLearningExample` table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS DynamicInContextLearningExample
             (
                 id UUID, -- must be a UUIDv7
@@ -45,7 +45,7 @@ impl Migration for Migration0002<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = MergeTree()
             ORDER BY (function_name, variant_name, namespace);
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

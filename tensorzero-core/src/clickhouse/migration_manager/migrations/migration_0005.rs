@@ -55,13 +55,13 @@ impl Migration for Migration0005<'_> {
 
         for table in tables {
             let query = format!(
-                r#"SELECT EXISTS(
+                r"SELECT EXISTS(
                     SELECT 1
                     FROM system.columns
                     WHERE database = '{database}'
                       AND table = '{table}'
                       AND name = 'tags'
-                )"#
+                )"
             );
             match self.clickhouse.run_query_synchronous_no_params(query).await {
                 Err(e) => {
@@ -93,7 +93,7 @@ impl Migration for Migration0005<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `InferenceTag` table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS InferenceTag
             (
                 function_name LowCardinality(String),
@@ -102,25 +102,25 @@ impl Migration for Migration0005<'_> {
                 inference_id UUID, -- must be a UUIDv7
             ) ENGINE = MergeTree()
             ORDER BY (function_name, key, value);
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `BooleanMetricFeedback` table
-        let query = r#"
+        let query = r"
             ALTER TABLE ChatInference
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `JsonInference` table
-        let query = r#"
+        let query = r"
             ALTER TABLE JsonInference
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -130,7 +130,7 @@ impl Migration for Migration0005<'_> {
         // We do not need to handle the case where there are already tags in the table since we created those columns just now.
         // So, we don't worry about timestamps for cutting over to the materialized views.
         // Create the materialized view for the `InferenceTag` table from ChatInference
-        let query = r#"
+        let query = r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceTagView
             TO InferenceTag
             AS
@@ -141,14 +141,14 @@ impl Migration for Migration0005<'_> {
                     id as inference_id
                 FROM ChatInference
                 ARRAY JOIN mapKeys(tags) as key
-            "#;
+            ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `InferenceTag` table from JsonInference
-        let query = r#"
+        let query = r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceTagView
             TO InferenceTag
             AS
@@ -159,7 +159,7 @@ impl Migration for Migration0005<'_> {
                     id as inference_id
                 FROM JsonInference
                 ARRAY JOIN mapKeys(tags) as key
-            "#;
+            ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

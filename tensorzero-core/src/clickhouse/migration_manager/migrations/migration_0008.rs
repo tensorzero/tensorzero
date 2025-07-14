@@ -101,13 +101,13 @@ impl Migration for Migration0008<'_> {
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Add a `raw_request` column, a `raw_response` column, a `function_name` column and a `variant_name` column
         // to the `BatchRequest` table
-        let query = r#"
+        let query = r"
             ALTER TABLE BatchRequest
             ADD COLUMN IF NOT EXISTS raw_request String,
             ADD COLUMN IF NOT EXISTS raw_response String,
             ADD COLUMN IF NOT EXISTS function_name LowCardinality(String),
             ADD COLUMN IF NOT EXISTS variant_name LowCardinality(String),
-            MODIFY COLUMN errors Array(String);"#;
+            MODIFY COLUMN errors Array(String);";
         // NOTE: this MODIFY COLUMN errors statement would convert data in bad ways
         // HOWEVER, TensorZero at the point of writing has never actually written any errors to the errors column
         // so this is safe to do.
@@ -117,30 +117,30 @@ impl Migration for Migration0008<'_> {
             .await?;
 
         // Alter the `response_time_ms` column of `ModelInference` to be a nullable column
-        let query = r#"
+        let query = r"
             ALTER TABLE ModelInference
             MODIFY COLUMN response_time_ms Nullable(UInt32)
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Alter the `processing_time_ms` column of `ChatInference` to be a nullable column
-        let query = r#"
+        let query = r"
             ALTER TABLE ChatInference
             MODIFY COLUMN processing_time_ms Nullable(UInt32)
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Alter the `processing_time_ms` column of `JsonInference` to be a nullable column
-        let query = r#"
+        let query = r"
             ALTER TABLE JsonInference
             MODIFY COLUMN processing_time_ms Nullable(UInt32)
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

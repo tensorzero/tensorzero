@@ -20,13 +20,7 @@ async fn test_logging_no_rust_log_default_debug() {
 /// Test that the gateway logs '/health' requests when [gateway.debug] is set
 #[tokio::test]
 async fn test_logging_no_rust_log_debug_on() {
-    let mut child_data = start_gateway_on_random_port(
-        r#"
-    debug = true
-    "#,
-        None,
-    )
-    .await;
+    let mut child_data = start_gateway_on_random_port(r"debug = true", None).await;
     let health_response = child_data.call_health_endpoint().await;
     assert_eq!(health_response, r#"{"gateway":"ok","clickhouse":"ok"}"#);
 
@@ -50,13 +44,7 @@ async fn test_logging_no_rust_log_debug_on() {
 /// Test that the gateway does logs '/health' requests when `RUST_LOG` blocks it
 #[tokio::test]
 async fn test_logging_rust_log_debug_on() {
-    let mut child_data = start_gateway_on_random_port(
-        r#"
-    debug = true
-    "#,
-        Some("gateway=debug"),
-    )
-    .await;
+    let mut child_data = start_gateway_on_random_port(r"debug = true", Some("gateway=debug")).await;
     let health_response = child_data.call_health_endpoint().await;
     assert_eq!(health_response, r#"{"gateway":"ok","clickhouse":"ok"}"#);
 

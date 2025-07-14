@@ -94,7 +94,7 @@ pub async fn check_static_eval_human_feedback(
     inference_output: &InferenceResponse,
 ) -> Result<Option<HumanFeedbackResult>> {
     let serialized_output = inference_output.get_serialized_output()?;
-    let query = r#"
+    let query = r"
         SELECT value, evaluator_inference_id FROM StaticEvaluationHumanFeedback
         WHERE
             metric_name = {metric_name:String}
@@ -102,8 +102,7 @@ pub async fn check_static_eval_human_feedback(
         AND output = {output:String}
         ORDER BY timestamp DESC
         LIMIT 1
-        FORMAT JSONEachRow
-    "#;
+        FORMAT JSONEachRow";
     debug!(query = %query, "Executing ClickHouse query");
     let escaped_serialized_output = escape_string_for_clickhouse_literal(&serialized_output);
     let result = clickhouse

@@ -71,13 +71,13 @@ async fn check_column_exists(
     migration_id: &str,
 ) -> Result<bool, Error> {
     let query = format!(
-        r#"SELECT EXISTS(
+        r"SELECT EXISTS(
             SELECT 1
             FROM system.columns
             WHERE database = '{}'
               AND table = '{}'
               AND name = '{}'
-        )"#,
+        )",
         clickhouse.database(),
         table,
         column,

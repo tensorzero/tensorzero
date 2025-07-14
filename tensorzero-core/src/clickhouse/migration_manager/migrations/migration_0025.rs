@@ -30,7 +30,7 @@ impl Migration for Migration0025<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS DynamicEvaluationRun
                 (
                     run_id_uint UInt128, -- UUID encoded as a UInt128
@@ -42,13 +42,13 @@ impl Migration for Migration0025<'_> {
                     updated_at DateTime64(6, 'UTC') DEFAULT now()
                 ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
                 ORDER BY run_id_uint;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS DynamicEvaluationRunEpisode
             (
                 run_id UUID,
@@ -61,7 +61,7 @@ impl Migration for Migration0025<'_> {
                 updated_at DateTime64(6, 'UTC') DEFAULT now()
             ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
                 ORDER BY episode_id_uint;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

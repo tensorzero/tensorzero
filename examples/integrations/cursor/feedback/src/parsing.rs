@@ -233,7 +233,7 @@ mod tests {
 
     #[test]
     fn test_parse_rust_struct_with_impl() {
-        let rust_code = r#"struct Point {
+        let rust_code = r"struct Point {
     x: i32,
     y: i32,
 }
@@ -242,7 +242,7 @@ impl Point {
     fn new(x: i32, y: i32) -> Self {
         Self { x, y }
     }
-}"#;
+}";
         let result = parse_hunk(rust_code, "rs");
         assert!(result.is_ok());
 
@@ -364,9 +364,9 @@ impl Point {
 
     #[test]
     fn test_parse_typescript_simple_function() {
-        let ts_code = r#"function greet(name: string): string {
+        let ts_code = r"function greet(name: string): string {
     return `Hello, ${name}!`;
-}"#;
+}";
         let result = parse_hunk(ts_code, "ts");
         assert!(result.is_ok());
 
@@ -423,7 +423,7 @@ impl Point {
 
     #[test]
     fn test_parse_typescript_class_with_methods() {
-        let ts_code = r#"class Calculator {
+        let ts_code = r"class Calculator {
     private value: number = 0;
 
     add(n: number): Calculator {
@@ -434,7 +434,7 @@ impl Point {
     getResult(): number {
         return this.value;
     }
-}"#;
+}";
         let result = parse_hunk(ts_code, "ts");
         assert!(result.is_ok());
 
@@ -555,8 +555,8 @@ impl Point {
 
     #[test]
     fn test_parse_python_simple_function() {
-        let py_code = r#"def calculate_area(radius):
-    return 3.14159 * radius * radius"#;
+        let py_code = r"def calculate_area(radius):
+    return 3.14159 * radius * radius";
         let result = parse_hunk(py_code, "py");
         assert!(result.is_ok());
 
@@ -899,7 +899,7 @@ fn main() {
 
     #[test]
     fn test_parse_markdown_with_lists() {
-        let md_code = r#"
+        let md_code = r"
 # Task List
 
 ## TODO Items
@@ -915,7 +915,7 @@ fn main() {
 3. Real-time updates
 
 > **Note**: This is a blockquote with important information.
-"#;
+";
         let result = parse_hunk(md_code, "md");
         assert!(result.is_ok());
 
@@ -956,12 +956,12 @@ fn main() {
     #[test]
     fn test_parse_invalid_syntax() {
         // Invalid Rust syntax
-        let invalid_rust = r#"
+        let invalid_rust = r"
 fn broken_function( {
     let x = ;
     return
 }
-"#;
+";
         let result = parse_hunk(invalid_rust, "rs");
         // Parser should still return a tree, but it will contain error nodes
         assert!(result.is_ok());
@@ -1067,7 +1067,7 @@ fn broken_function( {
 
         #[test]
         fn test_identical_complex_code_zero_distance() {
-            let code = r#"struct Point {
+            let code = r"struct Point {
     x: i32,
     y: i32,
 }
@@ -1082,7 +1082,7 @@ impl Point {
         let dy = (self.y - other.y) as f64;
         (dx * dx + dy * dy).sqrt()
     }
-}"#;
+}";
             assert_edit_distance(code, code, "rs", 0);
             let result = calculate_edit_distance(code, code, "rs");
             assert!(
@@ -1112,8 +1112,8 @@ impl Point {
 
         #[test]
         fn test_single_statement_insertion() {
-            let source = r#"fn test() {
-}"#;
+            let source = r"fn test() {
+}";
             let target = r#"fn test() {
     println!("Hello");
 }"#;
@@ -1134,8 +1134,8 @@ impl Point {
             let source = r#"fn test() {
     println!("Hello");
 }"#;
-            let target = r#"fn test() {
-}"#;
+            let target = r"fn test() {
+}";
             // Removing one statement should have moderate distance
             assert_edit_distance(source, target, "rs", 12);
             let result = calculate_edit_distance(source, target, "rs");
@@ -1172,12 +1172,12 @@ impl Point {
 
         #[test]
         fn test_literal_value_change() {
-            let source = r#"fn test() {
+            let source = r"fn test() {
     let x = 5;
-}"#;
-            let target = r#"fn test() {
+}";
+            let target = r"fn test() {
     let x = 10;
-}"#;
+}";
             // Changing literal value should be distance 1
             assert_edit_distance(source, target, "rs", 1);
             let result = calculate_edit_distance(source, target, "rs");
@@ -1404,14 +1404,14 @@ impl Point {
 
         #[test]
         fn test_completely_different_functions() {
-            let source = r#"fn fibonacci(n: u32) -> u32 {
+            let source = r"fn fibonacci(n: u32) -> u32 {
     if n <= 1 {
         n
     } else {
         fibonacci(n - 1) + fibonacci(n - 2)
     }
-}"#;
-            let target = r#"fn quicksort(arr: &mut [i32]) {
+}";
+            let target = r"fn quicksort(arr: &mut [i32]) {
     if arr.len() <= 1 {
         return;
     }
@@ -1419,7 +1419,7 @@ impl Point {
     let (left, right) = arr.split_at_mut(pivot);
     quicksort(left);
     quicksort(&mut right[1..]);
-}"#;
+}";
             // Completely different functions should have high distance
             assert_edit_distance(source, target, "rs", 47);
             let result = calculate_edit_distance(source, target, "rs");
@@ -1434,17 +1434,17 @@ impl Point {
 
         #[test]
         fn test_struct_to_enum_change() {
-            let source = r#"struct Color {
+            let source = r"struct Color {
     r: u8,
     g: u8,
     b: u8,
-}"#;
-            let target = r#"enum Color {
+}";
+            let target = r"enum Color {
     Red,
     Green,
     Blue,
     Rgb(u8, u8, u8),
-}"#;
+}";
             // Struct to enum should have high distance
             assert_edit_distance(source, target, "rs", 17);
             let result = calculate_edit_distance(source, target, "rs");
@@ -1459,11 +1459,11 @@ impl Point {
 
         #[test]
         fn test_impl_block_addition() {
-            let source = r#"struct Point {
+            let source = r"struct Point {
     x: i32,
     y: i32,
-}"#;
-            let target = r#"struct Point {
+}";
+            let target = r"struct Point {
     x: i32,
     y: i32,
 }
@@ -1472,7 +1472,7 @@ impl Point {
     fn new(x: i32, y: i32) -> Self {
         Self { x, y }
     }
-}"#;
+}";
             // Adding impl block should have low distance (found minimum in subtree)
             assert_edit_distance(source, target, "rs", 1);
             let result = calculate_edit_distance(source, target, "rs");
@@ -1541,16 +1541,16 @@ fn process_numbers() {
 
         #[test]
         fn test_iterator_vs_loop() {
-            let source = r#"fn sum_squares(numbers: &[i32]) -> i32 {
+            let source = r"fn sum_squares(numbers: &[i32]) -> i32 {
     let mut sum = 0;
     for num in numbers {
         sum += num * num;
     }
     sum
-}"#;
-            let target = r#"fn sum_squares(numbers: &[i32]) -> i32 {
+}";
+            let target = r"fn sum_squares(numbers: &[i32]) -> i32 {
     numbers.iter().map(|x| x * x).sum()
-}"#;
+}";
             // Iterator vs manual loop should have high distance
             assert_edit_distance(source, target, "rs", 35);
             let result = calculate_edit_distance(source, target, "rs");
@@ -1566,14 +1566,14 @@ fn process_numbers() {
         // TypeScript tests for different patterns
         #[test]
         fn test_typescript_class_to_function() {
-            let source = r#"class Calculator {
+            let source = r"class Calculator {
     add(a: number, b: number): number {
         return a + b;
     }
-}"#;
-            let target = r#"function add(a: number, b: number): number {
+}";
+            let target = r"function add(a: number, b: number): number {
     return a + b;
-}"#;
+}";
             // Class to function should have moderate distance
             assert_edit_distance(source, target, "ts", 8);
             let result = calculate_edit_distance(source, target, "ts");
@@ -1588,12 +1588,12 @@ fn process_numbers() {
 
         #[test]
         fn test_typescript_arrow_vs_regular_function() {
-            let source = r#"function greet(name: string): string {
+            let source = r"function greet(name: string): string {
     return `Hello, ${name}!`;
-}"#;
-            let target = r#"const greet = (name: string): string => {
+}";
+            let target = r"const greet = (name: string): string => {
     return `Hello, ${name}!`;
-};"#;
+};";
             // Arrow vs regular function should have low to moderate distance
             assert_edit_distance(source, target, "ts", 5);
             let result = calculate_edit_distance(source, target, "ts");
@@ -1609,11 +1609,11 @@ fn process_numbers() {
         // Python tests for different patterns
         #[test]
         fn test_python_class_vs_function() {
-            let source = r#"class Calculator:
+            let source = r"class Calculator:
     def add(self, a, b):
-        return a + b"#;
-            let target = r#"def add(a, b):
-    return a + b"#;
+        return a + b";
+            let target = r"def add(a, b):
+    return a + b";
             // Class method to function should have moderate distance
             assert_edit_distance(source, target, "py", 7);
             let result = calculate_edit_distance(source, target, "py");
@@ -1628,13 +1628,13 @@ fn process_numbers() {
 
         #[test]
         fn test_python_list_comprehension_vs_loop() {
-            let source = r#"def square_numbers(numbers):
+            let source = r"def square_numbers(numbers):
     result = []
     for num in numbers:
         result.append(num ** 2)
-    return result"#;
-            let target = r#"def square_numbers(numbers):
-    return [num ** 2 for num in numbers]"#;
+    return result";
+            let target = r"def square_numbers(numbers):
+    return [num ** 2 for num in numbers]";
             // List comprehension vs loop should have high distance
             assert_edit_distance(source, target, "py", 29);
             let result = calculate_edit_distance(source, target, "py");

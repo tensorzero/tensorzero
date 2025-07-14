@@ -46,7 +46,7 @@ impl Migration for Migration0006<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `BatchModelInference` table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS BatchModelInference
             (
                 inference_id UUID,
@@ -67,14 +67,14 @@ impl Migration for Migration0006<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(inference_id),
             ) ENGINE = MergeTree()
             ORDER BY (batch_id, inference_id)
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `BatchRequest` table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS BatchRequest
             (
                 batch_id UUID,
@@ -87,28 +87,28 @@ impl Migration for Migration0006<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id),
             ) ENGINE = MergeTree()
             ORDER BY (batch_id, id)
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the BatchIdByInferenceId table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS BatchIdByInferenceId
             (
                 inference_id UUID,
                 batch_id UUID,
             ) ENGINE = MergeTree()
             ORDER BY (inference_id)
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the BatchIdByInferenceId table
-        let query = r#"
+        let query = r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS BatchIdByInferenceIdView
             TO BatchIdByInferenceId
             AS
@@ -116,7 +116,7 @@ impl Migration for Migration0006<'_> {
                     inference_id,
                     batch_id
                 FROM BatchModelInference
-            "#;
+            ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

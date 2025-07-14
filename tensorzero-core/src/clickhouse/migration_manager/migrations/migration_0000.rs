@@ -53,7 +53,7 @@ impl Migration for Migration0000<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `BooleanMetricFeedback` table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS BooleanMetricFeedback
             (
                 id UUID, -- must be a UUIDv7
@@ -63,14 +63,14 @@ impl Migration for Migration0000<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = MergeTree()
             ORDER BY (metric_name, target_id);
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `CommentFeedback` table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS CommentFeedback
             (
                 id UUID, -- must be a UUIDv7
@@ -80,14 +80,14 @@ impl Migration for Migration0000<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = MergeTree()
             ORDER BY target_id;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `DemonstrationFeedback` table
-        let query = r#"
+        let query = r"
            CREATE TABLE IF NOT EXISTS DemonstrationFeedback
             (
                 id UUID, -- must be a UUIDv7
@@ -96,14 +96,14 @@ impl Migration for Migration0000<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = MergeTree()
             ORDER BY inference_id;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `FloatMetricFeedback` table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS FloatMetricFeedback
             (
                 id UUID, -- must be a UUIDv7
@@ -113,14 +113,14 @@ impl Migration for Migration0000<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = MergeTree()
             ORDER BY (metric_name, target_id);
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `ChatInference` table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS ChatInference
             (
                 id UUID, -- must be a UUIDv7
@@ -135,14 +135,14 @@ impl Migration for Migration0000<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = MergeTree()
             ORDER BY (function_name, variant_name, episode_id);
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `JsonInference` table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS JsonInference
             (
                 id UUID, -- must be a UUIDv7
@@ -157,14 +157,14 @@ impl Migration for Migration0000<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = MergeTree()
             ORDER BY (function_name, variant_name, episode_id);
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `ModelInference` table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS ModelInference
             (
                 id UUID, -- must be a UUIDv7
@@ -180,7 +180,7 @@ impl Migration for Migration0000<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = MergeTree()
             ORDER BY inference_id;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

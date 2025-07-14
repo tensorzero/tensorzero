@@ -115,7 +115,7 @@ impl Migration for Migration0021<'_> {
             + view_offset)
             .as_secs();
 
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS TagInference
                 (
                     key String,
@@ -128,41 +128,41 @@ impl Migration for Migration0021<'_> {
                     is_deleted Bool DEFAULT false,
                     updated_at DateTime64(6, 'UTC') DEFAULT now64()
                 ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
-                ORDER BY (key, value, inference_id)"#;
+                ORDER BY (key, value, inference_id)";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add the staled_at column to both datapoint tables
-        let query = r#"
+        let query = r"
             ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Nullable(DateTime64(6, 'UTC'));
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
-        let query = r#"
+        let query = r"
             ALTER TABLE JsonInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Nullable(DateTime64(6, 'UTC'));
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Update the defaults of updated_at for the Datapoint tables to be now64
-        let query = r#"
+        let query = r"
             ALTER TABLE ChatInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now64();
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
-        let query = r#"
+        let query = r"
             ALTER TABLE JsonInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now64();
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -176,7 +176,7 @@ impl Migration for Migration0021<'_> {
         };
 
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS TagChatInferenceView
             TO TagInference
             AS
@@ -191,7 +191,7 @@ impl Migration for Migration0021<'_> {
                 FROM ChatInference
                 ARRAY JOIN mapKeys(tags) as key
                 {view_where_clause};
-        "#
+        "
         );
         let _ = self
             .clickhouse
@@ -199,7 +199,7 @@ impl Migration for Migration0021<'_> {
             .await?;
 
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS TagJsonInferenceView
             TO TagInference
             AS
@@ -214,7 +214,7 @@ impl Migration for Migration0021<'_> {
                 FROM JsonInference
                 ARRAY JOIN mapKeys(tags) as key
                 {view_where_clause};
-        "#
+        "
         );
         let _ = self
             .clickhouse
@@ -227,7 +227,7 @@ impl Migration for Migration0021<'_> {
 
             let insert_chat_inference = async {
                 let query = format!(
-                    r#"
+                    r"
                     INSERT INTO TagInference (key, value, function_name, variant_name, episode_id, inference_id, function_type)
                     SELECT
                         key,
@@ -240,7 +240,7 @@ impl Migration for Migration0021<'_> {
                     FROM ChatInference
                     ARRAY JOIN mapKeys(tags) as key
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#
+                "
                 );
                 self.clickhouse
                     .run_query_synchronous_no_params(query.to_string())
@@ -249,7 +249,7 @@ impl Migration for Migration0021<'_> {
 
             let insert_json_inference = async {
                 let query = format!(
-                    r#"
+                    r"
                     INSERT INTO TagInference (key, value, function_name, variant_name, episode_id, inference_id, function_type)
                     SELECT
                         key,
@@ -262,7 +262,7 @@ impl Migration for Migration0021<'_> {
                     FROM JsonInference
                     ARRAY JOIN mapKeys(tags) as key
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#
+                "
                 );
                 self.clickhouse
                     .run_query_synchronous_no_params(query.to_string())

@@ -37,20 +37,20 @@ impl Migration for Migration0015<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Alter the `input_tokens` column of `ModelInference` to be a nullable column
-        let query = r#"
+        let query = r"
             ALTER TABLE ModelInference
             MODIFY COLUMN input_tokens Nullable(UInt32)
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Alter the `output_tokens` column of `ModelInference` to be a nullable column
-        let query = r#"
+        let query = r"
             ALTER TABLE ModelInference
             MODIFY COLUMN output_tokens Nullable(UInt32)
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
