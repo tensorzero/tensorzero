@@ -383,7 +383,7 @@ async fn write_boolean(
 /// This is to avoid a race condition where the id was created (e.g. an inference was made)
 /// but the feedback is received before the id is written to the database.
 ///
-/// We compute an amount of time to wait by max(FEEDBACK_COOLDOWN_PERIOD - elapsed_from_target_id, FEEDBACK_MINIMUM_WAIT_TIME)
+/// We compute an amount of time to wait by `max(FEEDBACK_COOLDOWN_PERIOD - elapsed_from_target_id, FEEDBACK_MINIMUM_WAIT_TIME)`
 /// We then poll every 500ms until that time has passed.
 /// If the time has passed and the id is still not found, we return an error.
 async fn throttled_get_function_name(

@@ -1,8 +1,8 @@
 //! OpenAI-compatible API endpoint implementation.
 //!
 //! This module provides compatibility with the OpenAI Chat Completions API format,
-//! translating between OpenAI's request/response format and our internal types.
-//! It implements request handling, parameter conversion, and response formatting
+//! translating between OpenAI's `request`/`response` format and our internal types.
+//! It implements request handling, parameter conversion, and `response` formatting
 //! to match OpenAI's API specification.
 //!
 //! We convert the request into our internal types, call `endpoints::inference::inference` to perform the actual inference,

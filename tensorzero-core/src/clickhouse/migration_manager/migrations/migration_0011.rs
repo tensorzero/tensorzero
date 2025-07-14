@@ -10,8 +10,8 @@ use super::{check_column_exists, check_table_exists};
 /// The `short_cache_key` is the first 8 bytes of the `long_cache_key`, a 32 byte array. We use it as the primary key in clickhouse for fast lookups.
 /// The `long_cache_key` is the cache key for the model provider request
 /// The `timestamp` is the timestamp of the request
-/// The `output` is the output of the request, serialized using serde_json::to_string
-/// We also add a column `cached` to indicate if a ModelInference was a cache hit
+/// The `output` is the output of the request, serialized using `serde_json::to_string`
+/// We also add a column `cached` to indicate if a `ModelInference` was a cache hit
 pub struct Migration0011<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }

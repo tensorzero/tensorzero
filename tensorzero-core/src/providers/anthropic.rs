@@ -317,7 +317,7 @@ impl InferenceProvider for AnthropicProvider {
 
 /// Maps events from Anthropic into the TensorZero format
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
-/// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResultChunk` type
+/// At a high level, this function is handling low-level `EventSource` details and mapping the objects returned by Anthropic into our `InferenceResultChunk` type
 fn stream_anthropic(
     mut event_source: EventSource,
     start_time: Instant,
@@ -1052,10 +1052,10 @@ enum AnthropicStreamMessage {
 }
 
 /// This function converts an Anthropic stream message to a TensorZero stream message.
-/// It must keep track of the current tool ID and name in order to correctly handle ToolCallChunks (which we force to always contain the tool name and ID)
-/// Anthropic only sends the tool ID and name in the ToolUse chunk so we need to keep the most recent ones as mutable references so
-/// subsequent InputJSONDelta chunks can be initialized with this information as well.
-/// There is no need to do the same bookkeeping for TextDelta chunks since they come with an index (which we use as an ID for a text chunk).
+/// It must keep track of the current tool ID and name in order to correctly handle `ToolCallChunks` (which we force to always contain the tool name and ID)
+/// Anthropic only sends the tool ID and name in the `ToolUse` chunk so we need to keep the most recent ones as mutable references so
+/// subsequent `InputJSONDelta` chunks can be initialized with this information as well.
+/// There is no need to do the same bookkeeping for `TextDelta` chunks since they come with an index (which we use as an ID for a text chunk).
 /// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details on the types of events and their semantics.
 fn anthropic_to_tensorzero_stream_message(
     raw_message: String,
@@ -1084,9 +1084,9 @@ fn anthropic_to_tensorzero_stream_message(
             }
             AnthropicContentBlockDelta::InputJsonDelta { partial_json } => {
                 Ok(Some(ProviderInferenceResponseChunk::new(
-                    // Take the current tool name and ID and use them to create a ToolCallChunk
+                    // Take the current tool name and ID and use them to create a `ToolCallChunk`
                     // This is necessary because the ToolCallChunk must always contain the tool name and ID
-                    // even though Anthropic only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
+                    // even though Anthropic only sends the tool ID and name in the `ToolUse` chunk and not `InputJSONDelta`
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                         raw_name: None,
                         id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {

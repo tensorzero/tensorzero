@@ -462,7 +462,7 @@ mod tests {
 
     use super::*;
 
-    /// This test ensures that if we make a small change to the ModelInferenceRequest,
+    /// This test ensures that if we make a small change to the `ModelInferenceRequest`,
     /// the cache key will change.
     #[test]
     fn test_get_cache_key() {

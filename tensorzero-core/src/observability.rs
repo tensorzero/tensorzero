@@ -68,7 +68,7 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
 ///
 /// If `override_exporter` is `None`, the default OTLP exporter will be used,
 /// which is configured via environment variables (e..g `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`):
-/// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md#endpoint-urls-for-otlphttp
+/// [endpoint-urls-for-otlphttp](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md#endpoint-urls-for-otlphttp)
 pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
     override_exporter: Option<T>,
 ) -> Result<(DelayedOtelEnableHandle, impl Layer<Registry>), Error> {
@@ -230,7 +230,7 @@ const DEFAULT_GATEWAY_NON_DEBUG_DIRECTIVES: &str = "warn,gateway=info,tensorzero
 const DEFAULT_GATEWAY_DEBUG_DIRECTIVES: &str =
     "warn,gateway=debug,tensorzero_core=debug,tower_http::trace=debug";
 
-/// Set up logging (including the necessary layers for OpenTelemtry exporting)
+/// Set up logging (including the necessary layers for `OpenTelemtry` exporting)
 ///
 /// This does *not* actually enable OTEL exporting - you must use the returned
 /// `DelayedOtelEnableHandle` to turn on exporting. This two-step approach is

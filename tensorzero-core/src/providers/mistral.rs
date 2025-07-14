@@ -454,9 +454,9 @@ fn prepare_mistral_tools<'a>(
 /// This struct defines the supported parameters for the Mistral inference API
 /// See the [Mistral API documentation](https://docs.mistral.ai/api/#tag/chat)
 /// for more details.
-/// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
-/// presence_penalty, frequency_penalty, service_tier, stop, user,
-/// or context_length_exceeded_behavior.
+/// We are not handling `logprobs`, `top_logprobs`, `n`, `prompt_truncate_len`
+/// `presence_penalty`, `frequency_penalty`, `service_tier`, `stop`, `user`,
+/// or `context_length_exceeded_behavior`.
 /// NOTE: Mistral does not support seed.
 #[derive(Debug, Serialize)]
 struct MistralRequest<'a> {

@@ -542,8 +542,8 @@ pub(super) fn prepare_groq_messages<'a>(
     Ok(messages)
 }
 
-/// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
-/// Otherwise convert the tool choice and tools to Groq format
+/// If there are no tools passed or the tools are empty, return `None` for both `tools` and `tool_choice`.
+/// Otherwise convert the tool choice and tools to `Groq` format
 /// NOTE: parallel tool calls are unreliable, and specific tool choice doesn't work
 pub(super) fn prepare_groq_tools<'a>(
     request: &'a ModelInferenceRequest,
@@ -572,9 +572,9 @@ pub(super) fn prepare_groq_tools<'a>(
     }
 }
 
-/// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
+/// If `ModelInferenceRequestJsonMode::On` and the system message or instructions does not contain `JSON`
 /// the request will return an error.
-/// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
+/// So, we need to format the instructions to include `Respond using JSON.` if it doesn't already.
 pub(super) fn tensorzero_to_groq_system_message<'a>(
     system: Option<&'a str>,
     json_mode: &ModelInferenceRequestJsonMode,
@@ -880,9 +880,9 @@ pub(super) struct StreamOptions {
 /// This struct defines the supported parameters for the Groq API
 /// See the [Groq API documentation](https://platform.groq.com/docs/api-reference/chat/create)
 /// for more details.
-/// We are not handling logprobs, top_logprobs, n,
-/// presence_penalty, seed, service_tier, stop, user,
-/// or the deprecated function_call and functions arguments.
+/// We are not handling `logprobs`, `top_logprobs`, `n`,
+/// `presence_penalty`, `seed`, `service_tier`, `stop`, `user`,
+/// or the deprecated `function_call` and functions arguments.
 #[derive(Debug, Serialize)]
 struct GroqRequest<'a> {
     messages: Vec<GroqRequestMessage<'a>>,
@@ -1191,7 +1191,7 @@ struct GroqChatChunk {
     usage: Option<GroqUsage>,
 }
 
-/// Maps an Groq chunk to a TensorZero chunk for streaming inferences
+/// Maps an `Groq` chunk to a TensorZero chunk for streaming inferences
 fn groq_to_tensorzero_chunk(
     mut chunk: GroqChatChunk,
     latency: Duration,

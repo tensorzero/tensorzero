@@ -289,7 +289,7 @@ impl InferenceProvider for HyperbolicProvider {
 /// This struct defines the supported parameters for the Hyperbolic text generation API
 /// See the [API documentation](https://docs.hyperbolic.xyz/docs/rest-api)
 /// for more details.
-/// We are not handling logit_bias, logprobs, toplogprobs, n, stop, user, top_k, min_p, and repetition_penalty.
+/// We are not handling `logit_bias`, `logprobs`, `toplogprobs`, `n`, `stop`, `user`, `top_k`, `min_p`, and `repetition_penalty`.
 #[derive(Debug, Serialize)]
 struct HyperbolicRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
