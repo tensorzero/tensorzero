@@ -77,7 +77,10 @@ export default function BasicInfo({
             iconBg={functionIconConfig.iconBg}
             label={inference.function_name}
             secondaryLabel={`· ${inference.function_type}`}
-            link={`/observability/functions/${inference.function_name}`}
+            link={[
+              "/observability/functions/:function_name",
+              { function_name: inference.function_name },
+            ]}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -89,7 +92,13 @@ export default function BasicInfo({
           <Chip
             label={inference.variant_name}
             secondaryLabel={`· ${variantType}`}
-            link={`/observability/functions/${inference.function_name}/variants/${inference.variant_name}`}
+            link={[
+              "/observability/functions/:function_name/variants/:variant_name",
+              {
+                function_name: inference.function_name,
+                variant_name: inference.variant_name,
+              },
+            ]}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -100,7 +109,10 @@ export default function BasicInfo({
         <BasicInfoItemContent>
           <Chip
             label={inference.episode_id}
-            link={`/observability/episodes/${inference.episode_id}`}
+            link={[
+              "/observability/episodes/:episode_id",
+              { episode_id: inference.episode_id },
+            ]}
             font="mono"
           />
         </BasicInfoItemContent>

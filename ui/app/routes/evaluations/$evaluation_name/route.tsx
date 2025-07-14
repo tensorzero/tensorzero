@@ -17,7 +17,7 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
-import { data, redirect, useNavigate } from "react-router";
+import { data, redirect } from "react-router";
 import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
 import BasicInfo from "./EvaluationBasicInfo";
 import { useConfig } from "~/context/config";
@@ -31,6 +31,7 @@ import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
 import { logger } from "~/utils/logger";
+import { useNavigate } from "~/safe-navigation";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -241,12 +242,12 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("offset", String(offset + pageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("offset", String(offset - pageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   // Use that time for auto-refreshing

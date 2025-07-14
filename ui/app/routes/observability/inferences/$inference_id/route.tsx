@@ -13,9 +13,8 @@ import type { Route } from "./+types/route";
 import {
   data,
   isRouteErrorResponse,
-  Link,
+  redirect,
   useFetcher,
-  useNavigate,
   type RouteHandle,
 } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
@@ -60,6 +59,7 @@ import { JSONParseError } from "~/utils/common";
 import { processJson } from "~/utils/syntax-highlighting.server";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
+import { Link, useNavigate } from "~/safe-navigation";
 
 export const handle: RouteHandle = {
   crumb: (match) => [match.params.inference_id!],
@@ -158,9 +158,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-type ActionData =
-  | { redirectTo: string; error?: never }
-  | { error: string; redirectTo?: never };
+type ActionData = { error?: string };
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
@@ -195,9 +193,10 @@ export async function action({ request }: Route.ActionArgs) {
           variantName.toString(),
           episodeId.toString(),
         );
-        return data<ActionData>({
-          redirectTo: `/datasets/${dataset.toString()}/datapoint/${datapoint.id}`,
-        });
+
+        return redirect(
+          `/datasets/${dataset.toString()}/datapoint/${datapoint.id}`,
+        );
       } catch (error) {
         logger.error(error);
         return data<ActionData>(
@@ -216,7 +215,7 @@ export async function action({ request }: Route.ActionArgs) {
         url.searchParams.delete("beforeFeedback");
         url.searchParams.delete("afterFeedback");
         url.searchParams.set("newFeedbackId", response.feedback_id);
-        return data<ActionData>({ redirectTo: url.pathname + url.search });
+        return redirect(url.toString());
       } catch (error) {
         if (isTensorZeroServerError(error)) {
           return data<ActionData>(
@@ -255,6 +254,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     latestFeedbackByMetric,
   } = loaderData;
   const navigate = useNavigate();
+
   const [openModal, setOpenModal] = useState<ModalType | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
@@ -268,7 +268,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterFeedback");
     searchParams.set("beforeFeedback", bottomFeedback.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   const handlePreviousFeedbackPage = () => {
@@ -276,7 +276,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeFeedback");
     searchParams.set("afterFeedback", topFeedback.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   // These are swapped because the table is sorted in descending order
@@ -301,13 +301,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     addToDatasetFetcher.state === "idle" && addToDatasetFetcher.data?.error
       ? addToDatasetFetcher.data.error
       : null;
-  useEffect(() => {
-    const currentState = addToDatasetFetcher.state;
-    const data = addToDatasetFetcher.data;
-    if (currentState === "idle" && data?.redirectTo) {
-      navigate(data.redirectTo);
-    }
-  }, [addToDatasetFetcher.data, addToDatasetFetcher.state, navigate]);
 
   const handleAddToDataset = (
     dataset: string,
@@ -359,9 +352,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       : null;
   useEffect(() => {
     const currentState = humanFeedbackFetcher.state;
-    const data = humanFeedbackFetcher.data;
-    if (currentState === "idle" && data?.redirectTo) {
-      navigate(data.redirectTo, { state: "humanFeedbackRedirect" });
+    if (currentState === "idle") {
       setOpenModal(null);
     }
   }, [humanFeedbackFetcher.data, humanFeedbackFetcher.state, navigate]);
@@ -573,7 +564,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         <h1 className="text-2xl font-bold">{heading}</h1>
         {typeof message === "string" ? <p>{message}</p> : message}
         <Link
-          to={`/observability/inferences`}
+          to="/observability/inferences"
           className="font-bold text-red-800 hover:text-red-600"
         >
           Go back &rarr;

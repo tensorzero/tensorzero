@@ -1,5 +1,5 @@
 import { useLayoutEffect, useState } from "react";
-import { useFetcher, Link } from "react-router";
+import { useFetcher } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -35,6 +35,7 @@ import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "~/utils/common";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
+import { Link } from "~/safe-navigation";
 
 interface LaunchEvaluationModalProps {
   isOpen: boolean;
@@ -229,7 +230,12 @@ function EvaluationForm({
         Function:{" "}
         {function_name ? (
           <span className="font-medium">
-            <Link to={`/observability/functions/${function_name}`}>
+            <Link
+              to={[
+                "/observability/functions/:function_name",
+                { function_name },
+              ]}
+            >
               {function_name}
             </Link>
           </span>

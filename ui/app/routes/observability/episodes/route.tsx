@@ -5,7 +5,7 @@ import {
 } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import EpisodesTable from "./EpisodesTable";
-import { data, isRouteErrorResponse, useNavigate } from "react-router";
+import { data, isRouteErrorResponse } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import EpisodeSearchBar from "./EpisodeSearchBar";
 import {
@@ -14,6 +14,7 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
+import { useNavigate } from "~/safe-navigation";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -51,17 +52,23 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
 
   const handleNextPage = () => {
     if (bottomEpisode) {
-      navigate(`?before=${bottomEpisode.episode_id}&pageSize=${pageSize}`, {
-        preventScrollReset: true,
-      });
+      navigate(
+        {
+          search: `?before=${bottomEpisode.episode_id}&pageSize=${pageSize}`,
+        },
+        { preventScrollReset: true },
+      );
     }
   };
 
   const handlePreviousPage = () => {
     if (topEpisode) {
-      navigate(`?after=${topEpisode.episode_id}&pageSize=${pageSize}`, {
-        preventScrollReset: true,
-      });
+      navigate(
+        { search: `?after=${topEpisode.episode_id}&pageSize=${pageSize}` },
+        {
+          preventScrollReset: true,
+        },
+      );
     }
   };
 

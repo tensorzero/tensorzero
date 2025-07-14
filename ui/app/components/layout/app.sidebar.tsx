@@ -13,7 +13,6 @@ import {
 import { useSidebar } from "~/components/ui/sidebar";
 import { useActivePath } from "~/hooks/use-active-path";
 import { TensorZeroLogo } from "~/components/icons/Icons";
-import { Link } from "react-router";
 import type { IconProps } from "~/components/icons/Icons";
 
 import {
@@ -31,10 +30,11 @@ import {
   SidebarGroupContent,
 } from "~/components/ui/sidebar";
 import TensorZeroStatusIndicator from "./TensorZeroStatusIndicator";
+import { Link, type SimplePaths } from "~/safe-navigation";
 
 interface NavigationItem {
   title: string;
-  url: string;
+  url: SimplePaths;
   icon: React.FC<IconProps>;
 }
 
@@ -69,7 +69,7 @@ const navigation: NavigationSection[] = [
     items: [
       {
         title: "Supervised Fine-Tuning",
-        url: "/optimization/supervised-fine-tuning",
+        url: "/optimization/supervised-fine-tuning/:job_id?",
         icon: SupervisedFineTuning,
       },
     ],

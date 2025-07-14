@@ -15,11 +15,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "~/components/ui/popover";
-import { useSearchParams, useNavigate, useFetcher } from "react-router";
+import { useSearchParams, useFetcher } from "react-router";
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import { getLastUuidSegment } from "~/components/evaluations/EvaluationRunBadge";
 import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
 import DynamicEvaluationRunBadge from "./DynamicEvaluationRunBadge";
+import { useNavigate } from "~/safe-navigation";
 
 interface DynamicEvalRunSelectorProps {
   projectName: string;
@@ -59,7 +60,7 @@ export function DynamicEvalRunSelector({
     } else {
       newParams.delete("run_ids");
     }
-    navigate(`?${newParams.toString()}`, { replace: true });
+    navigate(newParams, { replace: true });
   };
 
   // Toggle a run selection

@@ -1,4 +1,3 @@
-import { useNavigate } from "react-router";
 import { z } from "zod";
 import { Button } from "~/components/ui/button";
 import {
@@ -11,6 +10,7 @@ import {
 import { Input } from "~/components/ui/input";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useNavigate } from "~/safe-navigation";
 
 const formSchema = z.object({
   datasetRowId: z.string().uuid("Please enter a valid UUID"),
@@ -33,7 +33,13 @@ export default function DatasetRowSearchBar({
   });
 
   const onSubmit = (data: FormValues) => {
-    navigate(`/datasets/${dataset_name}/datapoint/${data.datasetRowId}`);
+    navigate([
+      "/datasets/:dataset_name/datapoint/:id",
+      {
+        dataset_name,
+        id: data.datasetRowId,
+      },
+    ]);
     form.reset();
   };
 

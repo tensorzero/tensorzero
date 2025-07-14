@@ -1,4 +1,3 @@
-import { Link } from "react-router";
 import {
   Table,
   TableBody,
@@ -10,6 +9,7 @@ import {
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
 import type { DynamicEvaluationProject } from "~/utils/clickhouse/dynamic_evaluations";
+import { Link } from "~/safe-navigation";
 
 export default function DynamicEvaluationProjectsTable({
   dynamicEvaluationProjects,
@@ -34,7 +34,10 @@ export default function DynamicEvaluationProjectsTable({
               <TableRow key={project.name}>
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={`/dynamic_evaluations/projects/${project.name}`}
+                    to={[
+                      "/dynamic_evaluations/projects/:project_name",
+                      { project_name: project.name },
+                    ]}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">

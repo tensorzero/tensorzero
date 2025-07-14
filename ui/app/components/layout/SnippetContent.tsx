@@ -1,5 +1,4 @@
 import * as React from "react";
-import { Link } from "react-router";
 import {
   Terminal,
   ArrowRight,
@@ -14,6 +13,7 @@ import {
 } from "lucide-react";
 import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
 import { CodeEditor, useFormattedJson } from "../ui/code-editor";
+import { Link } from "~/safe-navigation";
 
 export function EmptyMessage({ message = "No content" }: { message?: string }) {
   return (
@@ -231,7 +231,7 @@ export function ImageMessage({ url, downloadName }: ImageMessageProps) {
       />
       <div>
         <Link
-          to={url}
+          unsafeTo={url}
           target="_blank"
           rel="noopener noreferrer"
           download={downloadName}
@@ -381,7 +381,7 @@ export function FileMessage({
         </div>
 
         <Link
-          to={fileData}
+          unsafeTo={fileData}
           download={`tensorzero_${filePath}`}
           aria-label={`Download ${filePath}`}
         >
@@ -389,7 +389,7 @@ export function FileMessage({
         </Link>
 
         <Link
-          to={url}
+          unsafeTo={url}
           target="_blank"
           rel="noopener noreferrer"
           aria-label={`Open ${filePath} in new tab`}

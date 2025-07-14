@@ -8,7 +8,7 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import { Code } from "~/components/ui/code";
-import { useNavigate } from "react-router";
+import { useNavigate } from "~/safe-navigation";
 
 interface TagsTableProps {
   tags: Record<string, string>;
@@ -44,9 +44,13 @@ export function TagsTable({ tags }: TagsTableProps) {
           if (!evaluationName) {
             return;
           }
-          navigate(
-            `/evaluations/${evaluationName}?evaluation_run_ids=${value}`,
-          );
+          navigate({
+            pathname: [
+              "/evaluations/:evaluation_name",
+              { evaluation_name: evaluationName },
+            ],
+            search: `?evaluation_run_ids=${value}`,
+          });
           break;
         }
         case "tensorzero::datapoint_id": {
@@ -55,20 +59,32 @@ export function TagsTable({ tags }: TagsTableProps) {
           if (!datasetName) {
             return;
           }
-          navigate(`/datasets/${datasetName}/datapoint/${value}`);
+          navigate([
+            "/datasets/:dataset_name/datapoint/:id",
+            {
+              dataset_name: datasetName,
+              id: value,
+            },
+          ]);
           break;
         }
         case "tensorzero::evaluation_name":
-          navigate(`/evaluations/${value}`);
+          navigate([
+            "/evaluations/:evaluation_name",
+            { evaluation_name: value },
+          ]);
           break;
         case "tensorzero::dataset_name":
-          navigate(`/datasets/${value}`);
+          navigate(["/datasets/:dataset_name", { dataset_name: value }]);
           break;
         case "tensorzero::evaluator_inference_id":
-          navigate(`/observability/inferences/${value}`);
+          navigate([
+            "/observability/inferences/:inference_id",
+            { inference_id: value },
+          ]);
           break;
         case "tensorzero::dynamic_evaluation_run_id":
-          navigate(`/dynamic_evaluations/runs/${value}`);
+          navigate(["/dynamic_evaluations/runs/:run_id", { run_id: value }]);
           break;
       }
     }

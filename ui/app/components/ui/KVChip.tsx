@@ -1,5 +1,5 @@
-import { Link } from "react-router";
 import type { HTMLAttributes } from "react";
+import { Link } from "~/safe-navigation";
 
 interface KVChipProps extends HTMLAttributes<HTMLDivElement> {
   k: string;
@@ -21,7 +21,7 @@ export default function KVChip({
     <div className="flex flex-wrap gap-1" key={k} {...props}>
       <div className="flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 font-mono text-xs">
         {k_href ? (
-          <Link to={k_href} className="text-blue-600 hover:underline">
+          <Link unsafeTo={k_href} className="text-blue-600 hover:underline">
             {k}
           </Link>
         ) : (
@@ -29,7 +29,7 @@ export default function KVChip({
         )}
         <span className="text-gray-400">{separator}</span>
         {v_href ? (
-          <Link to={v_href} className="text-blue-600 hover:underline">
+          <Link unsafeTo={v_href} className="text-blue-600 hover:underline">
             {v}
           </Link>
         ) : (

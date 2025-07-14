@@ -35,13 +35,19 @@ export default function FunctionInferenceTable({
               <TableCell className="max-w-[200px]">
                 <TableItemShortUuid
                   id={inference.id}
-                  link={`/observability/inferences/${inference.id}`}
+                  link={[
+                    "/observability/inferences/:inference_id",
+                    { inference_id: inference.id },
+                  ]}
                 />
               </TableCell>
               <TableCell>
                 <TableItemShortUuid
                   id={inference.episode_id}
-                  link={`/observability/episodes/${inference.episode_id}`}
+                  link={[
+                    "/observability/episodes/:episode_id",
+                    { episode_id: inference.episode_id },
+                  ]}
                 />
               </TableCell>
               <TableCell>

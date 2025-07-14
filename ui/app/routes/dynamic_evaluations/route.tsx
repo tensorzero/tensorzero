@@ -1,5 +1,5 @@
 import type { Route } from "./+types/route";
-import { isRouteErrorResponse, useNavigate } from "react-router";
+import { isRouteErrorResponse } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
@@ -16,6 +16,7 @@ import {
 import DynamicEvaluationRunsTable from "./DynamicEvaluationRunsTable";
 import DynamicEvaluationProjectsTable from "./DynamicEvaluationProjectsTable";
 import { logger } from "~/utils/logger";
+import { useNavigate } from "~/safe-navigation";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -65,24 +66,24 @@ export default function EvaluationSummaryPage({
   const handleNextRunPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("runOffset", String(runOffset + runPageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
   const handlePreviousRunPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("runOffset", String(runOffset - runPageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   const handleNextProjectPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("projectOffset", String(projectOffset + projectPageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   const handlePreviousProjectPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("projectOffset", String(projectOffset - projectPageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   return (

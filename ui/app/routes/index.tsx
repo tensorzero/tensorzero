@@ -1,4 +1,4 @@
-import { Link, type RouteHandle } from "react-router";
+import { type RouteHandle } from "react-router";
 import { Card } from "~/components/ui/card";
 import { PageLayout } from "~/components/layout/PageLayout";
 import {
@@ -29,13 +29,14 @@ import {
   countDynamicEvaluationProjects,
   countDynamicEvaluationRuns,
 } from "~/utils/clickhouse/dynamic_evaluations.server";
+import { Link, type To } from "~/safe-navigation";
 
 export const handle: RouteHandle = {
   hideBreadcrumbs: true,
 };
 
 interface DirectoryCardProps {
-  source: string;
+  source: To;
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   description: string;
@@ -67,7 +68,7 @@ function DirectoryCard({
 }
 
 interface FooterLinkProps {
-  source: string;
+  source: To;
   icon: React.ComponentType<{ className?: string }>;
   children: React.ReactNode;
 }
@@ -171,7 +172,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             </h2>
             <div className="flex flex-col gap-2">
               <DirectoryCard
-                source="/optimization/supervised-fine-tuning"
+                source="/optimization/supervised-fine-tuning/:job_id?"
                 icon={SupervisedFineTuning}
                 title="Supervised Fine-tuning"
                 description={`${numFunctions} functions`}

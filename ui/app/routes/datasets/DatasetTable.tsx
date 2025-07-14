@@ -8,8 +8,8 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
-import { Link } from "react-router";
 import { TableItemTime } from "~/components/ui/TableItems";
+import { Link } from "~/safe-navigation";
 
 export default function DatasetTable({
   counts,
@@ -34,7 +34,10 @@ export default function DatasetTable({
               <TableRow key={count.dataset_name} id={count.dataset_name}>
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={`/datasets/${count.dataset_name}`}
+                    to={[
+                      "/datasets/:dataset_name",
+                      { dataset_name: count.dataset_name },
+                    ]}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">

@@ -51,7 +51,10 @@ export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
           <Chip
             icon={<Dataset className="text-fg-tertiary" />}
             label={datapoint.dataset_name}
-            link={`/datasets/${datapoint.dataset_name}`}
+            link={[
+              "/datasets/:dataset_name",
+              { dataset_name: datapoint.dataset_name },
+            ]}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -65,7 +68,10 @@ export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
             iconBg={functionIconConfig.iconBg}
             label={datapoint.function_name}
             secondaryLabel={type}
-            link={`/observability/functions/${datapoint.function_name}`}
+            link={[
+              "/observability/functions/:function_name",
+              { function_name: datapoint.function_name },
+            ]}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -77,7 +83,10 @@ export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
           <BasicInfoItemContent>
             <Chip
               label={datapoint.source_inference_id}
-              link={`/observability/inferences/${datapoint.source_inference_id}`}
+              link={[
+                "/observability/inferences/:inference_id",
+                { inference_id: datapoint.source_inference_id },
+              ]}
               font="mono"
             />
           </BasicInfoItemContent>
@@ -90,7 +99,10 @@ export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
           <BasicInfoItemContent>
             <Chip
               label={datapoint.episode_id}
-              link={`/observability/episodes/${datapoint.episode_id}`}
+              link={[
+                "/observability/episodes/:episode_id",
+                { episode_id: datapoint.episode_id },
+              ]}
               font="mono"
             />
           </BasicInfoItemContent>

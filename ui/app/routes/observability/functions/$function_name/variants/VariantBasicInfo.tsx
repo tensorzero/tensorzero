@@ -47,7 +47,10 @@ export default function BasicInfo({
             iconBg={functionIconConfig.iconBg}
             label={function_name}
             secondaryLabel={function_type}
-            link={`/observability/functions/${function_name}`}
+            link={[
+              "/observability/functions/:function_name",
+              { function_name },
+            ]}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -208,7 +211,10 @@ export default function BasicInfo({
                       <Chip
                         key={candidate}
                         label={candidate}
-                        link={`/observability/functions/${function_name}/variants/${candidate}`}
+                        link={[
+                          "/observability/functions/:function_name/variants/:variant_name",
+                          { function_name, variant_name: candidate },
+                        ]}
                         font="mono"
                       />
                     ))}
@@ -385,7 +391,13 @@ export default function BasicInfo({
                       <Chip
                         key={candidate}
                         label={candidate}
-                        link={`/observability/functions/${function_name}/variants/${candidate}`}
+                        link={[
+                          "/observability/functions/:function_name/variants/:variant_name",
+                          {
+                            function_name,
+                            variant_name: candidate,
+                          },
+                        ]}
                         font="mono"
                       />
                     ))}

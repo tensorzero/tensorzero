@@ -54,6 +54,19 @@ export default [
           message: "The string 'tensorzero_ui_fixtures' is not allowed.",
         },
       ],
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "react-router",
+              importNames: ["Link", "NavLink", "useNavigate"],
+              message:
+                "Use Link/NavLink/useNavigate from ~/safe-navigation instead",
+            },
+          ],
+        },
+      ],
     },
   },
   pluginReactHooks.configs["recommended-latest"],

@@ -72,7 +72,10 @@ export default function BasicInfo({
             <Chip
               label={dynamicEvaluationRun.project_name}
               font="mono"
-              link={`/dynamic_evaluations/projects/${dynamicEvaluationRun.project_name}`}
+              link={[
+                "/dynamic_evaluations/projects/:project_name",
+                { project_name: dynamicEvaluationRun.project_name },
+              ]}
             />
           </BasicInfoItemContent>
         </BasicInfoItem>

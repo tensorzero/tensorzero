@@ -1,9 +1,5 @@
 import type { Route } from "./+types/route";
-import {
-  isRouteErrorResponse,
-  useNavigate,
-  type RouteHandle,
-} from "react-router";
+import { isRouteErrorResponse, type RouteHandle } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
@@ -19,6 +15,7 @@ import {
 import BasicInfo from "./DynamicEvaluationRunBasicInfo";
 import DynamicEvaluationRunEpisodesTable from "./DynamicEvaluationRunEpisodesTable";
 import { logger } from "~/utils/logger";
+import { useNavigate } from "~/safe-navigation";
 
 export const handle: RouteHandle = {
   crumb: (match) => ["Runs", match.params.run_id!],
@@ -77,12 +74,12 @@ export default function DynamicEvaluationRunSummaryPage({
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("offset", String(offset + pageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("offset", String(offset - pageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   return (

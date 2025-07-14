@@ -5,7 +5,7 @@ import {
 } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import InferencesTable from "./InferencesTable";
-import { data, isRouteErrorResponse, useNavigate } from "react-router";
+import { data, isRouteErrorResponse } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import InferenceSearchBar from "./InferenceSearchBar";
 import {
@@ -14,6 +14,7 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
+import { useNavigate } from "~/safe-navigation";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -54,17 +55,23 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   const handleNextPage = () => {
     if (bottomInference) {
-      navigate(`?before=${bottomInference.id}&pageSize=${pageSize}`, {
-        preventScrollReset: true,
-      });
+      navigate(
+        { search: `?before=${bottomInference.id}&pageSize=${pageSize}` },
+        {
+          preventScrollReset: true,
+        },
+      );
     }
   };
 
   const handlePreviousPage = () => {
     if (topInference) {
-      navigate(`?after=${topInference.id}&pageSize=${pageSize}`, {
-        preventScrollReset: true,
-      });
+      navigate(
+        { search: `?after=${topInference.id}&pageSize=${pageSize}` },
+        {
+          preventScrollReset: true,
+        },
+      );
     }
   };
 

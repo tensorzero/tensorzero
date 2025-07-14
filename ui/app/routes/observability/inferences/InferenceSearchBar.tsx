@@ -1,4 +1,3 @@
-import { useNavigate } from "react-router";
 import { z } from "zod";
 import { Button } from "~/components/ui/button";
 import {
@@ -11,6 +10,7 @@ import {
 import { Input } from "~/components/ui/input";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useNavigate } from "~/safe-navigation";
 
 const formSchema = z.object({
   inferenceId: z.string().uuid("Please enter a valid UUID"),
@@ -29,7 +29,12 @@ export default function InferenceSearchBar() {
   });
 
   const onSubmit = (data: FormValues) => {
-    navigate(`/observability/inferences/${data.inferenceId}`);
+    navigate([
+      "/observability/inferences/:inference_id",
+      {
+        inference_id: data.inferenceId,
+      },
+    ]);
     form.reset();
   };
 
