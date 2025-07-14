@@ -46,8 +46,9 @@ async fn send_howdy(
     client: &Client,
     deployment_id: &str,
 ) -> Result<(), String> {
+    let howdy_url = HOWDY_URL.clone();
     let howdy_report = get_howdy_report(clickhouse, deployment_id).await?;
-    if let Err(e) = client.post(&*HOWDY_URL).json(&howdy_report).send().await {
+    if let Err(e) = client.post(&howdy_url).json(&howdy_report).send().await {
         return Err(format!("Failed to send howdy: {e}"));
     }
     Ok(())
@@ -64,7 +65,7 @@ pub async fn get_deployment_id(clickhouse: &ClickHouseConnectionInfo) -> Result<
         debug!("Failed to get deployment ID (response was empty)");
         return Err(());
     }
-    Ok(response.response)
+    Ok(response.response.trim().to_string())
 }
 
 pub async fn get_howdy_report<'a>(
