@@ -13,14 +13,22 @@ use crate::model::UninitializedModelConfig;
 use crate::optimization::fireworks_sft::{
     FireworksSFTConfig, FireworksSFTJobHandle, UninitializedFireworksSFTConfig,
 };
+use crate::optimization::gcp_vertex_gemini_sft::{
+    GCPVertexGeminiSFTConfig, GCPVertexGeminiSFTJobHandle, UninitializedGCPVertexGeminiSFTConfig,
+};
 use crate::optimization::openai_sft::{
     OpenAISFTConfig, OpenAISFTJobHandle, UninitializedOpenAISFTConfig,
+};
+use crate::optimization::together_sft::{
+    TogetherSFTConfig, TogetherSFTJobHandle, UninitializedTogetherSFTConfig,
 };
 use crate::stored_inference::RenderedSample;
 use crate::variant::VariantConfig;
 
 pub mod fireworks_sft;
+pub mod gcp_vertex_gemini_sft;
 pub mod openai_sft;
+pub mod together_sft;
 
 #[derive(Clone, Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -43,6 +51,8 @@ impl OptimizerInfo {
 enum OptimizerConfig {
     OpenAISFT(OpenAISFTConfig),
     FireworksSFT(FireworksSFTConfig),
+    GCPVertexGeminiSFT(Box<GCPVertexGeminiSFTConfig>),
+    TogetherSFT(TogetherSFTConfig),
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -55,6 +65,10 @@ pub enum OptimizationJobHandle {
     OpenAISFT(OpenAISFTJobHandle),
     #[serde(rename = "fireworks_sft")]
     FireworksSFT(FireworksSFTJobHandle),
+    #[serde(rename = "gcp_vertex_gemini_sft")]
+    GCPVertexGeminiSFT(GCPVertexGeminiSFTJobHandle),
+    #[serde(rename = "together_sft")]
+    TogetherSFT(TogetherSFTJobHandle),
 }
 
 impl OptimizationJobHandle {
@@ -102,6 +116,12 @@ impl JobHandle for OptimizationJobHandle {
                 job_handle.poll(client, credentials).await
             }
             OptimizationJobHandle::FireworksSFT(job_handle) => {
+                job_handle.poll(client, credentials).await
+            }
+            OptimizationJobHandle::GCPVertexGeminiSFT(job_handle) => {
+                job_handle.poll(client, credentials).await
+            }
+            OptimizationJobHandle::TogetherSFT(job_handle) => {
                 job_handle.poll(client, credentials).await
             }
         }
@@ -253,6 +273,14 @@ impl Optimizer for OptimizerInfo {
                 .launch(client, train_examples, val_examples, credentials)
                 .await
                 .map(OptimizationJobHandle::FireworksSFT),
+            OptimizerConfig::GCPVertexGeminiSFT(config) => config
+                .launch(client, train_examples, val_examples, credentials)
+                .await
+                .map(OptimizationJobHandle::GCPVertexGeminiSFT),
+            OptimizerConfig::TogetherSFT(config) => config
+                .launch(client, train_examples, val_examples, credentials)
+                .await
+                .map(OptimizationJobHandle::TogetherSFT),
         }
     }
 }
@@ -282,6 +310,10 @@ pub enum UninitializedOptimizerConfig {
     OpenAISFT(UninitializedOpenAISFTConfig),
     #[serde(rename = "fireworks_sft")]
     FireworksSFT(UninitializedFireworksSFTConfig),
+    #[serde(rename = "gcp_vertex_gemini_sft")]
+    GCPVertexGeminiSFT(UninitializedGCPVertexGeminiSFTConfig),
+    #[serde(rename = "together_sft")]
+    TogetherSFT(UninitializedTogetherSFTConfig),
 }
 
 impl UninitializedOptimizerConfig {
@@ -293,6 +325,12 @@ impl UninitializedOptimizerConfig {
             }
             UninitializedOptimizerConfig::FireworksSFT(config) => {
                 OptimizerConfig::FireworksSFT(config.load()?)
+            }
+            UninitializedOptimizerConfig::GCPVertexGeminiSFT(config) => {
+                OptimizerConfig::GCPVertexGeminiSFT(Box::new(config.load()?))
+            }
+            UninitializedOptimizerConfig::TogetherSFT(config) => {
+                OptimizerConfig::TogetherSFT(config.load()?)
             }
         })
     }

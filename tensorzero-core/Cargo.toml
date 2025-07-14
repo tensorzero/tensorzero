@@ -103,7 +103,7 @@ aws-sdk-sagemakerruntime = { version = "1.76.0", features = [
     "rt-tokio",
     "default-https-client",
 ], default-features = false }
-aws-smithy-runtime-api = "1.7.4"
+aws-smithy-runtime-api = "1.8.3"
 eventsource-stream = "0.2.3"
 scoped-tls = "1.0.1"
 opentelemetry_sdk = "0.30.0"
