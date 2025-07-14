@@ -371,6 +371,7 @@ impl InferenceProvider for DummyProvider {
             "json_diff_schema" => vec![DUMMY_JSON_RESPONSE_RAW_DIFF_SCHEMA.to_string().into()],
             "json_beatles_1" => vec![r#"{"names":["John", "George"]}"#.to_string().into()],
             "json_beatles_2" => vec![r#"{"names":["Paul", "Ringo"]}"#.to_string().into()],
+            #[expect(clippy::match_same_arms)]
             "best_of_n_0" => {
                 vec![r#"{"thinking": "hmmm", "answer_choice": 0}"#.to_string().into()]
             }
@@ -620,7 +621,6 @@ impl InferenceProvider for DummyProvider {
 
         let (content_chunks, is_tool_call) = match self.model_name.as_str() {
             "tool" | "tool_split_name" => (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true),
-            "reasoner" => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
             _ => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
         };
 

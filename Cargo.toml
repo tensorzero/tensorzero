@@ -74,6 +74,7 @@ unsafe_code = "forbid"
 allow_attributes = "deny"
 dbg_macro = "deny"
 expect_used = "deny"
+match_same_arms = "deny"       # partial progress towards pedantic
 panic = "deny"
 print_stderr = "deny"
 print_stdout = "deny"
