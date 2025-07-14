@@ -672,15 +672,6 @@ impl TryFrom<(Credential, &str)> for GCPVertexCredentials {
     }
 }
 
-impl TryFrom<Credential> for GCPVertexCredentials {
-    type Error = Error;
-
-    fn try_from(credentials: Credential) -> Result<Self, Error> {
-        // Use a generic model name since we don't have context here
-        Self::try_from((credentials, "GCP Vertex"))
-    }
-}
-
 #[derive(Serialize)]
 struct GCPVertexBatchLine<'a> {
     request: GCPVertexGeminiRequest<'a>,
