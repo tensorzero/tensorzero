@@ -12,7 +12,7 @@
 **[API Reference](https://www.tensorzero.com/docs/gateway/api-reference/inference)** ·
 **[Configuration Reference](https://www.tensorzero.com/docs/gateway/configuration-reference)**
 
-The TensorZero package provides a Python client for the TensorZero Gateway.
+The `tensorzero` package provides a Python client for the TensorZero Gateway.
 This client allows you to easily make inference requests and assign feedback to them via the gateway.
 
 See our **[API Reference](https://www.tensorzero.com/docs/gateway/api-reference)** for more information.
