@@ -40,59 +40,6 @@ export function Label({ text, icon }: LabelProps) {
   );
 }
 
-// TODO Remove `CodeMessage` - unused for input snippet rendering, but used elsewhere
-
-// Code content component
-interface CodeMessageProps {
-  label?: string;
-  content?: string;
-  showLineNumbers?: boolean;
-  emptyMessage?: string;
-}
-
-export function CodeMessage({
-  label,
-  content,
-  showLineNumbers = false,
-  emptyMessage,
-}: CodeMessageProps) {
-  if (!content) {
-    return <EmptyMessage message={emptyMessage} />;
-  }
-
-  // We still need line count for line numbers, but won't split the content for rendering
-  const lineCount = content ? content.split("\n").length : 0;
-
-  return (
-    <div className="relative w-full">
-      <Label text={label} />
-
-      <div className="w-full overflow-hidden">
-        <div className="w-full">
-          <div className="flex w-full">
-            {showLineNumbers && (
-              <div className="text-fg-muted pointer-events-none sticky left-0 min-w-[2rem] shrink-0 pr-3 text-right font-mono select-none">
-                {Array.from({ length: lineCount }, (_, i) => (
-                  <div key={i} className="text-sm leading-6">
-                    {i + 1}
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="w-0 grow overflow-auto">
-              <pre className="w-full">
-                <code className="text-fg-primary block font-mono text-sm leading-6 whitespace-pre">
-                  {content || ""}
-                </code>
-              </pre>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 interface TextMessageProps {
   label?: string;
   content?: string;
@@ -168,13 +115,16 @@ export function ParameterizedMessage({
 
 function ToolDetails({
   name,
+  nameLabel,
   id,
   payload,
   payloadLabel,
   isEditing,
   onChange,
+  enforceJson = false,
 }: {
   name: string;
+  nameLabel: string;
   id: string;
   payload: string;
   payloadLabel: string;
@@ -184,12 +134,13 @@ function ToolDetails({
     toolName: string,
     toolArguments: string,
   ) => void;
+  enforceJson?: boolean;
 }) {
   const formattedPayload = useFormattedJson(payload);
 
   return (
     <div className="border-border bg-bg-tertiary/50 grid grid-flow-row grid-cols-[min-content_1fr] grid-rows-[repeat(3,min-content)] place-content-center gap-x-4 gap-y-1 rounded-sm px-3 py-2 text-xs">
-      <p className="text-fg-secondary font-medium">Name</p>
+      <p className="text-fg-secondary font-medium">{nameLabel}</p>
       <p className="self-center truncate font-mono text-[0.6875rem]">{name}</p>
 
       <p className="text-fg-secondary font-medium">ID</p>
@@ -197,6 +148,7 @@ function ToolDetails({
 
       <p className="text-fg-secondary font-medium">{payloadLabel}</p>
       <CodeEditor
+        allowedLanguages={enforceJson ? ["json"] : undefined}
         value={formattedPayload}
         className="bg-bg-secondary"
         readOnly={!isEditing}
@@ -209,8 +161,10 @@ function ToolDetails({
 }
 
 interface ToolCallMessageProps {
-  toolName: string;
-  toolArguments: string;
+  toolName: string | null;
+  toolRawName: string;
+  toolArguments: string | null;
+  toolRawArguments: string;
   toolCallId: string;
   isEditing?: boolean;
   onChange?: (
@@ -222,7 +176,9 @@ interface ToolCallMessageProps {
 
 export function ToolCallMessage({
   toolName,
+  toolRawName,
   toolArguments,
+  toolRawArguments,
   toolCallId,
   isEditing,
   onChange,
@@ -234,12 +190,14 @@ export function ToolCallMessage({
         icon={<Terminal className="text-fg-muted h-3 w-3" />}
       />
       <ToolDetails
-        name={toolName}
+        name={toolName || toolRawName}
+        nameLabel={toolName ? "Name" : "Name (Invalid)"}
         id={toolCallId}
-        payload={toolArguments}
-        payloadLabel="Arguments"
+        payload={toolArguments || toolRawArguments}
+        payloadLabel={toolArguments ? "Arguments" : "Arguments (Invalid)"}
         isEditing={isEditing}
         onChange={onChange}
+        enforceJson={true}
       />
     </div>
   );
@@ -272,6 +230,7 @@ export function ToolResultMessage({
       />
       <ToolDetails
         name={toolName}
+        nameLabel="Name"
         id={toolResultId}
         payload={toolResult}
         payloadLabel="Result"

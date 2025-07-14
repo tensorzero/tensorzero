@@ -157,12 +157,6 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   );
   const { copy, didCopy, isCopyAvailable } = useCopy();
 
-  // Don't show line numbers if everything is on a single line
-  const shouldShowLineNumbers = useMemo(
-    () => showLineNumbers && value.includes("\n"),
-    [showLineNumbers, value],
-  );
-
   // Custom theme to remove dotted border and add focus styles
   const extensions = useMemo(() => {
     const customTheme = EditorView.theme({
@@ -262,8 +256,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           placeholder={placeholder}
           basicSetup={{
             // Line numbers
-            lineNumbers: shouldShowLineNumbers,
-            foldGutter: shouldShowLineNumbers,
+            lineNumbers: showLineNumbers,
+            foldGutter: showLineNumbers,
 
             // Read-only mode
             autocompletion: !readOnly,
