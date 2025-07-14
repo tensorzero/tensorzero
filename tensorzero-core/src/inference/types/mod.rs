@@ -951,19 +951,19 @@ impl ModelInferenceResponse {
         Self {
             id: Uuid::now_v7(),
             created: current_timestamp(),
-            output: cache_lookup.0.blocks,
+            output: cache_lookup.output.blocks,
             system: request.system.clone(),
             input_messages: request.messages.clone(), // maybe we can clean this up
-            raw_request: cache_lookup.1,
-            raw_response: cache_lookup.2,
+            raw_request: cache_lookup.raw_request,
+            raw_response: cache_lookup.raw_response,
             usage: Usage {
-                input_tokens: cache_lookup.3,
-                output_tokens: cache_lookup.4,
+                input_tokens: cache_lookup.input_tokens,
+                output_tokens: cache_lookup.output_tokens,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            finish_reason: cache_lookup.5,
+            finish_reason: cache_lookup.finish_reason,
             model_provider_name: Arc::from(model_provider_name),
             cached: true,
         }

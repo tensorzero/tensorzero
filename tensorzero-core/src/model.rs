@@ -129,7 +129,7 @@ impl StreamResponse {
         cache_lookup: CacheData<StreamingCacheData>,
         model_provider_name: Arc<str>,
     ) -> Self {
-        let chunks = cache_lookup.0.chunks;
+        let chunks = cache_lookup.output.chunks;
         let chunks_len = chunks.len();
 
         Self {
@@ -150,7 +150,7 @@ impl StreamResponse {
                         // For all chunks but the last one, the finish reason is None
                         // For the last chunk, the finish reason is the same as the cache lookup
                         finish_reason: if index == chunks_len - 1 {
-                            cache_lookup.5
+                            cache_lookup.finish_reason
                         } else {
                             None
                         },
@@ -162,7 +162,7 @@ impl StreamResponse {
                     "stream_from_cache",
                     otel.name = "stream_from_cache"
                 )),
-            raw_request: cache_lookup.1,
+            raw_request: cache_lookup.raw_request,
             model_provider_name,
             cached: true,
         }
