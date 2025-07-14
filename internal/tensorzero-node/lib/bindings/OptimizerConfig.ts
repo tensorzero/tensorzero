@@ -2,8 +2,10 @@
 import type { FireworksSFTConfig } from "./FireworksSFTConfig";
 import type { GCPVertexGeminiSFTConfig } from "./GCPVertexGeminiSFTConfig";
 import type { OpenAISFTConfig } from "./OpenAISFTConfig";
+import type { TogetherSFTConfig } from "./TogetherSFTConfig";
 
 export type OptimizerConfig =
   | { OpenAISFT: OpenAISFTConfig }
   | { FireworksSFT: FireworksSFTConfig }
-  | { GCPVertexGeminiSFT: GCPVertexGeminiSFTConfig };
+  | { GCPVertexGeminiSFT: GCPVertexGeminiSFTConfig }
+  | { TogetherSFT: TogetherSFTConfig };

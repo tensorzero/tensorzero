@@ -107,6 +107,7 @@ class OptimizationJobHandle:
     OpenAISFT: Type["OptimizationJobHandle"]
     FireworksSFT: Type["OptimizationJobHandle"]
     GCPVertexGeminiSFT: Type["OptimizationJobHandle"]
+    TogetherSFT: Type["OptimizationJobHandle"]
 
 @final
 class OptimizationJobStatus:
@@ -119,6 +120,7 @@ class OptimizationJobInfo:
     OpenAISFT: Type["OptimizationJobInfo"]
     FireworksSFT: Type["OptimizationJobInfo"]
     GCPVertexGeminiSFT: Type["OptimizationJobInfo"]
+    TogetherSFT: Type["OptimizationJobInfo"]
     @property
     def message(self) -> str: ...
     @property

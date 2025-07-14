@@ -2,8 +2,10 @@
 import type { UninitializedFireworksSFTConfig } from "./UninitializedFireworksSFTConfig";
 import type { UninitializedGCPVertexGeminiSFTConfig } from "./UninitializedGCPVertexGeminiSFTConfig";
 import type { UninitializedOpenAISFTConfig } from "./UninitializedOpenAISFTConfig";
+import type { UninitializedTogetherSFTConfig } from "./UninitializedTogetherSFTConfig";
 
 export type UninitializedOptimizerInfo =
   | ({ type: "openai_sft" } & UninitializedOpenAISFTConfig)
   | ({ type: "fireworks_sft" } & UninitializedFireworksSFTConfig)
-  | ({ type: "gcp_vertex_gemini_sft" } & UninitializedGCPVertexGeminiSFTConfig);
+  | ({ type: "gcp_vertex_gemini_sft" } & UninitializedGCPVertexGeminiSFTConfig)
+  | ({ type: "together_sft" } & UninitializedTogetherSFTConfig);
