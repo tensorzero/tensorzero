@@ -106,6 +106,7 @@ class RenderedSample:
 class OptimizationJobHandle:
     OpenAISFT: Type["OptimizationJobHandle"]
     FireworksSFT: Type["OptimizationJobHandle"]
+    TogetherSFT: Type["OptimizationJobHandle"]
 
 @final
 class OptimizationJobStatus:

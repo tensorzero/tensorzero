@@ -35,6 +35,7 @@ use crate::optimization::Optimizer;
 use crate::optimization::OptimizerOutput;
 use crate::providers::fireworks::prepare_fireworks_messages;
 use crate::providers::fireworks::FIREWORKS_API_BASE;
+use crate::providers::helpers::UrlParseErrExt;
 use crate::providers::openai::tensorzero_to_openai_assistant_message;
 use crate::stored_inference::RenderedSample;
 use crate::{
@@ -210,23 +211,6 @@ impl UninitializedFireworksSFTConfig {
 #[serde(rename_all = "camelCase")]
 pub struct FireworksDatasetResponse {
     state: String,
-}
-
-trait UrlParseErrExt<T> {
-    fn convert_parse_error(self) -> Result<T, Error>;
-}
-
-impl<T> UrlParseErrExt<T> for Result<T, url::ParseError> {
-    fn convert_parse_error(self) -> Result<T, Error> {
-        self.map_err(|e| {
-            Error::new(ErrorDetails::InternalError {
-                message: format!(
-                    "Error parsing URL: {}. {IMPOSSIBLE_ERROR_MESSAGE}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })
-    }
 }
 
 impl FireworksSFTConfig {

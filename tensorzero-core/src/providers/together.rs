@@ -1,5 +1,6 @@
 use std::{borrow::Cow, sync::OnceLock, time::Duration};
 
+use crate::inference::types::RequestMessage;
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_eventsource::{Event, EventSource};
@@ -41,14 +42,14 @@ use super::openai::{
 };
 
 lazy_static! {
-    static ref TOGETHER_API_BASE: Url = {
+    pub static ref TOGETHER_API_BASE: Url = {
         #[expect(clippy::expect_used)]
-        Url::parse("https://api.together.xyz/v1").expect("Failed to parse TOGETHER_API_BASE")
+        Url::parse("https://api.together.xyz/v1/").expect("Failed to parse TOGETHER_API_BASE")
     };
 }
 
-const PROVIDER_NAME: &str = "Together";
-const PROVIDER_TYPE: &str = "together";
+pub const PROVIDER_NAME: &str = "Together";
+pub const PROVIDER_TYPE: &str = "together";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -64,7 +65,7 @@ pub fn default_parse_think_blocks() -> bool {
     true
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<TogetherCredentials> = OnceLock::new();
+pub static DEFAULT_CREDENTIALS: OnceLock<TogetherCredentials> = OnceLock::new();
 
 impl TogetherProvider {
     pub fn new(
@@ -90,7 +91,7 @@ impl TogetherProvider {
     }
 }
 
-fn default_api_key_location() -> CredentialLocation {
+pub fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("TOGETHER_API_KEY".to_string())
 }
 
@@ -356,7 +357,7 @@ impl<'a> TogetherRequest<'a> {
             }
             ModelInferenceRequestJsonMode::Off => None,
         };
-        let messages = prepare_together_messages(request)?;
+        let messages = prepare_together_messages(request.system.as_deref(), &request.messages)?;
 
         // NOTE: Together AI doesn't seem to support `tool_choice="none"`, so we simply don't include the `tools` field if that's the case
         let tool_choice = request
@@ -388,15 +389,16 @@ impl<'a> TogetherRequest<'a> {
     }
 }
 
-pub(super) fn prepare_together_messages<'a>(
-    request: &'a ModelInferenceRequest<'_>,
+pub fn prepare_together_messages<'a>(
+    system: Option<&'a str>,
+    request_messages: &'a [RequestMessage],
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
-    let mut messages = Vec::with_capacity(request.messages.len());
-    for message in request.messages.iter() {
+    let mut messages = Vec::with_capacity(request_messages.len());
+    for message in request_messages.iter() {
         messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
     }
 
-    if let Some(system_msg) = tensorzero_to_together_system_message(request.system.as_deref()) {
+    if let Some(system_msg) = tensorzero_to_together_system_message(system) {
         messages.insert(0, system_msg);
     }
     Ok(messages)
@@ -823,7 +825,7 @@ mod tests {
 
     #[test]
     fn test_together_api_base() {
-        assert_eq!(TOGETHER_API_BASE.as_str(), "https://api.together.xyz/v1");
+        assert_eq!(TOGETHER_API_BASE.as_str(), "https://api.together.xyz/v1/");
     }
     #[test]
     fn test_credential_to_together_credentials() {
