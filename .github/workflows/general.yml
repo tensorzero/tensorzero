@@ -449,7 +449,7 @@ jobs:
           done
 
       - name: Test (Rust)
-        run: cargo test-optimization -- --skip together
+        run: cargo test-optimization -- --skip gcp --skip together
 
   build-gateway-container:
     uses: ./.github/workflows/build-gateway-container.yml
