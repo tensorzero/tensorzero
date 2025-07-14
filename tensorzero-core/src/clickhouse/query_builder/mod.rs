@@ -59,6 +59,7 @@ pub enum FloatComparisonOperator {
 }
 
 impl FloatComparisonOperator {
+    #[must_use]
     pub fn to_clickhouse_operator(&self) -> &str {
         match self {
             FloatComparisonOperator::LessThan => "<",

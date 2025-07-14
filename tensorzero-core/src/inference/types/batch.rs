@@ -54,6 +54,7 @@ pub struct StartBatchModelInferenceResponse {
 }
 
 impl StartBatchModelInferenceResponse {
+    #[must_use]
     pub fn new(
         provider_batch_response: StartBatchProviderInferenceResponse,
         model_provider_name: Arc<str>,
@@ -92,6 +93,7 @@ pub struct StartBatchModelInferenceWithMetadata<'a> {
 }
 
 impl<'a> StartBatchModelInferenceWithMetadata<'a> {
+    #[must_use]
     pub fn new(
         model_batch_response: StartBatchModelInferenceResponse,
         model_inference_requests: Vec<ModelInferenceRequest<'a>>,
@@ -229,6 +231,7 @@ pub struct UnparsedBatchRequestRow<'a> {
 }
 
 impl<'a> BatchRequestRow<'a> {
+    #[must_use]
     pub fn new(unparsed: UnparsedBatchRequestRow<'a>) -> Self {
         let UnparsedBatchRequestRow {
             batch_id,

@@ -607,6 +607,7 @@ fn parse_raw_examples(
     Ok(examples)
 }
 
+#[must_use]
 pub fn default_system_instructions() -> String {
     "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs.".to_string()
 }

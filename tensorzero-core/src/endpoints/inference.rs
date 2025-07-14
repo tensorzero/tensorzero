@@ -917,6 +917,7 @@ pub struct JsonInferenceResponse {
 }
 
 impl InferenceResponse {
+    #[must_use]
     pub fn new(inference_result: InferenceResult, episode_id: Uuid, variant_name: String) -> Self {
         let usage = inference_result.usage_considering_cached();
         match inference_result {
@@ -945,6 +946,7 @@ impl InferenceResponse {
         }
     }
 
+    #[must_use]
     pub fn variant_name(&self) -> &str {
         match self {
             InferenceResponse::Chat(c) => &c.variant_name,
@@ -952,6 +954,7 @@ impl InferenceResponse {
         }
     }
 
+    #[must_use]
     pub fn inference_id(&self) -> Uuid {
         match self {
             InferenceResponse::Chat(c) => c.inference_id,
@@ -959,6 +962,7 @@ impl InferenceResponse {
         }
     }
 
+    #[must_use]
     pub fn episode_id(&self) -> Uuid {
         match self {
             InferenceResponse::Chat(c) => c.episode_id,
@@ -1103,6 +1107,7 @@ impl InferenceResponseChunk {
         })
     }
 
+    #[must_use]
     pub fn episode_id(&self) -> Uuid {
         match self {
             InferenceResponseChunk::Chat(c) => c.episode_id,
@@ -1110,6 +1115,7 @@ impl InferenceResponseChunk {
         }
     }
 
+    #[must_use]
     pub fn inference_id(&self) -> Uuid {
         match self {
             InferenceResponseChunk::Chat(c) => c.inference_id,
@@ -1117,6 +1123,7 @@ impl InferenceResponseChunk {
         }
     }
 
+    #[must_use]
     pub fn variant_name(&self) -> &str {
         match self {
             InferenceResponseChunk::Chat(c) => &c.variant_name,

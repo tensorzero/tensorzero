@@ -241,6 +241,7 @@ pub enum EvaluatorResult {
 }
 
 impl<'a> EvaluatorResult {
+    #[must_use]
     pub fn value(&'a self) -> Option<&'a Value> {
         match self {
             EvaluatorResult::ExactMatch(value) => value.as_ref(),
@@ -248,18 +249,21 @@ impl<'a> EvaluatorResult {
         }
     }
 
+    #[must_use]
     pub fn evaluator_inference_id(&'a self) -> Option<&'a Uuid> {
         match self {
             EvaluatorResult::ExactMatch(_) => None,
             EvaluatorResult::LLMJudge(value) => value.as_ref().map(|v| &v.evaluator_inference_id),
         }
     }
+    #[must_use]
     pub fn value_owned(self) -> Option<Value> {
         match self {
             EvaluatorResult::ExactMatch(value) => value,
             EvaluatorResult::LLMJudge(value) => value.map(|v| v.value),
         }
     }
+    #[must_use]
     pub fn tags(&'a self) -> HashMap<String, String> {
         match self {
             EvaluatorResult::ExactMatch(_) => HashMap::new(),

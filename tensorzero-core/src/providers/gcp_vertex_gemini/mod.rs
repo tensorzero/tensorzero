@@ -564,14 +564,17 @@ impl GCPVertexGeminiProvider {
         })
     }
 
+    #[must_use]
     pub fn model_id(&self) -> Option<&str> {
         self.model_id.as_deref()
     }
 
+    #[must_use]
     pub fn endpoint_id(&self) -> Option<&str> {
         self.endpoint_id.as_deref()
     }
 
+    #[must_use]
     pub fn model_or_endpoint_id(&self) -> &str {
         &self.model_or_endpoint_id
     }
@@ -634,6 +637,7 @@ impl GCPVertexGeminiProvider {
     }
 }
 
+#[must_use]
 pub fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::PathFromEnv("GCP_VERTEX_CREDENTIALS_PATH".to_string())
 }

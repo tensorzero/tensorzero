@@ -46,6 +46,7 @@ pub const NUM_MIGRATIONS: usize = 27;
 /// This is the single source of truth for all migration - it's used during startup to migrate
 /// the database, and in our ClickHouse tests to verify that the migrations apply correctly
 /// to a fresh database.
+#[must_use]
 pub fn make_all_migrations<'a>(
     clickhouse: &'a ClickHouseConnectionInfo,
 ) -> Vec<Box<dyn Migration + Send + Sync + 'a>> {

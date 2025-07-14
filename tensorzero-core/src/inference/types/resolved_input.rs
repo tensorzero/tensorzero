@@ -36,6 +36,7 @@ impl std::fmt::Display for ResolvedInput {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl ResolvedInput {
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -46,6 +47,7 @@ impl ResolvedInput {
     }
 
     #[getter]
+    #[must_use]
     pub fn get_messages(&self) -> Vec<ResolvedInputMessage> {
         self.messages.clone()
     }
@@ -69,11 +71,13 @@ impl std::fmt::Display for ResolvedInputMessage {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl ResolvedInputMessage {
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
 
     #[getter]
+    #[must_use]
     pub fn get_role(&self) -> String {
         self.role.to_string()
     }
@@ -131,6 +135,7 @@ impl std::fmt::Display for FileWithPath {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl FileWithPath {
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }

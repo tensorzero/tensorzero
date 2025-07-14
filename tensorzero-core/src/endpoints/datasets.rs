@@ -1088,6 +1088,7 @@ pub enum DatapointKind {
 }
 
 impl DatapointKind {
+    #[must_use]
     pub fn table_name(&self) -> &'static str {
         match self {
             DatapointKind::Chat => "ChatInferenceDatapoint",
@@ -1110,6 +1111,7 @@ pub enum Datapoint {
 }
 
 impl Datapoint {
+    #[must_use]
     pub fn dataset_name(&self) -> &str {
         match self {
             Datapoint::Chat(datapoint) => &datapoint.dataset_name,
@@ -1117,6 +1119,7 @@ impl Datapoint {
         }
     }
 
+    #[must_use]
     pub fn input(&self) -> &ResolvedInput {
         match self {
             Datapoint::Chat(datapoint) => &datapoint.input,
@@ -1124,6 +1127,7 @@ impl Datapoint {
         }
     }
 
+    #[must_use]
     pub fn tool_call_config(&self) -> Option<&ToolCallConfigDatabaseInsert> {
         match self {
             Datapoint::Chat(datapoint) => datapoint.tool_params.as_ref(),
@@ -1131,6 +1135,7 @@ impl Datapoint {
         }
     }
 
+    #[must_use]
     pub fn output_schema(&self) -> Option<&serde_json::Value> {
         match self {
             Datapoint::Chat(_datapoint) => None,
@@ -1138,6 +1143,7 @@ impl Datapoint {
         }
     }
 
+    #[must_use]
     pub fn id(&self) -> Uuid {
         match self {
             Datapoint::Chat(datapoint) => datapoint.id,
@@ -1150,6 +1156,7 @@ impl Datapoint {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Datapoint {
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -1180,11 +1187,13 @@ impl Datapoint {
     }
 
     #[getter]
+    #[must_use]
     pub fn get_dataset_name(&self) -> String {
         self.dataset_name().to_string()
     }
 
     #[getter]
+    #[must_use]
     pub fn get_function_name(&self) -> String {
         self.function_name().to_string()
     }
@@ -1206,6 +1215,7 @@ impl Datapoint {
     }
 
     #[getter]
+    #[must_use]
     pub fn get_is_custom(&self) -> bool {
         match self {
             Datapoint::Chat(datapoint) => datapoint.is_custom,

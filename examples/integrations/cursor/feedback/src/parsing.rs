@@ -19,21 +19,25 @@ pub struct InferenceWithTrees {
 
 impl InferenceWithTrees {
     /// Create a new container with inference trees and metadata
+    #[must_use]
     pub fn new(trees: Vec<NormalizedInferenceTreeInfo>, inference: Arc<InferenceInfo>) -> Self {
         Self { trees, inference }
     }
 
     /// Get the inference ID
+    #[must_use]
     pub fn id(&self) -> &uuid::Uuid {
         &self.inference.id
     }
 
     /// Get the number of parsed trees
+    #[must_use]
     pub fn tree_count(&self) -> usize {
         self.trees.len()
     }
 
     /// Check if this inference has any parsed trees
+    #[must_use]
     pub fn has_trees(&self) -> bool {
         !self.trees.is_empty()
     }

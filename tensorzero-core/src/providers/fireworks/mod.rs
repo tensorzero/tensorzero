@@ -90,11 +90,13 @@ impl FireworksProvider {
         })
     }
 
+    #[must_use]
     pub fn model_name(&self) -> &str {
         &self.model_name
     }
 }
 
+#[must_use]
 pub fn default_parse_think_blocks() -> bool {
     true
 }
@@ -144,6 +146,7 @@ impl FireworksCredentials {
     }
 }
 
+#[must_use]
 pub fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("FIREWORKS_API_KEY".to_string())
 }

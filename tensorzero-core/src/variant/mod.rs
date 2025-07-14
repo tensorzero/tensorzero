@@ -144,6 +144,7 @@ pub struct BatchInferenceConfig<'a> {
     pub variant_name: Option<&'a str>,
 }
 impl<'a> BatchInferenceConfig<'a> {
+    #[must_use]
     pub fn inference_configs(
         &'a self,
         episode_ids: &[Uuid],
@@ -235,6 +236,7 @@ pub trait Variant {
 }
 
 impl VariantConfig {
+    #[must_use]
     pub fn weight(&self) -> Option<f64> {
         match self {
             VariantConfig::ChatCompletion(params) => params.weight,
@@ -751,6 +753,7 @@ impl Default for RetryConfig {
 }
 
 impl RetryConfig {
+    #[must_use]
     pub fn get_backoff(&self) -> backon::ExponentialBuilder {
         ExponentialBuilder::default()
             .with_jitter()

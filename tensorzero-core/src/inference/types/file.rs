@@ -70,15 +70,18 @@ impl Base64File {
 #[pymethods]
 impl Base64File {
     #[getter(url)]
+    #[must_use]
     pub fn url_string(&self) -> Option<String> {
         self.url.as_ref().map(|u| u.to_string())
     }
 
     #[getter(mime_type)]
+    #[must_use]
     pub fn mime_type_string(&self) -> String {
         self.mime_type.to_string()
     }
 
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -175,6 +178,7 @@ impl File {
 
 /// Strips out image data from the raw request, replacing it with a placeholder.
 /// This is a best-effort attempt to avoid filling up ClickHouse with image data.
+#[must_use]
 pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: String) -> String {
     let mut i = 0;
     for message in input_messages {

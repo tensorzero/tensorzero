@@ -73,6 +73,7 @@ pub fn setup_logging(args: &Args) -> Result<()> {
     }
 }
 
+#[must_use]
 pub fn get_cache_options(inference_cache: CacheEnabledMode) -> CacheParamsOptions {
     CacheParamsOptions {
         enabled: inference_cache,
