@@ -48,11 +48,16 @@ function renderContentBlock(block: DisplayInputMessageContent, index: number) {
       );
 
     case "tool_call":
+      // NOTE: since tool calls are stored as a string in ResolvedInput and therefore the database
+      // and we are not guaranteed that they are valid JSON, we try to parse them as JSON
+      // and if they are not valid JSON, we display the raw string
       return (
         <ToolCallMessage
           key={index}
           toolName={block.name}
+          toolRawName={block.name} // tool calls in the input aren't parsed, so there's no "raw"
           toolArguments={block.arguments}
+          toolRawArguments={block.arguments} // tool calls in the input aren't parsed, so there's no "raw"
           toolCallId={block.id}
         />
       );

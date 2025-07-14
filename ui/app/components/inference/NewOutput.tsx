@@ -14,7 +14,7 @@ import {
   TextMessage,
   ToolCallMessage,
 } from "~/components/layout/SnippetContent";
-import { CodeBlock } from "../ui/code-block";
+import { CodeEditor } from "../ui/code-editor";
 
 /*
 NOTE: This is the new output component but it is not editable yet so we are rolling
@@ -68,22 +68,26 @@ function renderJsonInferenceOutput(output: JsonInferenceOutputRenderingData) {
           {activeTab === "parsed" ? (
             <>
               {output.parsed ? (
-                <CodeBlock
-                  raw={JSON.stringify(output.parsed, null, 2)}
-                  showLineNumbers
+                <CodeEditor
+                  allowedLanguages={["json"]}
+                  value={JSON.stringify(output.parsed, null, 2)}
+                  readOnly
                 />
               ) : (
-                <SnippetMessage>
-                  <EmptyMessage message="The inference output failed to parse against the schema." />
-                </SnippetMessage>
+                <EmptyMessage message="The inference output failed to parse against the schema." />
               )}
             </>
           ) : activeTab === "raw" ? (
-            <CodeBlock raw={output.raw} showLineNumbers={true} />
+            <CodeEditor
+              allowedLanguages={["json"]}
+              value={output.raw}
+              readOnly
+            />
           ) : (
-            <CodeBlock
-              raw={JSON.stringify(output.schema, null, 2)}
-              showLineNumbers={true}
+            <CodeEditor
+              allowedLanguages={["json"]}
+              value={JSON.stringify(output.schema, null, 2)}
+              readOnly
             />
           )}
         </>
@@ -109,9 +113,13 @@ function renderChatInferenceOutput(output: ChatInferenceOutputRenderingData) {
                 return (
                   <ToolCallMessage
                     key={index}
-                    toolName={block.name ?? ""}
-                    toolArguments={JSON.stringify(block.arguments, null, 2)}
-                    // TODO: if arguments is null, display raw arguments without parsing
+                    toolName={block.name}
+                    toolRawName={block.raw_name}
+                    toolArguments={
+                      block.arguments &&
+                      JSON.stringify(block.arguments, null, 2)
+                    }
+                    toolRawArguments={block.raw_arguments}
                     toolCallId={block.id}
                   />
                 );

@@ -50,6 +50,5 @@ describe("native sft", () => {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       status = await client.experimentalPollOptimization(job);
     }
-    console.log(status);
   }, 10000); // timeout in ms
 });

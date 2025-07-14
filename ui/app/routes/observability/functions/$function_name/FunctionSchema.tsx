@@ -4,9 +4,9 @@ import {
   SnippetContent,
   SnippetTabs,
   type SnippetTab,
-  SnippetMessage,
 } from "~/components/layout/SnippetLayout";
-import { CodeMessage } from "~/components/layout/SnippetContent";
+import { EmptyMessage } from "~/components/layout/SnippetContent";
+import { CodeEditor } from "~/components/ui/code-editor";
 
 interface FunctionSchemaProps {
   functionConfig: FunctionConfig;
@@ -86,13 +86,15 @@ export default function FunctionSchema({
 
           return (
             <SnippetContent maxHeight={240}>
-              <SnippetMessage>
-                <CodeMessage
-                  content={formattedContent}
-                  showLineNumbers={true}
-                  emptyMessage={tab?.emptyMessage}
+              {formattedContent ? (
+                <CodeEditor
+                  allowedLanguages={["json"]}
+                  value={formattedContent}
+                  readOnly
                 />
-              </SnippetMessage>
+              ) : (
+                <EmptyMessage message={tab?.emptyMessage} />
+              )}
             </SnippetContent>
           );
         }}
