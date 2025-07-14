@@ -12,7 +12,9 @@ export function FunctionLink({ functionName, children }: FunctionLinkProps) {
   const config = useConfig();
   const functionConfig = config.functions[functionName];
   return functionConfig ? (
-    <Link to={`/observability/functions/${functionName}`}>{children}</Link>
+    <Link to={`/observability/functions/${encodeURIComponent(functionName)}`}>
+      {children}
+    </Link>
   ) : (
     <AlertDialog
       message="This function is not present in your configuration file."

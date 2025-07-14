@@ -50,6 +50,13 @@ export async function action({ request }: Route.ActionArgs) {
   const concurrency_limit = formData.get("concurrency_limit");
   const inference_cache = formData.get("inference_cache");
   let evaluation_start_info;
+
+  if (typeof evaluation_name !== "string") {
+    throw new Response("`evaluation_name` is required and must be a string", {
+      status: 400,
+    });
+  }
+
   try {
     evaluation_start_info = await runEvaluation(
       evaluation_name as string,
@@ -65,7 +72,7 @@ export async function action({ request }: Route.ActionArgs) {
     });
   }
   return redirect(
-    `/evaluations/${evaluation_name}?evaluation_run_ids=${evaluation_start_info.evaluation_run_id}`,
+    `/evaluations/${encodeURIComponent(evaluation_name)}?evaluation_run_ids=${evaluation_start_info.evaluation_run_id}`,
   );
 }
 

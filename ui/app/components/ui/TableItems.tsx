@@ -75,7 +75,6 @@ interface TableItemFunctionProps {
 function TableItemFunction({
   functionName,
   functionType,
-  link,
 }: TableItemFunctionProps) {
   const config = useConfig();
   const functionIconConfig = getFunctionTypeIcon(functionType);
@@ -107,26 +106,25 @@ function TableItemFunction({
     </>
   );
 
-  if (link) {
-    if (functionConfig) {
-      return (
-        <Link to={link} className={`${baseClasses} group cursor-pointer`}>
-          {content}
-        </Link>
-      );
-    } else {
-      return (
-        <AlertDialog
-          message="This function is not present in your configuration file."
-          trigger={
-            <div className={`${baseClasses} cursor-default`}>{content}</div>
-          }
-        />
-      );
-    }
+  if (functionConfig) {
+    return (
+      <Link
+        to={`/observability/functions/${encodeURIComponent(functionName)}`}
+        className={`${baseClasses} group cursor-pointer`}
+      >
+        {content}
+      </Link>
+    );
+  } else {
+    return (
+      <AlertDialog
+        message="This function is not present in your configuration file."
+        trigger={
+          <div className={`${baseClasses} cursor-default`}>{content}</div>
+        }
+      />
+    );
   }
-
-  return <div className={`${baseClasses} cursor-default`}>{content}</div>;
 }
 
 export { TableItemShortUuid, TableItemTime, TableItemFunction };

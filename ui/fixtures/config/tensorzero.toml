@@ -244,6 +244,13 @@ system_template = "functions/judge_answer/gpt-4.1-mini/system_template.minijinja
 user_template = "functions/judge_answer/gpt-4.1-mini/user_template.minijinja"
 json_mode = "strict"
 
+[functions."weird/function"]
+type = "chat"
+
+[functions."weird/function".variants."weird/variant"]
+type = "chat_completion"
+model = "openai::gpt-4.1-mini"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   TOOLS                                    │
 # └────────────────────────────────────────────────────────────────────────────┘

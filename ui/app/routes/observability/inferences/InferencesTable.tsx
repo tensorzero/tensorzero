@@ -54,7 +54,6 @@ export default function InferencesTable({
                   <TableItemFunction
                     functionName={inference.function_name}
                     functionType={inference.function_type}
-                    link={`/observability/functions/${inference.function_name}`}
                   />
                 </TableCell>
                 <TableCell>

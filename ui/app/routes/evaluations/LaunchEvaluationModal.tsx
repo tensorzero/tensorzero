@@ -229,7 +229,9 @@ function EvaluationForm({
         Function:{" "}
         {function_name ? (
           <span className="font-medium">
-            <Link to={`/observability/functions/${function_name}`}>
+            <Link
+              to={`/observability/functions/${encodeURIComponent(function_name)}`}
+            >
               {function_name}
             </Link>
           </span>

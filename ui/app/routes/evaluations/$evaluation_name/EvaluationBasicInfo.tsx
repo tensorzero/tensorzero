@@ -32,7 +32,7 @@ export default function BasicInfo({ evaluation_config }: BasicInfoProps) {
               iconBg={functionIconConfig.iconBg}
               label={functionName}
               secondaryLabel={`· ${functionType}`}
-              link={`/observability/functions/${functionName}`}
+              link={`/observability/functions/${encodeURIComponent(functionName)}`}
               font="mono"
             />
           )}

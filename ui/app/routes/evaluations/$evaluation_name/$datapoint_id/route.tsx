@@ -80,7 +80,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ? selected_evaluation_run_ids.split(",")
     : [];
   if (selectedRunIds.length === 0) {
-    return redirect(`/evaluations/${evaluation_name}`);
+    return redirect(`/evaluations/${encodeURIComponent(evaluation_name)}`);
   }
 
   // Define all promises

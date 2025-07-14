@@ -19,7 +19,7 @@ export function VariantLink({
   const variantConfig = functionConfig?.variants[variantName];
   return variantConfig ? (
     <Link
-      to={`/observability/functions/${functionName}/variants/${variantName}`}
+      to={`/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variantName)}`}
     >
       {children}
     </Link>

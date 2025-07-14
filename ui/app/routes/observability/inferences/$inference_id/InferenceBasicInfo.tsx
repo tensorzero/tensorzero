@@ -89,7 +89,7 @@ export default function BasicInfo({
           <Chip
             label={inference.variant_name}
             secondaryLabel={`· ${variantType}`}
-            link={`/observability/functions/${inference.function_name}/variants/${inference.variant_name}`}
+            link={`/observability/functions/${encodeURIComponent(inference.function_name)}/variants/${encodeURIComponent(inference.variant_name)}`}
             font="mono"
           />
         </BasicInfoItemContent>
