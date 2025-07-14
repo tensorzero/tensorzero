@@ -17,7 +17,7 @@ This example shows how to deploy the TensorZero (including the TensorZero Gatewa
 
 ## Installing the Chart
 
-To install the chart with the release name TensorZero:
+To install the chart with the release name `tensorzero`:
 
 ```bash
 # Create a namespace for tensorzero
@@ -53,7 +53,7 @@ kubectl create secret generic tensorzero-secret -n tensorzero \
 
 ## Uninstalling the Chart
 
-To uninstall the TensorZero deployment, run:
+To uninstall the `tensorzero` deployment, run:
 
 ```bash
 helm uninstall tensorzero -n tensorzero
