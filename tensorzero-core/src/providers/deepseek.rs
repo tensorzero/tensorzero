@@ -662,7 +662,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(reasoning) = message.reasoning_content {
             content.push(ContentBlockOutput::Thought(Thought {
-                text: reasoning,
+                text: Some(reasoning),
                 signature: None,
             }));
         }
@@ -968,7 +968,7 @@ mod tests {
         assert_eq!(
             inference_response.output[0],
             ContentBlockOutput::Thought(Thought {
-                text: "I'm thinking about the weather".to_string(),
+                text: Some("I'm thinking about the weather".to_string()),
                 signature: None,
             })
         );

@@ -537,7 +537,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 process_think_blocks(&raw_text, parse_think_blocks, PROVIDER_TYPE)?;
             if let Some(reasoning) = extracted_reasoning {
                 content.push(ContentBlockOutput::Thought(Thought {
-                    text: reasoning,
+                    text: Some(reasoning),
                     signature: None,
                 }));
             }
@@ -958,7 +958,7 @@ mod tests {
         assert_eq!(
             inference_response.output[0],
             ContentBlockOutput::Thought(Thought {
-                text: "hmmm".to_string(),
+                text: Some("hmmm".to_string()),
                 signature: None,
             })
         );
@@ -1003,7 +1003,7 @@ mod tests {
         assert_eq!(
             inference_response.output[0],
             ContentBlockOutput::Thought(Thought {
-                text: "hmmm".to_string(),
+                text: Some("hmmm".to_string()),
                 signature: None,
             })
         );
@@ -1081,7 +1081,10 @@ mod tests {
             ContentBlockOutput::Thought(_)
         ));
         if let ContentBlockOutput::Thought(thought) = &inference_response.output[0] {
-            assert_eq!(thought.text, "This is the reasoning process");
+            assert_eq!(
+                thought.text,
+                Some("This is the reasoning process".to_string())
+            );
             assert_eq!(thought.signature, None);
         }
 
@@ -1091,7 +1094,7 @@ mod tests {
             ContentBlockOutput::Text(_)
         ));
         if let ContentBlockOutput::Text(text) = &inference_response.output[1] {
-            assert_eq!(text.text, "This is the answer");
+            assert_eq!(text.text, "This is the answer".to_string());
         }
 
         // With parsing disabled

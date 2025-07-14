@@ -2028,14 +2028,14 @@ fn convert_to_output(
             FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(text)) => {
                 return Ok(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
-                    text,
+                    text: Some(text),
                 }));
             }
             // Handle 'thought/thoughtSignature' with no other fields
             FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
                 return Ok(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
-                    text: "".to_string(),
+                    text: None,
                 }));
             }
             _ => {
