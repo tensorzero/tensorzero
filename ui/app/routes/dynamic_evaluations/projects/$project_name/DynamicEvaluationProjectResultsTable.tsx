@@ -153,7 +153,10 @@ export function DynamicEvaluationProjectResultsTable({
                           <TableCell className="text-center align-middle">
                             <TableItemShortUuid
                               id={result.episode_id}
-                              link={`/observability/episodes/${result.episode_id}`}
+                              link={[
+                                "/observability/episodes/:episode_id",
+                                { episode_id: result.episode_id },
+                              ]}
                             />
                           </TableCell>
 

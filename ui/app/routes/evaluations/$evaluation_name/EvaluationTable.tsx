@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import React from "react";
-import { useSearchParams, useNavigate } from "react-router";
+import { useSearchParams } from "react-router";
 
 import * as RadixTooltip from "@radix-ui/react-tooltip";
 import {
@@ -45,6 +45,7 @@ import MetricValue, { isCutoffFailed } from "~/components/metric/MetricValue";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import InputSnippet from "~/components/inference/InputSnippet";
 import { logger } from "~/utils/logger";
+import { useNavigate } from "~/safe-navigation";
 
 type TruncatedContentProps = (
   | {
@@ -414,9 +415,16 @@ export function EvaluationTable({
                               const evaluation_run_ids = filteredVariants
                                 .map(([runId]) => runId)
                                 .join(",");
-                              navigate(
-                                `/evaluations/${evaluation_name}/${datapoint.id}?evaluation_run_ids=${evaluation_run_ids}`,
-                              );
+                              navigate({
+                                pathname: [
+                                  "/evaluations/:evaluation_name/:datapoint_id",
+                                  {
+                                    evaluation_name: evaluation_name,
+                                    datapoint_id: datapoint.id,
+                                  },
+                                ],
+                                search: `?evaluation_run_ids=${evaluation_run_ids}`,
+                              });
                             }}
                           >
                             {/* Input cell - only for the first variant row */}

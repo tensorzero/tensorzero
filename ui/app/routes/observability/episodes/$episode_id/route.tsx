@@ -14,7 +14,7 @@ import type { Route } from "./+types/route";
 import {
   data,
   isRouteErrorResponse,
-  useNavigate,
+  redirect,
   type RouteHandle,
 } from "react-router";
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
@@ -38,6 +38,7 @@ import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
+import { useNavigate } from "~/safe-navigation";
 
 export const handle: RouteHandle = {
   crumb: (match) => [match.params.episode_id!],
@@ -113,9 +114,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-type ActionData =
-  | { redirectTo: string; error?: never }
-  | { error: string; redirectTo?: never };
+type ActionData = { error?: string };
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
@@ -126,7 +125,7 @@ export async function action({ request }: Route.ActionArgs) {
     url.searchParams.delete("beforeFeedback");
     url.searchParams.delete("afterFeedback");
     url.searchParams.set("newFeedbackId", response.feedback_id);
-    return data<ActionData>({ redirectTo: url.pathname + url.search });
+    return redirect(url.toString());
   } catch (error) {
     if (isTensorZeroServerError(error)) {
       return data<ActionData>(
@@ -162,14 +161,14 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterInference");
     searchParams.set("beforeInference", bottomInference.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   const handlePreviousInferencePage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeInference");
     searchParams.set("afterInference", topInference.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
   // These are swapped because the table is sorted in descending order
   const disablePreviousInferencePage =
@@ -187,7 +186,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterFeedback");
     searchParams.set("beforeFeedback", bottomFeedback.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   const handlePreviousFeedbackPage = () => {
@@ -195,7 +194,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeFeedback");
     searchParams.set("afterFeedback", topFeedback.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   const { toast } = useToast();
@@ -224,9 +223,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       : null;
   useEffect(() => {
     const currentState = humanFeedbackFetcher.state;
-    const data = humanFeedbackFetcher.data;
-    if (currentState === "idle" && data?.redirectTo) {
-      navigate(data.redirectTo);
+    if (currentState === "idle") {
       setIsModalOpen(false);
     }
   }, [humanFeedbackFetcher.data, humanFeedbackFetcher.state, navigate]);

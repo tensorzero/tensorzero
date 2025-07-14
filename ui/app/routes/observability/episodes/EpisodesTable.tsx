@@ -51,7 +51,10 @@ export default function EpisodesTable({
                 <TableCell className="max-w-[200px] lg:max-w-none">
                   <TableItemShortUuid
                     id={episode.episode_id}
-                    link={`/observability/episodes/${episode.episode_id}`}
+                    link={[
+                      "/observability/episodes/:episode_id",
+                      { episode_id: episode.episode_id },
+                    ]}
                   />
                 </TableCell>
                 <TableCell>{episode.count}</TableCell>

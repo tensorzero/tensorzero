@@ -49,7 +49,10 @@ export default function LLMFineTuningStatus({
             <BasicInfoItemTitle>Function</BasicInfoItemTitle>
             <BasicInfoItemContent>
               <Chip
-                link={`/observability/functions/${status.formData.function}`}
+                link={[
+                  "/observability/functions/:function_name",
+                  { function_name: status.formData.function },
+                ]}
                 icon={<Function className="text-fg-tertiary" />}
                 label={status.formData.function}
                 font="mono"

@@ -1,4 +1,3 @@
-import { Link } from "react-router";
 import {
   Tooltip,
   TooltipContent,
@@ -9,10 +8,11 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 import { formatDate } from "~/utils/date";
 import { useConfig } from "~/context/config";
 import { AlertDialog } from "~/components/ui/AlertDialog";
+import { Link, type To } from "~/safe-navigation";
 
 interface TableItemShortUuidProps {
   id: string | null;
-  link?: string;
+  link?: To;
 }
 
 function TableItemShortUuid({ id, link }: TableItemShortUuidProps) {
@@ -69,7 +69,7 @@ function TableItemTime({ timestamp }: TableItemTimeProps) {
 interface TableItemFunctionProps {
   functionName: string;
   functionType: string;
-  link?: string;
+  link?: To;
 }
 
 function TableItemFunction({

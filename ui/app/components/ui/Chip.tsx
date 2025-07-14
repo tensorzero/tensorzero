@@ -1,5 +1,4 @@
 import React from "react";
-import { Link } from "react-router";
 import clsx from "clsx";
 import {
   Tooltip,
@@ -7,12 +6,13 @@ import {
   TooltipContent,
   TooltipProvider,
 } from "~/components/ui/tooltip";
+import { Link, type To } from "~/safe-navigation";
 
 interface ChipProps {
   icon?: React.ReactNode;
   label: string;
   secondaryLabel?: string;
-  link?: string;
+  link?: To;
   className?: string;
   font?: "sans" | "mono";
   tooltip?: React.ReactNode;

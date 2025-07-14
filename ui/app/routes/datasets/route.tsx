@@ -5,7 +5,6 @@ import {
 import type { Route } from "./+types/route";
 import DatasetTable from "./DatasetTable";
 import { data, isRouteErrorResponse } from "react-router";
-import { useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
@@ -14,6 +13,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { DatasetsActions } from "./DatasetsActions";
 import { logger } from "~/utils/logger";
+import { useNavigate } from "~/safe-navigation";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -33,12 +33,12 @@ export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("offset", String(offset + pageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("offset", String(offset - pageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
   return (
     <PageLayout>

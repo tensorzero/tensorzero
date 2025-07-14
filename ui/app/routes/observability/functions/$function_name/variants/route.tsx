@@ -2,7 +2,6 @@ import {
   data,
   isRouteErrorResponse,
   redirect,
-  useNavigate,
   useSearchParams,
 } from "react-router";
 import type { LoaderFunctionArgs, RouteHandle } from "react-router";
@@ -35,6 +34,7 @@ import {
   SectionHeader,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
+import { useNavigate } from "~/safe-navigation";
 
 export const handle: RouteHandle = {
   crumb: (match) => ["Variants", match.params.variant_name!],
@@ -165,7 +165,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterInference");
     searchParams.set("beforeInference", bottomInference.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   const handlePreviousInferencePage = () => {
@@ -173,7 +173,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeInference");
     searchParams.set("afterInference", topInference.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   const disablePreviousInferencePage =
@@ -189,7 +189,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     setMetricName(metric);
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("metric_name", metric);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   const metricsExcludingDemonstrations = useMemo(
@@ -207,7 +207,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     setTimeGranularity(granularity);
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("time_granularity", granularity);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
   const function_type = function_config.type;
   return (

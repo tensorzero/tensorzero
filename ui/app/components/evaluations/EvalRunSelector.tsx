@@ -15,7 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "~/components/ui/popover";
-import { useSearchParams, useNavigate, useFetcher } from "react-router";
+import { useSearchParams, useFetcher } from "react-router";
 import type {
   EvaluationRunInfo,
   EvaluationRunSearchResult,
@@ -23,6 +23,7 @@ import type {
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import { getLastUuidSegment } from "~/components/evaluations/EvaluationRunBadge";
 import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
+import { useNavigate } from "~/safe-navigation";
 
 interface EvalRunSelectorProps {
   evaluationName: string;
@@ -80,7 +81,7 @@ export function EvalRunSelector({
       "evaluation_run_ids",
       runIdInfos.map((info) => info.evaluation_run_id).join(","),
     );
-    navigate(`?${newParams.toString()}`, { replace: true });
+    navigate(newParams, { replace: true });
   };
 
   // Toggle a run selection

@@ -1,4 +1,3 @@
-import { Link } from "react-router";
 import {
   Table,
   TableBody,
@@ -16,6 +15,7 @@ import {
   TableItemShortUuid,
 } from "~/components/ui/TableItems";
 import { useConfig } from "~/context/config";
+import { Link } from "~/safe-navigation";
 
 export default function EvaluationRunsTable({
   evaluationRuns,
@@ -53,12 +53,21 @@ export default function EvaluationRunsTable({
                   <TableCell className="max-w-[200px]">
                     <TableItemShortUuid
                       id={evaluationRun.evaluation_run_id}
-                      link={`/evaluations/${evaluationRun.evaluation_name}?evaluation_run_ids=${evaluationRun.evaluation_run_id}`}
+                      link={{
+                        pathname: [
+                          "/evaluations/:evaluation_name",
+                          { evaluation_name: evaluationRun.evaluation_name },
+                        ],
+                        search: `?evaluation_run_ids=${evaluationRun.evaluation_run_id}`,
+                      }}
                     />
                   </TableCell>
                   <TableCell className="max-w-[200px]">
                     <Link
-                      to={`/evaluations/${evaluationRun.evaluation_name}`}
+                      to={[
+                        "/evaluations/:evaluation_name",
+                        { evaluation_name: evaluationRun.evaluation_name },
+                      ]}
                       className="block no-underline"
                     >
                       <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
@@ -68,7 +77,10 @@ export default function EvaluationRunsTable({
                   </TableCell>
                   <TableCell>
                     <Link
-                      to={`/datasets/${evaluationRun.dataset_name}`}
+                      to={[
+                        "/datasets/:dataset_name",
+                        { dataset_name: evaluationRun.dataset_name },
+                      ]}
                       className="block no-underline"
                     >
                       <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
@@ -80,7 +92,10 @@ export default function EvaluationRunsTable({
                     <TableItemFunction
                       functionName={evaluationRun.function_name}
                       functionType={functionType ?? ""}
-                      link={`/functions/${evaluationRun.function_name}`}
+                      link={[
+                        "/observability/functions/:function_name",
+                        { function_name: evaluationRun.function_name },
+                      ]}
                     />
                   </TableCell>
                   <TableCell>

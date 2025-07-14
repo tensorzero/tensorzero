@@ -11,8 +11,9 @@ import {
 import type { DynamicEvaluationRunStatisticsByMetricName } from "~/utils/clickhouse/dynamic_evaluations";
 import { ColorAssignerProvider } from "~/hooks/evaluations/ColorAssigner";
 import { DynamicEvaluationProjectResultsTable } from "./DynamicEvaluationProjectResultsTable";
-import { useNavigate, type RouteHandle } from "react-router";
+import { type RouteHandle } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
+import { useNavigate } from "~/safe-navigation";
 
 export const handle: RouteHandle = {
   crumb: (match) => ["Projects", match.params.project_name!],
@@ -97,12 +98,12 @@ export default function DynamicEvaluationProjectPage({
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("offset", String(offset + pageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("offset", String(offset - pageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>

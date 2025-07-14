@@ -1,7 +1,7 @@
-import { Link } from "react-router";
 import { AlertDialog } from "~/components/ui/AlertDialog";
 import { useConfig } from "~/context/config";
 import type { ReactNode } from "react";
+import { Link } from "~/safe-navigation";
 
 type VariantLinkProps = {
   variantName: string;
@@ -19,7 +19,13 @@ export function VariantLink({
   const variantConfig = functionConfig?.variants[variantName];
   return variantConfig ? (
     <Link
-      to={`/observability/functions/${functionName}/variants/${variantName}`}
+      to={[
+        "/observability/functions/:function_name/variants/:variant_name",
+        {
+          function_name: functionName,
+          variant_name: variantName,
+        },
+      ]}
     >
       {children}
     </Link>

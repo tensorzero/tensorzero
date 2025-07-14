@@ -41,20 +41,31 @@ export default function DatasetRowTable({
                 <TableCell className="max-w-[200px]">
                   <TableItemShortUuid
                     id={row.id}
-                    link={`/datasets/${dataset_name}/datapoint/${row.id}`}
+                    link={[
+                      "/datasets/:dataset_name/datapoint/:id",
+                      { dataset_name, id: row.id },
+                    ]}
                   />
                 </TableCell>
                 <TableCell>
-                  <TableItemShortUuid
-                    id={row.episode_id}
-                    link={`/observability/episodes/${row.episode_id}`}
-                  />
+                  {row.episode_id && (
+                    <TableItemShortUuid
+                      id={row.episode_id}
+                      link={[
+                        "/observability/episodes/:episode_id",
+                        { episode_id: row.episode_id },
+                      ]}
+                    />
+                  )}
                 </TableCell>
                 <TableCell>
                   <TableItemFunction
                     functionName={row.function_name}
                     functionType={row.type}
-                    link={`/observability/functions/${row.function_name}`}
+                    link={[
+                      "/observability/functions/:function_name",
+                      { function_name: row.function_name },
+                    ]}
                   />
                 </TableCell>
                 <TableCell>

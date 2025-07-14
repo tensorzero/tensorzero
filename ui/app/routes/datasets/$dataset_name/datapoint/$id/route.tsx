@@ -1,12 +1,5 @@
 import type { ActionFunctionArgs, RouteHandle } from "react-router";
-import {
-  data,
-  isRouteErrorResponse,
-  Link,
-  redirect,
-  useFetcher,
-  useParams,
-} from "react-router";
+import { data, isRouteErrorResponse, redirect, useFetcher } from "react-router";
 import { v7 as uuid } from "uuid";
 import DatapointBasicInfo from "./DatapointBasicInfo";
 import Input from "~/components/inference/Input";
@@ -43,6 +36,7 @@ import {
 import type { DisplayInputMessage } from "~/utils/clickhouse/common";
 import { Badge } from "~/components/ui/badge";
 import { logger } from "~/utils/logger";
+import { Link } from "~/safe-navigation";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -411,17 +405,13 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     logger.error(error);
   }, [error]);
   const { heading, message } = getUserFacingError(error);
-  const { dataset_name: datasetName } = useParams<{
-    dataset_name: string;
-    id: string;
-  }>();
   return (
     <div className="flex flex-col items-center justify-center md:h-full">
       <div className="mt-8 flex flex-col items-center justify-center gap-2 rounded-xl bg-red-50 p-6 md:mt-0">
         <h1 className="text-2xl font-bold">{heading}</h1>
         {typeof message === "string" ? <p>{message}</p> : message}
         <Link
-          to={`/datasets/${datasetName}`}
+          unsafeTo=".."
           className="font-bold text-red-800 hover:text-red-600"
         >
           Go back &rarr;

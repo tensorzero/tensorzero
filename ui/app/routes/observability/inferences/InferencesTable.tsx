@@ -41,20 +41,29 @@ export default function InferencesTable({
                 <TableCell>
                   <TableItemShortUuid
                     id={inference.id}
-                    link={`/observability/inferences/${inference.id}`}
+                    link={[
+                      "/observability/inferences/:inference_id",
+                      { inference_id: inference.id },
+                    ]}
                   />
                 </TableCell>
                 <TableCell>
                   <TableItemShortUuid
                     id={inference.episode_id}
-                    link={`/observability/episodes/${inference.episode_id}`}
+                    link={[
+                      "/observability/episodes/:episode_id",
+                      { episode_id: inference.episode_id },
+                    ]}
                   />
                 </TableCell>
                 <TableCell>
                   <TableItemFunction
                     functionName={inference.function_name}
                     functionType={inference.function_type}
-                    link={`/observability/functions/${inference.function_name}`}
+                    link={[
+                      "/observability/functions/:function_name",
+                      { function_name: inference.function_name },
+                    ]}
                   />
                 </TableCell>
                 <TableCell>

@@ -4,7 +4,6 @@ import { useState } from "react";
 import type { ContentBlockOutput } from "~/utils/clickhouse/common";
 import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
 import Output from "../inference/Output";
-import { Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
   filterMetricsByLevel,
@@ -13,6 +12,7 @@ import {
 import BooleanFeedbackInput from "./BooleanFeedbackInput";
 import FloatFeedbackInput from "./FloatFeedbackInput";
 import CommentFeedbackInput from "./CommentFeedbackInput";
+import { Link } from "~/safe-navigation";
 
 export interface HumanFeedbackFormSharedProps {
   inferenceOutput?: ContentBlockOutput[] | JsonInferenceOutput;

@@ -4,12 +4,7 @@ import {
   queryInferenceTableByFunctionName,
 } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
-import {
-  data,
-  isRouteErrorResponse,
-  useNavigate,
-  useSearchParams,
-} from "react-router";
+import { data, isRouteErrorResponse, useSearchParams } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import { getConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
@@ -36,6 +31,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
+import { useNavigate } from "~/safe-navigation";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -156,7 +152,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterInference");
     searchParams.set("beforeInference", bottomInference.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   const handlePreviousInferencePage = () => {
@@ -164,7 +160,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeInference");
     searchParams.set("afterInference", topInference.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   // Modify pagination disable logic to handle empty inferences
@@ -181,7 +177,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     setMetricName(metric);
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("metric_name", metric);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   const metricsExcludingDemonstrations = useMemo(
@@ -199,7 +195,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     setTimeGranularity(granularity);
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("time_granularity", granularity);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
 
   return (

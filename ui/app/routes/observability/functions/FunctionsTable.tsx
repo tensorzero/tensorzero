@@ -81,7 +81,10 @@ export default function FunctionsTable({
                     <TableItemFunction
                       functionName={function_name}
                       functionType={type}
-                      link={`/observability/functions/${function_name}`}
+                      link={[
+                        "/observability/functions/:function_name",
+                        { function_name },
+                      ]}
                     />
                   </TableCell>
                   <TableCell>{variantsCount}</TableCell>

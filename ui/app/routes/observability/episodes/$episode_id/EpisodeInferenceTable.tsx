@@ -39,14 +39,20 @@ export default function EpisodeInferenceTable({
               <TableCell className="max-w-[200px]">
                 <TableItemShortUuid
                   id={inference.id}
-                  link={`/observability/inferences/${inference.id}`}
+                  link={[
+                    "/observability/inferences/:inference_id",
+                    { inference_id: inference.id },
+                  ]}
                 />
               </TableCell>
               <TableCell>
                 <TableItemFunction
                   functionName={inference.function_name}
                   functionType={inference.function_type}
-                  link={`/observability/functions/${inference.function_name}`}
+                  link={[
+                    "/observability/functions/:function_name",
+                    { function_name: inference.function_name },
+                  ]}
                 />
               </TableCell>
               <TableCell>

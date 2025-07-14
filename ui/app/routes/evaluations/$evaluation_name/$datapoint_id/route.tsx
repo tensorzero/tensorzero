@@ -17,7 +17,6 @@ import InputSnippet from "~/components/inference/InputSnippet";
 import {
   data,
   isRouteErrorResponse,
-  Link,
   redirect,
   type RouteHandle,
 } from "react-router";
@@ -53,6 +52,7 @@ import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
 import { logger } from "~/utils/logger";
+import { Link } from "~/safe-navigation";
 
 export const handle: RouteHandle = {
   crumb: (match) => ["Datapoints", match.params.datapoint_id!],
@@ -479,7 +479,10 @@ function OutputsSection({
                     <div className="text-xs text-gray-500">
                       Inference:{" "}
                       <Link
-                        to={`/observability/inferences/${result.inferenceId}`}
+                        to={[
+                          "/observability/inferences/:inference_id",
+                          { inference_id: result.inferenceId },
+                        ]}
                         className="text-blue-600 hover:text-blue-800 hover:underline"
                       >
                         {result.inferenceId}

@@ -1,4 +1,3 @@
-import { Link } from "react-router";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -8,6 +7,7 @@ import {
   BreadcrumbSeparator,
 } from "~/components/ui/breadcrumb";
 import { useBreadcrumbs } from "~/hooks/use-breadcrumbs";
+import { Link } from "~/safe-navigation";
 
 export function SubNavBreadcrumbs() {
   const { segments } = useBreadcrumbs();
@@ -22,7 +22,7 @@ export function SubNavBreadcrumbs() {
             ) : bc.href ? (
               <>
                 <BreadcrumbLink asChild>
-                  <Link to={bc.href}>{bc.label}</Link>
+                  <Link unsafeTo={bc.href}>{bc.label}</Link>
                 </BreadcrumbLink>
                 <BreadcrumbSeparator />
               </>

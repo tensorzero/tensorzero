@@ -1,5 +1,5 @@
 import type { Route } from "./+types/route";
-import { isRouteErrorResponse, redirect, useNavigate } from "react-router";
+import { isRouteErrorResponse, redirect } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
@@ -20,6 +20,7 @@ import {
 } from "~/utils/evaluations.server";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { logger } from "~/utils/logger";
+import { useNavigate } from "~/safe-navigation";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const totalEvaluationRuns = await countTotalEvaluationRuns();
@@ -84,12 +85,12 @@ export default function EvaluationSummaryPage({
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("offset", String(offset + pageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("offset", String(offset - pageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    navigate(searchParams, { preventScrollReset: true });
   };
   const [launchEvaluationModalIsOpen, setLaunchEvaluationModalIsOpen] =
     useState(false);
