@@ -488,7 +488,7 @@ pub async fn update_datapoint_handler(
 /// We can disambiguate them by checking the config for the `function_name` that
 /// the datapoint is for and then deserializing it as the correct type.
 ///
-/// For the `OpenAPI` spec we will have to manually create the type for this.
+/// For the OpenAPI spec we will have to manually create the type for this.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct InsertDatapointParams {
