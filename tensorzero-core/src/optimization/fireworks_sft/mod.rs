@@ -13,6 +13,10 @@ use std::time::Duration;
 
 use futures::try_join;
 use http::StatusCode;
+#[cfg(feature = "pyo3")]
+use pyo3::exceptions::PyValueError;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use reqwest::multipart::{Form, Part};
 use secrecy::ExposeSecret;
 use secrecy::SecretString;
@@ -26,11 +30,12 @@ use crate::model::UninitializedModelConfig;
 use crate::model::UninitializedModelProvider;
 use crate::model::UninitializedProviderConfig;
 use crate::optimization::JobHandle;
+use crate::optimization::OptimizationJobInfo;
 use crate::optimization::Optimizer;
 use crate::optimization::OptimizerOutput;
-use crate::optimization::OptimizerStatus;
 use crate::providers::fireworks::prepare_fireworks_messages;
 use crate::providers::fireworks::FIREWORKS_API_BASE;
+use crate::providers::helpers::UrlParseErrExt;
 use crate::providers::openai::tensorzero_to_openai_assistant_message;
 use crate::stored_inference::RenderedSample;
 use crate::{
@@ -121,14 +126,68 @@ pub struct FireworksSFTConfig {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "FireworksSFTConfig"))]
 pub struct UninitializedFireworksSFTConfig {
     pub model: String,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credentials: Option<CredentialLocation>,
     pub account_id: String,
     pub api_base: Option<Url>,
+}
+
+impl std::fmt::Display for UninitializedFireworksSFTConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl UninitializedFireworksSFTConfig {
+    #[new]
+    #[pyo3(signature = (*, model, credentials=None, account_id, api_base=None))]
+    pub fn new(
+        model: String,
+        credentials: Option<String>,
+        account_id: String,
+        api_base: Option<String>,
+    ) -> PyResult<Self> {
+        let credentials =
+            credentials.map(|s| serde_json::from_str(&s).unwrap_or(CredentialLocation::Env(s)));
+        let api_base = api_base
+            .map(|s| {
+                Url::parse(&s)
+                    .map_err(|e| PyErr::new::<PyValueError, std::string::String>(e.to_string()))
+            })
+            .transpose()?;
+        Ok(Self {
+            model,
+            credentials,
+            account_id,
+            api_base,
+        })
+    }
+
+    /// Initialize the FireworksSFTConfig. All parameters are optional except for `model` and `account_id`.
+    ///
+    /// :param model: The model to use for the fine-tuning job.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::FIREWORKS_API_KEY". See docs for more details.
+    /// :param account_id: The account ID to use for the fine-tuning job.
+    /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
+    #[expect(unused_variables)]
+    #[pyo3(signature = (*, model, credentials=None, account_id, api_base=None))]
+    fn __init__(
+        this: Py<Self>,
+        model: String,
+        credentials: Option<String>,
+        account_id: String,
+        api_base: Option<String>,
+    ) -> Py<Self> {
+        this
+    }
 }
 
 impl UninitializedFireworksSFTConfig {
@@ -152,23 +211,6 @@ impl UninitializedFireworksSFTConfig {
 #[serde(rename_all = "camelCase")]
 pub struct FireworksDatasetResponse {
     state: String,
-}
-
-trait UrlParseErrExt<T> {
-    fn convert_parse_error(self) -> Result<T, Error>;
-}
-
-impl<T> UrlParseErrExt<T> for Result<T, url::ParseError> {
-    fn convert_parse_error(self) -> Result<T, Error> {
-        self.map_err(|e| {
-            Error::new(ErrorDetails::InternalError {
-                message: format!(
-                    "Error parsing URL: {}. {IMPOSSIBLE_ERROR_MESSAGE}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })
-    }
 }
 
 impl FireworksSFTConfig {
@@ -475,8 +517,9 @@ impl Optimizer for FireworksSFTConfig {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct FireworksSFTJobHandle {
     pub api_base: Url,
     pub account_id: String,
@@ -484,6 +527,13 @@ pub struct FireworksSFTJobHandle {
     pub job_path: String,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocation>,
+}
+
+impl std::fmt::Display for FireworksSFTJobHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
@@ -748,7 +798,7 @@ impl JobHandle for FireworksSFTJobHandle {
         &self,
         client: &reqwest::Client,
         credentials: &InferenceCredentials,
-    ) -> Result<OptimizerStatus, Error> {
+    ) -> Result<OptimizationJobInfo, Error> {
         let fireworks_credentials = build_creds_caching_default(
             self.credential_location.clone(),
             default_api_key_location(),
@@ -784,7 +834,7 @@ impl JobHandle for FireworksSFTJobHandle {
                 FireworksDeploymentState::StateUnspecified
                 | FireworksDeploymentState::Deploying
                 | FireworksDeploymentState::Undeploying
-                | FireworksDeploymentState::Updating => Ok(OptimizerStatus::Pending {
+                | FireworksDeploymentState::Updating => Ok(OptimizationJobInfo::Pending {
                     message: deployment_state.to_string(),
                     estimated_finish: None,
                     trained_tokens: None,
@@ -802,7 +852,7 @@ impl JobHandle for FireworksSFTJobHandle {
                         timeouts: None,
                         discard_unknown_chunks: false,
                     };
-                    Ok(OptimizerStatus::Completed {
+                    Ok(OptimizationJobInfo::Completed {
                         output: OptimizerOutput::Model(UninitializedModelConfig {
                             routing: vec![model_path.clone().into()],
                             providers: HashMap::from([(model_path.into(), model_provider)]),
@@ -819,7 +869,7 @@ impl JobHandle for FireworksSFTJobHandle {
 
 pub fn convert_to_optimizer_status(
     job: FireworksFineTuningJobResponse,
-) -> Result<OptimizerStatus, Error> {
+) -> Result<OptimizationJobInfo, Error> {
     Ok(match job.state {
         FireworksFineTuningJobState::JobStateCreating
         | FireworksFineTuningJobState::JobStatePending
@@ -829,7 +879,7 @@ pub fn convert_to_optimizer_status(
         | FireworksFineTuningJobState::JobStateRollout
         | FireworksFineTuningJobState::JobStateEvaluation
         | FireworksFineTuningJobState::JobStateUnspecified
-        | FireworksFineTuningJobState::JobStatePolicyUpdate => OptimizerStatus::Pending {
+        | FireworksFineTuningJobState::JobStatePolicyUpdate => OptimizationJobInfo::Pending {
             message: job.state.to_string(),
             estimated_finish: None,
             trained_tokens: None,
@@ -839,7 +889,7 @@ pub fn convert_to_optimizer_status(
         | FireworksFineTuningJobState::JobStateFailedCleaningUp
         | FireworksFineTuningJobState::JobStateCancelled
         | FireworksFineTuningJobState::JobStateDeleting
-        | FireworksFineTuningJobState::JobStateDeletingCleaningUp => OptimizerStatus::Failed {
+        | FireworksFineTuningJobState::JobStateDeletingCleaningUp => OptimizationJobInfo::Failed {
             message: job.state.to_string(),
             error: job.status.map(|s| s.message.into()),
         },

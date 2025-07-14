@@ -407,6 +407,13 @@ jobs:
   # Run 'cargo test-optimization' against mock-inference-provider
   mock-optimization-tests:
     runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: not_used
+      FIREWORKS_API_KEY: not_used
+      FIREWORKS_ACCOUNT_ID: not_used
+      TENSORZERO_USE_MOCK_INFERENCE_PROVIDER: 1
+      TENSORZERO_SKIP_LARGE_FIXTURES: 1
+
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: dtolnay/rust-toolchain@stable
@@ -431,10 +438,18 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch ClickHouse container for E2E tests
-        run: TENSORZERO_SKIP_LARGE_FIXTURES=1 docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
+
+      - name: Launch the gateway for E2E tests
+        run: |
+          cargo run-e2e > e2e_logs.txt 2>&1 &
+          while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+            echo "Waiting for gateway to be healthy..."
+            sleep 1
+          done
 
       - name: Test (Rust)
-        run: TENSORZERO_USE_MOCK_INFERENCE_PROVIDER=1 OPENAI_API_KEY=not_used FIREWORKS_API_KEY=not_used FIREWORKS_ACCOUNT_ID=not_used cargo test-optimization
+        run: cargo test-optimization -- --skip together
 
   build-gateway-container:
     uses: ./.github/workflows/build-gateway-container.yml

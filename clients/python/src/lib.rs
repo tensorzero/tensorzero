@@ -26,13 +26,24 @@ use python_helpers::{
 };
 use tensorzero_core::{
     clickhouse::ClickhouseFormat,
+    config_parser::{ConfigPyClass, FunctionsConfigPyClass},
+    function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
         pyo3_helpers::{
-            deserialize_from_pyobj, deserialize_from_stored_sample, serialize_to_dict,
+            deserialize_from_pyobj, deserialize_from_rendered_sample,
+            deserialize_from_stored_sample, deserialize_optimization_config, serialize_to_dict,
             tensorzero_core_error, tensorzero_core_error_class, tensorzero_error_class, JSON_DUMPS,
             JSON_LOADS,
         },
         ResolvedInput, ResolvedInputMessage,
+    },
+    optimization::{
+        fireworks_sft::UninitializedFireworksSFTConfig, openai_sft::UninitializedOpenAISFTConfig,
+        OptimizationJobInfoPyClass, OptimizationJobStatus, UninitializedOptimizerInfo,
+    },
+    variant::{
+        BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
+        DiclConfigPyClass, MixtureOfNConfigPyClass,
     },
 };
 use tensorzero_core::{
@@ -48,8 +59,8 @@ use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, Datapoint,
     DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, ListInferencesParams, RenderedSample, StoredInference,
-    TensorZeroError, Tool,
+    InferenceParams, InferenceStream, LaunchOptimizationParams, ListInferencesParams,
+    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -77,9 +88,24 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<LocalHttpGateway>()?;
     m.add_class::<RenderedSample>()?;
     m.add_class::<StoredInference>()?;
+    m.add_class::<UninitializedOpenAISFTConfig>()?;
+    m.add_class::<UninitializedFireworksSFTConfig>()?;
     m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
+    m.add_class::<ConfigPyClass>()?;
+    m.add_class::<FunctionsConfigPyClass>()?;
+    m.add_class::<FunctionConfigChatPyClass>()?;
+    m.add_class::<FunctionConfigJsonPyClass>()?;
+    m.add_class::<VariantsConfigPyClass>()?;
+    m.add_class::<ChatCompletionConfigPyClass>()?;
+    m.add_class::<BestOfNSamplingConfigPyClass>()?;
+    m.add_class::<DiclConfigPyClass>()?;
+    m.add_class::<MixtureOfNConfigPyClass>()?;
+    m.add_class::<ChainOfThoughtConfigPyClass>()?;
+    m.add_class::<OptimizationJobHandle>()?;
+    m.add_class::<OptimizationJobInfoPyClass>()?;
+    m.add_class::<OptimizationJobStatus>()?;
 
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;
@@ -298,6 +324,14 @@ impl BaseTensorZeroGateway {
             include_original_response.unwrap_or(false),
         )?;
         serialize_to_dict(this.py(), params)
+    }
+
+    fn experimental_get_config(&self) -> PyResult<ConfigPyClass> {
+        let config = self
+            .client
+            .get_config()
+            .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
+        Ok(ConfigPyClass::new(config))
     }
 }
 
@@ -1020,6 +1054,59 @@ impl TensorZeroGateway {
         let fut = client.experimental_render_samples(stored_samples, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
+
+    /// Launch an optimization job.
+    ///
+    /// :param train_samples: A list of RenderedSample objects that will be used for training.
+    /// :param val_samples: A list of RenderedSample objects that will be used for validation.
+    /// :param optimization_config: The optimization config.
+    /// :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+    #[pyo3(signature = (*, train_samples, val_samples=None, optimization_config))]
+    fn experimental_launch_optimization(
+        this: PyRef<'_, Self>,
+        train_samples: Vec<Bound<'_, PyAny>>,
+        val_samples: Option<Vec<Bound<'_, PyAny>>>,
+        optimization_config: Bound<'_, PyAny>,
+    ) -> PyResult<OptimizationJobHandle> {
+        let client = this.as_super().client.clone();
+        let train_samples = train_samples
+            .iter()
+            .map(|x| deserialize_from_rendered_sample(this.py(), x))
+            .collect::<Result<Vec<_>, _>>()?;
+        let val_samples = val_samples
+            .map(|x| {
+                x.iter()
+                    .map(|x| deserialize_from_rendered_sample(this.py(), x))
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()?;
+        let optimization_config = deserialize_optimization_config(&optimization_config)?;
+        let fut = client.experimental_launch_optimization(LaunchOptimizationParams {
+            train_samples,
+            val_samples,
+            optimization_config: UninitializedOptimizerInfo {
+                inner: optimization_config,
+            },
+        });
+        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+    }
+
+    /// Poll an optimization job.
+    ///
+    /// :param job_handle: The job handle returned by `experimental_launch_optimization`.
+    /// :return: An `OptimizerStatus` object.
+    #[pyo3(signature = (*, job_handle))]
+    fn experimental_poll_optimization(
+        this: PyRef<'_, Self>,
+        job_handle: OptimizationJobHandle,
+    ) -> PyResult<OptimizationJobInfoPyClass> {
+        let client = this.as_super().client.clone();
+        let fut = client.experimental_poll_optimization(&job_handle);
+        match tokio_block_on_without_gil(this.py(), fut) {
+            Ok(status) => Ok(OptimizationJobInfoPyClass::new(status)),
+            Err(e) => Err(convert_error(this.py(), e)),
+        }
+    }
 }
 
 #[pyclass(extends=BaseTensorZeroGateway)]
@@ -1670,6 +1757,69 @@ impl AsyncTensorZeroGateway {
                 Ok(samples) => Ok(PyList::new(py, samples)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
+        })
+    }
+
+    /// Launch an optimization job.
+    ///
+    /// :param train_samples: A list of RenderedSample objects that will be used for training.
+    /// :param val_samples: A list of RenderedSample objects that will be used for validation.
+    /// :param optimiztion_config: The optimization config.
+    /// :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+    #[pyo3(signature = (*, train_samples, val_samples=None, optimization_config))]
+    fn experimental_launch_optimization<'a>(
+        this: PyRef<'a, Self>,
+        train_samples: Vec<Bound<'a, PyAny>>,
+        val_samples: Option<Vec<Bound<'a, PyAny>>>,
+        optimization_config: Bound<'a, PyAny>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let train_samples = train_samples
+            .iter()
+            .map(|x| deserialize_from_rendered_sample(this.py(), x))
+            .collect::<Result<Vec<_>, _>>()?;
+        let val_samples = val_samples
+            .as_ref()
+            .map(|x| {
+                x.iter()
+                    .map(|x| deserialize_from_rendered_sample(this.py(), x))
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()?;
+        let optimizer_config = deserialize_optimization_config(&optimization_config)?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client
+                .experimental_launch_optimization(LaunchOptimizationParams {
+                    train_samples,
+                    val_samples,
+                    optimization_config: UninitializedOptimizerInfo {
+                        inner: optimizer_config,
+                    },
+                })
+                .await;
+            match res {
+                Ok(job_handle) => Ok(job_handle),
+                Err(e) => Python::with_gil(|py| Err(convert_error(py, e))),
+            }
+        })
+    }
+
+    /// Poll an optimization job.
+    ///
+    /// :param job_handle: The job handle returned by `experimental_launch_optimization`.
+    /// :return: An `OptimizerStatus` object.
+    #[pyo3(signature = (*, job_handle))]
+    fn experimental_poll_optimization(
+        this: PyRef<'_, Self>,
+        job_handle: OptimizationJobHandle,
+    ) -> PyResult<Bound<'_, PyAny>> {
+        let client = this.as_super().client.clone();
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.experimental_poll_optimization(&job_handle).await;
+            match res {
+                Ok(status) => Ok(OptimizationJobInfoPyClass::new(status)),
+                Err(e) => Python::with_gil(|py| Err(convert_error(py, e))),
+            }
         })
     }
 }

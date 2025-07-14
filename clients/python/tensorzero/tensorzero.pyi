@@ -28,6 +28,7 @@ from tensorzero import (
     InferenceInput,
     InferenceResponse,
     JsonDatapointInsert,
+    OptimizationConfig,
 )
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
@@ -102,6 +103,57 @@ class RenderedSample:
     dispreferred_outputs: List[ChatInferenceOutput] = []
 
 @final
+class OptimizationJobHandle:
+    OpenAISFT: Type["OptimizationJobHandle"]
+    FireworksSFT: Type["OptimizationJobHandle"]
+    TogetherSFT: Type["OptimizationJobHandle"]
+
+@final
+class OptimizationJobStatus:
+    Pending: Type["OptimizationJobStatus"]
+    Completed: Type["OptimizationJobStatus"]
+    Failed: Type["OptimizationJobStatus"]
+
+@final
+class OptimizationJobInfo:
+    OpenAISFT: Type["OptimizationJobInfo"]
+    FireworksSFT: Type["OptimizationJobInfo"]
+    @property
+    def message(self) -> str: ...
+    @property
+    def status(self) -> Type[OptimizationJobStatus]: ...
+    @property
+    def output(self) -> Optional[Any]: ...
+    @property
+    def estimated_finish(self) -> Optional[int]: ...
+
+@final
+class OpenAISFTConfig:
+    def __init__(
+        self,
+        *,
+        model: str,
+        batch_size: Optional[int] = None,
+        learning_rate_multiplier: Optional[float] = None,
+        n_epochs: Optional[int] = None,
+        credentials: Optional[str] = None,
+        api_base: Optional[str] = None,
+        seed: Optional[int] = None,
+        suffix: Optional[str] = None,
+    ) -> None: ...
+
+@final
+class FireworksSFTConfig:
+    def __init__(
+        self,
+        *,
+        model: str,
+        credentials: Optional[str] = None,
+        account_id: str,
+        api_base: Optional[str] = None,
+    ) -> None: ...
+
+@final
 class Datapoint:
     Chat: Type["Datapoint"]
     Json: Type["Datapoint"]
@@ -120,9 +172,89 @@ class Datapoint:
     def tool_params(self) -> Optional[Any]: ...
     @property
     def output_schema(self) -> Optional[Any]: ...
+    @property
+    def is_custom(self) -> bool: ...
+
+@final
+class ChatCompletionConfig:
+    @property
+    def system_template(self) -> Optional[str]: ...
+    @property
+    def user_template(self) -> Optional[str]: ...
+    @property
+    def assistant_template(self) -> Optional[str]: ...
+
+@final
+class BestOfNSamplingConfig:
+    pass
+
+@final
+class DiclConfig:
+    pass
+
+@final
+class MixtureOfNConfig:
+    pass
+
+@final
+class ChainOfThoughtConfig:
+    pass
+
+@final
+class VariantsConfig:
+    def __len__(self) -> int: ...
+    def __getitem__(
+        self, key: str
+    ) -> Union[
+        ChatCompletionConfig,
+        BestOfNSamplingConfig,
+        DiclConfig,
+        MixtureOfNConfig,
+        ChainOfThoughtConfig,
+    ]: ...
+
+@final
+class FunctionConfigChat:
+    @property
+    def type(self) -> Literal["chat"]: ...
+    @property
+    def variants(self) -> VariantsConfig: ...
+    @property
+    def system_schema(self) -> Optional[Any]: ...
+    @property
+    def user_schema(self) -> Optional[Any]: ...
+    @property
+    def assistant_schema(self) -> Optional[Any]: ...
+
+@final
+class FunctionConfigJson:
+    @property
+    def type(self) -> Literal["json"]: ...
+    @property
+    def variants(self) -> VariantsConfig: ...
+    @property
+    def system_schema(self) -> Optional[Any]: ...
+    @property
+    def user_schema(self) -> Optional[Any]: ...
+    @property
+    def assistant_schema(self) -> Optional[Any]: ...
+    @property
+    def output_schema(self) -> Optional[Any]: ...
+
+@final
+class FunctionsConfig:
+    def __len__(self) -> int: ...
+    def __getitem__(
+        self, key: str
+    ) -> Union[FunctionConfigChat, FunctionConfigJson]: ...
+
+@final
+class Config:
+    @property
+    def functions(self) -> FunctionsConfig: ...
 
 class BaseTensorZeroGateway:
-    pass
+    def experimental_get_config(self) -> Config: ...
 
 @final
 class TensorZeroGateway(BaseTensorZeroGateway):
@@ -415,6 +547,36 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param stored_samples: A list of stored samples (datapoints or inferences) to render.
         :param variants: A mapping from function name to variant name.
         :return: A list of rendered samples.
+        """
+        ...
+
+    def experimental_launch_optimization(
+        self,
+        *,
+        train_samples: List[RenderedSample],
+        val_samples: Optional[List[RenderedSample]] = None,
+        optimization_config: OptimizationConfig,
+    ) -> OptimizationJobHandle:
+        """
+        Launch an optimization job.
+
+        :param train_samples: A list of RenderedSample objects that will be used for training.
+        :param val_samples: A list of RenderedSample objects that will be used for validation.
+        :param optimization_config: The optimization config.
+        :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+        """
+        ...
+
+    def experimental_poll_optimization(
+        self,
+        *,
+        job_handle: OptimizationJobHandle,
+    ) -> OptimizationJobInfo:
+        """
+        Poll an optimization job.
+
+        :param job_handle: The job handle returned by `experimental_launch_optimization`.
+        :return: An `OptimizerStatus` object.
         """
         ...
 
@@ -729,6 +891,36 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A list of rendered samples.
         """
 
+    async def experimental_launch_optimization(
+        self,
+        *,
+        train_samples: List[RenderedSample],
+        val_samples: Optional[List[RenderedSample]] = None,
+        optimization_config: OptimizationConfig,
+    ) -> OptimizationJobHandle:
+        """
+        Launch an optimization job.
+
+        :param train_samples: A list of RenderedSample objects that will be used for training.
+        :param val_samples: A list of RenderedSample objects that will be used for validation.
+        :param optimization_config: The optimization config.
+        :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+        """
+        ...
+
+    async def experimental_poll_optimization(
+        self,
+        *,
+        job_handle: OptimizationJobHandle,
+    ) -> OptimizationJobInfo:
+        """
+        Poll an optimization job.
+
+        :param job_handle: The job handle returned by `experimental_launch_optimization`.
+        :return: An `OptimizerStatus` object.
+        """
+        ...
+
     async def close(self) -> None:
         """
         Close the connection to the TensorZero gateway.
@@ -758,12 +950,27 @@ class LocalHttpGateway(object):
 __all__ = [
     "AsyncTensorZeroGateway",
     "BaseTensorZeroGateway",
+    "BestOfNSamplingConfig",
+    "ChatCompletionConfig",
+    "ChainOfThoughtConfig",
+    "Config",
     "Datapoint",
+    "DiclConfig",
+    "FunctionConfigChat",
+    "FunctionConfigJson",
+    "FunctionsConfig",
+    "FireworksSFTConfig",
     "TensorZeroGateway",
     "LocalHttpGateway",
+    "MixtureOfNConfig",
     "_start_http_gateway",
+    "OpenAISFTConfig",
+    "OptimizationJobHandle",
+    "OptimizationJobInfo",
+    "OptimizationJobStatus",
     "RenderedSample",
     "StoredInference",
     "ResolvedInput",
     "ResolvedInputMessage",
+    "VariantsConfig",
 ]

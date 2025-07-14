@@ -11,7 +11,7 @@ use crate::stored_inference::{
 };
 
 pub async fn render_samples<T: StoredSample>(
-    config: Arc<Config<'static>>,
+    config: Arc<Config>,
     mut stored_samples: Vec<T>,
     variants: HashMap<String, String>,
 ) -> Result<Vec<RenderedSample>, Error> {

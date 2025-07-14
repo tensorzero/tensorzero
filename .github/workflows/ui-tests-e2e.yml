@@ -48,6 +48,8 @@ jobs:
       - name: Start Docker containers and apply fixtures
         working-directory: ui
         run: |
+          # We set all of the environment variables for both the gateway and ui containers here
+          # The 'ui-tests-e2e' job tests that the UI container starts without some of these variables set,
           echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
           echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
@@ -152,42 +154,41 @@ jobs:
         run: |
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml build fixtures mock-inference-provider
 
-      - name: Start Docker containers and apply fixtures
+      - name: Start dependency Docker containers and apply fixtures
         working-directory: ui
         run: |
-          echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
-          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
-          echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
-          echo "OPENAI_API_KEY=not_used" >> fixtures/.env
-          echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
-          echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env
-          echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
+          # Environment variables shared by the gateway and ui containers
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --no-build -d
-          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml wait fixtures
+          # We need these set in the ui container, so that we construct the correct optimizer config
+          # to pass to 'experimentalLaunchOptimizationWorkflow'
+          echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
+          echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
+          echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
+
+          # Environment variables only used by the gateway container
+          # We deliberately leave these unset when starting the UI container, to ensure
+          # that it doesn't depend on them being set
+          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env-gateway
+          echo "OPENAI_API_KEY=not_used" >> fixtures/.env-gateway
+          echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env-gateway
+          echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env-gateway
+          docker compose -f fixtures/docker-compose.e2e.yml up --no-build -d
+          docker compose -f fixtures/docker-compose.e2e.yml wait fixtures
+
+      - name: Start UI Docker container
+        working-directory: ui
+        run: |
+          docker compose -f fixtures/docker-compose.ui.yml up --no-build -d
 
       - name: Run UI E2E tests
         id: e2e_tests
         env:
           TENSORZERO_CI: 1
         continue-on-error: true
-        run: pnpm ui:test:e2e --grep-invert "fine-tune on image|fine-tune with a mocked Fireworks server"
-
-      - name: Restart UI container with native SFT flag
-        working-directory: ui
-        run: |
-          echo "TENSORZERO_UI_FF_USE_NATIVE_SFT=1" >> fixtures/.env
-          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --no-build -d ui
-
-      - name: Run Rust E2E tests
-        id: rust_e2e_tests
-        env:
-          TENSORZERO_CI: 1
-        continue-on-error: true
-        run: pnpm ui:test:e2e --grep "tuning"
+        run: pnpm ui:test:e2e
 
       - name: Print Docker Compose logs
         if: always()

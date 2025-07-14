@@ -2,6 +2,10 @@ use backon::ExponentialBuilder;
 use backon::Retryable;
 use futures::StreamExt;
 use itertools::izip;
+#[cfg(feature = "pyo3")]
+use pyo3::exceptions::PyValueError;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
@@ -18,6 +22,8 @@ use crate::endpoints::inference::InferenceIds;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::Error;
 use crate::error::ErrorDetails;
+#[cfg(feature = "pyo3")]
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
 use crate::inference::types::extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
@@ -54,7 +60,7 @@ pub struct VariantInfo {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum VariantConfig {
@@ -63,6 +69,36 @@ pub enum VariantConfig {
     Dicl(dicl::DiclConfig),
     MixtureOfN(mixture_of_n::MixtureOfNConfig),
     ChainOfThought(chain_of_thought::ChainOfThoughtConfig),
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "ChatCompletionConfig")]
+pub struct ChatCompletionConfigPyClass {
+    pub inner: Arc<VariantInfo>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "BestOfNSamplingConfig")]
+pub struct BestOfNSamplingConfigPyClass {
+    pub inner: Arc<VariantInfo>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "DiclConfig")]
+pub struct DiclConfigPyClass {
+    pub inner: Arc<VariantInfo>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "MixtureOfNConfig")]
+pub struct MixtureOfNConfigPyClass {
+    pub inner: Arc<VariantInfo>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "ChainOfThoughtConfig")]
+pub struct ChainOfThoughtConfigPyClass {
+    pub inner: Arc<VariantInfo>,
 }
 
 /// This type is used to determine how to enforce JSON mode for a given variant.
@@ -738,6 +774,45 @@ impl<'a> BatchInferenceConfig<'a> {
             function_name,
             variant_name,
         }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+impl ChatCompletionConfigPyClass {
+    fn extract_chat_completion_config(
+        variant_info: &VariantInfo,
+    ) -> Result<&chat_completion::ChatCompletionConfig, PyErr> {
+        match &variant_info.inner {
+            VariantConfig::ChatCompletion(config) => Ok(config),
+            _ => Err(PyValueError::new_err(format!(
+                "Variant is not a chat completion variant: {IMPOSSIBLE_ERROR_MESSAGE}"
+            ))),
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ChatCompletionConfigPyClass {
+    #[getter]
+    fn get_system_template(&self) -> PyResult<Option<String>> {
+        let config = Self::extract_chat_completion_config(&self.inner)?;
+        Ok(config.system_template.as_ref().map(|t| t.contents.clone()))
+    }
+
+    #[getter]
+    fn get_user_template(&self) -> PyResult<Option<String>> {
+        let config = Self::extract_chat_completion_config(&self.inner)?;
+        Ok(config.user_template.as_ref().map(|t| t.contents.clone()))
+    }
+
+    #[getter]
+    fn get_assistant_template(&self) -> PyResult<Option<String>> {
+        let config = Self::extract_chat_completion_config(&self.inner)?;
+        Ok(config
+            .assistant_template
+            .as_ref()
+            .map(|t| t.contents.clone()))
     }
 }
 

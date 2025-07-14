@@ -143,6 +143,7 @@ pub async fn inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        ..
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
@@ -198,7 +199,7 @@ pub struct InferenceIds {
     )
 )]
 pub async fn inference(
-    config: Arc<Config<'static>>,
+    config: Arc<Config>,
     http_client: &reqwest::Client,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
@@ -529,13 +530,13 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                 Arc::new(FunctionConfig::Chat(FunctionConfigChat {
                     variants: [(
                         model_name.clone(),
-                        VariantInfo {
+                        Arc::new(VariantInfo {
                             timeouts: Default::default(),
                             inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
                                 model: (&**model_name).into(),
                                 ..Default::default()
                             }),
-                        },
+                        }),
                     )]
                     .into_iter()
                     .collect(),
@@ -563,7 +564,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
 
 fn create_stream(
     function: Arc<FunctionConfig>,
-    config: Arc<Config<'static>>,
+    config: Arc<Config>,
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
@@ -825,7 +826,7 @@ async fn write_file(
 
 async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    config: &Config<'_>,
+    config: &Config,
     input: ResolvedInput,
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,

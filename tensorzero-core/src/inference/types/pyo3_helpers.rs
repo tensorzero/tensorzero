@@ -10,7 +10,12 @@ use uuid::Uuid;
 
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, ResolvedInput, ResolvedInputMessageContent};
-use crate::stored_inference::{SimpleStoredSampleInfo, StoredInference, StoredSample};
+use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
+use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
+use crate::optimization::UninitializedOptimizerConfig;
+use crate::stored_inference::{
+    RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredSample,
+};
 
 use super::ContentBlock;
 
@@ -294,6 +299,34 @@ pub fn deserialize_from_stored_sample<'a>(
         Ok(StoredSampleItem::Datapoint(obj.extract()?))
     } else {
         deserialize_from_pyobj(py, obj)
+    }
+}
+
+/// In the `experimental_launch_optimization` function, we need to be able to accept
+/// either an arbitrary Python object that matches the serialization pattern of the
+/// `RenderedSample` type or a `RenderedSample` object.
+pub fn deserialize_from_rendered_sample<'a>(
+    py: Python<'a>,
+    obj: &Bound<'a, PyAny>,
+) -> PyResult<RenderedSample> {
+    if obj.is_instance_of::<RenderedSample>() {
+        Ok(obj.extract()?)
+    } else {
+        deserialize_from_pyobj(py, obj)
+    }
+}
+
+pub fn deserialize_optimization_config(
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<UninitializedOptimizerConfig> {
+    if obj.is_instance_of::<UninitializedOpenAISFTConfig>() {
+        Ok(UninitializedOptimizerConfig::OpenAISFT(obj.extract()?))
+    } else if obj.is_instance_of::<UninitializedFireworksSFTConfig>() {
+        Ok(UninitializedOptimizerConfig::FireworksSFT(obj.extract()?))
+    } else {
+        Err(PyValueError::new_err(
+            "Invalid optimization config. Expected OpenAISFTConfig or FireworksSFTConfig",
+        ))
     }
 }
 

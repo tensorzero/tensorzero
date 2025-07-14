@@ -806,7 +806,7 @@ pub struct ChatInferenceDatabaseInsert {
     pub processing_time_ms: Option<u32>,
     pub ttft_ms: Option<u32>,
     pub tags: HashMap<String, String>,
-    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_defaulted_json_string")]
     pub extra_body: UnfilteredInferenceExtraBody,
 }
 
@@ -830,7 +830,7 @@ pub struct JsonInferenceDatabaseInsert {
     pub output_schema: Value,
     pub ttft_ms: Option<u32>,
     pub tags: HashMap<String, String>,
-    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_defaulted_json_string")]
     pub extra_body: UnfilteredInferenceExtraBody,
 }
 

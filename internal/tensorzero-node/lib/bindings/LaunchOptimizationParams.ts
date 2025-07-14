@@ -3,7 +3,7 @@ import type { RenderedSample } from "./RenderedSample";
 import type { UninitializedOptimizerInfo } from "./UninitializedOptimizerInfo";
 
 export type LaunchOptimizationParams = {
-  train_examples: Array<RenderedSample>;
-  val_examples: Array<RenderedSample> | null;
-  optimizer_config: UninitializedOptimizerInfo;
+  train_samples: Array<RenderedSample>;
+  val_samples: Array<RenderedSample> | null;
+  optimization_config: UninitializedOptimizerInfo;
 };

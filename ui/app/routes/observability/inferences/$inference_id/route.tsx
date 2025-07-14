@@ -56,10 +56,8 @@ import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { logger } from "~/utils/logger";
-import {
-  handleJsonProcessingError,
-  processJson,
-} from "~/utils/syntax-highlighting.server";
+import { JSONParseError } from "~/utils/common";
+import { processJson } from "~/utils/syntax-highlighting.server";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
 
@@ -171,8 +169,18 @@ export async function action({ request }: Route.ActionArgs) {
     case "addToDataset": {
       const dataset = formData.get("dataset");
       const output = formData.get("output");
-      const inference_id = formData.get("inference_id");
-      if (!dataset || !output || !inference_id) {
+      const inferenceId = formData.get("inference_id");
+      const functionName = formData.get("function_name");
+      const variantName = formData.get("variant_name");
+      const episodeId = formData.get("episode_id");
+      if (
+        !dataset ||
+        !output ||
+        !inferenceId ||
+        !functionName ||
+        !variantName ||
+        !episodeId
+      ) {
         return data<ActionData>(
           { error: "Missing required fields" },
           { status: 400 },
@@ -181,8 +189,11 @@ export async function action({ request }: Route.ActionArgs) {
       try {
         const datapoint = await getTensorZeroClient().createDatapoint(
           dataset.toString(),
-          inference_id.toString(),
+          inferenceId.toString(),
           output.toString() as "inherit" | "demonstration" | "none",
+          functionName.toString(),
+          variantName.toString(),
+          episodeId.toString(),
         );
         return data<ActionData>({
           redirectTo: `/datasets/${dataset.toString()}/datapoint/${datapoint.id}`,
@@ -306,6 +317,9 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     formData.append("dataset", dataset);
     formData.append("output", output);
     formData.append("inference_id", inference.id);
+    formData.append("function_name", inference.function_name);
+    formData.append("variant_name", inference.variant_name);
+    formData.append("episode_id", inference.episode_id);
     formData.append("_action", "addToDataset");
     addToDatasetFetcher.submit(formData, { method: "post", action: "." });
   };
@@ -411,7 +425,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <InputSnippet {...inference.input} />
+          <InputSnippet
+            system={inference.input.system}
+            messages={inference.input.messages}
+          />
         </SectionLayout>
 
         <SectionLayout>
@@ -453,21 +470,13 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Inference Parameters" />
-          <ParameterCard
-            parameters={inferenceParams.raw}
-            html={inferenceParams.html}
-          />
+          <ParameterCard parameters={inferenceParams.raw} />
         </SectionLayout>
 
         {inference.function_type === "chat" && (
           <SectionLayout>
             <SectionHeader heading="Tool Parameters" />
-            {toolParams && (
-              <ParameterCard
-                parameters={toolParams.raw}
-                html={inferenceParams.html}
-              />
-            )}
+            {toolParams && <ParameterCard parameters={toolParams.raw} />}
           </SectionLayout>
         )}
 
@@ -564,4 +573,13 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </div>
     </div>
   );
+}
+
+function handleJsonProcessingError(error: unknown): never {
+  if (error instanceof JSONParseError) {
+    throw data(error.message, { status: 400 });
+  }
+  throw data(`Server error while processing JSON. Please contact support.`, {
+    status: 500,
+  });
 }

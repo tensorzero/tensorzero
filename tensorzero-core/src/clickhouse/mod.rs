@@ -13,7 +13,7 @@ use url::Url;
 
 pub mod migration_manager;
 pub mod query_builder;
-#[cfg(any(test, feature = "e2e_tests"))]
+#[cfg(any(test, feature = "e2e_tests", feature = "optimization_tests"))]
 pub mod test_helpers;
 
 use crate::config_parser::Config;
@@ -473,7 +473,7 @@ impl ClickHouseConnectionInfo {
 
     pub async fn list_inferences(
         &self,
-        config: &Config<'_>,
+        config: &Config,
         opts: &ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInference>, Error> {
         let (sql, params) = generate_list_inferences_sql(config, opts)?;
@@ -711,7 +711,7 @@ where
 /// Currently only used in the query builder.
 /// TODO: use across the codebase.
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 pub enum ClickhouseFormat {
     #[default]

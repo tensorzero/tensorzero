@@ -298,24 +298,55 @@ async def test_async_client_build_embedded_sync():
 
 
 @pytest.mark.asyncio
+async def test_async_thought_input(async_client: AsyncTensorZeroGateway):
+    result = await async_client.inference(
+        model_name="dummy::echo_request_messages",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "thought",
+                            "text": "my_first_thought",
+                            "signature": "my_first_signature",
+                        },
+                        Thought(
+                            text="my_second_thought", signature="my_second_signature"
+                        ),
+                    ],
+                }
+            ],
+        },
+        tags={"key": "value"},
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert len(result.content) == 1
+    assert isinstance(result.content[0], Text)
+    assert (
+        result.content[0].text
+        == '{"system":null,"messages":[{"role":"user","content":[{"type":"thought","text":"my_first_thought","signature":"my_first_signature"},{"type":"thought","text":"my_second_thought","signature":"my_second_signature"}]}]}'
+    )
+
+
+@pytest.mark.asyncio
 async def test_async_reasoning_inference(async_client: AsyncTensorZeroGateway):
     result = await async_client.inference(
-        function_name="basic_test",
-        variant_name="reasoner",
+        model_name="dummy::reasoner_with_signature",
         input={
-            "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": "Hello"}],
         },
         tags={"key": "value"},
     )
     assert isinstance(result, ChatInferenceResponse)
-    assert result.variant_name == "reasoner"
+    assert result.variant_name == "dummy::reasoner_with_signature"
     assert result.original_response is None
     content = result.content
     assert len(content) == 2
     assert isinstance(content[0], Thought)
     assert content[0].type == "thought"
     assert content[0].text == "hmmm"
+    assert content[0].signature == "my_signature"
     assert isinstance(content[1], Text)
     assert content[1].type == "text"
     assert (
@@ -524,6 +555,7 @@ async def test_async_reasoning_inference_streaming(
             assert chunk.content[0].type == "thought"
             assert isinstance(chunk.content[0], ThoughtChunk)
             assert chunk.content[0].text == expected_thinking[i]
+            assert chunk.content[0].signature is None
         elif i < len(expected_thinking) + len(expected_text):
             assert len(chunk.content) == 1
             assert chunk.content[0].type == "text"
@@ -2244,6 +2276,26 @@ def test_extra_body_types(sync_client: TensorZeroGateway):
                 model_provider_name="tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai",
                 pointer="/stop",
                 value="Potato",
+            ),
+            ProviderExtraBody(
+                model_provider_name="tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai",
+                pointer="/should_be_deleted_provider",
+                value=2,
+            ),
+            ProviderExtraBody(
+                model_provider_name="tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai",
+                pointer="/should_be_deleted_provider",
+                delete=True,
+            ),
+            VariantExtraBody(
+                variant_name="openai",
+                pointer="/should_be_deleted_variant",
+                value=2,
+            ),
+            VariantExtraBody(
+                variant_name="openai",
+                pointer="/should_be_deleted_variant",
+                delete=True,
             ),
         ],
     )

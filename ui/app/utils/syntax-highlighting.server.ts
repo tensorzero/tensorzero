@@ -1,6 +1,7 @@
 import { codeToHtml } from "shiki";
 import { JSONParseError } from "./common";
 import { data } from "react-router";
+import { logger } from "./logger";
 
 export type SupportedLanguage = "json";
 
@@ -26,7 +27,7 @@ export async function processJson(object: object, objectRef: string) {
   try {
     raw = JSON.stringify(object, null, 2);
     html = await highlightCode(raw).catch((error) => {
-      console.error(
+      logger.error(
         `Syntax error highlighting error for ${objectRef}. Using raw JSON instead.`,
         error,
       );
