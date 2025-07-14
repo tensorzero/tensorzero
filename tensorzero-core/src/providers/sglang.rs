@@ -666,7 +666,8 @@ mod tests {
 
     use crate::{
         inference::types::{
-            FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
+            extra_body::FullExtraBodyConfig, FinishReason, FunctionType,
+            ModelInferenceRequestJsonMode, RequestMessage, Role,
         },
         providers::{
             openai::{
@@ -707,7 +708,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let sglang_request = SGLangRequest::new(&model_name, &basic_request).unwrap();
@@ -744,7 +745,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         SGLangRequest::new(&model_name, &request_with_tools).expect_err("requires a schema");
@@ -768,7 +769,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         SGLangRequest::new(&model_name, &request_with_tools).expect_err("requires a schema");
@@ -793,7 +794,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -845,7 +846,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let sglang_response_with_metadata = SGLangResponseWithMetadata {
@@ -944,7 +945,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -988,7 +989,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let sglang_request = SGLangRequest::new(&model_name, &request_without_tools).unwrap();

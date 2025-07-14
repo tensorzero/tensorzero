@@ -496,6 +496,7 @@ mod tests {
 
     use super::*;
 
+    use crate::inference::types::extra_body::FullExtraBodyConfig;
     use crate::inference::types::{
         FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
@@ -525,7 +526,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -571,7 +572,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Json,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -670,7 +671,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let xai_response_with_metadata = XAIResponseWithMetadata {
