@@ -37,7 +37,7 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "Groq";
-const PROVIDER_TYPE: &str = "groq";
+pub const PROVIDER_TYPE: &str = "groq";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]

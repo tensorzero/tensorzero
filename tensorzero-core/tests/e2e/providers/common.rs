@@ -1730,6 +1730,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
                         content: vec![ClientInputMessageContent::Thought(Thought {
                             text: "My TensorZero thought".to_string(),
                             signature: Some("My TensorZero signature".to_string()),
+                            provider_type: None,
                         })],
                     },
                     ClientInputMessage {

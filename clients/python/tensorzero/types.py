@@ -123,6 +123,7 @@ class Thought(ContentBlock):
     text: str
     type: str = "thought"
     signature: Optional[str] = None
+    _internal_provider_type: Optional[str] = None
 
 
 @dataclass
@@ -282,6 +283,7 @@ class ThoughtChunk(ContentBlockChunk):
     text: str
     type: str = "thought"
     signature: Optional[str] = None
+    _internal_provider_type: Optional[str] = None
 
 
 @dataclass

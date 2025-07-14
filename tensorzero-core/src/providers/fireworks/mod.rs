@@ -645,6 +645,7 @@ fn fireworks_to_tensorzero_chunk(
                                 text: Some(text.to_string()),
                                 signature: None,
                                 id: thinking_state.get_id(),
+                                provider_type: Some(PROVIDER_TYPE.to_string()),
                             }));
                         }
                     }
@@ -751,6 +752,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 content.push(ContentBlockOutput::Thought(Thought {
                     text: reasoning,
                     signature: None,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             if !clean_text.is_empty() {

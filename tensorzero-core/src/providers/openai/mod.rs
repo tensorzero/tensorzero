@@ -171,6 +171,10 @@ impl OpenAICredentials {
 }
 
 impl WrappedProvider for OpenAIProvider {
+    fn thought_block_provider_type_suffix(&self) -> Cow<'static, str> {
+        Cow::Borrowed("openai")
+    }
+
     fn make_body<'a>(
         &'a self,
         ModelProviderRequest {

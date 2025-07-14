@@ -2149,6 +2149,7 @@ fn content_part_to_tensorzero_chunk(
                     id: "0".to_string(),
                     text: Some(text),
                     signature: part.thought_signature,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 })));
             }
             // Handle 'thought/thoughtSignature' with no other fields
@@ -2157,6 +2158,7 @@ fn content_part_to_tensorzero_chunk(
                     id: "0".to_string(),
                     text: None,
                     signature: part.thought_signature,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 })));
             }
             _ => {
@@ -2242,6 +2244,7 @@ fn convert_to_output(
                 return Ok(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
                     text,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             // Handle 'thought/thoughtSignature' with no other fields
@@ -2249,6 +2252,7 @@ fn convert_to_output(
                 return Ok(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
                     text: "".to_string(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             _ => {

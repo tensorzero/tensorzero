@@ -50,7 +50,7 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "Mistral";
-const PROVIDER_TYPE: &str = "mistral";
+pub const PROVIDER_TYPE: &str = "mistral";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]

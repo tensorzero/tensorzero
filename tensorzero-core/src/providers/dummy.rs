@@ -30,7 +30,7 @@ use crate::providers::helpers::inject_extra_request_data;
 use crate::tool::{ToolCall, ToolCallChunk};
 
 const PROVIDER_NAME: &str = "Dummy";
-const PROVIDER_TYPE: &str = "dummy";
+pub const PROVIDER_TYPE: &str = "dummy";
 
 #[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -97,6 +97,7 @@ impl DummyProvider {
                 text: Some(chunk.to_string()),
                 signature: None,
                 id: "0".to_string(),
+                provider_type: None,
             })
         });
         let response_chunks = response_chunks.into_iter().map(|chunk| {
@@ -336,6 +337,7 @@ impl InferenceProvider for DummyProvider {
                 ContentBlockOutput::Thought(Thought {
                     text: "hmmm".to_string(),
                     signature: None,
+                    provider_type: None,
                 }),
                 ContentBlockOutput::Text(Text {
                     text: DUMMY_INFER_RESPONSE_CONTENT.to_string(),
@@ -345,6 +347,7 @@ impl InferenceProvider for DummyProvider {
                 ContentBlockOutput::Thought(Thought {
                     text: "hmmm".to_string(),
                     signature: Some("my_signature".to_string()),
+                    provider_type: None,
                 }),
                 ContentBlockOutput::Text(Text {
                     text: DUMMY_INFER_RESPONSE_CONTENT.to_string(),
@@ -354,6 +357,7 @@ impl InferenceProvider for DummyProvider {
                 ContentBlockOutput::Thought(Thought {
                     text: "hmmm".to_string(),
                     signature: None,
+                    provider_type: None,
                 }),
                 ContentBlockOutput::Text(Text {
                     text: DUMMY_JSON_RESPONSE_RAW.to_string(),
@@ -418,13 +422,15 @@ impl InferenceProvider for DummyProvider {
                     .to_string(),
                 })]
             }
-            "echo_request_messages" => vec![ContentBlockOutput::Text(Text {
-                text: json!({
-                    "system": request.system,
-                    "messages": request.messages,
-                })
-                .to_string(),
-            })],
+            "echo_request_messages" => {
+                vec![ContentBlockOutput::Text(Text {
+                    text: json!({
+                        "system": request.system,
+                        "messages": request.messages,
+                    })
+                    .to_string(),
+                })]
+            }
             "extract_images" => {
                 let images: Vec<_> = request
                     .messages
