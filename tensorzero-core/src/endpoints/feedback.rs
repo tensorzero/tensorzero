@@ -39,7 +39,7 @@ const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_secs(5);
 const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1200);
 
 /// The expected payload is a JSON object with the following fields:
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
     // the episode ID client is providing feedback for (either this or `inference_id` must be set but not both)

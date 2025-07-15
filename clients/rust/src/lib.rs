@@ -316,6 +316,19 @@ impl ClientBuilder {
         }
     }
 
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub async fn build_from_state(state: AppStateData) -> Result<Client, ClientBuilderError> {
+        Ok(Client {
+            mode: ClientMode::EmbeddedGateway {
+                gateway: EmbeddedGateway { state },
+                timeout: None,
+            },
+            verbose_errors: false,
+            #[cfg(feature = "e2e_tests")]
+            last_body: Default::default(),
+        })
+    }
+
     /// Builds a `Client` in HTTPGateway mode, erroring if the mode is not HTTPGateway
     /// This allows avoiding calling the async `build` method
     pub fn build_http(self) -> Result<Client, ClientBuilderError> {
