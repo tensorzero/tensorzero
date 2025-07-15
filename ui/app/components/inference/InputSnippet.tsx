@@ -1,13 +1,10 @@
 import type {
-  DisplayInput,
   DisplayInputMessageContent,
   DisplayInputMessage,
 } from "~/utils/clickhouse/common";
 import {
   SnippetLayout,
   SnippetContent,
-  SnippetHeading,
-  SnippetDivider,
   SnippetMessage,
 } from "~/components/layout/SnippetLayout";
 import {
@@ -19,64 +16,48 @@ import {
   AudioMessage,
   TextMessage,
   EmptyMessage,
+  ParameterizedMessage,
 } from "~/components/layout/SnippetContent";
+import type { JsonObject } from "type-fest";
 
 interface InputSnippetProps {
-  input: DisplayInput;
+  messages: DisplayInputMessage[];
+  system?: string | JsonObject | null;
 }
 
 function renderContentBlock(block: DisplayInputMessageContent, index: number) {
   switch (block.type) {
-    case "structured_text": {
-      return (
-        <TextMessage
-          key={index}
-          label="Text (Arguments)"
-          content={JSON.stringify(block.arguments, null, 2)}
-          type="structured"
-        />
-      );
-    }
+    case "structured_text":
+      return <ParameterizedMessage key={index} parameters={block.arguments} />;
 
-    case "unstructured_text": {
-      return (
-        <TextMessage
-          key={index}
-          label="Text"
-          content={block.text}
-          type="default"
-        />
-      );
-    }
+    // Unstructured text is a function/variant with no schema
+    case "unstructured_text":
+      return <TextMessage key={index} label="Text" content={block.text} />;
 
-    case "missing_function_text": {
+    // "Raw text" is when the user submits an inference on the function/variant and overrides template interpolation
+    case "raw_text":
+      return <TextMessage key={index} label="Raw Text" content={block.value} />;
+
+    case "missing_function_text":
       return (
         <TextMessage
           key={index}
           label="Text (Missing Function Config)"
           content={block.value}
-          type="default"
-        />
-      );
-    }
-
-    case "raw_text":
-      return (
-        <TextMessage
-          key={index}
-          label="Text (Raw)"
-          content={block.value}
-          type="structured"
         />
       );
 
     case "tool_call":
+      // NOTE: since tool calls are stored as a string in ResolvedInput and therefore the database
+      // and we are not guaranteed that they are valid JSON, we try to parse them as JSON
+      // and if they are not valid JSON, we display the raw string
       return (
         <ToolCallMessage
           key={index}
           toolName={block.name}
-          toolArguments={JSON.stringify(JSON.parse(block.arguments), null, 2)}
-          // TODO: if arguments is null, display raw arguments without parsing
+          toolRawName={block.name} // tool calls in the input aren't parsed, so there's no "raw"
+          toolArguments={block.arguments}
+          toolRawArguments={block.arguments} // tool calls in the input aren't parsed, so there's no "raw"
           toolCallId={block.id}
         />
       );
@@ -92,93 +73,63 @@ function renderContentBlock(block: DisplayInputMessageContent, index: number) {
       );
 
     case "file":
-      if (block.file.mime_type.startsWith("image/")) {
-        return (
-          <ImageMessage
-            key={index}
-            url={block.file.dataUrl}
-            downloadName={`tensorzero_${block.storage_path.path}`}
-          />
-        );
-      } else if (block.file.mime_type.startsWith("audio/")) {
-        return (
-          <AudioMessage
-            key={index}
-            fileData={block.file.dataUrl}
-            mimeType={block.file.mime_type}
-            filePath={block.storage_path.path}
-          />
-        );
-      } else {
-        return (
-          <FileMessage
-            key={index}
-            fileData={block.file.dataUrl}
-            mimeType={block.file.mime_type}
-            filePath={block.storage_path.path}
-          />
-        );
-      }
+      return block.file.mime_type.startsWith("image/") ? (
+        <ImageMessage
+          key={index}
+          url={block.file.dataUrl}
+          downloadName={`tensorzero_${block.storage_path.path}`}
+        />
+      ) : block.file.mime_type.startsWith("audio/") ? (
+        <AudioMessage
+          key={index}
+          fileData={block.file.dataUrl}
+          mimeType={block.file.mime_type}
+          filePath={block.storage_path.path}
+        />
+      ) : (
+        <FileMessage
+          key={index}
+          fileData={block.file.dataUrl}
+          mimeType={block.file.mime_type}
+          filePath={block.storage_path.path}
+        />
+      );
 
     case "file_error":
       return <FileErrorMessage key={index} error="Failed to retrieve file" />;
-
-    default:
-      return null;
   }
 }
 
-function renderMessage(message: DisplayInputMessage, messageIndex: number) {
-  return (
-    <SnippetMessage variant="input" key={messageIndex} role={message.role}>
-      {message.content.map(
-        (block: DisplayInputMessageContent, blockIndex: number) =>
-          renderContentBlock(block, blockIndex),
-      )}
-    </SnippetMessage>
-  );
-}
-
-export default function InputSnippet({ input }: InputSnippetProps) {
+export default function InputSnippet({ system, messages }: InputSnippetProps) {
   return (
     <SnippetLayout>
-      {input.system && (
-        <>
-          <SnippetHeading heading="System" />
-          <SnippetContent>
-            <SnippetMessage>
-              {typeof input.system === "object" ? (
-                <TextMessage
-                  content={JSON.stringify(input.system, null, 2)}
-                  type="structured"
-                />
-              ) : (
-                <TextMessage content={input.system} />
-              )}
-            </SnippetMessage>
-          </SnippetContent>
-          <SnippetDivider />
-        </>
+      {!system && messages.length === 0 && (
+        <SnippetContent>
+          <EmptyMessage message="Empty input" />
+        </SnippetContent>
       )}
 
-      <div>
-        {input.messages.length === 0 ? (
-          <SnippetContent>
-            <EmptyMessage message="No input messages found" />
-          </SnippetContent>
-        ) : (
-          <>
-            <SnippetHeading heading="Messages" />
-            <SnippetContent>
-              {input.messages.map((message, messageIndex) => (
-                <div key={messageIndex}>
-                  {renderMessage(message, messageIndex)}
-                </div>
-              ))}
-            </SnippetContent>
-          </>
-        )}
-      </div>
+      {system && (
+        <SnippetContent>
+          <SnippetMessage role="system">
+            {typeof system === "object" ? (
+              <ParameterizedMessage parameters={system} />
+            ) : (
+              <TextMessage content={system} />
+            )}
+          </SnippetMessage>
+        </SnippetContent>
+      )}
+
+      {messages.length > 0 && (
+        <SnippetContent>
+          {messages.map((message, messageIndex) => (
+            <SnippetMessage role={message.role} key={messageIndex}>
+              {message.content.map(renderContentBlock)}
+            </SnippetMessage>
+          ))}
+        </SnippetContent>
+      )}
     </SnippetLayout>
   );
 }

@@ -64,7 +64,7 @@ async fn e2e_test_inference_flaky() {
     let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
-    assert_eq!(output_tokens, 10);
+    assert_eq!(output_tokens, 1);
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -122,7 +122,7 @@ async fn e2e_test_inference_flaky() {
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert_eq!(output_tokens, 10);
+    assert_eq!(output_tokens, 1);
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
@@ -393,8 +393,8 @@ async fn e2e_test_best_of_n_dummy_candidates_flaky_judge() {
     let usage = usage.as_object().unwrap();
     let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(input_tokens > 10);
-    assert!(output_tokens > 20);
+    assert!(input_tokens > 10, "Unexpected input tokens: {input_tokens}");
+    assert_eq!(output_tokens, 3, "Unexpected output tokens");
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -481,7 +481,7 @@ async fn e2e_test_best_of_n_dummy_candidates_flaky_judge() {
     let expected_model_names: std::collections::HashSet<String> =
         ["test", "json", "flaky_best_of_n_judge"]
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
     assert_eq!(model_names, expected_model_names);
 }

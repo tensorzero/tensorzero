@@ -2,6 +2,10 @@ use backon::ExponentialBuilder;
 use backon::Retryable;
 use futures::StreamExt;
 use itertools::izip;
+#[cfg(feature = "pyo3")]
+use pyo3::exceptions::PyValueError;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
@@ -18,6 +22,8 @@ use crate::endpoints::inference::InferenceIds;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::Error;
 use crate::error::ErrorDetails;
+#[cfg(feature = "pyo3")]
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
 use crate::inference::types::extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
@@ -45,14 +51,16 @@ pub mod mixture_of_n;
 
 /// Holds a particular variant implementation, plus additional top-level configuration
 /// that is applicable to any variant type.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct VariantInfo {
     pub inner: VariantConfig,
     pub timeouts: TimeoutsConfig,
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum VariantConfig {
@@ -61,6 +69,36 @@ pub enum VariantConfig {
     Dicl(dicl::DiclConfig),
     MixtureOfN(mixture_of_n::MixtureOfNConfig),
     ChainOfThought(chain_of_thought::ChainOfThoughtConfig),
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "ChatCompletionConfig")]
+pub struct ChatCompletionConfigPyClass {
+    pub inner: Arc<VariantInfo>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "BestOfNSamplingConfig")]
+pub struct BestOfNSamplingConfigPyClass {
+    pub inner: Arc<VariantInfo>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "DiclConfig")]
+pub struct DiclConfigPyClass {
+    pub inner: Arc<VariantInfo>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "MixtureOfNConfig")]
+pub struct MixtureOfNConfigPyClass {
+    pub inner: Arc<VariantInfo>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "ChainOfThoughtConfig")]
+pub struct ChainOfThoughtConfigPyClass {
+    pub inner: Arc<VariantInfo>,
 }
 
 /// This type is used to determine how to enforce JSON mode for a given variant.
@@ -147,8 +185,9 @@ pub struct ModelUsedInfo {
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
-    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub cached: bool,
+    // These responses will get added into the final inference result (after `collect_chunks` finishes)
+    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
 }
 
 pub trait Variant {
@@ -294,7 +333,7 @@ impl Variant for VariantInfo {
                 // so that it can be handled by the `match response` block below
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
-                        variant_name: inference_config.variant_name.map(|v| v.to_string()),
+                        variant_name: inference_config.variant_name.map(str::to_string),
                         timeout,
                         streaming: false,
                     }))
@@ -390,7 +429,7 @@ impl Variant for VariantInfo {
                 .await
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
-                        variant_name: inference_config.variant_name.map(|v| v.to_string()),
+                        variant_name: inference_config.variant_name.map(str::to_string),
                         timeout,
                         streaming: true,
                     }))
@@ -636,14 +675,12 @@ async fn infer_model_request(
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, args.model_name);
     let raw_content = model_inference_result.output.clone();
-    let usage = model_inference_result.actual_usage();
     let model_inference_results = vec![model_inference_result];
 
     args.function
         .prepare_response(
             args.inference_config.ids.inference_id,
             raw_content,
-            usage,
             model_inference_results,
             args.inference_config,
             args.inference_params,
@@ -740,6 +777,45 @@ impl<'a> BatchInferenceConfig<'a> {
     }
 }
 
+#[cfg(feature = "pyo3")]
+impl ChatCompletionConfigPyClass {
+    fn extract_chat_completion_config(
+        variant_info: &VariantInfo,
+    ) -> Result<&chat_completion::ChatCompletionConfig, PyErr> {
+        match &variant_info.inner {
+            VariantConfig::ChatCompletion(config) => Ok(config),
+            _ => Err(PyValueError::new_err(format!(
+                "Variant is not a chat completion variant: {IMPOSSIBLE_ERROR_MESSAGE}"
+            ))),
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ChatCompletionConfigPyClass {
+    #[getter]
+    fn get_system_template(&self) -> PyResult<Option<String>> {
+        let config = Self::extract_chat_completion_config(&self.inner)?;
+        Ok(config.system_template.as_ref().map(|t| t.contents.clone()))
+    }
+
+    #[getter]
+    fn get_user_template(&self) -> PyResult<Option<String>> {
+        let config = Self::extract_chat_completion_config(&self.inner)?;
+        Ok(config.user_template.as_ref().map(|t| t.contents.clone()))
+    }
+
+    #[getter]
+    fn get_assistant_template(&self) -> PyResult<Option<String>> {
+        let config = Self::extract_chat_completion_config(&self.inner)?;
+        Ok(config
+            .assistant_template
+            .as_ref()
+            .map(|t| t.contents.clone()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -749,13 +825,13 @@ mod tests {
     use crate::error::ErrorDetails;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::{
-        ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role,
+        ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role, Usage,
     };
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
     use crate::providers::dummy::{
-        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_USAGE, DUMMY_JSON_RESPONSE_RAW,
+        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW,
         DUMMY_STREAMING_RESPONSE,
     };
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -1104,12 +1180,18 @@ mod tests {
         let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
+        assert_eq!(
+            inference_result.usage_considering_cached(),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 // The DummyProvider returns DUMMY_INFER_RESPONSE_CONTENT by default
                 let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
                 assert_eq!(chat_result.content, expected_content);
-                assert_eq!(chat_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(chat_result.model_inference_results.len(), 1);
                 assert_eq!(
                     &*chat_result.model_inference_results[0].model_name,
@@ -1213,6 +1295,13 @@ mod tests {
         let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
+        assert_eq!(
+            inference_result.usage_considering_cached(),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         match inference_result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(
@@ -1220,7 +1309,6 @@ mod tests {
                     Some(DUMMY_JSON_RESPONSE_RAW.to_string())
                 );
                 assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
-                assert_eq!(json_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
                     &*json_result.model_inference_results[0].model_name,
@@ -1410,12 +1498,18 @@ mod tests {
         let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
+        assert_eq!(
+            inference_result.usage_considering_cached(),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 // The DummyProvider returns DUMMY_INFER_RESPONSE_CONTENT by default
                 let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
                 assert_eq!(chat_result.content, expected_content);
-                assert_eq!(chat_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(chat_result.model_inference_results.len(), 1);
                 assert_eq!(
                     &*chat_result.model_inference_results[0].model_name,

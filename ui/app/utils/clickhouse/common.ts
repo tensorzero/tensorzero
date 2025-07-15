@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { FunctionConfig } from "../config/function";
+import type { FunctionConfig } from "tensorzero-node";
 
 export const roleSchema = z.enum(["user", "assistant"]);
 export type Role = z.infer<typeof roleSchema>;
@@ -354,6 +354,11 @@ export const TableBoundsSchema = z.object({
   last_id: z.string().uuid().nullable(), // UUIDv7 string
 });
 export type TableBounds = z.infer<typeof TableBoundsSchema>;
+
+export const TableBoundsWithCountSchema = TableBoundsSchema.extend({
+  count: z.number(),
+});
+export type TableBoundsWithCount = z.infer<typeof TableBoundsWithCountSchema>;
 
 export const FeedbackBoundsSchema = TableBoundsSchema.extend({
   by_type: z.object({

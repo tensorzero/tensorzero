@@ -598,6 +598,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                is_custom: true,
             }),
         )
         .unwrap()
@@ -665,6 +666,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                is_custom: true,
             }),
         )
         .unwrap()
@@ -822,7 +824,7 @@ mod tests {
                 value: "raw text".to_string(),
             },
             ClientInputMessageContent::Thought(Thought {
-                text: "thought".to_string(),
+                text: Some("thought".to_string()),
                 signature: None,
             }),
         ];
@@ -891,6 +893,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let result = handle_reference_output(&config, &datapoint).unwrap();
         assert_eq!(result, None);
@@ -921,6 +924,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let err = handle_reference_output(&config, &datapoint).unwrap_err();
         assert_eq!(
@@ -947,6 +951,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let result = handle_reference_output(&config, &datapoint)
             .unwrap()
@@ -973,6 +978,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let result = handle_reference_output(&config, &datapoint)
             .unwrap()
@@ -1075,6 +1081,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                is_custom: true,
             }),
         )
         .unwrap()
@@ -1188,6 +1195,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                is_custom: true,
             }),
         )
         .unwrap()

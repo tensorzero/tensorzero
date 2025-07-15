@@ -13,6 +13,7 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -45,27 +46,33 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const { inferences, pageSize, bounds, totalInferences } = loaderData;
+
   const navigate = useNavigate();
 
-  const topInference = inferences[0];
-  const bottomInference = inferences[inferences.length - 1];
+  const topInference = inferences.at(0);
+  const bottomInference = inferences.at(inferences.length - 1);
 
   const handleNextPage = () => {
-    navigate(`?before=${bottomInference.id}&pageSize=${pageSize}`, {
-      preventScrollReset: true,
-    });
+    if (bottomInference) {
+      navigate(`?before=${bottomInference.id}&pageSize=${pageSize}`, {
+        preventScrollReset: true,
+      });
+    }
   };
 
   const handlePreviousPage = () => {
-    navigate(`?after=${topInference.id}&pageSize=${pageSize}`, {
-      preventScrollReset: true,
-    });
+    if (topInference) {
+      navigate(`?after=${topInference.id}&pageSize=${pageSize}`, {
+        preventScrollReset: true,
+      });
+    }
   };
 
+  // These are swapped because the table is sorted in descending order
   const disablePrevious =
-    !bounds?.last_id || bounds.last_id === topInference.id;
+    !bounds?.last_id || bounds.last_id === topInference?.id;
   const disableNext =
-    !bounds?.first_id || bounds.first_id === bottomInference.id;
+    !bounds?.first_id || bounds.first_id === bottomInference?.id;
 
   return (
     <PageLayout>
@@ -85,7 +92,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

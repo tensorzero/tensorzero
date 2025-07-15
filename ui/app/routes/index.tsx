@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, type RouteHandle } from "react-router";
 import { Card } from "~/components/ui/card";
 import { PageLayout } from "~/components/layout/PageLayout";
 import {
@@ -30,6 +30,10 @@ import {
   countDynamicEvaluationRuns,
 } from "~/utils/clickhouse/dynamic_evaluations.server";
 
+export const handle: RouteHandle = {
+  hideBreadcrumbs: true,
+};
+
 interface DirectoryCardProps {
   source: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -45,7 +49,7 @@ function DirectoryCard({
 }: DirectoryCardProps) {
   return (
     <Link to={source} className="block">
-      <Card className="group border-border hover:border-border-hover flex w-full flex-row items-center gap-3 rounded-xl border p-4 hover:shadow-[0_0_0_3px_rgba(0,0,0,0.05)]">
+      <Card className="border-border hover:border-border-hover group flex w-full flex-row items-center gap-3 rounded-xl border p-4 hover:shadow-[0_0_0_3px_rgba(0,0,0,0.05)]">
         <div className="bg-bg-tertiary h-8 w-8 rounded-lg p-2">
           <Icon className="text-fg-secondary group-hover:text-fg-primary transition-colors" />
         </div>

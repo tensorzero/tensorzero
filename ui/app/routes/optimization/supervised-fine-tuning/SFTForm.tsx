@@ -10,10 +10,11 @@ import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import { Button } from "~/components/ui/button";
 import { Form } from "~/components/ui/form";
-import type { ChatCompletionConfig } from "~/utils/config/variant";
-import type { Config } from "~/utils/config";
+import type { ChatCompletionConfig, VariantInfo } from "tensorzero-node";
+import type { Config } from "tensorzero-node";
 import { models } from "./model_options";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
+import { logger } from "~/utils/logger";
 
 export function SFTForm({
   config,
@@ -91,7 +92,7 @@ export function SFTForm({
       formFetcher.submit(submitData, { method: "POST" });
       setSubmissionPhase("submitting");
     } catch (error) {
-      console.error("Submission error (likely a bug):", error);
+      logger.error("Submission error (likely a bug):", error);
     }
   };
 
@@ -107,10 +108,15 @@ export function SFTForm({
 
     const functionConfig = config.functions[selectedFunction];
     return Object.fromEntries(
-      Object.entries(functionConfig.variants || {}).filter(
-        (entry): entry is [string, ChatCompletionConfig] =>
-          entry[1].type === "chat_completion",
-      ),
+      Object.entries(functionConfig.variants || {})
+        .filter(
+          (entry): entry is [string, VariantInfo] =>
+            entry[1]?.inner.type === "chat_completion",
+        )
+        .map(([name, variant]) => [
+          name,
+          variant.inner as ChatCompletionConfig,
+        ]),
     );
   };
 
@@ -158,7 +164,7 @@ export function SFTForm({
                 name="metric"
                 functionFieldName="function"
                 config={config}
-                showDemonstrations={true}
+                addDemonstrations={true}
               />
 
               {errors.metric && (

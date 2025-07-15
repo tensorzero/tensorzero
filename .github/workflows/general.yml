@@ -40,6 +40,42 @@ jobs:
   check-python-client-build:
     uses: ./.github/workflows/python-client-build.yml
 
+  check-node-bindings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version: "22.9.0"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+
+      - name: Install dependencies
+        working-directory: internal/tensorzero-node
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Node.js bindings
+        working-directory: internal/tensorzero-node
+        run: pnpm build-bindings
+
+      - name: Check for git diff after building bindings
+        id: git_diff_check
+        run: git diff --exit-code
+
+      - name: Upload bindings artifact on diff failure
+        if: failure()
+        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
+        with:
+          name: node-bindings
+          path: internal/tensorzero-node/lib/bindings
+          retention-days: 7
+
+      - name: Check tensorzero-node bindings are properly exported
+        run: pnpm --filter=tensorzero-node run check-exports
+
   build-windows:
     runs-on: windows-latest
     steps:
@@ -258,9 +294,6 @@ jobs:
       - name: Build npm workspace
         run: pnpm -r build
 
-      - name: Check tensorzero-node bindings are properly exported
-        run: pnpm --filter=tensorzero-node run check-exports
-
       - name: Format tensorzero-node package
         run: pnpm --filter=tensorzero-node run format:check
 
@@ -371,6 +404,53 @@ jobs:
         if: always()
         run: cat e2e_logs.txt
 
+  # Run 'cargo test-optimization' against mock-inference-provider
+  mock-optimization-tests:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: not_used
+      FIREWORKS_API_KEY: not_used
+      FIREWORKS_ACCOUNT_ID: not_used
+      TENSORZERO_USE_MOCK_INFERENCE_PROVIDER: 1
+      TENSORZERO_SKIP_LARGE_FIXTURES: 1
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          shared-key: "build-gateway-cache"
+          save-if: false
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        with:
+          tool: cargo-nextest
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - name: Download ClickHouse fixtures
+        run: uv run ./ui/fixtures/download-fixtures.py
+
+      - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
+        run: |
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+
+      - name: Launch ClickHouse container for E2E tests
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
+
+      - name: Launch the gateway for E2E tests
+        run: |
+          cargo run-e2e > e2e_logs.txt 2>&1 &
+          while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+            echo "Waiting for gateway to be healthy..."
+            sleep 1
+          done
+
+      - name: Test (Rust)
+        run: cargo test-optimization -- --skip gcp --skip together
+
   build-gateway-container:
     uses: ./.github/workflows/build-gateway-container.yml
 
@@ -395,11 +475,13 @@ jobs:
       [
         check-docker-compose,
         check-python-client-build,
+        check-node-bindings,
         build-windows,
         validate,
         clickhouse-tests,
         ui-tests,
         ui-tests-e2e,
+        mock-optimization-tests,
       ]
     runs-on: ubuntu-latest
     steps:

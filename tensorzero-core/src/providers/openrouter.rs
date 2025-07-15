@@ -55,9 +55,12 @@ fn default_api_key_location() -> CredentialLocation {
 const PROVIDER_NAME: &str = "OpenRouter";
 const PROVIDER_TYPE: &str = "openrouter";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct OpenRouterProvider {
     model_name: String,
+    #[serde(skip)]
     credentials: OpenRouterCredentials,
 }
 
@@ -611,13 +614,7 @@ pub(super) fn prepare_openrouter_tools<'a>(
             if tool_config.tools_available.is_empty() {
                 return (None, None, None);
             }
-            let tools = Some(
-                tool_config
-                    .tools_available
-                    .iter()
-                    .map(|tool| tool.into())
-                    .collect(),
-            );
+            let tools = Some(tool_config.tools_available.iter().map(Into::into).collect());
             let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
             (tools, tool_choice, parallel_tool_calls)
@@ -1285,7 +1282,7 @@ fn openrouter_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {

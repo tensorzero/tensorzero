@@ -19,10 +19,7 @@ import {
 import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
 
 import { useConfig } from "~/context/config";
-import {
-  formatMetricSummaryValue,
-  type MetricConfig,
-} from "~/utils/config/metric";
+import { formatMetricSummaryValue } from "~/utils/config/feedback";
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import MetricValue from "~/components/metric/MetricValue";
 import type {
@@ -31,6 +28,7 @@ import type {
 } from "~/utils/clickhouse/dynamic_evaluations";
 import { TableItemShortUuid } from "~/components/ui/TableItems";
 import { formatDate } from "~/utils/date";
+import type { MetricConfig } from "tensorzero-node";
 
 interface DynamicEvaluationProjectResultsTableProps {
   selected_run_infos: DynamicEvaluationRun[];
@@ -178,7 +176,7 @@ export function DynamicEvaluationProjectResultsTable({
                             );
 
                             const value = feedbackMap.get(metric_name);
-                            const metricType = config.metrics[metric_name].type;
+                            const metricConfig = config.metrics[metric_name];
 
                             return (
                               <TableCell
@@ -189,16 +187,12 @@ export function DynamicEvaluationProjectResultsTable({
                                 <div
                                   className={`group relative flex h-full items-center justify-center`}
                                 >
-                                  {value &&
-                                  metricType !== "comment" &&
-                                  metricType !== "demonstration" ? (
+                                  {value && metricConfig ? (
                                     <>
                                       <MetricValue
                                         value={value}
-                                        metricType={metricType}
-                                        optimize={
-                                          config.metrics[metric_name].optimize
-                                        }
+                                        metricType={metricConfig.type}
+                                        optimize={metricConfig.optimize}
                                         isHumanFeedback={false}
                                       />
                                     </>
@@ -232,10 +226,7 @@ const MetricHeader = ({
 }) => {
   const config = useConfig();
   const metricProperties = config.metrics[metric_name];
-  if (
-    metricProperties.type === "comment" ||
-    metricProperties.type === "demonstration"
-  ) {
+  if (!metricProperties) {
     return null;
   }
   return (

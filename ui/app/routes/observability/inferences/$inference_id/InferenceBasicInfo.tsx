@@ -49,7 +49,7 @@ export default function BasicInfo({
   const config = useConfig();
   const variantType =
     config.functions[inference.function_name]?.variants[inference.variant_name]
-      ?.type;
+      ?.inner.type;
 
   // Create timestamp tooltip
   const timestampTooltip = createTimestampTooltip(inference.timestamp);

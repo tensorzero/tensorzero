@@ -208,20 +208,36 @@ async fn test_cache_stream_write_and_read() {
     .unwrap();
     assert!(result.is_none());
 
-    let initial_chunks = vec![ProviderInferenceResponseChunk {
-        content: vec![ContentBlockChunk::Text(TextChunk {
-            id: "0".to_string(),
-            text: "test content".to_string(),
-        })],
-        created: 1234,
-        usage: Some(Usage {
-            input_tokens: 20,
-            output_tokens: 40,
-        }),
-        raw_response: "raw response".to_string(),
-        latency: Duration::from_secs(999),
-        finish_reason: Some(FinishReason::Stop),
-    }];
+    let initial_chunks = vec![
+        ProviderInferenceResponseChunk {
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                id: "0".to_string(),
+                text: "test content".to_string(),
+            })],
+            created: 1234,
+            usage: Some(Usage {
+                input_tokens: 20,
+                output_tokens: 40,
+            }),
+            raw_response: "raw response".to_string(),
+            latency: Duration::from_secs(999),
+            finish_reason: None,
+        },
+        ProviderInferenceResponseChunk {
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                id: "1".to_string(),
+                text: "test content 2".to_string(),
+            })],
+            created: 5678,
+            usage: Some(Usage {
+                input_tokens: 100,
+                output_tokens: 200,
+            }),
+            raw_response: "raw response 2".to_string(),
+            latency: Duration::from_secs(999),
+            finish_reason: Some(FinishReason::Stop),
+        },
+    ];
 
     // Write
     start_cache_write_streaming(
@@ -230,8 +246,8 @@ async fn test_cache_stream_write_and_read() {
         initial_chunks.clone(),
         "raw request",
         &Usage {
-            input_tokens: 20,
-            output_tokens: 40,
+            input_tokens: 1,
+            output_tokens: 2,
         },
     )
     .unwrap();
@@ -248,28 +264,45 @@ async fn test_cache_stream_write_and_read() {
     assert!(result.is_some());
     let result = result.unwrap();
     let chunks = result.stream.map(|c| c.unwrap()).collect::<Vec<_>>().await;
-    assert_eq!(chunks.len(), 1);
-    let ProviderInferenceResponseChunk {
-        content,
-        created,
-        usage,
-        raw_response,
-        latency,
-        finish_reason,
-    } = &chunks[0];
-    assert_eq!(content, &initial_chunks[0].content);
-    // 'created' should be different (current timestamp is different)
-    assert_ne!(created, &initial_chunks[0].created);
-    assert_eq!(
-        usage,
-        &Some(Usage {
-            input_tokens: 20,
-            output_tokens: 40,
-        })
-    );
-    assert_eq!(raw_response, &initial_chunks[0].raw_response);
-    assert_eq!(latency, &Duration::from_secs(0));
-    assert_eq!(finish_reason, &Some(FinishReason::Stop));
+    assert_eq!(chunks.len(), 2);
+    for (i, chunk) in chunks.into_iter().enumerate() {
+        let ProviderInferenceResponseChunk {
+            content,
+            created,
+            usage,
+            raw_response,
+            latency,
+            finish_reason,
+        } = &chunk;
+        assert_eq!(content, &initial_chunks[i].content);
+        // 'created' should be different (current timestamp is different)
+        assert_ne!(created, &initial_chunks[i].created);
+        if i == 0 {
+            assert_eq!(
+                usage,
+                &Some(Usage {
+                    input_tokens: 20,
+                    output_tokens: 40,
+                })
+            )
+        } else {
+            assert_eq!(
+                usage,
+                &Some(Usage {
+                    input_tokens: 100,
+                    output_tokens: 200,
+                })
+            )
+        };
+        assert_eq!(raw_response, &initial_chunks[i].raw_response);
+        assert_eq!(latency, &Duration::from_secs(0));
+        if i == 0 {
+            assert_eq!(finish_reason, &None);
+        } else {
+            assert_eq!(finish_reason, &Some(FinishReason::Stop));
+        }
+    }
+
     // Read (should be None)
     tokio::time::sleep(Duration::from_secs(2)).await;
     let result =

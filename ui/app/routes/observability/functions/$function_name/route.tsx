@@ -24,7 +24,7 @@ import {
 import { queryMetricsWithFeedback } from "~/utils/clickhouse/feedback";
 import { getInferenceTableName } from "~/utils/clickhouse/common";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import FunctionVariantTable from "./FunctionVariantTable";
 import {
@@ -35,6 +35,7 @@ import {
   SectionHeader,
 } from "~/components/layout/PageLayout";
 import { getFunctionTypeIcon } from "~/utils/icon";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -105,14 +106,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     const variant_config = function_config.variants[
       variant_count.variant_name
     ] || {
-      // In case the variant is not found, we still want to display the variant name
-      type: "unknown",
-      weight: 0,
+      inner: {
+        // In case the variant is not found, we still want to display the variant name
+        type: "unknown",
+        weight: 0,
+      },
     };
     return {
       ...variant_count,
-      type: variant_config.type,
-      weight: variant_config.weight,
+      type: variant_config.inner.type,
+      weight: variant_config.inner.weight,
     };
   });
   return {
@@ -139,6 +142,9 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const function_config = useConfig().functions[function_name];
+  if (!function_config) {
+    throw data(`Function ${function_name} not found`, { status: 404 });
+  }
 
   // Only get top/bottom inferences if array is not empty
   const topInference = inferences.length > 0 ? inferences[0] : null;
@@ -178,6 +184,15 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
+  const metricsExcludingDemonstrations = useMemo(
+    () => ({
+      metrics: metricsWithFeedback.metrics.filter(
+        ({ metric_type }) => metric_type !== "demonstration",
+      ),
+    }),
+    [metricsWithFeedback],
+  );
+
   const [time_granularity, setTimeGranularity] =
     useState<TimeWindowUnit>("week");
   const handleTimeGranularityChange = (granularity: TimeWindowUnit) => {
@@ -212,7 +227,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
         <SectionLayout>
           <SectionHeader heading="Metrics" />
           <MetricSelector
-            metricsWithFeedback={metricsWithFeedback}
+            metricsWithFeedback={metricsExcludingDemonstrations}
             selectedMetric={metric_name || ""}
             onMetricChange={handleMetricChange}
           />
@@ -246,7 +261,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   );
 }
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

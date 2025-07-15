@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import OutputSourceSelector from "./OutputSourceSelector";
 import { DatasetCountDisplay } from "./DatasetCountDisplay";
+import { logger } from "~/utils/logger";
 
 export function DatasetBuilderForm({
   dataset_counts,
@@ -62,14 +63,16 @@ export function DatasetBuilderForm({
     const metricConfig = config.metrics[metricName ?? ""];
     form.setValue("metric_config", metricConfig ? metricConfig : undefined);
     const functionType = config.functions[functionName ?? ""]?.type;
-    form.setValue("type", functionType);
+    if (functionType) {
+      form.setValue("type", functionType);
+    }
   }, [metricName, functionName, config, form]);
 
   // Handle form submission response
   useEffect(() => {
     if (formFetcher.data) {
       if (formFetcher.data.errors) {
-        console.error("Form submission error:", formFetcher.data.errors);
+        logger.error("Form submission error:", formFetcher.data.errors);
         setSubmissionPhase("idle");
         form.setError("root", {
           type: "submit",
@@ -93,7 +96,7 @@ export function DatasetBuilderForm({
       formFetcher.submit(submitData, { method: "POST" });
       setSubmissionPhase("submitting");
     } catch (error) {
-      console.error("Submission error:", error);
+      logger.error("Submission error:", error);
       setSubmissionPhase("idle");
     }
   };
@@ -138,7 +141,7 @@ export function DatasetBuilderForm({
             name="metric_name"
             functionFieldName="function"
             config={config}
-            showDemonstrations={false}
+            addDemonstrations={false}
           />
           <OutputSourceSelector control={form.control} />
         </div>

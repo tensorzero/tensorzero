@@ -1,5 +1,5 @@
 import { ZodError } from "zod";
-import { tensorZeroClient } from "~/utils/tensorzero.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type {
   ResolvedFileContent,
   DisplayInput,
@@ -58,7 +58,7 @@ async function handleInferenceAction(
     throw result.error;
   }
 
-  return await tensorZeroClient.inference({
+  return await getTensorZeroClient().inference({
     ...result.data,
     stream: false,
   });

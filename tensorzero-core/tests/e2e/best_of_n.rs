@@ -1,4 +1,7 @@
+#![allow(clippy::print_stdout)]
+use futures::StreamExt;
 use reqwest::{Client, StatusCode};
+use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use tensorzero_core::{
     inference::types::{ContentBlock, RequestMessage, Role},
@@ -13,16 +16,25 @@ use tensorzero_core::clickhouse::test_helpers::{
 };
 
 #[tokio::test]
-async fn e2e_test_best_of_n_dummy_candidates_dummy_judge() {
+async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_non_stream() {
     // Include randomness in put to make sure that the first request is a cache miss
     let random_input = Uuid::now_v7();
-    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, false).await;
-    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, true).await;
+    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, false, false).await;
+    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, true, false).await;
+}
+
+#[tokio::test]
+async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_streaming() {
+    // Include randomness in put to make sure that the first request is a cache miss
+    let random_input = Uuid::now_v7();
+    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, false, true).await;
+    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, true, true).await;
 }
 
 async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(
     random_input: Uuid,
     should_be_cached: bool,
+    stream: bool,
 ) {
     let episode_id = Uuid::now_v7();
 
@@ -40,22 +52,45 @@ async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(
                     ]
                 }
             ]},
-        "stream": false,
+        "stream": stream,
         "cache_options": {"enabled": "on", "lookback_s": 10}
     });
 
-    let response = Client::new()
+    let builder = Client::new()
         .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-    // Check Response is OK, then fields in order
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
-    // Check that inference_id is here
-    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id = Uuid::parse_str(inference_id).unwrap();
+        .json(&payload);
+
+    let inference_id = if stream {
+        let mut chunks = builder.eventsource().unwrap();
+        let mut first_inference_id = None;
+        while let Some(chunk) = chunks.next().await {
+            println!("chunk: {chunk:?}");
+            let chunk = chunk.unwrap();
+            let Event::Message(chunk) = chunk else {
+                continue;
+            };
+            if chunk.data == "[DONE]" {
+                break;
+            }
+            let chunk_json = chunk.data;
+            let chunk_json: Value = serde_json::from_str(&chunk_json).unwrap();
+            let inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
+            let inference_id = Uuid::parse_str(inference_id).unwrap();
+            if first_inference_id.is_none() {
+                first_inference_id = Some(inference_id);
+            }
+        }
+        // TODO - expand this test to build up 'content' from the chunks
+        first_inference_id.unwrap()
+    } else {
+        let response = builder.send().await.unwrap();
+        // Check Response is OK, then fields in order
+        assert_eq!(response.status(), StatusCode::OK);
+        let response_json = response.json::<Value>().await.unwrap();
+        // Check that inference_id is here
+        let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+        Uuid::parse_str(inference_id).unwrap()
+    };
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -142,7 +177,7 @@ async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(
     let expected_model_names: std::collections::HashSet<String> =
         ["dummy::random_answer", "dummy::best_of_n_0", "json"]
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
     assert_eq!(model_names, expected_model_names);
 
@@ -467,7 +502,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
     let expected_model_names: std::collections::HashSet<String> =
         ["test", "json", "gemini-2.0-flash-001"]
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
     assert_eq!(model_names, expected_model_names);
 }
@@ -747,7 +782,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
     let expected_model_names: std::collections::HashSet<String> =
         ["test", "json", "json_goodbye", "gemini-2.0-flash-001"]
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
     assert_eq!(model_names, expected_model_names);
 }
@@ -1030,7 +1065,7 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
         "claude-3-haiku-20240307-anthropic",
     ]
     .iter()
-    .map(|s| s.to_string())
+    .map(std::string::ToString::to_string)
     .collect();
     assert_eq!(model_names, expected_model_names);
 }

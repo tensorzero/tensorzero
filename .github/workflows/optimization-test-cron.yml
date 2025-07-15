@@ -9,6 +9,8 @@ on:
 env:
   FORCE_COLOR: 1
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+  TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
 
 jobs:
   optimization-tests:
@@ -34,7 +36,7 @@ jobs:
           tool: cargo-nextest
 
       - name: Run optimization tests
-        run: cargo test-optimization --nocapture
+        run: cargo test-optimization --nocapture --no-fail-fast
 
       - name: Log test completion
         if: always()

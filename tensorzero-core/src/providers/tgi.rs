@@ -57,9 +57,12 @@ fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("TGI_API_KEY".to_string())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct TGIProvider {
     api_base: Url,
+    #[serde(skip)]
     credentials: TGICredentials,
 }
 
@@ -543,7 +546,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 latency,
-                finish_reason: finish_reason.map(|r| r.into()),
+                finish_reason: finish_reason.map(Into::into),
             },
         ))
     }
@@ -719,7 +722,7 @@ fn tgi_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {

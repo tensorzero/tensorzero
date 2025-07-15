@@ -8,6 +8,7 @@ import {
   type StoragePath,
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
+import { logger } from "~/utils/logger";
 
 /**
  * JSON types.
@@ -261,6 +262,7 @@ const BaseDatapointSchema = z.object({
   output: JSONValueSchema,
   tags: z.record(z.string()).optional(),
   auxiliary: z.string().optional(),
+  is_custom: z.boolean(),
   source_inference_id: z.string().uuid().nullable(),
 });
 
@@ -400,7 +402,7 @@ export class TensorZeroClient {
             const parsed = JSON.parse(dataStr);
             yield parsed as InferenceResponse;
           } catch (err) {
-            console.error("Failed to parse SSE data:", err);
+            logger.error("Failed to parse SSE data:", err);
           }
         }
       }
@@ -436,6 +438,9 @@ export class TensorZeroClient {
     datasetName: string,
     inferenceId: string,
     outputKind: "inherit" | "demonstration" | "none" = "inherit",
+    functionName: string,
+    variantName: string,
+    episodeId: string,
   ): Promise<DatapointResponse> {
     if (!datasetName || typeof datasetName !== "string") {
       throw new Error("Dataset name must be a non-empty string");
@@ -450,6 +455,9 @@ export class TensorZeroClient {
     const request = {
       inference_id: inferenceId,
       output: outputKind,
+      function_name: functionName,
+      variant_name: variantName,
+      episode_id: episodeId,
     };
 
     const response = await this.fetch(endpoint, {
@@ -478,14 +486,7 @@ export class TensorZeroClient {
     datasetName: string,
     datapointId: string,
     datapoint: Datapoint,
-    inputChanged: boolean,
   ): Promise<DatapointResponse> {
-    // If the input changed, we should remove the source_inference_id
-    // because it will no longer be valid
-    datapoint.source_inference_id = inputChanged
-      ? null
-      : datapoint.source_inference_id;
-
     if (!datasetName || typeof datasetName !== "string") {
       throw new Error("Dataset name must be a non-empty string");
     }

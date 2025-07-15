@@ -1,3 +1,4 @@
+use std::fmt;
 use std::path::Path;
 
 use futures::future::join_all;
@@ -9,13 +10,18 @@ use tokio::time::{timeout, Duration};
 use crate::config_parser::PathWithContents;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
-use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
+    batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
+};
+use crate::inference::types::{
+    ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
+    JsonInferenceResultChunk, ResolvedInput, TextChunk, ThoughtChunk, Usage,
 };
 use crate::model::ModelTable;
+use crate::tool::ToolCallChunk;
 use crate::{
     endpoints::inference::InferenceParams,
     error::{Error, ErrorDetails},
@@ -29,11 +35,11 @@ use crate::config_parser::LoadableConfig;
 use crate::variant::chat_completion::{TemplateSchemaInfo, UninitializedChatCompletionConfig};
 
 use super::{
-    infer_model_request, prepare_model_inference_request, InferModelRequestArgs, InferenceConfig,
-    ModelUsedInfo, Variant,
+    infer_model_request, infer_model_request_stream, prepare_model_inference_request,
+    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant,
 };
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct MixtureOfNConfig {
@@ -58,7 +64,7 @@ fn default_timeout() -> f64 {
     300.0
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct FuserConfig {
@@ -99,30 +105,61 @@ impl Variant for MixtureOfNConfig {
         let candidate_inference_results = self
             .infer_candidates(input, models, function, inference_config, clients)
             .await?;
-        self.fuse_candidates(
-            input,
-            function,
-            models.models,
-            inference_config,
-            clients,
-            candidate_inference_results,
-        )
-        .await
+        match self
+            .fuse_candidates(
+                input,
+                function,
+                models.models,
+                inference_config,
+                clients,
+                candidate_inference_results,
+                false,
+            )
+            .await?
+        {
+            InferenceOrStreamResult::NonStream(inference_result) => {
+                Ok(inference_result)
+            },
+            InferenceOrStreamResult::Stream(..) => {
+                Err(ErrorDetails::InternalError { message: format!("MixtureOfNConfig.fuse_candidates returned a stream for a non-streaming request. {IMPOSSIBLE_ERROR_MESSAGE}") }.into())
+            }
+        }
     }
 
     async fn infer_stream<'request>(
         &self,
-        _input: &ResolvedInput,
-        _models: &'request InferenceModels<'_>,
-        _function: &FunctionConfig,
-        _inference_config: &'request InferenceConfig<'static, 'request>,
-        _clients: &'request InferenceClients<'request>,
-        _inference_params: InferenceParams,
+        input: &ResolvedInput,
+        models: &'request InferenceModels<'_>,
+        function: &FunctionConfig,
+        inference_config: &'request InferenceConfig<'static, 'request>,
+        clients: &'request InferenceClients<'request>,
+        inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-        Err(ErrorDetails::InvalidRequest {
-            message: "Best of n variants do not support streaming inference.".to_string(),
+        // We infer the candidates in non-streaming mode, since we need to pass the full candidate results to the fuser
+        let candidate_inference_results = self
+            .infer_candidates(input, models, function, inference_config, clients)
+            .await?;
+
+        match self
+            .fuse_candidates(
+                input,
+                function,
+                models.models,
+                inference_config,
+                clients,
+                candidate_inference_results,
+                true,
+            )
+            .await?
+        {
+            // We get a NonStream result if we don't have fuser result (either the fuser failed, or it wasn't run at all due to only one candidate existing)
+            InferenceOrStreamResult::NonStream(inference_result) => {
+                stream_inference_from_non_stream(inference_result, inference_params)
+            }
+            InferenceOrStreamResult::Stream(stream, model_used_info) => {
+                Ok((stream, model_used_info))
+            }
         }
-        .into())
     }
 
     async fn validate(
@@ -193,6 +230,139 @@ impl Variant for MixtureOfNConfig {
     }
 }
 
+/// The result of calling attempts to fuse our candidates
+enum InferenceOrStreamResult {
+    /// If the user requested a non-streaming inference, then we'll call the fuser
+    /// in non-streaming mode and return its result.
+    /// If the fuser fails (or we only have a single candidate) when the user
+    /// requested a streaming inference, we'll also return `InferenceOrStreamResult::NonStream`
+    /// The `infer_stream` method is responsible for converting a non-streaming response
+    /// into a 'fake' stream
+    NonStream(InferenceResult),
+    /// We only produce `InferenceOrStreamResult::Stream` if the user requested a streaming inference,
+    /// and the fuser successfully starts a stream.
+    Stream(InferenceResultStream, ModelUsedInfo),
+}
+
+/// Constructs an `infer_stream` response `(InferenceResultStream, ModelUsedInfo)`,
+/// built from the information contained in the `InferenceResult`.
+/// Each content block in the `InferenceResult` is converted into a chunk in the `InferenceResultStream`.
+/// This is used by `best_of_n` and `mixture_of_n` when the user requests a stream response,
+/// but our candidate/judge has a non-streaming response.
+pub fn stream_inference_from_non_stream(
+    inference_result: InferenceResult,
+    inference_params: InferenceParams,
+) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
+    // Use the first model inference result to construct our top-level result (since we don't have a fuser/judge result)
+    let model_inference_result = inference_result
+        .model_inference_results()
+        .first()
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::Inference {
+                message: format!(
+                    "Expected one candidate but found none. {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
+            })
+        })?;
+    // Copy the actual usage from the model inference result (without considering cached)
+    // We set the 'cached' flag on the 'ModelUsedInfo, which will adjust the usage as needed when producing
+    // the HTTP response stream.
+    let usage = model_inference_result.usage;
+    let model_used_info = ModelUsedInfo {
+        model_name: model_inference_result.model_name.clone(),
+        model_provider_name: model_inference_result.model_provider_name.clone(),
+        raw_request: model_inference_result.raw_request.clone(),
+        inference_params: inference_params.clone(),
+        // Preserve the raw response from the candidate we chose (rather than attempting
+        // to concatenate the raw_response from the chunks in our fake stream)
+        raw_response: Some(model_inference_result.raw_response.clone()),
+        // Preserve any other model inference results (we already processed the first one),
+        // in case we're doing something like chained best-of-n/mixture-of-n variants.
+        previous_model_inference_results: inference_result.model_inference_results()[1..].to_vec(),
+        system: model_inference_result.system.clone(),
+        input_messages: model_inference_result.input_messages.clone(),
+        cached: model_inference_result.cached,
+    };
+    let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
+    Ok((stream, model_used_info))
+}
+
+fn make_stream_from_non_stream(
+    inference_result: InferenceResult,
+    usage: Option<Usage>,
+) -> Result<InferenceResultStream, Error> {
+    let mut id = 0;
+    let chunk = match inference_result {
+        InferenceResult::Chat(chat) => {
+            let content_blocks = chat.content.into_iter().map(|content| {
+                match content {
+                ContentBlockChatOutput::Text(text) => {
+                    let chunk = ContentBlockChunk::Text(TextChunk {
+                        id: id.to_string(),
+                        text: text.text,
+                    });
+                    id += 1;
+                    Ok(chunk)
+                }
+                ContentBlockChatOutput::ToolCall(tool_call) => {
+                    // Ues the tool call id as the chunk id, as this id needs to be
+                    // passed back in when providing a tool call response.
+                    let chunk = ContentBlockChunk::ToolCall(ToolCallChunk {
+                        id: tool_call.id.to_string(),
+                        raw_name: Some(tool_call.raw_name),
+                        raw_arguments: tool_call.raw_arguments,
+                    });
+                    Ok(chunk)
+                }
+                ContentBlockChatOutput::Thought(thought) => {
+                    let chunk = ContentBlockChunk::Thought(ThoughtChunk {
+                        id: id.to_string(),
+                        text: thought.text,
+                        signature: thought.signature,
+                    });
+                    id += 1;
+                    Ok(chunk)
+                }
+                ContentBlockChatOutput::Unknown { .. } => {
+                    Err(ErrorDetails::Inference {
+                        message: "MixtureOfNConfig variant does not support unknown content blocks in streaming mode".to_string(),
+                    }
+                    .into())
+                }
+            }
+        }).collect::<Result<Vec<_>, Error>>()?;
+            Ok(InferenceResultChunk::Chat(ChatInferenceResultChunk {
+                content: content_blocks,
+                created: chat.created,
+                usage,
+                latency: Duration::from_secs(0),
+                raw_response: chat.original_response.unwrap_or_default(),
+                finish_reason: chat.finish_reason,
+            }))
+        }
+        InferenceResult::Json(json) => Ok(InferenceResultChunk::Json(JsonInferenceResultChunk {
+            raw: json.output.raw,
+            thought: None,
+            created: json.created,
+            usage,
+            latency: Duration::from_secs(0),
+            raw_response: json.original_response.unwrap_or_default(),
+            finish_reason: json.finish_reason,
+        })),
+    };
+    Ok(Box::pin(tokio_stream::once(chunk)))
+}
+
+impl fmt::Debug for InferenceOrStreamResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NonStream(result) => write!(f, "NonStream({result:?})"),
+            Self::Stream(_, model_used_info) => {
+                write!(f, "Stream(..., {model_used_info:?})")
+            }
+        }
+    }
+}
 impl MixtureOfNConfig {
     /// Infer each candidate variant concurrently and return the results.
     async fn infer_candidates<'a, 'request>(
@@ -286,6 +456,7 @@ impl MixtureOfNConfig {
     /// Fuses the candidates using the fuser config.
     /// If the fuser fails to return a valid response,
     /// we randomly select one of the candidates.
+    #[expect(clippy::too_many_arguments)]
     async fn fuse_candidates<'a, 'request>(
         &'a self,
         input: &ResolvedInput,
@@ -294,7 +465,8 @@ impl MixtureOfNConfig {
         inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         mut candidates: Vec<InferenceResult>,
-    ) -> Result<InferenceResult, Error> {
+        stream: bool,
+    ) -> Result<InferenceOrStreamResult, Error> {
         if candidates.is_empty() {
             return Err(ErrorDetails::Inference {
                 message: "No candidates to fuse in the mixture of n".to_string(),
@@ -302,24 +474,41 @@ impl MixtureOfNConfig {
             .into());
         }
         if candidates.len() == 1 {
-            return candidates.pop().ok_or_else(|| Error::new(ErrorDetails::Inference {
+            return Ok(InferenceOrStreamResult::NonStream(candidates.pop().ok_or_else(|| Error::new(ErrorDetails::Inference {
                 message: "Expected one candidate but found none. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-            }));
+            }))?));
         }
         let mut candidates = candidates;
-        // If the fuser fails, we randomly select one of the candidates
+
+        let inference_result = if stream {
+            inner_fuse_candidates_stream(
+                &self.fuser,
+                input,
+                models,
+                function,
+                inference_config,
+                clients,
+                &candidates,
+            )
+            .await
+            .map(|(stream, model_used_info)| {
+                InferenceOrStreamResult::Stream(stream, model_used_info)
+            })
+        } else {
+            inner_fuse_candidates(
+                &self.fuser,
+                input,
+                models,
+                function,
+                inference_config,
+                clients,
+                &candidates,
+            )
+            .await
+            .map(InferenceOrStreamResult::NonStream)
+        };
         // As long as the fuser returns an inference result, we want to include it in the observability
-        let mut inference_result = match inner_fuse_candidates(
-            &self.fuser,
-            input,
-            models,
-            function,
-            inference_config,
-            clients,
-            &candidates,
-        )
-        .await
-        {
+        let mut inference_result = match inference_result {
             Ok(inf_result) => inf_result,
             Err(_) => {
                 let random_index = rand::rng().random_range(0..candidates.len());
@@ -331,20 +520,27 @@ impl MixtureOfNConfig {
                 // If the fuser fails, don't provide any 'original_response' to the user
                 let mut candidate = candidates.swap_remove(random_index);
                 candidate.set_original_response(None);
-                candidate
+                InferenceOrStreamResult::NonStream(candidate)
             }
         };
 
-        // Safely remove the selected candidate without panicking
-        let mut total_usage: Usage = candidates.iter().map(|c| c.usage()).sum();
-        total_usage.input_tokens += inference_result.usage().input_tokens;
-        total_usage.output_tokens += inference_result.usage().output_tokens;
-        inference_result.set_usage(total_usage);
-        for candidate in candidates {
-            inference_result
-                .mut_model_inference_results()
-                .extend(candidate.owned_model_inference_results());
+        match &mut inference_result {
+            InferenceOrStreamResult::NonStream(inference_result) => {
+                for candidate in candidates {
+                    inference_result
+                        .mut_model_inference_results()
+                        .extend(candidate.owned_model_inference_results());
+                }
+            }
+            InferenceOrStreamResult::Stream(_stream, model_used_info) => {
+                for candidate in candidates {
+                    model_used_info
+                        .previous_model_inference_results
+                        .extend(candidate.owned_model_inference_results());
+                }
+            }
         }
+
         Ok(inference_result)
     }
 }
@@ -373,6 +569,7 @@ async fn inner_fuse_candidates<'a, 'request>(
         inference_config,
         candidates,
         &mut inference_params,
+        false,
     )?;
     if included_indices.is_empty() {
         return Err(ErrorDetails::Inference {
@@ -397,6 +594,55 @@ async fn inner_fuse_candidates<'a, 'request>(
     };
     let inference_result = infer_model_request(infer_model_request_args).await?;
     Ok(inference_result)
+}
+
+/// Attempts to fuse the candidates for the mixture of n.
+/// If this function returns an error, we will randomly select one
+/// of the candidates in the outer function.
+///
+/// Here are the steps in the function:
+///  * Prepare the request for the fuser variant.
+///  * Infer the request using the model specified in the fuser config.
+///  * Return the output of the fuser.
+async fn inner_fuse_candidates_stream<'a, 'request>(
+    fuser: &'a FuserConfig,
+    input: &'request ResolvedInput,
+    models: &'a ModelTable,
+    function: &'a FunctionConfig,
+    inference_config: &'request InferenceConfig<'a, 'request>,
+    clients: &'request InferenceClients<'request>,
+    candidates: &[InferenceResult],
+) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
+    let mut params = InferenceParams::default();
+    let (inference_request, included_indices) = fuser.prepare_request(
+        input,
+        function,
+        inference_config,
+        candidates,
+        &mut params,
+        true,
+    )?;
+    if included_indices.is_empty() {
+        return Err(ErrorDetails::Inference {
+            message: "No valid candidates available to prepare request.".to_string(),
+        }
+        .into());
+    }
+    let model_config = models.get(&fuser.inner.model).await?.ok_or_else(|| {
+        Error::new(ErrorDetails::UnknownModel {
+            name: fuser.inner.model.to_string(),
+        })
+    })?;
+    infer_model_request_stream(
+        inference_request,
+        fuser.inner.model.clone(),
+        &model_config,
+        function,
+        clients,
+        params,
+        fuser.inner.retries,
+    )
+    .await
 }
 
 impl FuserConfig {
@@ -514,7 +760,8 @@ impl FuserConfig {
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'a, 'request>,
         candidates: &[InferenceResult],
-        inference_params: &'request mut InferenceParams,
+        inference_params: &mut InferenceParams,
+        stream: bool,
     ) -> Result<(ModelInferenceRequest<'request>, Vec<usize>), Error>
     where
         'a: 'request,
@@ -577,7 +824,7 @@ impl FuserConfig {
             system,
             function,
             inference_config,
-            false,
+            stream,
             inference_params,
             self.inner.json_mode,
             extra_body,
@@ -592,6 +839,7 @@ mod tests {
     use std::collections::HashMap;
 
     use reqwest::Client;
+    use tokio_stream::StreamExt;
     use uuid::Uuid;
 
     use crate::{
@@ -601,13 +849,13 @@ mod tests {
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
             ChatInferenceResult, FinishReason, InternalJsonInferenceOutput, JsonInferenceResult,
-            Latency, ModelInferenceResponseWithMetadata,
+            Latency, ModelInferenceResponseWithMetadata, Text, Thought,
         },
         jsonschema_util::StaticJSONSchema,
         minijinja_util::tests::get_test_template_config,
         model::{ModelConfig, ModelProvider, ProviderConfig},
         providers::dummy::DummyProvider,
-        tool::{ToolCallConfig, ToolChoice},
+        tool::{ToolCallConfig, ToolCallOutput, ToolChoice},
     };
 
     use super::*;
@@ -799,10 +1047,6 @@ mod tests {
             ChatInferenceResult::new(
                 Uuid::now_v7(),
                 vec!["Candidate answer 1".to_string().into()],
-                Usage {
-                    input_tokens: 10,
-                    output_tokens: 20,
-                },
                 vec![model_inference_response],
                 None,
                 InferenceParams::default(),
@@ -836,10 +1080,6 @@ mod tests {
             ChatInferenceResult::new(
                 Uuid::now_v7(),
                 vec!["Candidate answer 2".to_string().into()],
-                Usage {
-                    input_tokens: 15,
-                    output_tokens: 25,
-                },
                 vec![model_inference_response2],
                 None,
                 InferenceParams::default(),
@@ -885,8 +1125,8 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Valid JSON response\"}".to_string(),
             usage: Usage {
-                input_tokens: 50,
-                output_tokens: 100,
+                input_tokens: 10,
+                output_tokens: 20,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
@@ -903,10 +1143,6 @@ mod tests {
             Some(json!({"response": "Valid JSON response"})),
             Some(0),
             vec![],
-            Usage {
-                input_tokens: 10,
-                output_tokens: 20,
-            },
             vec![model_inference_response_valid],
             json!({"type": "object", "properties": {"response": {"type": "string"}}}),
             InferenceParams::default(),
@@ -942,10 +1178,6 @@ mod tests {
             None, // malformed
             Some(0),
             vec![],
-            Usage {
-                input_tokens: 15,
-                output_tokens: 25,
-            },
             vec![model_inference_response_malformed],
             json!({"type": "object", "properties": {"response": {"type": "string"}}}),
             InferenceParams::default(),
@@ -1005,8 +1237,8 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
-                input_tokens: 50,
-                output_tokens: 100,
+                input_tokens: 10,
+                output_tokens: 20,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
@@ -1021,10 +1253,6 @@ mod tests {
             ChatInferenceResult::new(
                 inference_id0,
                 vec!["Candidate answer 0".to_string().into()],
-                Usage {
-                    input_tokens: 10,
-                    output_tokens: 20,
-                },
                 vec![model_inference_response0],
                 None,
                 InferenceParams::default(),
@@ -1058,10 +1286,6 @@ mod tests {
             ChatInferenceResult::new(
                 inference_id1,
                 vec!["Candidate answer 1".to_string().into()],
-                Usage {
-                    input_tokens: 15,
-                    output_tokens: 25,
-                },
                 vec![model_inference_response1],
                 None,
                 InferenceParams::default(),
@@ -1123,7 +1347,7 @@ mod tests {
             extra_cache_key: None,
         };
 
-        let fused = mixture_of_n_variant
+        let InferenceOrStreamResult::NonStream(fused) = mixture_of_n_variant
             .fuse_candidates(
                 &input,
                 &json_function_config,
@@ -1131,13 +1355,17 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                false,
             )
             .await
-            .expect("Failed to select best candidate");
+            .expect("Failed to select best candidate")
+        else {
+            panic!("Expected a non-stream result");
+        };
 
         let expected_usage = Usage {
             input_tokens: 35,
-            output_tokens: 55,
+            output_tokens: 46,
         };
         let expected_content = InternalJsonInferenceOutput {
             raw: Some("{\"answer\":\"Hello\"}".to_string()),
@@ -1145,9 +1373,9 @@ mod tests {
             auxiliary_content: vec![],
             json_block_index: Some(0),
         };
+        assert_eq!(fused.usage_considering_cached(), expected_usage);
         match fused {
             InferenceResult::Json(fused) => {
-                assert_eq!(fused.usage, expected_usage);
                 assert_eq!(fused.output, expected_content);
                 assert_eq!(fused.model_inference_results.len(), 3);
             }
@@ -1199,7 +1427,7 @@ mod tests {
             messages: vec![],
         };
 
-        let result = mixture_of_n_variant
+        let InferenceOrStreamResult::NonStream(result) = mixture_of_n_variant
             .fuse_candidates(
                 &input,
                 &json_function_config,
@@ -1207,11 +1435,16 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                false,
             )
-            .await;
+            .await
+            .unwrap()
+        else {
+            panic!("Expected a non-stream result");
+        };
 
         // Expect an error and a random candidate to be selected
-        let choice = result.unwrap();
+        let choice = result;
         // We know that the model will fail, so there should only be two results
         match choice {
             InferenceResult::Chat(chat_choice) => {
@@ -1277,7 +1510,7 @@ mod tests {
             description: None,
         });
 
-        let result = mixture_of_n_variant
+        let InferenceOrStreamResult::NonStream(result) = mixture_of_n_variant
             .fuse_candidates(
                 &input,
                 &chat_function_config,
@@ -1285,10 +1518,15 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                false,
             )
-            .await;
+            .await
+            .unwrap()
+        else {
+            panic!("Expected a non-stream result");
+        };
 
-        let choice = result.unwrap();
+        let choice = result;
         match choice {
             InferenceResult::Chat(chat_choice) => {
                 // Should return 3 results since model has been called 3 times
@@ -1309,6 +1547,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 empty_candidates.clone(),
+                false,
             )
             .await;
         let err = result.unwrap_err();
@@ -1318,6 +1557,104 @@ mod tests {
                 message: "No candidates to fuse in the mixture of n".to_string()
             }
             .into()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_make_stream_from_non_stream_chat() {
+        let stream = make_stream_from_non_stream(
+            InferenceResult::Chat(ChatInferenceResult {
+                inference_id: Uuid::now_v7(),
+                content: vec![
+                    ContentBlockChatOutput::Text(Text {
+                        text: "First text message".to_string(),
+                    }),
+                    ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                        id: "123".into(),
+                        name: Some("first_tool".into()),
+                        raw_name: "first_tool".into(),
+                        arguments: Some(serde_json::json!({
+                            "my": "first_arg"
+                        })),
+                        raw_arguments: r#"{"my"  :  "first_arg"}"#.to_string(),
+                    }),
+                    ContentBlockChatOutput::Thought(Thought {
+                        text: Some("My first thought".into()),
+                        signature: Some("my_first_signature".into()),
+                    }),
+                    ContentBlockChatOutput::Thought(Thought {
+                        text: Some("My second thought".into()),
+                        signature: Some("my_second_signature".into()),
+                    }),
+                    ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                        id: "456".into(),
+                        name: Some("second_tool".into()),
+                        raw_name: "second_tool".into(),
+                        arguments: Some(serde_json::json!({
+                            "my": "second_arg"
+                        })),
+                        raw_arguments: r#"{"my"  :  "second_arg"}"#.to_string(),
+                    }),
+                    ContentBlockChatOutput::Text(Text {
+                        text: "Second text message".to_string(),
+                    }),
+                ],
+                created: 123456,
+                model_inference_results: vec![],
+                inference_params: InferenceParams::default(),
+                original_response: Some("My raw response".to_string()),
+                finish_reason: Some(FinishReason::Length),
+            }),
+            Some(Usage {
+                input_tokens: 10,
+                output_tokens: 20,
+            }),
+        )
+        .unwrap();
+
+        let stream_chunks = stream.collect::<Vec<_>>().await;
+        assert_eq!(
+            stream_chunks,
+            [Ok(InferenceResultChunk::Chat(ChatInferenceResultChunk {
+                content: vec![
+                    ContentBlockChunk::Text(TextChunk {
+                        id: "0".into(),
+                        text: "First text message".to_string(),
+                    }),
+                    ContentBlockChunk::ToolCall(ToolCallChunk {
+                        id: "123".into(),
+                        raw_name: Some("first_tool".into()),
+                        raw_arguments: r#"{"my"  :  "first_arg"}"#.to_string(),
+                    }),
+                    ContentBlockChunk::Thought(ThoughtChunk {
+                        id: "1".into(),
+                        text: Some("My first thought".into()),
+                        signature: Some("my_first_signature".into()),
+                    }),
+                    ContentBlockChunk::Thought(ThoughtChunk {
+                        id: "2".into(),
+                        text: Some("My second thought".into()),
+                        signature: Some("my_second_signature".into()),
+                    }),
+                    ContentBlockChunk::ToolCall(ToolCallChunk {
+                        id: "456".into(),
+                        raw_name: Some("second_tool".into()),
+                        raw_arguments: r#"{"my"  :  "second_arg"}"#.to_string(),
+                    }),
+                    ContentBlockChunk::Text(TextChunk {
+                        id: "3".into(),
+                        text: "Second text message".to_string(),
+                    }),
+                ],
+                created: 123456,
+                usage: Some(Usage {
+                    input_tokens: 10,
+                    output_tokens: 20,
+                }),
+                latency: Duration::from_secs(0),
+                raw_response: "My raw response".to_string(),
+                finish_reason: Some(FinishReason::Length),
+            })),]
         );
     }
 }

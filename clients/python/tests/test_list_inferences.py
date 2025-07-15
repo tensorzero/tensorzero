@@ -46,6 +46,7 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
         assert isinstance(episode_id, UUID)
         output_schema = inference.output_schema
         assert output_schema is not None
+        assert len(inference.dispreferred_outputs) == 0
 
 
 def test_simple_query_with_float_filter(embedded_sync_client: TensorZeroGateway):
@@ -65,6 +66,7 @@ def test_simple_query_with_float_filter(embedded_sync_client: TensorZeroGateway)
     assert len(inferences) == 1
     for inference in inferences:
         assert inference.function_name == "extract_entities"
+        assert len(inference.dispreferred_outputs) == 0
 
 
 def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
@@ -102,6 +104,7 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         assert tool_params is not None
         assert tool_params.tools_available == []
         assert tool_params.parallel_tool_calls is None
+        assert len(inference.dispreferred_outputs) == 0
 
 
 def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroGateway):
@@ -199,6 +202,7 @@ def test_demonstration_output_source(embedded_sync_client: TensorZeroGateway):
     assert len(inferences) == 5
     for inference in inferences:
         assert inference.function_name == "extract_entities"
+        assert len(inference.dispreferred_outputs) == 1
 
 
 def test_boolean_metric_filter(embedded_sync_client: TensorZeroGateway):
@@ -313,8 +317,8 @@ def test_list_render_json_inferences(embedded_sync_client: TensorZeroGateway):
         limit=2,
         offset=None,
     )
-    rendered_inferences = embedded_sync_client.experimental_render_inferences(
-        stored_inferences=stored_inferences,
+    rendered_inferences = embedded_sync_client.experimental_render_samples(
+        stored_samples=stored_inferences,
         variants={"extract_entities": "gpt_4o_mini"},
     )
     assert len(rendered_inferences) == 2
@@ -329,8 +333,8 @@ def test_list_render_chat_inferences(embedded_sync_client: TensorZeroGateway):
         limit=2,
         offset=None,
     )
-    rendered_inferences = embedded_sync_client.experimental_render_inferences(
-        stored_inferences=stored_inferences,
+    rendered_inferences = embedded_sync_client.experimental_render_samples(
+        stored_samples=stored_inferences,
         variants={"write_haiku": "gpt_4o_mini"},
     )
     assert len(rendered_inferences) == 2
@@ -394,6 +398,7 @@ async def test_simple_query_with_float_filter_async(
     assert len(inferences) == 1
     for inference in inferences:
         assert inference.function_name == "extract_entities"
+        assert len(inference.dispreferred_outputs) == 0
 
 
 @pytest.mark.asyncio
@@ -448,6 +453,7 @@ async def test_demonstration_output_source_async(
     assert len(inferences) == 5
     for inference in inferences:
         assert inference.function_name == "extract_entities"
+        assert len(inference.dispreferred_outputs) == 1
 
 
 @pytest.mark.asyncio
@@ -575,8 +581,8 @@ async def test_list_render_json_inferences_async(
         limit=2,
         offset=None,
     )
-    rendered_inferences = await embedded_async_client.experimental_render_inferences(
-        stored_inferences=stored_inferences,
+    rendered_inferences = await embedded_async_client.experimental_render_samples(
+        stored_samples=stored_inferences,
         variants={"extract_entities": "gpt_4o_mini"},
     )
     assert len(rendered_inferences) == 2
@@ -594,8 +600,10 @@ async def test_list_render_chat_inferences_async(
         limit=2,
         offset=None,
     )
-    rendered_inferences = await embedded_async_client.experimental_render_inferences(
-        stored_inferences=stored_inferences,
+    rendered_inferences = await embedded_async_client.experimental_render_samples(
+        stored_samples=stored_inferences,
         variants={"write_haiku": "gpt_4o_mini"},
     )
     assert len(rendered_inferences) == 2
+    for inference in rendered_inferences:
+        assert len(inference.dispreferred_outputs) == 1

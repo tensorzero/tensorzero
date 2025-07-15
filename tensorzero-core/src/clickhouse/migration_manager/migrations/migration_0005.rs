@@ -72,7 +72,7 @@ impl Migration for Migration0005<'_> {
                     .into());
                 }
                 Ok(response) => {
-                    if response.trim() != "1" {
+                    if response.response.trim() != "1" {
                         return Ok(true);
                     }
                 }

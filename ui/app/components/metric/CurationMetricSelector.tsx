@@ -5,7 +5,7 @@ import {
   type Path,
   type PathValue,
 } from "react-hook-form";
-import { Config } from "~/utils/config";
+import type { Config } from "tensorzero-node";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import {
   Popover,
@@ -23,18 +23,19 @@ import {
   CommandList,
 } from "~/components/ui/command";
 import { Input } from "~/components/ui/input";
-import MetricBadges from "~/components/metric/MetricBadges";
+import FeedbackBadges from "~/components/feedback/FeedbackBadges";
 import { useEffect, useMemo, useState } from "react";
 import { useFetcher } from "react-router";
 import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
 import clsx from "clsx";
+import type { FeedbackConfig } from "~/utils/config/feedback";
 
 type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   control: Control<T>;
   name: Path<T>;
   functionFieldName: Path<T>;
   config: Config;
-  showDemonstrations: boolean;
+  addDemonstrations: boolean;
 };
 
 /**
@@ -54,12 +55,23 @@ export default function CurationMetricSelector<
   name,
   functionFieldName,
   config,
-  showDemonstrations,
+  addDemonstrations,
 }: CurationMetricSelectorProps<T>) {
   const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
   const { getValues, setValue } = useFormContext<T>();
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
+
+  const metrics = Object.fromEntries(
+    Object.entries(config.metrics).filter(([, v]) => v !== undefined),
+  ) as Record<string, FeedbackConfig>;
+
+  if (addDemonstrations) {
+    metrics["demonstration"] = {
+      type: "demonstration",
+      level: "inference",
+    };
+  }
 
   const functionValue = useWatch({
     control,
@@ -84,13 +96,10 @@ export default function CurationMetricSelector<
     if (!metricsFetcher.data) return new Set<string>();
     return new Set(
       metricsFetcher.data.metrics
-        .filter(
-          (m) =>
-            m.metric_name !== "demonstration" && m.metric_name !== "comment",
-        )
+        .filter((m) => addDemonstrations || m.metric_name !== "demonstration")
         .map((m) => m.metric_name),
     );
-  }, [metricsFetcher.data]);
+  }, [metricsFetcher.data, addDemonstrations]);
 
   const isLoading = metricsFetcher.state === "loading";
 
@@ -228,14 +237,9 @@ export default function CurationMetricSelector<
                             : "0"}
                         </span>
                       </CommandItem>
-                      {Object.entries(config.metrics)
-                        .filter(
-                          ([metricName]) =>
-                            (metricName !== "demonstration" ||
-                              showDemonstrations) &&
-                            metricName !== "comment",
-                        )
+                      {Object.entries(metrics)
                         .sort(([metricNameA], [metricNameB]) => {
+                          // 1. Put selectable metrics first
                           const isSelectableA = validMetrics.has(metricNameA);
                           const isSelectableB = validMetrics.has(metricNameB);
                           if (isSelectableA && !isSelectableB) {
@@ -244,6 +248,9 @@ export default function CurationMetricSelector<
                           if (!isSelectableA && isSelectableB) {
                             return 1;
                           }
+                          // 2. Within each category, put demonstration first if present
+                          if (metricNameA === "demonstration") return -1;
+                          if (metricNameB === "demonstration") return 1;
                           return 0;
                         })
                         .map(([metricName, metricConfig]) => {
@@ -272,7 +279,7 @@ export default function CurationMetricSelector<
                             >
                               <span className="truncate">{metricName}</span>
                               <div className="ml-2 flex items-center gap-2">
-                                <MetricBadges metric={metricConfig} />
+                                <FeedbackBadges metric={metricConfig} />
                                 <span
                                   className={clsx(
                                     "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",

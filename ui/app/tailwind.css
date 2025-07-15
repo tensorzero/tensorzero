@@ -348,35 +348,3 @@
     @apply bg-background text-foreground;
   }
 }
-
-@layer components {
-  .CodeBlock {
-    &:where(.CodeBlock--with-line-numbers) code {
-      counter-reset: line;
-    }
-
-    &:where(.CodeBlock--with-line-numbers) .line {
-      counter-increment: line;
-
-      &::before {
-        --_width: --spacing(13);
-        display: block;
-        content: counter(line);
-        position: sticky;
-        flex: 0 0 var(--_width);
-        align-self: flex-start;
-        color: theme(--color-fg-muted);
-        left: 0;
-        width: var(--_width);
-        padding-right: --spacing(3);
-        text-align: right;
-        user-select: none;
-        font-family: theme(--font-mono);
-        background: theme(--color-bg-primary);
-        @media (width <= theme(--breakpoint-sm)) {
-          display: none;
-        }
-      }
-    }
-  }
-}

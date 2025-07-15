@@ -220,7 +220,9 @@ project_id = "tensorzero-public"
 # Set the thinking budget to the minimum value.
 # This speeds up our tests, saves us some tokens, and prevents the model from
 # hitting our token limit
-extra_body = [{ pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 }]
+extra_body = [
+    { pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 },
+]
 
 
 [models."gemini-2.0-flash-lite"]
@@ -265,7 +267,9 @@ model_name = "gemini-2.5-pro-preview-06-05"
 # Set the thinking budget to the minimum value.
 # This speeds up our tests, saves us some tokens, and prevents the model from
 # hitting our token limit
-extra_body = [{ pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 }]
+extra_body = [
+    { pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 },
+]
 
 [models."gemini-2.5-pro-dynamic"]
 routing = ["google_ai_studio_gemini"]
@@ -277,7 +281,9 @@ api_key_location = "dynamic::google_ai_studio_api_key"
 # Set the thinking budget to the minimum value.
 # This speeds up our tests, saves us some tokens, and prevents the model from
 # hitting our token limit
-extra_body = [{ pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 }]
+extra_body = [
+    { pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 },
+]
 
 [models."llama3.3-70b-instruct-fireworks"]
 routing = ["fireworks"]
@@ -914,7 +920,7 @@ type = "chat_completion"
 model = "gemma-3-1b-aws-sagemaker-openai"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
-extra_headers = [{ name = "x-amz-security-token", value = "InvalidToken"}]
+extra_headers = [{ name = "x-amz-security-token", value = "InvalidToken" }]
 
 
 [functions.basic_test.variants.aws-bedrock-us-east-1]
@@ -975,14 +981,14 @@ max_tokens = 500
 
 [functions.basic_test.variants.fireworks-extra-body]
 type = "chat_completion"
-model = "qwen2p5-72b-instruct"
+model = "fireworks::accounts/fireworks/models/deepseek-r1-0528"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.fireworks-extra-headers]
 type = "chat_completion"
-model = "qwen2p5-72b-instruct"
+model = "fireworks::accounts/fireworks/models/deepseek-r1-0528"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [{ name = "Authorization", value = "invalid_fireworks_auth" }]
@@ -3128,6 +3134,25 @@ model = "dummy::best_of_n_0"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
 
+[functions.mixture_of_n_single_candidate]
+type = "chat"
+system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.mixture_of_n_single_candidate.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n_single_candidate.variants.mixture_of_n_variant]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["variant0"]
+
+[functions.mixture_of_n_single_candidate.variants.mixture_of_n_variant.fuser]
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
 [functions.mixture_of_n]
 type = "chat"
 system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
@@ -3151,6 +3176,15 @@ candidates = ["variant0", "variant1"]
 
 [functions.mixture_of_n.variants.mixture_of_n_variant.fuser]
 model = "gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n.variants.mixture_of_n_variant_bad_fuser]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["variant0", "variant0"]
+
+[functions.mixture_of_n.variants.mixture_of_n_variant_bad_fuser.fuser]
+model = "dummy::error"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 
@@ -3229,6 +3263,12 @@ user_schema = "../../fixtures/config/functions/write_haiku/user_schema.json"
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/write_haiku/initial_prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/write_haiku/initial_prompt/user_template.minijinja"
+
+[functions.write_haiku.variants.aws_bedrock]
+weight = 0
+type = "chat_completion"
+model = "claude-3-haiku-20240307-aws-bedrock"
 user_template = "../../fixtures/config/functions/write_haiku/initial_prompt/user_template.minijinja"
 
 [functions.extract_entities]

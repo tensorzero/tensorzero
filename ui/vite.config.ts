@@ -17,6 +17,14 @@ export default defineConfig(({ mode }) => ({
     shouldLoadReactRouter ? reactRouter() : react(),
     tsconfigPaths(),
   ],
+
+  define: {
+    __APP_VERSION__: JSON.stringify(
+      process.env.npm_package_version || "unknown",
+    ),
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
+
   // IMPORTANT:
   // If we don't set the target to es2022, we need `vite-plugin-top-level-await`
   // for "vite-plugin-wasm".

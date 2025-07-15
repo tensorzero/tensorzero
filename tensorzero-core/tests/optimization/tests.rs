@@ -1,18 +1,16 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::print_stdout
-)]
+#![expect(clippy::unwrap_used, clippy::panic, clippy::print_stdout)]
 use base64::Engine;
 use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use tensorzero::{RenderedStoredInference, Role};
+use tensorzero::{
+    Client, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
+};
 use tensorzero_core::{
     cache::CacheOptions,
-    clickhouse::ClickHouseConnectionInfo,
+    clickhouse::test_helpers::CLICKHOUSE_URL,
+    clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
     config_parser::ProviderTypesConfig,
     endpoints::inference::InferenceClients,
     inference::types::{
@@ -22,23 +20,33 @@ use tensorzero_core::{
         ModelInput, RequestMessage, Text,
     },
     optimization::JobHandle,
-    optimization::{Optimizer, OptimizerInfo, OptimizerOutput, OptimizerStatus},
+    optimization::{OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo},
     tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
 };
 
+mod fireworks_sft;
+mod gcp_vertex_gemini_sft;
 mod openai_sft;
+mod together_sft;
 
 static FERRIS_PNG: &[u8] = include_bytes!("../e2e/providers/ferris.png");
+
+fn use_mock_inference_provider() -> bool {
+    std::env::var("TENSORZERO_USE_MOCK_INFERENCE_PROVIDER").is_ok()
+}
 
 pub trait OptimizationTestCase {
     fn supports_image_data(&self) -> bool;
     fn supports_tool_calls(&self) -> bool;
-    fn get_optimizer_info(&self) -> OptimizerInfo;
+    fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo;
 }
 
 pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
-    let optimizer_info = test_case.get_optimizer_info();
+    let optimizer_info = test_case
+        .get_optimizer_info(use_mock_inference_provider())
+        .load()
+        .unwrap();
     let client = reqwest::Client::new();
     let test_examples = get_examples(test_case, 10);
     let val_examples = Some(get_examples(test_case, 10));
@@ -47,18 +55,25 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .launch(&client, test_examples, val_examples, &credentials)
         .await
         .unwrap();
-    let mut status = job_handle.poll(&client, &credentials).await.unwrap();
-    while !matches!(status, OptimizerStatus::Completed { .. }) {
+    let mut status;
+    loop {
         status = job_handle.poll(&client, &credentials).await.unwrap();
-        println!("Status: {status:?}");
-        // Sleep for a minute
-        sleep(Duration::from_secs(60)).await;
-        if matches!(status, OptimizerStatus::Failed) {
-            panic!("Optimization failed");
+        println!("Status: `{status:?}` Handle: `{job_handle}`");
+        if matches!(status, OptimizationJobInfo::Completed { .. }) {
+            break;
         }
+        if matches!(status, OptimizationJobInfo::Failed { .. }) {
+            panic!("Optimization failed: {status:?}");
+        }
+        sleep(if use_mock_inference_provider() {
+            Duration::from_secs(1)
+        } else {
+            Duration::from_secs(60)
+        })
+        .await;
     }
-    assert!(matches!(status, OptimizerStatus::Completed { .. }));
-    let OptimizerStatus::Completed {
+    assert!(matches!(status, OptimizationJobInfo::Completed { .. }));
+    let OptimizationJobInfo::Completed {
         output: OptimizerOutput::Model(model_config),
     } = status
     else {
@@ -100,6 +115,10 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         credentials: &HashMap::new(),
         cache_options: &CacheOptions::default(),
     };
+    // We didn't produce a real model, so there's nothing to test
+    if use_mock_inference_provider() {
+        return;
+    }
     let response = model_config
         .infer(&request, &clients, "test")
         .await
@@ -107,12 +126,48 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     println!("Response: {response:?}");
 }
 
-fn get_examples(
+/// Runs launch_optimization_workflow and then polls for the workflow using the Rust client
+pub async fn run_workflow_test_case_with_tensorzero_client(
     test_case: &impl OptimizationTestCase,
-    num_examples: usize,
-) -> Vec<RenderedStoredInference> {
+    client: &tensorzero::Client,
+) {
+    let params = LaunchOptimizationWorkflowParams {
+        function_name: "write_haiku".to_string(),
+        template_variant_name: "gpt_4o_mini".to_string(),
+        query_variant_name: None,
+        filters: None,
+        output_source: InferenceOutputSource::Inference,
+        limit: Some(10),
+        offset: None,
+        val_fraction: None,
+        format: ClickhouseFormat::JsonEachRow,
+        // We always mock the client tests since this is tested above
+        optimizer_config: test_case.get_optimizer_info(true),
+    };
+    let job_handle = client
+        .experimental_launch_optimization_workflow(params)
+        .await
+        .unwrap();
+    let mut status;
+    loop {
+        status = client
+            .experimental_poll_optimization(&job_handle)
+            .await
+            .unwrap();
+        println!("Status: `{status:?}` Handle: `{job_handle}`");
+        if matches!(status, OptimizationJobInfo::Completed { .. }) {
+            break;
+        }
+        if matches!(status, OptimizationJobInfo::Failed { .. }) {
+            panic!("Optimization failed: {status:?}");
+        }
+        sleep(Duration::from_secs(1)).await;
+    }
+}
+
+fn get_examples(test_case: &impl OptimizationTestCase, num_examples: usize) -> Vec<RenderedSample> {
     assert!(num_examples >= 10);
-    let mut generators: Vec<fn() -> RenderedStoredInference> = vec![generate_text_example];
+    let mut generators: Vec<fn() -> RenderedSample> = vec![generate_text_example];
     if test_case.supports_tool_calls() {
         generators.push(generate_tool_call_example);
     }
@@ -127,12 +182,11 @@ fn get_examples(
         .collect()
 }
 
-fn generate_text_example() -> RenderedStoredInference {
+fn generate_text_example() -> RenderedSample {
     // So the examples are different
     let id = Uuid::now_v7().to_string();
-    RenderedStoredInference {
+    RenderedSample {
         function_name: "test".to_string(),
-        variant_name: "test".to_string(),
         input: ModelInput {
             system: Some(format!(
                 "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
@@ -144,22 +198,24 @@ fn generate_text_example() -> RenderedStoredInference {
                 })],
             }],
         },
-        output: vec![ContentBlockChatOutput::Text(Text {
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "The capital of France is Paris.".to_string(),
-        })],
-        episode_id: Uuid::now_v7(),
-        inference_id: Uuid::now_v7(),
+        })]),
+        episode_id: Some(Uuid::now_v7()),
+        inference_id: Some(Uuid::now_v7()),
         tool_params: None,
         output_schema: None,
+        dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
+            text: "The capital of France is Marseille.".to_string(),
+        })]],
     }
 }
 
-fn generate_tool_call_example() -> RenderedStoredInference {
+fn generate_tool_call_example() -> RenderedSample {
     // So the examples are different
     let id = Uuid::now_v7().to_string();
-    RenderedStoredInference {
+    RenderedSample {
         function_name: "test".to_string(),
-        variant_name: "test".to_string(),
         input: ModelInput {
             system: Some(format!(
                 "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
@@ -212,7 +268,7 @@ fn generate_tool_call_example() -> RenderedStoredInference {
                 },
             ],
         },
-        output: vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
+        output: Some(vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
             name: Some("get_weather".to_string()),
             arguments: Some(serde_json::json!({
                 "location": "London",
@@ -223,9 +279,7 @@ fn generate_tool_call_example() -> RenderedStoredInference {
             })
             .to_string(),
             id: "call_2".to_string(),
-        })],
-        episode_id: Uuid::now_v7(),
-        inference_id: Uuid::now_v7(),
+        })]),
         tool_params: Some(ToolCallConfigDatabaseInsert {
             tools_available: vec![Tool {
                 name: "get_weather".to_string(),
@@ -245,16 +299,18 @@ fn generate_tool_call_example() -> RenderedStoredInference {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
         }),
+        episode_id: Some(Uuid::now_v7()),
+        inference_id: Some(Uuid::now_v7()),
         output_schema: None,
+        dispreferred_outputs: vec![],
     }
 }
 
-fn generate_image_example() -> RenderedStoredInference {
+fn generate_image_example() -> RenderedSample {
     // So the examples are different
     let id = Uuid::now_v7().to_string();
-    RenderedStoredInference {
+    RenderedSample {
         function_name: "test".to_string(),
-        variant_name: "test".to_string(),
         input: ModelInput {
             system: Some(format!(
                 "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
@@ -281,14 +337,40 @@ fn generate_image_example() -> RenderedStoredInference {
                 ],
             }],
         },
-        output: vec![ContentBlockChatOutput::Text(Text {
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "Orange!".to_string(),
-        })],
-        episode_id: Uuid::now_v7(),
-        inference_id: Uuid::now_v7(),
+        })]),
         tool_params: None,
+        episode_id: Some(Uuid::now_v7()),
+        inference_id: Some(Uuid::now_v7()),
         output_schema: None,
+        dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
+            text: "Blue!".to_string(),
+        })]],
     }
+}
+
+pub async fn make_embedded_gateway() -> Client {
+    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    config_path.push("tests/e2e/tensorzero.toml");
+    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(config_path),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        timeout: None,
+        verify_credentials: true,
+    })
+    .build()
+    .await
+    .unwrap()
+}
+
+pub async fn make_http_gateway() -> Client {
+    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
+        url: "http://localhost:3000".parse().unwrap(),
+    })
+    .build()
+    .await
+    .unwrap()
 }
 
 /// Generates a `#[tokio::test] async fn $fn_name() { run_test_case(&$constructor).await; }`
@@ -298,9 +380,41 @@ macro_rules! optimization_test_case {
     // $constructor = an expression which yields your impl of OptimizationTestCase
     ($fn_name:ident, $constructor:expr) => {
         ::paste::paste! {
-            #[tokio::test]
+            #[tokio::test(flavor = "multi_thread")]
             async fn [<test_slow_optimization_ $fn_name>]() {
                 $crate::run_test_case(&$constructor).await;
+            }
+        }
+    };
+}
+
+/// Generates a `#[tokio::test] async fn $fn_name() { run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await; }`
+#[macro_export]
+macro_rules! embedded_workflow_test_case {
+    // $fn_name  = the name of the generated test function
+    // $constructor = an expression which yields your impl of OptimizationTestCase
+    ($fn_name:ident, $constructor:expr) => {
+        ::paste::paste! {
+            #[tokio::test(flavor = "multi_thread")]
+            async fn [<test_embedded_slow_optimization_ $fn_name>]() {
+                let client = $crate::make_embedded_gateway().await;
+                $crate::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
+            }
+        }
+    };
+}
+
+/// Generates a `#[tokio::test] async fn $fn_name() { run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await; }`
+#[macro_export]
+macro_rules! http_workflow_test_case {
+    // $fn_name  = the name of the generated test function
+    // $constructor = an expression which yields your impl of OptimizationTestCase
+    ($fn_name:ident, $constructor:expr) => {
+        ::paste::paste! {
+            #[tokio::test]
+            async fn [<test_http_slow_optimization_ $fn_name>]() {
+                let client = $crate::make_http_gateway().await;
+                $crate::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
             }
         }
     };

@@ -57,12 +57,15 @@ use super::openai::convert_stream_error;
 const PROVIDER_NAME: &str = "GCP Vertex Anthropic";
 const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct GCPVertexAnthropicProvider {
     model_id: String,
     request_url: String,
     streaming_request_url: String,
     audience: String,
+    #[serde(skip)]
     credentials: GCPVertexCredentials,
 }
 
@@ -601,7 +604,7 @@ impl<'a> TryFrom<&'a RequestMessage> for GCPVertexAnthropicMessage<'a> {
         let content: Vec<FlattenUnknown<GCPVertexAnthropicMessageContent>> = inference_message
             .content
             .iter()
-            .map(|block| block.try_into())
+            .map(TryInto::try_into)
             .collect::<Result<Vec<Option<FlattenUnknown<GCPVertexAnthropicMessageContent>>>, _>>()?
             .into_iter()
             .flatten()
@@ -667,12 +670,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             if matches!(c.tool_choice, ToolChoice::None) {
                 None
             } else {
-                Some(
-                    c.tools_available
-                        .iter()
-                        .map(|tool| tool.into())
-                        .collect::<Vec<_>>(),
-                )
+                Some(c.tools_available.iter().map(Into::into).collect::<Vec<_>>())
             }
         });
         // `tool_choice` should only be set if tools are set and non-empty
@@ -918,7 +916,7 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
                 raw_response,
                 usage: response.usage.into(),
                 latency,
-                finish_reason: response.stop_reason.map(|r| r.into()),
+                finish_reason: response.stop_reason.map(AnthropicStopReason::into),
             },
         ))
     }
@@ -1117,7 +1115,7 @@ fn anthropic_to_tensorzero_stream_message(
                 Some(usage.into()),
                 raw_message,
                 message_latency,
-                delta.stop_reason.map(|s| s.into()),
+                delta.stop_reason.map(AnthropicStopReason::into),
             )))
         }
         GCPVertexAnthropicStreamMessage::MessageStart { message } => {

@@ -7,6 +7,7 @@ WORKDIR /src
 RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
 
 COPY . .
+RUN git rev-parse HEAD
 
 ARG CARGO_BUILD_FLAGS=""
 
