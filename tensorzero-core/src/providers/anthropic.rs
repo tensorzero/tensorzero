@@ -476,7 +476,7 @@ enum AnthropicMessageContent<'a> {
         content: Vec<AnthropicMessageContent<'a>>,
     },
     Thinking {
-        thinking: &'a str,
+        thinking: Option<&'a str>,
         signature: Option<&'a str>,
     },
     ToolUse {
@@ -573,7 +573,7 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, AnthropicMessag
             }
             ContentBlock::Thought(thought) => Ok(Some(FlattenUnknown::Normal(
                 AnthropicMessageContent::Thinking {
-                    thinking: &thought.text,
+                    thinking: thought.text.as_deref(),
                     signature: thought.signature.as_deref(),
                 },
             ))),
@@ -854,7 +854,7 @@ fn convert_to_output(
             thinking,
             signature,
         }) => Ok(ContentBlockOutput::Thought(Thought {
-            text: thinking,
+            text: Some(thinking),
             signature: Some(signature),
         })),
         FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown {

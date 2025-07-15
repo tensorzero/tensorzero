@@ -749,7 +749,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 process_think_blocks(&raw_text, parse_think_blocks, PROVIDER_TYPE)?;
             if let Some(reasoning) = extracted_reasoning {
                 content.push(ContentBlockOutput::Thought(Thought {
-                    text: reasoning,
+                    text: Some(reasoning),
                     signature: None,
                 }));
             }
@@ -859,7 +859,7 @@ mod tests {
         // First block should be a thought
         match &inference_response.output[0] {
             ContentBlockOutput::Thought(thought) => {
-                assert_eq!(thought.text, "This is reasoning");
+                assert_eq!(thought.text, Some("This is reasoning".to_string()));
                 assert_eq!(thought.signature, None);
             }
             _ => panic!("Expected a thought block"),
@@ -868,7 +868,7 @@ mod tests {
         // Second block should be text
         match &inference_response.output[1] {
             ContentBlockOutput::Text(text) => {
-                assert_eq!(text.text, "Hello  world");
+                assert_eq!(text.text, "Hello  world".to_string());
             }
             _ => panic!("Expected a text block"),
         }
