@@ -1,10 +1,11 @@
 import { useForm, useWatch } from "react-hook-form";
-import { Form, FormField, FormItem, FormLabel } from "~/components/ui/form";
+import { Form } from "~/components/ui/form";
 import {
   DatasetBuilderFormValuesResolver,
   type DatasetBuilderFormValues,
 } from "./types";
 import { FunctionFormField } from "~/components/function/FunctionFormField";
+import { DatasetFormField } from "~/components/dataset/DatasetFormField";
 import { useConfig } from "~/context/config";
 import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
@@ -14,7 +15,6 @@ import { Button } from "~/components/ui/button";
 import OutputSourceSelector from "./OutputSourceSelector";
 import { DatasetCountDisplay } from "./DatasetCountDisplay";
 import { logger } from "~/utils/logger";
-import { DatasetSelector } from "./DatasetSelector";
 
 export function DatasetBuilderForm() {
   const config = useConfig();
@@ -120,21 +120,13 @@ export function DatasetBuilderForm() {
         className="space-y-6"
       >
         <div className="space-y-6">
-          <FormField
+          <DatasetFormField
             control={form.control}
             name="dataset"
-            render={({ field }) => (
-              <FormItem className="flex flex-col gap-1">
-                <FormLabel className="sr-only">Dataset</FormLabel>
-                <DatasetSelector
-                  selected={field.value}
-                  onSelect={(dataset, isNew) => {
-                    field.onChange(dataset);
-                    setIsNewDataset(isNew);
-                  }}
-                />
-              </FormItem>
-            )}
+            label="Dataset"
+            onSelect={(dataset, isNew) => {
+              setIsNewDataset(isNew);
+            }}
           />
 
           <FunctionFormField

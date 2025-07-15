@@ -20,7 +20,7 @@ import { useConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
-import { DatasetSelector } from "../datasets/builder/DatasetSelector";
+import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 
 interface LaunchEvaluationModalProps {
   isOpen: boolean;
