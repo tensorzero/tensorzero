@@ -1,6 +1,6 @@
 //! This module is responsible for sending usage data to the TensorZero Howdy service.
 //! It is configured via the `TENSORZERO_HOWDY_URL` environment variable.
-//! If the `TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_DATA` environment variable is set to `1`,
+//! If the `TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS` environment variable is set to `1`,
 //! the usage data will not be sent.
 //!
 //! The usage data is sent every 6 hours.
@@ -42,8 +42,8 @@ lazy_static! {
 /// Setup the howdy loop.
 /// This is called from the main function in the gateway or embedded client.
 pub fn setup_howdy(clickhouse: ClickHouseConnectionInfo) {
-    if env::var("TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_DATA").unwrap_or_default() == "1" {
-        info!("Usage data is disabled");
+    if env::var("TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS").unwrap_or_default() == "1" {
+        info!("Pseudonymous usage analytics is disabled");
         return;
     }
     tokio::spawn(howdy_loop(clickhouse));
