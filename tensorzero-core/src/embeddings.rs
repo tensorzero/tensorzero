@@ -427,6 +427,6 @@ mod tests {
         assert!(response.is_ok());
         assert!(logs_contain(
             "Error sending request to Dummy provider for model 'error'"
-        ))
+        ));
     }
 }

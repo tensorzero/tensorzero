@@ -1432,7 +1432,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
         for content in chunk.content.into_iter() {
             match content {
                 ContentBlockChunk::ToolCall(tool_call) => {
-                    raw = Some(tool_call.raw_arguments.to_owned())
+                    raw = Some(tool_call.raw_arguments.to_owned());
                 }
                 ContentBlockChunk::Text(text_chunk) => raw = Some(text_chunk.text.to_owned()),
                 ContentBlockChunk::Thought(thought_chunk) => {
@@ -3821,7 +3821,7 @@ mod tests {
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
             InputMessageContent::Text(TextKind::Text { text }) => {
-                assert_eq!(text, "Hello, world!")
+                assert_eq!(text, "Hello, world!");
             }
             _ => panic!("Expected Text content: {message:?}"),
         }
@@ -3836,7 +3836,7 @@ mod tests {
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
             InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                assert_eq!(arguments, json!({"key": "value"}).as_object().unwrap())
+                assert_eq!(arguments, json!({"key": "value"}).as_object().unwrap());
             }
             _ => panic!("Expected Text content"),
         }
@@ -3854,7 +3854,7 @@ mod tests {
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
             InputMessageContent::Text(TextKind::LegacyValue { value }) => {
-                assert_eq!(value, "Hello")
+                assert_eq!(value, "Hello");
             }
             _ => panic!("Expected Text content"),
         }
@@ -3884,7 +3884,7 @@ mod tests {
                 assert_eq!(
                     value,
                     &json!({"complex": "json", "with": ["nested", "array"]})
-                )
+                );
             }
             _ => panic!("Expected Text content with JSON object"),
         }
@@ -4158,7 +4158,7 @@ mod tests {
             .unwrap()
         {
             ContentBlockOutput::Thought(Thought { text, signature: _ }) => {
-                assert_eq!(text, &Some("Thinking...".to_string()))
+                assert_eq!(text, &Some("Thinking...".to_string()));
             }
             _ => panic!("Expected thought block"),
         }

@@ -252,7 +252,7 @@ impl ObjectStoreInfo {
                 }
                 if let Some(allow_http) = *allow_http {
                     if allow_http {
-                        tracing::warn!("`[object_storage.allow_http]` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store")
+                        tracing::warn!("`[object_storage.allow_http]` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store");
                     }
                     builder = builder.with_allow_http(allow_http);
                 }
@@ -460,7 +460,7 @@ impl Config {
 
     async fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config, Error> {
         if table.is_empty() {
-            tracing::info!("Config file is empty, so only default functions will be available.")
+            tracing::info!("Config file is empty, so only default functions will be available.");
         }
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 

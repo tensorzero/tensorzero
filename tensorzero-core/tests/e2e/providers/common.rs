@@ -884,9 +884,10 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
             &StorageKind::S3Compatible {
                 bucket_name: Some(test_bucket.to_string()),
                 region: Some("us-east-1".to_string()),
-                prefix: prefix.clone(),
                 endpoint: None,
                 allow_http: None,
+                #[cfg(feature = "e2e_tests")]
+                prefix: prefix.clone(),
             },
             &client,
             &format!(
@@ -1683,24 +1684,24 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                     .as_str()
                     .is_some_and(|e| e.contains("401 Authorization")),
                 "Unexpected error: {res}"
-            )
+            );
         }
         "together" => {
             assert!(
                 res["error"].as_str().unwrap().contains("Invalid API key"),
                 "Unexpected error: {res}"
-            )
+            );
         }
         "vllm" => {
             // vLLM returns different errors if you mess with the request headers,
             // so we just check that an error occurs
-            assert!(res["error"].as_str().is_some(), "Unexpected error: {res}")
+            assert!(res["error"].as_str().is_some(), "Unexpected error: {res}");
         }
         "xai" => {
             assert!(
                 res["error"].as_str().unwrap().contains("Incorrect"),
                 "Unexpected error: {res}"
-            )
+            );
         }
         "gcp_vertex_gemini" => {
             // We produce an error by setting a bad 'Content-Length', so just
@@ -4879,7 +4880,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     // OpenAI occasionally emits a tool call with an empty object for `arguments`
     assert!(arguments.len() <= 2);
     if let Some(location) = arguments.get("location") {
-        assert!(location.as_str().is_some())
+        assert!(location.as_str().is_some());
     }
     if arguments.len() == 2 {
         let units = arguments.get("units").unwrap().as_str().unwrap();
@@ -10638,7 +10639,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
                     "name": "get_temperature",
                     "result": "70",
                 }
-            ))
+            ));
         } else if content_block.get("name").unwrap().as_str().unwrap() == "get_humidity" {
             tool_results.push(json!(
                 {
@@ -10647,7 +10648,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
                     "name": "get_humidity",
                     "result": "30",
                 }
-            ))
+            ));
         } else {
             panic!(
                 "Unknown tool call: {}",
@@ -10930,7 +10931,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
                     "name": "get_temperature",
                     "result": "70",
                 }
-            ))
+            ));
         } else if content_block.get("name").unwrap().as_str().unwrap() == "get_humidity" {
             tool_results.push(json!(
                 {
@@ -10939,7 +10940,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
                     "name": "get_humidity",
                     "result": "30",
                 }
-            ))
+            ));
         } else {
             panic!(
                 "Unknown tool call: {}",

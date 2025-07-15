@@ -1438,7 +1438,7 @@ async fn test_empty_config() {
         .unwrap();
     assert!(logs_contain(
         "Config file is empty, so only default functions will be available."
-    ))
+    ));
 }
 
 #[tokio::test]
