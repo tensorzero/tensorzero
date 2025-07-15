@@ -39,8 +39,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
     migration_manager::run(&clickhouse).await.unwrap();
     let state =
         AppStateData::new_with_clickhouse_and_http_client(config, clickhouse, Client::new());
-    let client = ClientBuilder::build_from_state(state).await.unwrap();
-    client
+    ClientBuilder::build_from_state(state).await.unwrap()
 }
 
 #[tokio::test(flavor = "multi_thread")]
