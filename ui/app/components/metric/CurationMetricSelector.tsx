@@ -29,6 +29,7 @@ import { useFetcher } from "react-router";
 import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
 import clsx from "clsx";
 import type { FeedbackConfig } from "~/utils/config/feedback";
+import { Skeleton } from "../ui/skeleton";
 
 type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   control: Control<T>;
@@ -36,6 +37,8 @@ type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   functionFieldName: Path<T>;
   config: Config;
   addDemonstrations: boolean;
+  feedbackCount: number | null;
+  curatedInferenceCount: number | null;
 };
 
 /**
@@ -56,6 +59,8 @@ export default function CurationMetricSelector<
   functionFieldName,
   config,
   addDemonstrations,
+  feedbackCount,
+  curatedInferenceCount,
 }: CurationMetricSelectorProps<T>) {
   const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
   const { getValues, setValue } = useFormContext<T>();
@@ -124,10 +129,10 @@ export default function CurationMetricSelector<
       control={control}
       name={name}
       render={({ field }) => (
-        <FormItem className="flex flex-col gap-1">
+        <FormItem className="flex flex-col justify-center">
           <FormLabel>Metric</FormLabel>
-          <div className="space-y-2">
-            <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
+          <div className="items-top grid gap-x-8 md:grid-cols-2">
+            <div className="space-y-2">
               <Popover open={open} onOpenChange={setOpen}>
                 <PopoverTrigger asChild>
                   <Button
@@ -302,28 +307,57 @@ export default function CurationMetricSelector<
                   </Command>
                 </PopoverContent>
               </Popover>
+
+              {field.value && config.metrics[field.value]?.type === "float" && (
+                <FormField
+                  control={control}
+                  name={"threshold" as Path<T>}
+                  render={({ field: thresholdField }) => (
+                    <FormItem className="flex flex-col gap-1">
+                      <FormLabel>Threshold</FormLabel>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        {...thresholdField}
+                        value={thresholdField.value?.toString() ?? ""}
+                        onChange={(e) => {
+                          thresholdField.onChange(Number(e.target.value));
+                        }}
+                      />
+                    </FormItem>
+                  )}
+                />
+              )}
             </div>
 
-            {field.value && config.metrics[field.value]?.type === "float" && (
-              <FormField
-                control={control}
-                name={"threshold" as Path<T>}
-                render={({ field: thresholdField }) => (
-                  <FormItem className="flex flex-col gap-1">
-                    <FormLabel>Threshold</FormLabel>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      {...thresholdField}
-                      value={thresholdField.value?.toString() ?? ""}
-                      onChange={(e) => {
-                        thresholdField.onChange(Number(e.target.value));
-                      }}
-                    />
-                  </FormItem>
+            <div className="text-muted-foreground space-y-1 text-sm">
+              <div>
+                Feedbacks:{" "}
+                {/* If field.value is empty string (unselected), show loading skeleton */}
+                {field.value === "" ? (
+                  <Skeleton className="inline-block h-4 w-16 align-middle" />
+                ) : /* If field.value is null (selected "None"), show N/A */
+                field.value === null ? (
+                  <span className="font-medium">N/A</span>
+                ) : (
+                  /* Otherwise show the actual feedback count */
+                  <span className="font-medium">{feedbackCount}</span>
                 )}
-              />
-            )}
+              </div>
+              <div>
+                Curated Inferences:{" "}
+                {/* If field.value is empty string (unselected), show loading skeleton */}
+                {field.value === "" ? (
+                  <Skeleton className="inline-block h-4 w-16 align-middle" />
+                ) : /* If field.value is null (selected "None"), show N/A */
+                field.value === null ? (
+                  <span className="font-medium">N/A</span>
+                ) : (
+                  /* Otherwise show the actual curated inference count */
+                  <span className="font-medium">{curatedInferenceCount}</span>
+                )}
+              </div>
+            </div>
           </div>
         </FormItem>
       )}
