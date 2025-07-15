@@ -158,6 +158,7 @@ export function SFTForm({
                 name="metric"
                 functionFieldName="function"
                 config={config}
+                showDemonstrations={true}
               />
 
               {errors.metric && (

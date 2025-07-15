@@ -34,6 +34,7 @@ type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   name: Path<T>;
   functionFieldName: Path<T>;
   config: Config;
+  showDemonstrations: boolean;
 };
 
 /**
@@ -53,6 +54,7 @@ export default function CurationMetricSelector<
   name,
   functionFieldName,
   config,
+  showDemonstrations,
 }: CurationMetricSelectorProps<T>) {
   const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
   const { getValues, setValue } = useFormContext<T>();
@@ -166,7 +168,7 @@ export default function CurationMetricSelector<
                   </div>
                   <ChevronDown
                     className={clsx(
-                      "text-fg-muted group-hover:text-fg-tertiary ml-2 h-4 w-4 shrink-0 transition-colors transition-transform duration-300 ease-out",
+                      "text-fg-muted group-hover:text-fg-tertiary ml-2 h-4 w-4 shrink-0 transition-transform duration-300 ease-out",
                       open ? "-rotate-180" : "rotate-0",
                     )}
                   />
@@ -229,7 +231,8 @@ export default function CurationMetricSelector<
                       {Object.entries(config.metrics)
                         .filter(
                           ([metricName]) =>
-                            metricName !== "demonstration" &&
+                            (metricName !== "demonstration" ||
+                              showDemonstrations) &&
                             metricName !== "comment",
                         )
                         .sort(([metricNameA], [metricNameB]) => {

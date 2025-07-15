@@ -138,6 +138,7 @@ export function DatasetBuilderForm({
             name="metric_name"
             functionFieldName="function"
             config={config}
+            showDemonstrations={false}
           />
           <OutputSourceSelector control={form.control} />
         </div>
