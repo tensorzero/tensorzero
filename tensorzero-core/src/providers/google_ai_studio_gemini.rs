@@ -858,7 +858,7 @@ fn convert_part_to_output(
             FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
                 return Ok(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
-                    text: "".to_string(),
+                    text: String::new(),
                 }));
             }
             _ => {
@@ -2183,7 +2183,7 @@ mod tests {
     #[test]
     fn test_try_from_with_empty_text_chunks() {
         // Setup a response with empty text chunks that should be filtered out
-        let empty_text = GeminiResponseContentPartData::Text("".to_string());
+        let empty_text = GeminiResponseContentPartData::Text(String::new());
         let non_empty_text = GeminiResponseContentPartData::Text("Non-empty text".to_string());
         let content = GeminiResponseContent {
             parts: vec![

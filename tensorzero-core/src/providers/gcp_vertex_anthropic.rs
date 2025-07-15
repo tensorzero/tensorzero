@@ -1086,7 +1086,7 @@ fn anthropic_to_tensorzero_stream_message(
                         id,
                         raw_name: Some(name),
                         // As far as I can tell this is always {} so we ignore
-                        raw_arguments: "".to_string(),
+                        raw_arguments: String::new(),
                     })],
                     None,
                     raw_message,
@@ -2348,7 +2348,7 @@ mod tests {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool1".to_string());
                 assert_eq!(tool_call.raw_name, Some("calculator".to_string()));
-                assert_eq!(tool_call.raw_arguments, "".to_string());
+                assert_eq!(tool_call.raw_arguments, String::new());
             }
             _ => panic!("Expected a tool call content block"),
         }

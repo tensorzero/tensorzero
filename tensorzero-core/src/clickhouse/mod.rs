@@ -205,14 +205,14 @@ impl ClickHouseConnectionInfo {
     ) -> Result<ClickHouseResponse, Error> {
         match self {
             Self::Disabled => Ok(ClickHouseResponse {
-                response: "".to_string(),
+                response: String::new(),
                 metadata: ClickHouseResponseMetadata {
                     read_rows: 0,
                     written_rows: 0,
                 },
             }),
             Self::Mock { .. } => Ok(ClickHouseResponse {
-                response: "".to_string(),
+                response: String::new(),
                 metadata: ClickHouseResponseMetadata {
                     read_rows: 0,
                     written_rows: 0,
@@ -311,7 +311,7 @@ impl ClickHouseConnectionInfo {
     ) -> Result<ClickHouseResponse, Error> {
         match self {
             Self::Disabled | Self::Mock { .. } => Ok(ClickHouseResponse {
-                response: "".to_string(),
+                response: String::new(),
                 metadata: ClickHouseResponseMetadata {
                     read_rows: 0,
                     written_rows: 0,

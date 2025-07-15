@@ -947,7 +947,7 @@ mod tests {
                 weight: Some(1.0),
                 system_template: Some(PathWithContents {
                     path: system_template_name.into(),
-                    contents: "".to_string(),
+                    contents: String::new(),
                 }),
                 ..Default::default()
             },
@@ -986,7 +986,7 @@ mod tests {
                 weight: Some(1.0),
                 system_template: Some(PathWithContents {
                     path: system_template_name.into(),
-                    contents: "".to_string(),
+                    contents: String::new(),
                 }),
                 ..Default::default()
             },
