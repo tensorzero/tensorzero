@@ -205,7 +205,7 @@ fn parse_thinking_output(
         Some(parsed) => {
             let Some(thinking) = parsed
                 .get_mut("thinking")
-                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                .and_then(|v| v.as_str().map(str::to_string))
             else {
                 tracing::warn!(
                     "Chain of thought variant received a parsed output that didn't contain a `thinking` field. {}",
