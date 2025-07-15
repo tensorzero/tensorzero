@@ -884,10 +884,9 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
             &StorageKind::S3Compatible {
                 bucket_name: Some(test_bucket.to_string()),
                 region: Some("us-east-1".to_string()),
+                prefix: prefix.clone(),
                 endpoint: None,
                 allow_http: None,
-                #[cfg(feature = "e2e_tests")]
-                prefix: prefix.clone(),
             },
             &client,
             &format!(
