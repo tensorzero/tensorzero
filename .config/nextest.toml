@@ -34,7 +34,7 @@ default-filter = 'test(test_dummy_only) | test(clickhouse)'
 default-filter = 'binary(optimization-live)'
 
 [profile.optimization-mock]
-default-filter = 'binary(optimization-live)'
+default-filter = 'binary(optimization-mock)'
 
 
 [[profile.optimization.overrides]]

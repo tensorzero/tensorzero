@@ -26,8 +26,9 @@ use tensorzero_core::{
 };
 
 pub mod fireworks_sft;
-mod gcp_vertex_gemini_sft;
+pub mod gcp_vertex_gemini_sft;
 pub mod openai_sft;
+pub mod together_sft;
 
 static FERRIS_PNG: &[u8] = include_bytes!("../../e2e/providers/ferris.png");
 

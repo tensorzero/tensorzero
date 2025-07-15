@@ -1,10 +1,10 @@
-use crate::{optimization_test_case, OptimizationTestCase};
+use crate::common::OptimizationTestCase;
 use tensorzero_core::optimization::{
     together_sft::UninitializedTogetherSFTConfig, UninitializedOptimizerConfig,
     UninitializedOptimizerInfo,
 };
 
-struct TogetherSFTTestCase();
+pub struct TogetherSFTTestCase();
 
 impl OptimizationTestCase for TogetherSFTTestCase {
     fn supports_image_data(&self) -> bool {
