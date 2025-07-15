@@ -63,11 +63,17 @@ pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo) {
     };
     let mut interval = time::interval(Duration::from_secs(6 * 60 * 60));
     loop {
+        let copied_clickhouse = clickhouse.clone();
+        let copied_client = client.clone();
+        let copied_deployment_id = deployment_id.clone();
         interval.tick().await;
-        // TODO: do we need to spawn this? it can't fail in theory
-        if let Err(e) = send_howdy(&clickhouse, &client, &deployment_id).await {
-            debug!("{e}");
-        }
+        tokio::spawn(async move {
+            if let Err(e) =
+                send_howdy(&copied_clickhouse, &copied_client, &copied_deployment_id).await
+            {
+                debug!("{e}");
+            }
+        });
     }
 }
 
