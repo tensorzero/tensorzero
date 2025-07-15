@@ -368,20 +368,20 @@ async def test_async_thought_signature_only_input(async_client: AsyncTensorZeroG
 
 def test_display_thought():
     t1 = Thought(signature="my_signature")
-    assert str(t1) == "Thought(text=None, type='thought', signature='my_signature')"
-    assert repr(t1) == "Thought(text=None, type='thought', signature='my_signature')"
+    assert str(t1) == "Thought(text=None, type='thought', signature='my_signature', _internal_provider_type=None)"
+    assert repr(t1) == "Thought(text=None, type='thought', signature='my_signature', _internal_provider_type=None)"
 
     t2 = Thought(text="my_text", signature="my_signature")
     assert (
-        str(t2) == "Thought(text='my_text', type='thought', signature='my_signature')"
+        str(t2) == "Thought(text='my_text', type='thought', signature='my_signature', _internal_provider_type=None)"
     )
     assert (
-        repr(t2) == "Thought(text='my_text', type='thought', signature='my_signature')"
+        repr(t2) == "Thought(text='my_text', type='thought', signature='my_signature', _internal_provider_type=None)"
     )
 
     t3 = Thought(text="my_text")
-    assert str(t3) == "Thought(text='my_text', type='thought', signature=None)"
-    assert repr(t3) == "Thought(text='my_text', type='thought', signature=None)"
+    assert str(t3) == "Thought(text='my_text', type='thought', signature=None, _internal_provider_type=None)"
+    assert repr(t3) == "Thought(text='my_text', type='thought', signature=None, _internal_provider_type=None)"
 
 
 @pytest.mark.asyncio
