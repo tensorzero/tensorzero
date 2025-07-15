@@ -246,7 +246,7 @@ test.describe("Error handling", () => {
       .getByRole("combobox")
       .filter({ hasText: "Select a function" })
       .click();
-    await page.getByRole("option", { name: "extract_entities JSON" }).click();
+    await page.getByRole("option", { name: "extract_entities" }).click();
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a metric" })
