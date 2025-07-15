@@ -446,7 +446,7 @@ impl<'a> TryFrom<&'a RequestMessage> for GeminiContent<'a> {
         while let Some(block) = iter.next() {
             match block {
                 ContentBlock::Thought(thought @ Thought { text, signature }) => {
-                    // Gemini nevers produces 'thought: true' at the moment, and there's no documentation
+                    // Gemini never produces 'thought: true' at the moment, and there's no documentation
                     // on whether or not they should be passed back in. Let's warn and discard for now.
                     if text.is_some() {
                         warn_discarded_thought_block(PROVIDER_TYPE, thought);
