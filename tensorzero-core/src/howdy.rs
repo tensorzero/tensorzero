@@ -118,6 +118,7 @@ pub async fn get_howdy_report<'a>(
         inference_count,
         feedback_count,
         gateway_version: crate::endpoints::status::TENSORZERO_VERSION,
+        commit_hash: crate::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown"),
         dryrun,
     })
 }
@@ -191,6 +192,7 @@ pub struct HowdyReportBody<'a> {
     pub inference_count: String,
     pub feedback_count: String,
     pub gateway_version: &'static str,
+    pub commit_hash: &'static str,
     #[serde(default)]
     pub dryrun: bool,
 }
