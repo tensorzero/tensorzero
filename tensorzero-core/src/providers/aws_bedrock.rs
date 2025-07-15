@@ -479,7 +479,7 @@ fn bedrock_to_tensorzero_stream_message(
                         vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                             id: tool_use.tool_use_id,
                             raw_name: Some(tool_use.name),
-                            raw_arguments: "".to_string(),
+                            raw_arguments: String::new(),
                         })],
                         None,
                         raw_message,

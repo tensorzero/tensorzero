@@ -338,7 +338,7 @@ async fn test_write_read_completed_batch_inference_chat() {
     let output_1 = ProviderBatchInferenceOutput {
         id: inference_id1,
         output: vec!["hello world".to_string().into()],
-        raw_response: "".to_string(),
+        raw_response: String::new(),
         usage: Usage {
             input_tokens: 10,
             output_tokens: 20,
@@ -349,7 +349,7 @@ async fn test_write_read_completed_batch_inference_chat() {
     let output_2 = ProviderBatchInferenceOutput {
         id: inference_id2,
         output: vec!["goodbye world".to_string().into()],
-        raw_response: "".to_string(),
+        raw_response: String::new(),
         usage: Usage {
             input_tokens: 20,
             output_tokens: 30,
@@ -540,7 +540,7 @@ async fn test_write_read_completed_batch_inference_json() {
     let output_1 = ProviderBatchInferenceOutput {
         id: inference_id1,
         output: vec!["{\"answer\": \"hello world\"}".to_string().into()],
-        raw_response: "".to_string(),
+        raw_response: String::new(),
         usage: Usage {
             input_tokens: 10,
             output_tokens: 20,
@@ -551,7 +551,7 @@ async fn test_write_read_completed_batch_inference_json() {
     let output_2 = ProviderBatchInferenceOutput {
         id: inference_id2,
         output: vec!["{\"response\": \"goodbye world\"}".to_string().into()],
-        raw_response: "".to_string(),
+        raw_response: String::new(),
         usage: Usage {
             input_tokens: 20,
             output_tokens: 30,

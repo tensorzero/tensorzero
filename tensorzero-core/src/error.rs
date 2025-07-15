@@ -838,16 +838,16 @@ impl std::fmt::Display for ErrorDetails {
                         message,
                         raw_request
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw request: {r}")),
+                            .map_or(String::new(), |r| format!("\nRaw request: {r}")),
                         raw_response
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw response: {r}"))
+                            .map_or(String::new(), |r| format!("\nRaw response: {r}"))
                     )
                 } else {
                     write!(
                         f,
                         "Error{} from {} client: {}",
-                        status_code.map_or("".to_string(), |s| format!(" {s}")),
+                        status_code.map_or(String::new(), |s| format!(" {s}")),
                         provider_type,
                         message
                     )
@@ -871,10 +871,10 @@ impl std::fmt::Display for ErrorDetails {
                         message,
                         raw_request
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw request: {r}")),
+                            .map_or(String::new(), |r| format!("\nRaw request: {r}")),
                         raw_response
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw response: {r}"))
+                            .map_or(String::new(), |r| format!("\nRaw response: {r}"))
                     )
                 } else {
                     write!(f, "Error from {provider_type} server: {message}")
