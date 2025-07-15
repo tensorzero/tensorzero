@@ -1,12 +1,12 @@
 import { useForm, useWatch } from "react-hook-form";
-import { Form, FormField, FormItem, FormLabel } from "~/components/ui/form";
+import { Form } from "~/components/ui/form";
 import { DatasetSelector } from "./DatasetSelector";
 import {
   DatasetBuilderFormValuesResolver,
   type DatasetBuilderFormValues,
 } from "./types";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
-import { FunctionSelector } from "~/components/function/FunctionSelector";
+import { FunctionFormField } from "~/components/function/FunctionFormField";
 import { useConfig } from "~/context/config";
 import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
@@ -131,22 +131,13 @@ export function DatasetBuilderForm({
             setIsNewDataset={setIsNewDataset}
           />
 
-          <FormField
+          <FunctionFormField
             control={form.control}
             name="function"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="sr-only">Function</FormLabel>
-                <FunctionSelector
-                  selected={field.value}
-                  onSelect={(value) => {
-                    field.onChange(value);
-                    form.resetField("variant");
-                  }}
-                  functions={config.functions}
-                />
-              </FormItem>
-            )}
+            functions={config.functions}
+            onSelect={() => {
+              form.resetField("variant");
+            }}
           />
 
           <CurationMetricSelector<DatasetBuilderFormValues>

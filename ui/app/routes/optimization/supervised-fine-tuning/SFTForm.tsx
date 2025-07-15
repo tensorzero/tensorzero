@@ -3,13 +3,13 @@ import { useFetcher } from "react-router";
 import { useEffect } from "react";
 import { v7 as uuid } from "uuid";
 import { type SFTFormValues, SFTFormValuesResolver } from "./types";
-import { FunctionSelector } from "~/components/function/FunctionSelector";
+import { FunctionFormField } from "~/components/function/FunctionFormField";
 import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { VariantSelector } from "./VariantSelector";
 import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import { Button } from "~/components/ui/button";
-import { Form, FormField, FormItem, FormLabel } from "~/components/ui/form";
+import { Form } from "~/components/ui/form";
 import type { ChatCompletionConfig, VariantInfo } from "tensorzero-node";
 import type { Config } from "tensorzero-node";
 import { models } from "./model_options";
@@ -144,20 +144,11 @@ export function SFTForm({
         >
           <div className="space-y-6">
             <div className="flex flex-col gap-1">
-              <FormField
+              <FunctionFormField
                 control={form.control}
                 name="function"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="sr-only">Function</FormLabel>
-                    <FunctionSelector
-                      selected={field.value}
-                      onSelect={field.onChange}
-                      functions={config.functions}
-                      hideDefaultFunction={true}
-                    />
-                  </FormItem>
-                )}
+                functions={config.functions}
+                hideDefaultFunction={true}
               />
 
               {errors.function && (
