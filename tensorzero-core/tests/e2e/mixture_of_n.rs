@@ -238,7 +238,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
     // Check that all expected model names are present
     let expected_model_names: std::collections::HashSet<String> = ["dummy::random_answer", "json"]
         .iter()
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
     assert_eq!(model_names, expected_model_names);
 
@@ -548,7 +548,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
     let expected_model_names: std::collections::HashSet<String> =
         ["test", "alternate", "gpt-4o-mini-2024-07-18"]
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
     assert_eq!(model_names, expected_model_names);
 }
@@ -773,7 +773,7 @@ async fn e2e_test_mixture_of_n_json_real_judge() {
     let expected_model_names: std::collections::HashSet<String> =
         ["json_beatles_1", "json_beatles_2", "gpt-4o-mini-2024-07-18"]
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
     assert_eq!(model_names, expected_model_names);
 }
@@ -908,7 +908,7 @@ async fn e2e_test_mixture_of_n_extra_body() {
     let expected_model_names: std::collections::HashSet<String> =
         ["test", "o1-2024-12-17", "gpt-4o-mini-2024-07-18"]
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
     assert_eq!(model_names, expected_model_names);
 }

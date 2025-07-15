@@ -824,7 +824,7 @@ mod tests {
                 value: "raw text".to_string(),
             },
             ClientInputMessageContent::Thought(Thought {
-                text: "thought".to_string(),
+                text: Some("thought".to_string()),
                 signature: None,
             }),
         ];
