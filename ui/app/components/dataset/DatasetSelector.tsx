@@ -114,11 +114,13 @@ export function DatasetSelector({
               </span>
             )}
 
-            <ChevronDown
+            <ButtonIcon
+              as={ChevronDown}
               className={clsx(
-                "text-fg-muted ml-2 h-4 w-4 shrink-0 transition duration-300 ease-out",
+                "h-4 w-4 shrink-0 transition duration-300 ease-out",
                 open ? "-rotate-180" : "rotate-0",
               )}
+              variant="tertiary"
             />
           </Button>
         </PopoverTrigger>
