@@ -226,6 +226,9 @@ impl ModelConfig {
                                 signature: _,
                                 provider_type,
                             }) => {
+                                // When a thought is scoped to a particular provider type, we discard
+                                // if it doesn't match our target provider.
+                                // Thoughts without a `provider_type` are used for all providers.
                                 if provider_type.as_ref().is_some_and(|t| {
                                     t != &provider.config.thought_block_provider_type()
                                 }) {
