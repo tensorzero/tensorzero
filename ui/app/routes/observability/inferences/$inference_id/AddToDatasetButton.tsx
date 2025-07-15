@@ -36,7 +36,6 @@ export function AddToDatasetButton({
   return (
     <>
       <DatasetSelector
-        className="w-64"
         selected={selectedDataset}
         onSelect={(dataset) => {
           setSelectedDataset(dataset);

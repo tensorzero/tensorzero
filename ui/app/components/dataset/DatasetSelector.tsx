@@ -83,7 +83,7 @@ export function DatasetSelector({
   );
 
   return (
-    <div className={clsx("flex min-w-64 flex-col space-y-2", className)}>
+    <div className={clsx("flex flex-col space-y-2", className)}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -124,7 +124,7 @@ export function DatasetSelector({
         </PopoverTrigger>
 
         <PopoverContent
-          className="w-[var(--radix-popover-trigger-width)] p-0"
+          className="w-[var(--radix-popover-trigger-width)] min-w-64 p-0"
           align="start"
         >
           <Command>
