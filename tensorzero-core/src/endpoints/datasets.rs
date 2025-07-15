@@ -364,7 +364,7 @@ pub async fn update_datapoint_handler(
             let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(
                 chat.tool_params
                     .clone()
-                    .map(|x| x.into())
+                    .map(ToolCallConfigDatabaseInsert::into)
                     .unwrap_or_default(),
             );
 
@@ -672,7 +672,7 @@ pub async fn insert_datapoint(
                     Some(JsonInferenceOutput {
                         raw: output
                             .get("raw")
-                            .and_then(|v| v.as_str().map(|s| s.to_string())),
+                            .and_then(|v| v.as_str().map(str::to_string)),
                         parsed: output.get("parsed").cloned(),
                     })
                 } else {

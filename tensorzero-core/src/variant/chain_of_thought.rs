@@ -205,7 +205,7 @@ fn parse_thinking_output(
         Some(parsed) => {
             let Some(thinking) = parsed
                 .get_mut("thinking")
-                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                .and_then(|v| v.as_str().map(str::to_string))
             else {
                 tracing::warn!(
                     "Chain of thought variant received a parsed output that didn't contain a `thinking` field. {}",
@@ -235,7 +235,7 @@ fn parse_thinking_output(
                 output
                     .auxiliary_content
                     .push(ContentBlockOutput::Thought(Thought {
-                        text: thinking,
+                        text: Some(thinking),
                         signature: None,
                         provider_type: None,
                     }));
@@ -244,7 +244,7 @@ fn parse_thinking_output(
             output.auxiliary_content.insert(
                 json_block_index,
                 ContentBlockOutput::Thought(Thought {
-                    text: thinking,
+                    text: Some(thinking),
                     signature: None,
                     provider_type: None,
                 }),
@@ -337,7 +337,7 @@ mod tests {
         assert_eq!(
             out.auxiliary_content[0],
             ContentBlockOutput::Thought(Thought {
-                text: "step by step".to_string(),
+                text: Some("step by step".to_string()),
                 signature: None,
                 provider_type: None,
             })
@@ -351,7 +351,7 @@ mod tests {
                 "response": {"answer": "the ultimate answer is 42"}
             })),
             auxiliary_content: vec![ContentBlockOutput::Thought(Thought {
-                text: "existing thinking".to_string(),
+                text: Some("existing thinking".to_string()),
                 signature: None,
                 provider_type: None,
             })],
@@ -377,7 +377,7 @@ mod tests {
         assert_eq!(
             out.auxiliary_content[0],
             ContentBlockOutput::Thought(Thought {
-                text: "new thinking process".to_string(),
+                text: Some("new thinking process".to_string()),
                 signature: None,
                 provider_type: None,
             })
@@ -385,7 +385,7 @@ mod tests {
         assert_eq!(
             out.auxiliary_content[1],
             ContentBlockOutput::Thought(Thought {
-                text: "existing thinking".to_string(),
+                text: Some("existing thinking".to_string()),
                 signature: None,
                 provider_type: None,
             })

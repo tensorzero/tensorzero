@@ -787,7 +787,7 @@ impl OpenAIProvider {
                 raw_response,
                 provider_type: PROVIDER_TYPE.to_string(),
             },
-            |r| r.try_into(),
+            TryInto::try_into,
         )
         .await
     }
@@ -1158,13 +1158,7 @@ pub(super) fn prepare_openai_tools<'a>(
             if tool_config.tools_available.is_empty() {
                 return (None, None, None);
             }
-            let tools = Some(
-                tool_config
-                    .tools_available
-                    .iter()
-                    .map(|tool| tool.into())
-                    .collect(),
-            );
+            let tools = Some(tool_config.tools_available.iter().map(Into::into).collect());
             let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
             (tools, tool_choice, parallel_tool_calls)
@@ -2008,7 +2002,7 @@ fn openai_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {

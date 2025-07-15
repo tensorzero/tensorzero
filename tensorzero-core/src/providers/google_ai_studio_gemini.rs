@@ -515,7 +515,7 @@ impl<'a> TryFrom<&'a RequestMessage> for GeminiContent<'a> {
         let parts: Vec<FlattenUnknown<GeminiPart>> = message
             .content
             .iter()
-            .map(|block| block.try_into())
+            .map(TryInto::try_into)
             .collect::<Result<Vec<Option<FlattenUnknown<GeminiPart>>>, _>>()?
             .into_iter()
             .flatten()
@@ -558,7 +558,7 @@ impl<'a> From<&'a ToolConfig> for GeminiFunctionDeclaration<'a> {
 impl<'a> From<&'a Vec<ToolConfig>> for GeminiTool<'a> {
     fn from(tools: &'a Vec<ToolConfig>) -> Self {
         let function_declarations: Vec<GeminiFunctionDeclaration<'a>> =
-            tools.iter().map(|tc| tc.into()).collect();
+            tools.iter().map(Into::into).collect();
         GeminiTool {
             function_declarations,
         }
@@ -775,7 +775,9 @@ fn content_part_to_tensorzero_chunk(
                 })));
             }
             // Handle 'thought/thoughtSignature' with no other fields
-            FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
+            FlattenUnknown::Unknown(obj)
+                if obj.as_object().is_some_and(serde_json::Map::is_empty) =>
+            {
                 return Ok(Some(ContentBlockChunk::Thought(ThoughtChunk {
                     id: "0".to_string(),
                     text: None,
@@ -853,15 +855,17 @@ fn convert_part_to_output(
             FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => {
                 return Ok(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
-                    text,
+                    text: Some(text),
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             // Handle 'thought/thoughtSignature' with no other fields
-            FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
+            FlattenUnknown::Unknown(obj)
+                if obj.as_object().is_some_and(serde_json::Map::is_empty) =>
+            {
                 return Ok(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
-                    text: "".to_string(),
+                    text: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
@@ -1046,9 +1050,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 latency,
-                finish_reason: first_candidate
-                    .finish_reason
-                    .map(|finish_reason| finish_reason.into()),
+                finish_reason: first_candidate.finish_reason.map(Into::into),
             },
         ))
     }
@@ -1100,18 +1102,14 @@ fn convert_stream_response_with_metadata_to_chunk(
     let usage = if first_candidate.finish_reason.as_ref().is_none() {
         None
     } else {
-        response
-            .usage_metadata
-            .map(|usage_metadata| usage_metadata.into())
+        response.usage_metadata.map(Into::into)
     };
     Ok(ProviderInferenceResponseChunk::new(
         content,
         usage,
         raw_response,
         latency,
-        first_candidate
-            .finish_reason
-            .map(|finish_reason| finish_reason.into()),
+        first_candidate.finish_reason.map(Into::into),
     ))
 }
 

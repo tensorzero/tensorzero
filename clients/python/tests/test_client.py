@@ -338,6 +338,53 @@ async def test_async_thought_input(async_client: AsyncTensorZeroGateway):
 
 
 @pytest.mark.asyncio
+async def test_async_thought_signature_only_input(async_client: AsyncTensorZeroGateway):
+    result = await async_client.inference(
+        model_name="dummy::echo_request_messages",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "thought",
+                            "signature": "my_first_signature",
+                        },
+                        Thought(signature="my_second_signature"),
+                    ],
+                }
+            ],
+        },
+        tags={"key": "value"},
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert len(result.content) == 1
+    assert isinstance(result.content[0], Text)
+    assert (
+        result.content[0].text
+        == '{"system":null,"messages":[{"role":"user","content":[{"type":"thought","text":null,"signature":"my_first_signature"},{"type":"thought","text":null,"signature":"my_second_signature"}]}]}'
+    )
+
+
+def test_display_thought():
+    t1 = Thought(signature="my_signature")
+    assert str(t1) == "Thought(text=None, type='thought', signature='my_signature')"
+    assert repr(t1) == "Thought(text=None, type='thought', signature='my_signature')"
+
+    t2 = Thought(text="my_text", signature="my_signature")
+    assert (
+        str(t2) == "Thought(text='my_text', type='thought', signature='my_signature')"
+    )
+    assert (
+        repr(t2) == "Thought(text='my_text', type='thought', signature='my_signature')"
+    )
+
+    t3 = Thought(text="my_text")
+    assert str(t3) == "Thought(text='my_text', type='thought', signature=None)"
+    assert repr(t3) == "Thought(text='my_text', type='thought', signature=None)"
+
+
+@pytest.mark.asyncio
 async def test_async_reasoning_inference(async_client: AsyncTensorZeroGateway):
     result = await async_client.inference(
         model_name="dummy::reasoner_with_signature",

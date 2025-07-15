@@ -498,7 +498,7 @@ fn deepseek_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(OpenAIUsage::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
@@ -663,7 +663,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(reasoning) = message.reasoning_content {
             content.push(ContentBlockOutput::Thought(Thought {
-                text: reasoning,
+                text: Some(reasoning),
                 signature: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             }));
@@ -687,7 +687,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_response,
                 usage,
                 latency,
-                finish_reason: finish_reason.map(|r| r.into()),
+                finish_reason: finish_reason.map(OpenAIFinishReason::into),
             },
         ))
     }
@@ -970,7 +970,7 @@ mod tests {
         assert_eq!(
             inference_response.output[0],
             ContentBlockOutput::Thought(Thought {
-                text: "I'm thinking about the weather".to_string(),
+                text: Some("I'm thinking about the weather".to_string()),
                 signature: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             })

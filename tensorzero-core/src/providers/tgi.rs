@@ -550,7 +550,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 latency,
-                finish_reason: finish_reason.map(|r| r.into()),
+                finish_reason: finish_reason.map(Into::into),
             },
         ))
     }
@@ -726,7 +726,7 @@ fn tgi_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
