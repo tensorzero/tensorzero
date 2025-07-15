@@ -42,7 +42,7 @@ pub fn set_debug(debug: bool) -> Result<(), Error> {
 
 pub fn warn_discarded_thought_block(provider_type: &str, thought: &Thought) {
     if *DEBUG.get().unwrap_or(&false) {
-        tracing::warn!("Provider type `{provider_type}` does not support input thought blocks, discarding: {thought}");
+        tracing::warn!("Provider type `{provider_type}` does not support input thought blocks, discarding: {thought:?}");
     } else {
         tracing::warn!(
             "Provider type `{provider_type}` does not support input thought blocks, discarding"

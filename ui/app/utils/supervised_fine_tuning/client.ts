@@ -69,7 +69,8 @@ class NativeSFTJob extends SFTJob {
             info: this.jobStatus,
           },
         };
-      case "failed":
+      case "failed": {
+        const stringifiedError = JSON.stringify(this.jobStatus.error, null, 2);
         return {
           status: "error",
           modelProvider: this.provider,
@@ -77,10 +78,11 @@ class NativeSFTJob extends SFTJob {
           jobUrl: this.jobHandle.job_url,
           rawData: {
             status: "error",
-            message: this.jobStatus.message,
+            message: stringifiedError,
           },
-          error: this.jobStatus.message,
+          error: stringifiedError,
         };
+      }
       case "completed": {
         // NOTE: the native SFT backend actually returns a model provider that is all we need
         // and guaranteed to match the Rust type.

@@ -340,8 +340,8 @@ test("queryInferenceTableBounds", async () => {
 
 test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
-  expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0197177a-7c00-70a2-82a6-741f60a03b2e");
+  expect(bounds.first_id).toBe("0192ced0-947e-74b3-a3d7-02fd2c54d637");
+  expect(bounds.last_id).toBe("0197177a-7c00-70a2-82a6-744bcb064c42");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -448,35 +448,36 @@ test(
     });
     expect(episodes.length).toBe(10);
 
-    // Verify last_inference_ids are in descending order
+    console.log(episodes);
+
+    // Verify episodes are in descending order
     for (let i = 1; i < episodes.length; i++) {
-      expect(
-        episodes[i - 1].last_inference_id > episodes[i].last_inference_id,
-      ).toBe(true);
+      expect(episodes[i - 1].episode_id > episodes[i].episode_id).toBe(true);
     }
 
     // Test pagination with before
     const episodes2 = await queryEpisodeTable({
-      before: episodes[episodes.length - 1].last_inference_id,
+      before: episodes[episodes.length - 1].episode_id,
       page_size: 10,
     });
     expect(episodes2.length).toBe(10);
 
     // Test pagination with after on the last inference id
     const episodes3 = await queryEpisodeTable({
-      after: episodes[0].last_inference_id,
+      after: episodes[0].episode_id,
       page_size: 10,
     });
+    console.log(episodes3);
     expect(episodes3.length).toBe(0);
 
     // Test that before and after together throws error
     await expect(
       queryEpisodeTable({
-        before: episodes[0].last_inference_id,
-        after: episodes[0].last_inference_id,
+        before: episodes[0].episode_id,
+        after: episodes[0].episode_id,
         page_size: 10,
       }),
-    ).rejects.toThrow("Cannot specify both 'before' and 'after' parameters");
+    ).rejects.toThrow("Cannot specify both `before` and `after` parameters");
 
     // Verify each episode has valid data
     for (const episode of episodes) {

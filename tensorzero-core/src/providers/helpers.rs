@@ -1,5 +1,6 @@
 use std::{collections::HashMap, pin::Pin};
 
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use axum::http;
 use bytes::Bytes;
 use futures::{stream::Peekable, Stream};
@@ -633,6 +634,96 @@ pub(crate) fn check_new_tool_call_name(
             *last_tool_name = new_name.clone();
             Some(new_name)
         }
+    }
+}
+
+pub trait TensorZeroRequestBuilderExt {
+    async fn send_and_parse_json<T: DeserializeOwned>(
+        self,
+        provider_type: &str,
+    ) -> Result<T, Error>;
+}
+
+impl TensorZeroRequestBuilderExt for reqwest::RequestBuilder {
+    async fn send_and_parse_json<T: DeserializeOwned>(
+        self,
+        provider_type: &str,
+    ) -> Result<T, Error> {
+        let (client, request) = self.build_split();
+        let request = request.map_err(|e| {
+            Error::new(ErrorDetails::InferenceClient {
+                status_code: None,
+                message: format!("Error building request: {}", DisplayOrDebugGateway::new(e)),
+                provider_type: provider_type.to_string(),
+                raw_request: None,
+                raw_response: None,
+            })
+        })?;
+        let url = request.url().clone();
+        let raw_body = request
+            .body()
+            .and_then(|b| b.as_bytes().map(|b| String::from_utf8_lossy(b).to_string()));
+        let response = client.execute(request).await.map_err(|e| {
+            Error::new(ErrorDetails::InferenceClient {
+                status_code: e.status(),
+                message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                provider_type: provider_type.to_string(),
+                raw_request: raw_body.clone(),
+                raw_response: None,
+            })
+        })?;
+
+        let status_code = response.status();
+
+        let raw_response = response.text().await.map_err(|e| {
+            Error::new(ErrorDetails::InferenceClient {
+                status_code: e.status(),
+                message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                provider_type: provider_type.to_string(),
+                raw_request: raw_body.clone(),
+                raw_response: None,
+            })
+        })?;
+
+        if !status_code.is_success() {
+            return Err(Error::new(ErrorDetails::InferenceClient {
+                status_code: Some(status_code),
+                message: format!("Non-successful status code for url `{url}`",),
+                provider_type: provider_type.to_string(),
+                raw_request: raw_body.clone(),
+                raw_response: Some(raw_response.clone()),
+            }));
+        }
+
+        let res: T = serde_json::from_str(&raw_response).map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Error parsing JSON response: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+                raw_request: raw_body.clone(),
+                raw_response: Some(raw_response.clone()),
+                provider_type: provider_type.to_string(),
+            })
+        })?;
+        Ok(res)
+    }
+}
+
+pub trait UrlParseErrExt<T> {
+    fn convert_parse_error(self) -> Result<T, Error>;
+}
+
+impl<T> UrlParseErrExt<T> for Result<T, url::ParseError> {
+    fn convert_parse_error(self) -> Result<T, Error> {
+        self.map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!(
+                    "Error parsing URL: {}. {IMPOSSIBLE_ERROR_MESSAGE}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })
     }
 }
 

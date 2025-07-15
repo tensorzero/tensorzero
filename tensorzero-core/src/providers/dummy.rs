@@ -334,7 +334,7 @@ impl InferenceProvider for DummyProvider {
             })],
             "reasoner" => vec![
                 ContentBlockOutput::Thought(Thought {
-                    text: "hmmm".to_string(),
+                    text: Some("hmmm".to_string()),
                     signature: None,
                 }),
                 ContentBlockOutput::Text(Text {
@@ -343,7 +343,7 @@ impl InferenceProvider for DummyProvider {
             ],
             "reasoner_with_signature" => vec![
                 ContentBlockOutput::Thought(Thought {
-                    text: "hmmm".to_string(),
+                    text: Some("hmmm".to_string()),
                     signature: Some("my_signature".to_string()),
                 }),
                 ContentBlockOutput::Text(Text {
@@ -352,7 +352,7 @@ impl InferenceProvider for DummyProvider {
             ],
             "json_reasoner" => vec![
                 ContentBlockOutput::Thought(Thought {
-                    text: "hmmm".to_string(),
+                    text: Some("hmmm".to_string()),
                     signature: None,
                 }),
                 ContentBlockOutput::Text(Text {

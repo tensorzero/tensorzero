@@ -470,21 +470,13 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Inference Parameters" />
-          <ParameterCard
-            parameters={inferenceParams.raw}
-            html={inferenceParams.html}
-          />
+          <ParameterCard parameters={inferenceParams.raw} />
         </SectionLayout>
 
         {inference.function_type === "chat" && (
           <SectionLayout>
             <SectionHeader heading="Tool Parameters" />
-            {toolParams && (
-              <ParameterCard
-                parameters={toolParams.raw}
-                html={inferenceParams.html}
-              />
-            )}
+            {toolParams && <ParameterCard parameters={toolParams.raw} />}
           </SectionLayout>
         )}
 

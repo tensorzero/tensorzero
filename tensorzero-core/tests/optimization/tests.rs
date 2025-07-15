@@ -26,7 +26,9 @@ use tensorzero_core::{
 };
 
 mod fireworks_sft;
+mod gcp_vertex_gemini_sft;
 mod openai_sft;
+mod together_sft;
 
 static FERRIS_PNG: &[u8] = include_bytes!("../e2e/providers/ferris.png");
 
@@ -378,7 +380,7 @@ macro_rules! optimization_test_case {
     // $constructor = an expression which yields your impl of OptimizationTestCase
     ($fn_name:ident, $constructor:expr) => {
         ::paste::paste! {
-            #[tokio::test]
+            #[tokio::test(flavor = "multi_thread")]
             async fn [<test_slow_optimization_ $fn_name>]() {
                 $crate::run_test_case(&$constructor).await;
             }
