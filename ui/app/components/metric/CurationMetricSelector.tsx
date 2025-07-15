@@ -127,187 +127,189 @@ export default function CurationMetricSelector<
         <FormItem className="flex flex-col gap-1">
           <FormLabel>Metric</FormLabel>
           <div className="space-y-2">
-            <Popover open={open} onOpenChange={setOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={open}
-                  className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border font-normal hover:cursor-pointer"
-                  disabled={!functionValue || isLoading}
-                >
-                  <div className="min-w-0 flex-1">
-                    {(() => {
-                      const currentMetricName = field.value as string | null;
-                      const selectedMetricDetails = currentMetricName
-                        ? config.metrics[currentMetricName]
-                        : undefined;
+            <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
+              <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={open}
+                    className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border font-normal hover:cursor-pointer"
+                    disabled={!functionValue || isLoading}
+                  >
+                    <div className="min-w-0 flex-1">
+                      {(() => {
+                        const currentMetricName = field.value as string | null;
+                        const selectedMetricDetails = currentMetricName
+                          ? config.metrics[currentMetricName]
+                          : undefined;
 
-                      if (currentMetricName && selectedMetricDetails) {
-                        return (
-                          <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
-                            <span className="truncate text-sm">
-                              {currentMetricName}
-                            </span>
-                          </div>
-                        );
-                      } else if (currentMetricName === null) {
-                        return (
-                          <div className="text-fg-muted flex items-center gap-x-2">
-                            <span className="text-fg-secondary flex text-sm">
-                              None
-                            </span>
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div className="text-fg-muted flex items-center gap-x-2">
-                            <span className="text-fg-secondary flex text-sm">
-                              {isLoading
-                                ? "Loading metrics..."
-                                : !functionValue ||
-                                    (functionValue && validMetrics.size === 0)
-                                  ? "No metrics available"
-                                  : "Select a metric"}
-                            </span>
-                          </div>
-                        );
-                      }
-                    })()}
-                  </div>
-                  <ChevronDown
-                    className={clsx(
-                      "text-fg-muted group-hover:text-fg-tertiary ml-2 h-4 w-4 shrink-0 transition-transform duration-300 ease-out",
-                      open ? "-rotate-180" : "rotate-0",
-                    )}
-                  />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                className="w-[var(--radix-popover-trigger-width)] p-0"
-                align="start"
-              >
-                <Command>
-                  <CommandInput
-                    placeholder="Find a metric..."
-                    value={inputValue}
-                    onValueChange={handleInputChange}
-                    className="h-9"
-                  />
-                  <CommandList>
-                    <CommandEmpty className="px-4 py-2 text-sm">
-                      No metrics found.
-                    </CommandEmpty>
-                    <CommandGroup
-                      heading={
-                        <div className="text-fg-tertiary flex w-full items-center justify-between">
-                          <span>Function Metrics</span>
-                          <span>Inferences</span>
-                        </div>
-                      }
-                    >
-                      <CommandItem
-                        key="none"
-                        value="none"
-                        onSelect={() => {
-                          const metricValue = null;
-                          field.onChange(metricValue);
-                          setInputValue("");
-                          setOpen(false);
-                        }}
-                        className="group flex w-full cursor-pointer items-center justify-between"
-                      >
-                        <span>None</span>
-                        <span
-                          className={clsx(
-                            "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
-                            field.value === null
-                              ? "text-fg-secondary font-medium"
-                              : "text-fg-tertiary font-normal",
-                          )}
-                        >
-                          {metricsFetcher.data?.metrics
-                            ? metricsFetcher.data.metrics
-                                .reduce(
-                                  (total, metric) =>
-                                    total + metric.feedback_count,
-                                  0,
-                                )
-                                .toLocaleString()
-                            : "0"}
-                        </span>
-                      </CommandItem>
-                      {Object.entries(metrics)
-                        .sort(([metricNameA], [metricNameB]) => {
-                          // 1. Put selectable metrics first
-                          const isSelectableA = validMetrics.has(metricNameA);
-                          const isSelectableB = validMetrics.has(metricNameB);
-                          if (isSelectableA && !isSelectableB) {
-                            return -1;
-                          }
-                          if (!isSelectableA && isSelectableB) {
-                            return 1;
-                          }
-                          // 2. Within each category, put demonstration first if present
-                          if (metricNameA === "demonstration") return -1;
-                          if (metricNameB === "demonstration") return 1;
-                          return 0;
-                        })
-                        .map(([metricName, metricConfig]) => {
-                          const isSelectable = validMetrics.has(metricName);
-                          const metricFeedback =
-                            metricsFetcher.data?.metrics.find(
-                              (m) => m.metric_name === metricName,
-                            );
+                        if (currentMetricName && selectedMetricDetails) {
                           return (
-                            <CommandItem
-                              key={metricName}
-                              value={metricName}
-                              disabled={!isSelectable}
-                              onSelect={() => {
-                                if (!isSelectable) return;
-                                field.onChange(metricName);
-                                setInputValue("");
-                                setOpen(false);
-                              }}
-                              className={clsx(
-                                "group flex w-full items-center justify-between",
-                                isSelectable
-                                  ? "cursor-pointer"
-                                  : "cursor-not-allowed opacity-50",
-                              )}
-                            >
-                              <span className="truncate">{metricName}</span>
-                              <div className="ml-2 flex items-center gap-2">
-                                <FeedbackBadges metric={metricConfig} />
-                                <span
-                                  className={clsx(
-                                    "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
-                                    field.value === metricName
-                                      ? "text-fg-secondary font-medium"
-                                      : "text-fg-tertiary font-normal",
-                                  )}
-                                >
-                                  {metricFeedback
-                                    ? metricFeedback.feedback_count.toLocaleString()
-                                    : "0"}
-                                </span>
-                              </div>
-                            </CommandItem>
+                            <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
+                              <span className="truncate text-sm">
+                                {currentMetricName}
+                              </span>
+                            </div>
                           );
-                        })}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+                        } else if (currentMetricName === null) {
+                          return (
+                            <div className="text-fg-muted flex items-center gap-x-2">
+                              <span className="text-fg-secondary flex text-sm">
+                                None
+                              </span>
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div className="text-fg-muted flex items-center gap-x-2">
+                              <span className="text-fg-secondary flex text-sm">
+                                {isLoading
+                                  ? "Loading metrics..."
+                                  : !functionValue ||
+                                      (functionValue && validMetrics.size === 0)
+                                    ? "No metrics available"
+                                    : "Select a metric"}
+                              </span>
+                            </div>
+                          );
+                        }
+                      })()}
+                    </div>
+                    <ChevronDown
+                      className={clsx(
+                        "text-fg-muted group-hover:text-fg-tertiary ml-2 h-4 w-4 shrink-0 transition-transform duration-300 ease-out",
+                        open ? "-rotate-180" : "rotate-0",
+                      )}
+                    />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[var(--radix-popover-trigger-width)] p-0"
+                  align="start"
+                >
+                  <Command>
+                    <CommandInput
+                      placeholder="Find a metric..."
+                      value={inputValue}
+                      onValueChange={handleInputChange}
+                      className="h-9"
+                    />
+                    <CommandList>
+                      <CommandEmpty className="px-4 py-2 text-sm">
+                        No metrics found.
+                      </CommandEmpty>
+                      <CommandGroup
+                        heading={
+                          <div className="text-fg-tertiary flex w-full items-center justify-between">
+                            <span>Function Metrics</span>
+                            <span>Inferences</span>
+                          </div>
+                        }
+                      >
+                        <CommandItem
+                          key="none"
+                          value="none"
+                          onSelect={() => {
+                            const metricValue = null;
+                            field.onChange(metricValue);
+                            setInputValue("");
+                            setOpen(false);
+                          }}
+                          className="group flex w-full cursor-pointer items-center justify-between"
+                        >
+                          <span>None</span>
+                          <span
+                            className={clsx(
+                              "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
+                              field.value === null
+                                ? "text-fg-secondary font-medium"
+                                : "text-fg-tertiary font-normal",
+                            )}
+                          >
+                            {metricsFetcher.data?.metrics
+                              ? metricsFetcher.data.metrics
+                                  .reduce(
+                                    (total, metric) =>
+                                      total + metric.feedback_count,
+                                    0,
+                                  )
+                                  .toLocaleString()
+                              : "0"}
+                          </span>
+                        </CommandItem>
+                        {Object.entries(metrics)
+                          .sort(([metricNameA], [metricNameB]) => {
+                            // 1. Put selectable metrics first
+                            const isSelectableA = validMetrics.has(metricNameA);
+                            const isSelectableB = validMetrics.has(metricNameB);
+                            if (isSelectableA && !isSelectableB) {
+                              return -1;
+                            }
+                            if (!isSelectableA && isSelectableB) {
+                              return 1;
+                            }
+                            // 2. Within each category, put demonstration first if present
+                            if (metricNameA === "demonstration") return -1;
+                            if (metricNameB === "demonstration") return 1;
+                            return 0;
+                          })
+                          .map(([metricName, metricConfig]) => {
+                            const isSelectable = validMetrics.has(metricName);
+                            const metricFeedback =
+                              metricsFetcher.data?.metrics.find(
+                                (m) => m.metric_name === metricName,
+                              );
+                            return (
+                              <CommandItem
+                                key={metricName}
+                                value={metricName}
+                                disabled={!isSelectable}
+                                onSelect={() => {
+                                  if (!isSelectable) return;
+                                  field.onChange(metricName);
+                                  setInputValue("");
+                                  setOpen(false);
+                                }}
+                                className={clsx(
+                                  "group flex w-full items-center justify-between",
+                                  isSelectable
+                                    ? "cursor-pointer"
+                                    : "cursor-not-allowed opacity-50",
+                                )}
+                              >
+                                <span className="truncate">{metricName}</span>
+                                <div className="ml-2 flex items-center gap-2">
+                                  <FeedbackBadges metric={metricConfig} />
+                                  <span
+                                    className={clsx(
+                                      "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
+                                      field.value === metricName
+                                        ? "text-fg-secondary font-medium"
+                                        : "text-fg-tertiary font-normal",
+                                    )}
+                                  >
+                                    {metricFeedback
+                                      ? metricFeedback.feedback_count.toLocaleString()
+                                      : "0"}
+                                  </span>
+                                </div>
+                              </CommandItem>
+                            );
+                          })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
 
             {field.value && config.metrics[field.value]?.type === "float" && (
               <FormField
                 control={control}
                 name={"threshold" as Path<T>}
                 render={({ field: thresholdField }) => (
-                  <FormItem className="flex flex-col gap-1 pt-2">
+                  <FormItem className="flex flex-col gap-1">
                     <FormLabel>Threshold</FormLabel>
                     <Input
                       type="number"
