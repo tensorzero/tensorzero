@@ -4,7 +4,7 @@ import {
   DatasetBuilderFormValuesResolver,
   type DatasetBuilderFormValues,
 } from "./types";
-import { FunctionSelector } from "~/components/function/FunctionSelector";
+import { FunctionFormField } from "~/components/function/FunctionFormField";
 import { useConfig } from "~/context/config";
 import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
@@ -137,12 +137,15 @@ export function DatasetBuilderForm() {
             )}
           />
 
-          <FunctionSelector<DatasetBuilderFormValues>
+          <FunctionFormField
             control={form.control}
             name="function"
-            inferenceCount={counts.inferenceCount}
-            config={config}
+            functions={config.functions}
+            onSelect={() => {
+              form.resetField("variant");
+            }}
           />
+
           <CurationMetricSelector<DatasetBuilderFormValues>
             control={form.control}
             name="metric_name"
