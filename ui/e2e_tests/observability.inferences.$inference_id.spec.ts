@@ -376,7 +376,7 @@ test("should be able to add a datapoint from the inference page", async ({
 
   // Wait for navigation to the new page
   await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
-    timeout: 10000,
+    timeout: 5000,
   });
 
   // Assert that the page URL starts with /datasets/test_json_dataset/datapoint/

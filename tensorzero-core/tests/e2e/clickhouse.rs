@@ -500,7 +500,10 @@ async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bo
 invoke_all_separate_tests!(
     test_rollback_helper,
     test_rollback_up_to_migration_index_,
-    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+    [
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+        25, 26
+    ]
 );
 
 #[tokio::test(flavor = "multi_thread")]
@@ -672,7 +675,7 @@ async fn test_clickhouse_migration_manager() {
         // for each element in the array.
         [
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24
+            24, 25, 26
         ]
     );
     let rows = get_all_migration_records(&clickhouse).await;
@@ -752,6 +755,34 @@ async fn test_bad_clickhouse_write() {
 async fn test_clean_clickhouse_start() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
     migration_manager::run(&clickhouse).await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_deployment_id_oldest() {
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    migration_manager::run(&clickhouse).await.unwrap();
+    // Add a row to the DeploymentID table and make sure that it isn't returned
+    let new_deployment_id = "foo";
+    clickhouse
+        .write(
+            &[serde_json::json!({
+                "deployment_id": new_deployment_id,
+            })],
+            "DeploymentID",
+        )
+        .await
+        .unwrap();
+    // Run a query that gets the newest deployment ID but since it's final it shouldn't be foo
+    let deployment_id = clickhouse
+        .run_query_synchronous_no_params(
+            "SELECT deployment_id FROM DeploymentID FINAL ORDER BY created_at DESC LIMIT 1"
+                .to_string(),
+        )
+        .await
+        .unwrap()
+        .response;
+
+    assert_ne!(deployment_id, new_deployment_id);
 }
 
 #[tokio::test(flavor = "multi_thread")]

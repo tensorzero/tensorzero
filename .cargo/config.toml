@@ -16,7 +16,7 @@ test-optimization = [
     "nextest",
     "run",
     "--features",
-    "optimization_tests",
+    "optimization_tests,e2e_tests",
     "--profile",
     "optimization",
 ]

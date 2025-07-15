@@ -156,10 +156,18 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
     assert all(isinstance(dp, ChatDatapoint) for dp in listed_datapoints)
     assert all(dp.function_name == "basic_test" for dp in listed_datapoints)
 
-    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[0])
-    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[1])
-    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[2])
-    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[3])
+    sync_client.delete_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
+    )
+    sync_client.delete_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[1]
+    )
+    sync_client.delete_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[2]
+    )
+    sync_client.delete_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[3]
+    )
 
 
 @pytest.mark.asyncio
@@ -294,6 +302,7 @@ async def test_async_bulk_insert_delete_datapoints(
     assert isinstance(datapoint.input.messages[0].content[0], Text)
     assert datapoint.input.messages[0].content[0].arguments == {"country": "US"}
     assert datapoint.output is None
+    assert datapoint.is_custom
 
     # List datapoints
     listed_datapoints = await async_client.list_datapoints(
@@ -313,6 +322,7 @@ async def test_async_bulk_insert_delete_datapoints(
     )
     assert len(listed_datapoints) == 2
     assert all(isinstance(dp, ChatDatapoint) for dp in listed_datapoints)
+    assert all(dp.is_custom for dp in listed_datapoints)
     assert all(dp.function_name == "basic_test" for dp in listed_datapoints)
 
     await async_client.delete_datapoint(

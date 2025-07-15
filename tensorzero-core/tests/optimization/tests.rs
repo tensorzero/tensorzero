@@ -1,18 +1,16 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::print_stdout
-)]
+#![expect(clippy::unwrap_used, clippy::panic, clippy::print_stdout)]
 use base64::Engine;
 use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use tensorzero::{RenderedSample, Role};
+use tensorzero::{
+    Client, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
+};
 use tensorzero_core::{
     cache::CacheOptions,
-    clickhouse::ClickHouseConnectionInfo,
+    clickhouse::test_helpers::CLICKHOUSE_URL,
+    clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
     config_parser::ProviderTypesConfig,
     endpoints::inference::InferenceClients,
     inference::types::{
@@ -22,28 +20,33 @@ use tensorzero_core::{
         ModelInput, RequestMessage, Text,
     },
     optimization::JobHandle,
-    optimization::{OptimizationJobInfo, Optimizer, OptimizerInfo, OptimizerOutput},
+    optimization::{OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo},
     tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
 };
 
 mod fireworks_sft;
+mod gcp_vertex_gemini_sft;
 mod openai_sft;
+mod together_sft;
 
 static FERRIS_PNG: &[u8] = include_bytes!("../e2e/providers/ferris.png");
 
-pub fn use_mock_inference_provider() -> bool {
+fn use_mock_inference_provider() -> bool {
     std::env::var("TENSORZERO_USE_MOCK_INFERENCE_PROVIDER").is_ok()
 }
 
 pub trait OptimizationTestCase {
     fn supports_image_data(&self) -> bool;
     fn supports_tool_calls(&self) -> bool;
-    fn get_optimizer_info(&self) -> OptimizerInfo;
+    fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo;
 }
 
 pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
-    let optimizer_info = test_case.get_optimizer_info();
+    let optimizer_info = test_case
+        .get_optimizer_info(use_mock_inference_provider())
+        .load()
+        .unwrap();
     let client = reqwest::Client::new();
     let test_examples = get_examples(test_case, 10);
     let val_examples = Some(get_examples(test_case, 10));
@@ -55,7 +58,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let mut status;
     loop {
         status = job_handle.poll(&client, &credentials).await.unwrap();
-        println!("Status: {status:?}");
+        println!("Status: `{status:?}` Handle: `{job_handle}`");
         if matches!(status, OptimizationJobInfo::Completed { .. }) {
             break;
         }
@@ -121,6 +124,45 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .await
         .unwrap();
     println!("Response: {response:?}");
+}
+
+/// Runs launch_optimization_workflow and then polls for the workflow using the Rust client
+pub async fn run_workflow_test_case_with_tensorzero_client(
+    test_case: &impl OptimizationTestCase,
+    client: &tensorzero::Client,
+) {
+    let params = LaunchOptimizationWorkflowParams {
+        function_name: "write_haiku".to_string(),
+        template_variant_name: "gpt_4o_mini".to_string(),
+        query_variant_name: None,
+        filters: None,
+        output_source: InferenceOutputSource::Inference,
+        limit: Some(10),
+        offset: None,
+        val_fraction: None,
+        format: ClickhouseFormat::JsonEachRow,
+        // We always mock the client tests since this is tested above
+        optimizer_config: test_case.get_optimizer_info(true),
+    };
+    let job_handle = client
+        .experimental_launch_optimization_workflow(params)
+        .await
+        .unwrap();
+    let mut status;
+    loop {
+        status = client
+            .experimental_poll_optimization(&job_handle)
+            .await
+            .unwrap();
+        println!("Status: `{status:?}` Handle: `{job_handle}`");
+        if matches!(status, OptimizationJobInfo::Completed { .. }) {
+            break;
+        }
+        if matches!(status, OptimizationJobInfo::Failed { .. }) {
+            panic!("Optimization failed: {status:?}");
+        }
+        sleep(Duration::from_secs(1)).await;
+    }
 }
 
 fn get_examples(test_case: &impl OptimizationTestCase, num_examples: usize) -> Vec<RenderedSample> {
@@ -308,6 +350,29 @@ fn generate_image_example() -> RenderedSample {
     }
 }
 
+pub async fn make_embedded_gateway() -> Client {
+    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    config_path.push("tests/e2e/tensorzero.toml");
+    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(config_path),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        timeout: None,
+        verify_credentials: true,
+    })
+    .build()
+    .await
+    .unwrap()
+}
+
+pub async fn make_http_gateway() -> Client {
+    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
+        url: "http://localhost:3000".parse().unwrap(),
+    })
+    .build()
+    .await
+    .unwrap()
+}
+
 /// Generates a `#[tokio::test] async fn $fn_name() { run_test_case(&$constructor).await; }`
 #[macro_export]
 macro_rules! optimization_test_case {
@@ -315,9 +380,41 @@ macro_rules! optimization_test_case {
     // $constructor = an expression which yields your impl of OptimizationTestCase
     ($fn_name:ident, $constructor:expr) => {
         ::paste::paste! {
-            #[tokio::test]
+            #[tokio::test(flavor = "multi_thread")]
             async fn [<test_slow_optimization_ $fn_name>]() {
                 $crate::run_test_case(&$constructor).await;
+            }
+        }
+    };
+}
+
+/// Generates a `#[tokio::test] async fn $fn_name() { run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await; }`
+#[macro_export]
+macro_rules! embedded_workflow_test_case {
+    // $fn_name  = the name of the generated test function
+    // $constructor = an expression which yields your impl of OptimizationTestCase
+    ($fn_name:ident, $constructor:expr) => {
+        ::paste::paste! {
+            #[tokio::test(flavor = "multi_thread")]
+            async fn [<test_embedded_slow_optimization_ $fn_name>]() {
+                let client = $crate::make_embedded_gateway().await;
+                $crate::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
+            }
+        }
+    };
+}
+
+/// Generates a `#[tokio::test] async fn $fn_name() { run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await; }`
+#[macro_export]
+macro_rules! http_workflow_test_case {
+    // $fn_name  = the name of the generated test function
+    // $constructor = an expression which yields your impl of OptimizationTestCase
+    ($fn_name:ident, $constructor:expr) => {
+        ::paste::paste! {
+            #[tokio::test]
+            async fn [<test_http_slow_optimization_ $fn_name>]() {
+                let client = $crate::make_http_gateway().await;
+                $crate::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
             }
         }
     };

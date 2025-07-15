@@ -1,7 +1,14 @@
 use std::{collections::HashMap, sync::Arc};
 
+use axum::{
+    body::Body,
+    extract::{Path, State},
+    response::{IntoResponse, Response},
+    Json,
+};
+
 use rand::seq::SliceRandom;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     clickhouse::{
@@ -11,6 +18,7 @@ use crate::{
     config_parser::Config,
     endpoints::{inference::InferenceCredentials, stored_inference::render_samples},
     error::{Error, ErrorDetails},
+    gateway_util::{AppState, AppStateData, StructuredJson},
     optimization::{
         JobHandle, OptimizationJobHandle, OptimizationJobInfo, Optimizer,
         UninitializedOptimizerInfo,
@@ -20,7 +28,7 @@ use crate::{
 };
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 pub struct LaunchOptimizationWorkflowParams {
     pub function_name: String,
@@ -38,6 +46,22 @@ pub struct LaunchOptimizationWorkflowParams {
     pub optimizer_config: UninitializedOptimizerInfo,
 }
 
+pub async fn launch_optimization_workflow_handler(
+    State(AppStateData {
+        config,
+        http_client,
+        clickhouse_connection_info,
+        ..
+    }): AppState,
+    StructuredJson(params): StructuredJson<LaunchOptimizationWorkflowParams>,
+) -> Result<Response<Body>, Error> {
+    let job_handle =
+        launch_optimization_workflow(&http_client, config, &clickhouse_connection_info, params)
+            .await?;
+    let encoded_job_handle = job_handle.to_base64_urlencoded()?;
+    Ok(encoded_job_handle.into_response())
+}
+
 /// Starts an optimization job.
 /// This function will query inferences from the database,
 /// render them by fetching any network resources needed and
@@ -45,7 +69,7 @@ pub struct LaunchOptimizationWorkflowParams {
 /// and launch the optimization job specified.
 pub async fn launch_optimization_workflow(
     http_client: &reqwest::Client,
-    config: Arc<Config<'static>>,
+    config: Arc<Config>,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     params: LaunchOptimizationWorkflowParams,
 ) -> Result<OptimizationJobHandle, Error> {
@@ -134,6 +158,15 @@ pub async fn launch_optimization(
             &InferenceCredentials::default(),
         )
         .await
+}
+
+pub async fn poll_optimization_handler(
+    State(AppStateData { http_client, .. }): AppState,
+    Path(job_handle): Path<String>,
+) -> Result<Response<Body>, Error> {
+    let job_handle = OptimizationJobHandle::from_base64_urlencoded(&job_handle)?;
+    let info = poll_optimization(&http_client, &job_handle).await?;
+    Ok(Json(info).into_response())
 }
 
 /// Poll an existing optimization job.

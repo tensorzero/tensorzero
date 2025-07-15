@@ -28,7 +28,7 @@ use super::{
     InferModelRequestArgs, InferenceConfig, ModelUsedInfo, RetryConfig, Variant,
 };
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct ChatCompletionConfig {

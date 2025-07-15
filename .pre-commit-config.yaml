@@ -20,7 +20,7 @@ repos:
       - id: detect-private-key
         exclude: |
           (?x)^(
-              tensorzero-core/src/providers/gcp_vertex_gemini\.rs|
+              tensorzero-core/src/providers/gcp_vertex_gemini/mod\.rs|
               ci/dummy-gcp-credentials\.json
           )$
       - id: end-of-file-fixer
@@ -62,13 +62,6 @@ repos:
       - id: cargo-clippy
         name: cargo clippy
         entry: cargo clippy --all-targets --all-features -- -D warnings
-        language: system
-        types: [rust]
-        pass_filenames: false
-
-      - id: cargo-test-unit
-        name: cargo test-unit
-        entry: cargo test-unit
         language: system
         types: [rust]
         pass_filenames: false

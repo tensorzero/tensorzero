@@ -106,6 +106,8 @@ class RenderedSample:
 class OptimizationJobHandle:
     OpenAISFT: Type["OptimizationJobHandle"]
     FireworksSFT: Type["OptimizationJobHandle"]
+    GCPVertexGeminiSFT: Type["OptimizationJobHandle"]
+    TogetherSFT: Type["OptimizationJobHandle"]
 
 @final
 class OptimizationJobStatus:
@@ -117,6 +119,8 @@ class OptimizationJobStatus:
 class OptimizationJobInfo:
     OpenAISFT: Type["OptimizationJobInfo"]
     FireworksSFT: Type["OptimizationJobInfo"]
+    GCPVertexGeminiSFT: Type["OptimizationJobInfo"]
+    TogetherSFT: Type["OptimizationJobInfo"]
     @property
     def message(self) -> str: ...
     @property
@@ -153,6 +157,28 @@ class FireworksSFTConfig:
     ) -> None: ...
 
 @final
+class GCPVertexGeminiSFTConfig:
+    def __init__(
+        self,
+        *,
+        model: str,
+        bucket_name: str,
+        project_id: str,
+        region: str,
+        learning_rate_multiplier: Optional[float] = None,
+        adapter_size: Optional[int] = None,
+        n_epochs: Optional[int] = None,
+        export_last_checkpoint_only: Optional[bool] = None,
+        credentials: Optional[str] = None,
+        api_base: Optional[str] = None,
+        seed: Optional[int] = None,
+        service_account: Optional[str] = None,
+        kms_key_name: Optional[str] = None,
+        tuned_model_display_name: Optional[str] = None,
+        bucket_path_prefix: Optional[str] = None,
+    ) -> None: ...
+
+@final
 class Datapoint:
     Chat: Type["Datapoint"]
     Json: Type["Datapoint"]
@@ -171,9 +197,89 @@ class Datapoint:
     def tool_params(self) -> Optional[Any]: ...
     @property
     def output_schema(self) -> Optional[Any]: ...
+    @property
+    def is_custom(self) -> bool: ...
+
+@final
+class ChatCompletionConfig:
+    @property
+    def system_template(self) -> Optional[str]: ...
+    @property
+    def user_template(self) -> Optional[str]: ...
+    @property
+    def assistant_template(self) -> Optional[str]: ...
+
+@final
+class BestOfNSamplingConfig:
+    pass
+
+@final
+class DiclConfig:
+    pass
+
+@final
+class MixtureOfNConfig:
+    pass
+
+@final
+class ChainOfThoughtConfig:
+    pass
+
+@final
+class VariantsConfig:
+    def __len__(self) -> int: ...
+    def __getitem__(
+        self, key: str
+    ) -> Union[
+        ChatCompletionConfig,
+        BestOfNSamplingConfig,
+        DiclConfig,
+        MixtureOfNConfig,
+        ChainOfThoughtConfig,
+    ]: ...
+
+@final
+class FunctionConfigChat:
+    @property
+    def type(self) -> Literal["chat"]: ...
+    @property
+    def variants(self) -> VariantsConfig: ...
+    @property
+    def system_schema(self) -> Optional[Any]: ...
+    @property
+    def user_schema(self) -> Optional[Any]: ...
+    @property
+    def assistant_schema(self) -> Optional[Any]: ...
+
+@final
+class FunctionConfigJson:
+    @property
+    def type(self) -> Literal["json"]: ...
+    @property
+    def variants(self) -> VariantsConfig: ...
+    @property
+    def system_schema(self) -> Optional[Any]: ...
+    @property
+    def user_schema(self) -> Optional[Any]: ...
+    @property
+    def assistant_schema(self) -> Optional[Any]: ...
+    @property
+    def output_schema(self) -> Optional[Any]: ...
+
+@final
+class FunctionsConfig:
+    def __len__(self) -> int: ...
+    def __getitem__(
+        self, key: str
+    ) -> Union[FunctionConfigChat, FunctionConfigJson]: ...
+
+@final
+class Config:
+    @property
+    def functions(self) -> FunctionsConfig: ...
 
 class BaseTensorZeroGateway:
-    pass
+    def experimental_get_config(self) -> Config: ...
 
 @final
 class TensorZeroGateway(BaseTensorZeroGateway):
@@ -869,17 +975,28 @@ class LocalHttpGateway(object):
 __all__ = [
     "AsyncTensorZeroGateway",
     "BaseTensorZeroGateway",
+    "BestOfNSamplingConfig",
+    "ChatCompletionConfig",
+    "ChainOfThoughtConfig",
+    "Config",
     "Datapoint",
+    "DiclConfig",
+    "FunctionConfigChat",
+    "FunctionConfigJson",
+    "FunctionsConfig",
     "FireworksSFTConfig",
+    "GCPVertexGeminiSFTConfig",
     "TensorZeroGateway",
     "LocalHttpGateway",
+    "MixtureOfNConfig",
     "_start_http_gateway",
-    "RenderedSample",
-    "StoredInference",
-    "ResolvedInput",
-    "ResolvedInputMessage",
     "OpenAISFTConfig",
     "OptimizationJobHandle",
     "OptimizationJobInfo",
     "OptimizationJobStatus",
+    "RenderedSample",
+    "StoredInference",
+    "ResolvedInput",
+    "ResolvedInputMessage",
+    "VariantsConfig",
 ]

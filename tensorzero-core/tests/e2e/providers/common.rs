@@ -3867,11 +3867,6 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         return;
     }
 
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
@@ -4487,10 +4482,6 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
         return;
     }
 
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -5080,11 +5071,6 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         || provider.model_provider_name == "sglang"
         || provider.model_provider_name == "groq"
     {
-        return;
-    }
-
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -5692,10 +5678,6 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     if provider.model_name.starts_with("gemini-2.5-pro") {
         return;
     }
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
 
     // NOTE: the xAI API now returns mangled output most of the time when this test runs.
     // The bug has been reported to the xAI team.
@@ -6002,11 +5984,6 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
         || provider.model_provider_name == "mistral"
         || provider.model_provider_name == "together"
     {
-        return;
-    }
-
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -6342,11 +6319,6 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "groq"
     {
-        return;
-    }
-
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -7009,10 +6981,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     if provider.model_provider_name == "together" {
         return;
     }
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
+
     // Groq does not support streaming in JSON mode
     // (no reason given): https://console.groq.com/docs/text-chat#json-mode
     if provider.model_provider_name == "groq" {
@@ -7363,11 +7332,6 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
         return;
     }
 
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -7639,11 +7603,6 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     // We skip this test for xAI until the fix is deployed.
     // https://gist.github.com/GabrielBianconi/47a4247cfd8b6689e7228f654806272d
     if provider.model_provider_name == "xai" {
-        return;
-    }
-
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -8375,11 +8334,6 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
 ) {
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
 
     let input_function_name = "basic_test";
@@ -10048,10 +10002,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         // Groq does not support streaming in JSON mode (no reason given): https://console.groq.com/docs/text-chat#json-mode)
         return;
     }
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -10197,6 +10148,8 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("gemini-2.5-pro") {
         500
+    } else if provider.model_name.starts_with("o1") {
+        1000
     } else {
         100
     };
