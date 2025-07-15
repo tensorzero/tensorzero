@@ -1613,7 +1613,7 @@ impl<'a> From<&'a ToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
 impl<'a> From<&'a Vec<ToolConfig>> for GCPVertexGeminiTool<'a> {
     fn from(tools: &'a Vec<ToolConfig>) -> Self {
         let function_declarations: Vec<GCPVertexGeminiFunctionDeclaration<'a>> =
-            tools.iter().map(|tc| tc.into()).collect();
+            tools.iter().map(Into::into).collect();
         GCPVertexGeminiTool::FunctionDeclarations(function_declarations)
     }
 }
@@ -2152,7 +2152,9 @@ fn content_part_to_tensorzero_chunk(
                 })));
             }
             // Handle 'thought/thoughtSignature' with no other fields
-            FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
+            FlattenUnknown::Unknown(obj)
+                if obj.as_object().is_some_and(serde_json::Map::is_empty) =>
+            {
                 return Ok(Some(ContentBlockChunk::Thought(ThoughtChunk {
                     id: "0".to_string(),
                     text: None,
@@ -2241,14 +2243,16 @@ fn convert_to_output(
             FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(text)) => {
                 return Ok(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
-                    text,
+                    text: Some(text),
                 }));
             }
             // Handle 'thought/thoughtSignature' with no other fields
-            FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
+            FlattenUnknown::Unknown(obj)
+                if obj.as_object().is_some_and(serde_json::Map::is_empty) =>
+            {
                 return Ok(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
-                    text: "".to_string(),
+                    text: None,
                 }));
             }
             _ => {
@@ -2405,9 +2409,7 @@ fn get_response_content(
         })
     })?;
 
-    let finish_reason = first_candidate
-        .finish_reason
-        .map(|finish_reason| finish_reason.into());
+    let finish_reason = first_candidate.finish_reason.map(Into::into);
 
     // GCP sometimes doesn't return content in the response (e.g. safety settings blocked the generation).
     let content = match first_candidate.content {
@@ -2516,14 +2518,10 @@ fn convert_stream_response_with_metadata_to_chunk(
     });
     Ok(ProviderInferenceResponseChunk::new(
         content,
-        response
-            .usage_metadata
-            .map(|usage_metadata| usage_metadata.into()),
+        response.usage_metadata.map(Into::into),
         raw_response,
         latency,
-        first_candidate
-            .finish_reason
-            .map(|finish_reason| finish_reason.into()),
+        first_candidate.finish_reason.map(Into::into),
     ))
 }
 

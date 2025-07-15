@@ -371,7 +371,7 @@ impl<'a> FireworksRequest<'a> {
         };
         let messages = prepare_fireworks_messages(request.system.as_deref(), &request.messages)?;
         let (tools, tool_choice, _) = prepare_openai_tools(request);
-        let tools = tools.map(|t| t.into_iter().map(|tool| tool.into()).collect());
+        let tools = tools.map(|t| t.into_iter().map(OpenAITool::into).collect());
 
         Ok(FireworksRequest {
             messages,
@@ -623,7 +623,7 @@ fn fireworks_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(OpenAIUsage::into);
     let mut finish_reason = None;
     let mut content = vec![];
     if let Some(choice) = chunk.choices.pop() {
@@ -749,7 +749,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 process_think_blocks(&raw_text, parse_think_blocks, PROVIDER_TYPE)?;
             if let Some(reasoning) = extracted_reasoning {
                 content.push(ContentBlockOutput::Thought(Thought {
-                    text: reasoning,
+                    text: Some(reasoning),
                     signature: None,
                 }));
             }
@@ -773,7 +773,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 raw_response,
                 usage,
                 latency,
-                finish_reason: finish_reason.map(|r| r.into()),
+                finish_reason: finish_reason.map(FireworksFinishReason::into),
             },
         ))
     }
@@ -859,7 +859,7 @@ mod tests {
         // First block should be a thought
         match &inference_response.output[0] {
             ContentBlockOutput::Thought(thought) => {
-                assert_eq!(thought.text, "This is reasoning");
+                assert_eq!(thought.text, Some("This is reasoning".to_string()));
                 assert_eq!(thought.signature, None);
             }
             _ => panic!("Expected a thought block"),
@@ -868,7 +868,7 @@ mod tests {
         // Second block should be text
         match &inference_response.output[1] {
             ContentBlockOutput::Text(text) => {
-                assert_eq!(text.text, "Hello  world");
+                assert_eq!(text.text, "Hello  world".to_string());
             }
             _ => panic!("Expected a text block"),
         }

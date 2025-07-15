@@ -90,11 +90,7 @@ impl<'a> TryFrom<&'a RenderedSample> for TogetherSupervisedRow<'a> {
                         message: "Parallel tool calls are not supported for Together".to_string(),
                     }));
                 }
-                tool_params
-                    .tools_available
-                    .iter()
-                    .map(|t| t.into())
-                    .collect()
+                tool_params.tools_available.iter().map(Into::into).collect()
             }
             None => vec![],
         };
