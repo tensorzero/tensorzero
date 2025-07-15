@@ -218,6 +218,10 @@ pub enum ErrorDetails {
         mode: String,
         message: String,
     },
+    InvalidEncodedJobHandle,
+    InvalidJobHandle {
+        message: String,
+    },
     InvalidInferenceOutputSource {
         source: String,
     },
@@ -492,6 +496,8 @@ impl ErrorDetails {
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidEncodedJobHandle => tracing::Level::WARN,
+            ErrorDetails::InvalidJobHandle { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidRenderedStoredInference { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidMetricName { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
@@ -580,6 +586,8 @@ impl ErrorDetails {
             ErrorDetails::ModelTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::VariantTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::InvalidClientMode { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidEncodedJobHandle => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidJobHandle { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidTensorzeroUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
@@ -908,6 +916,15 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Dynamic evaluation run not found for episode id: {episode_id}",
                 )
+            }
+            ErrorDetails::InvalidEncodedJobHandle => {
+                write!(
+                    f,
+                    "Invalid encoded job handle. Failed to decode using URL-safe Base64."
+                )
+            }
+            ErrorDetails::InvalidJobHandle { message } => {
+                write!(f, "Failed to deserialize job handle: {message}")
             }
             ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{message}"),
             ErrorDetails::InvalidTensorzeroUuid { message, kind } => {

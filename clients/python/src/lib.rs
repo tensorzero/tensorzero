@@ -26,6 +26,8 @@ use python_helpers::{
 };
 use tensorzero_core::{
     clickhouse::ClickhouseFormat,
+    config_parser::{ConfigPyClass, FunctionsConfigPyClass},
+    function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
         pyo3_helpers::{
             deserialize_from_pyobj, deserialize_from_rendered_sample,
@@ -36,8 +38,14 @@ use tensorzero_core::{
         ResolvedInput, ResolvedInputMessage,
     },
     optimization::{
-        fireworks_sft::UninitializedFireworksSFTConfig, openai_sft::UninitializedOpenAISFTConfig,
-        OptimizationJobInfoPyClass, OptimizationJobStatus, UninitializedOptimizerInfo,
+        fireworks_sft::UninitializedFireworksSFTConfig,
+        gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig,
+        openai_sft::UninitializedOpenAISFTConfig, OptimizationJobInfoPyClass,
+        OptimizationJobStatus, UninitializedOptimizerInfo,
+    },
+    variant::{
+        BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
+        DiclConfigPyClass, MixtureOfNConfigPyClass,
     },
 };
 use tensorzero_core::{
@@ -84,9 +92,20 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<StoredInference>()?;
     m.add_class::<UninitializedOpenAISFTConfig>()?;
     m.add_class::<UninitializedFireworksSFTConfig>()?;
+    m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
     m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
+    m.add_class::<ConfigPyClass>()?;
+    m.add_class::<FunctionsConfigPyClass>()?;
+    m.add_class::<FunctionConfigChatPyClass>()?;
+    m.add_class::<FunctionConfigJsonPyClass>()?;
+    m.add_class::<VariantsConfigPyClass>()?;
+    m.add_class::<ChatCompletionConfigPyClass>()?;
+    m.add_class::<BestOfNSamplingConfigPyClass>()?;
+    m.add_class::<DiclConfigPyClass>()?;
+    m.add_class::<MixtureOfNConfigPyClass>()?;
+    m.add_class::<ChainOfThoughtConfigPyClass>()?;
     m.add_class::<OptimizationJobHandle>()?;
     m.add_class::<OptimizationJobInfoPyClass>()?;
     m.add_class::<OptimizationJobStatus>()?;
@@ -308,6 +327,14 @@ impl BaseTensorZeroGateway {
             include_original_response.unwrap_or(false),
         )?;
         serialize_to_dict(this.py(), params)
+    }
+
+    fn experimental_get_config(&self) -> PyResult<ConfigPyClass> {
+        let config = self
+            .client
+            .get_config()
+            .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
+        Ok(ConfigPyClass::new(config))
     }
 }
 
@@ -1077,7 +1104,7 @@ impl TensorZeroGateway {
         job_handle: OptimizationJobHandle,
     ) -> PyResult<OptimizationJobInfoPyClass> {
         let client = this.as_super().client.clone();
-        let fut = client.experimental_poll_optimization(job_handle);
+        let fut = client.experimental_poll_optimization(&job_handle);
         match tokio_block_on_without_gil(this.py(), fut) {
             Ok(status) => Ok(OptimizationJobInfoPyClass::new(status)),
             Err(e) => Err(convert_error(this.py(), e)),
@@ -1791,7 +1818,7 @@ impl AsyncTensorZeroGateway {
     ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.experimental_poll_optimization(job_handle).await;
+            let res = client.experimental_poll_optimization(&job_handle).await;
             match res {
                 Ok(status) => Ok(OptimizationJobInfoPyClass::new(status)),
                 Err(e) => Python::with_gil(|py| Err(convert_error(py, e))),

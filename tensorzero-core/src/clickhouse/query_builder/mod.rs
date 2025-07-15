@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     collections::{BTreeSet, HashMap},
@@ -19,7 +19,7 @@ use crate::{
 };
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 pub enum InferenceOutputSource {
     Inference,
@@ -41,7 +41,7 @@ impl TryFrom<&str> for InferenceOutputSource {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, ts(export))]
 pub enum FloatComparisonOperator {
     #[serde(rename = "<")]
@@ -166,7 +166,7 @@ LEFT JOIN (
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 pub struct FloatMetricNode {
     pub metric_name: String,
@@ -175,7 +175,7 @@ pub struct FloatMetricNode {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 pub struct BooleanMetricNode {
     pub metric_name: String,
@@ -183,7 +183,7 @@ pub struct BooleanMetricNode {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InferenceFilterTreeNode {
@@ -678,7 +678,7 @@ mod tests {
 
     use super::*;
 
-    async fn get_e2e_config() -> Config<'static> {
+    async fn get_e2e_config() -> Config {
         // Read the e2e config file
         Config::load_from_path_optional_verify_credentials(
             Path::new("tests/e2e/tensorzero.toml"),

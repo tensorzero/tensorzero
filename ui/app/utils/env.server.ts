@@ -1,5 +1,7 @@
 // This is the only file in which `process.env` should be accessed directly.
 
+import { logger } from "./logger";
+
 class EnvironmentVariableError extends Error {
   constructor(
     public message: string,
@@ -14,7 +16,6 @@ interface Env {
   TENSORZERO_CLICKHOUSE_URL: string;
   TENSORZERO_UI_CONFIG_PATH: string;
   TENSORZERO_GATEWAY_URL: string;
-  TENSORZERO_UI_FF_USE_NATIVE_SFT: 1 | 0;
   TENSORZERO_EVALUATIONS_PATH: string;
   OPENAI_BASE_URL: string | null;
   FIREWORKS_BASE_URL: string | null;
@@ -56,8 +57,6 @@ export function getEnv(): Env {
     TENSORZERO_GATEWAY_URL,
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || null,
     FIREWORKS_BASE_URL: process.env.FIREWORKS_BASE_URL || null,
-    TENSORZERO_UI_FF_USE_NATIVE_SFT:
-      process.env.TENSORZERO_UI_FF_USE_NATIVE_SFT === "1" ? 1 : 0,
     TENSORZERO_EVALUATIONS_PATH:
       process.env.TENSORZERO_EVALUATIONS_PATH || "evaluations",
     FIREWORKS_ACCOUNT_ID: process.env.FIREWORKS_ACCOUNT_ID || null,
@@ -73,7 +72,7 @@ function getClickhouseUrl() {
   }
 
   if (process.env.CLICKHOUSE_URL) {
-    console.warn(
+    logger.warn(
       'Deprecation Warning: The environment variable "CLICKHOUSE_URL" has been renamed to "TENSORZERO_CLICKHOUSE_URL" and will be removed in a future version. Please update your environment to use "TENSORZERO_CLICKHOUSE_URL" instead.',
     );
     return process.env.CLICKHOUSE_URL;

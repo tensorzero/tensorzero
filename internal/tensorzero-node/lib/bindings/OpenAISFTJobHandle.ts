@@ -2,6 +2,10 @@
 
 export type OpenAISFTJobHandle = {
   job_id: string;
+  /**
+   * A url to a human-readable page for the job.
+   */
   job_url: string;
+  job_api_url: string;
   credential_location: string | null;
 };

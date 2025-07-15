@@ -1,17 +1,17 @@
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
-import { OpenAISFTJob } from "./openai";
-import { FireworksSFTJob } from "./fireworks";
 import { SFTJob, type SFTJobStatus } from "./common";
 import { TensorZeroClient } from "tensorzero-node";
 import type {
   InferenceFilterTreeNode,
   InferenceOutputSource,
+  JsonValue,
   OptimizationJobHandle,
   OptimizationJobInfo,
   UninitializedOptimizerInfo,
 } from "tensorzero-node";
 import { getConfig } from "~/utils/config/index.server";
 import { getEnv } from "../env.server";
+import { logger } from "../logger";
 
 let _tensorZeroClient: TensorZeroClient | undefined;
 export async function getNativeTensorZeroClient(): Promise<TensorZeroClient> {
@@ -20,31 +20,14 @@ export async function getNativeTensorZeroClient(): Promise<TensorZeroClient> {
   }
 
   const env = getEnv();
-  _tensorZeroClient = await TensorZeroClient.build(
-    env.TENSORZERO_UI_CONFIG_PATH,
-    env.TENSORZERO_CLICKHOUSE_URL,
+  _tensorZeroClient = await TensorZeroClient.buildHttp(
+    env.TENSORZERO_GATEWAY_URL,
   );
   return _tensorZeroClient;
 }
 
 export function launch_sft_job(data: SFTFormValues): Promise<SFTJob> {
-  const useNativeSFT = getEnv().TENSORZERO_UI_FF_USE_NATIVE_SFT === 1;
-  if (useNativeSFT) {
-    return launch_sft_job_native(data);
-  } else {
-    return launch_sft_job_ts(data);
-  }
-}
-
-function launch_sft_job_ts(data: SFTFormValues): Promise<SFTJob> {
-  switch (data.model.provider) {
-    case "openai":
-      return OpenAISFTJob.from_form_data(data);
-    case "fireworks":
-      return FireworksSFTJob.from_form_data(data);
-    default:
-      throw new Error("Invalid provider");
-  }
+  return launch_sft_job_native(data);
 }
 
 class NativeSFTJob extends SFTJob {
@@ -86,7 +69,8 @@ class NativeSFTJob extends SFTJob {
             info: this.jobStatus,
           },
         };
-      case "failed":
+      case "failed": {
+        const stringifiedError = JSON.stringify(this.jobStatus.error, null, 2);
         return {
           status: "error",
           modelProvider: this.provider,
@@ -94,10 +78,11 @@ class NativeSFTJob extends SFTJob {
           jobUrl: this.jobHandle.job_url,
           rawData: {
             status: "error",
-            message: "Job failed",
+            message: stringifiedError,
           },
-          error: "Job failed",
+          error: stringifiedError,
         };
+      }
       case "completed": {
         // NOTE: the native SFT backend actually returns a model provider that is all we need
         // and guaranteed to match the Rust type.
@@ -124,8 +109,19 @@ class NativeSFTJob extends SFTJob {
 
   async poll(): Promise<SFTJob> {
     const client = await getNativeTensorZeroClient();
-    const status = await client.experimentalPollOptimization(this.jobHandle);
-    this.jobStatus = status;
+    logger.debug("Polling job", this.jobHandle);
+    try {
+      const status = await client.experimentalPollOptimization(this.jobHandle);
+      this.jobStatus = status;
+    } catch (e) {
+      logger.error(e);
+      this.jobStatus = {
+        status: "failed",
+        message: `Job failed: ${e}`,
+        error: e as JsonValue,
+      };
+    }
+    logger.debug("Job status", this.jobStatus);
     return this;
   }
 }
