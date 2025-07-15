@@ -1133,6 +1133,7 @@ impl Client {
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
     pub fn get_app_state_data(&self) -> Option<&AppStateData> {
+        #[expect(clippy::match_wildcard_for_single_variants)]
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.state),
             _ => None,

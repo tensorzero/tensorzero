@@ -1008,7 +1008,9 @@ mod tests {
             assert_eq!(config.evaluators.len(), 1);
             match config.evaluators.get("em_evaluator").unwrap() {
                 EvaluatorConfig::ExactMatch(params) => assert_eq!(params.cutoff, Some(0.4)),
-                _ => panic!("Expected ExactMatch evaluator"),
+                EvaluatorConfig::LLMJudge(_) => {
+                    panic!("Expected ExactMatch evaluator, received LLMJudge")
+                }
             }
             // No additional function configs for exact match
             assert_eq!(additional_functions.len(), 0);
@@ -1099,7 +1101,9 @@ mod tests {
                     assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
                     assert!(!judge_config.include.reference_output);
                 }
-                _ => panic!("Expected LLMJudge evaluator config"),
+                EvaluatorConfig::ExactMatch(_) => {
+                    panic!("Expected LLMJudge evaluator config, received ExactMatch")
+                }
             }
 
             // Verify additional function config was created
@@ -1117,7 +1121,7 @@ mod tests {
                     assert!(json_config.user_schema.is_some());
                     assert!(json_config.output_schema.value.is_object());
                 }
-                _ => panic!("Expected Json function config"),
+                FunctionConfig::Chat(_chat_config) => panic!("Expected Json function config"),
             }
 
             // Verify the metrics
@@ -1142,7 +1146,9 @@ mod tests {
             let llm_judge_evaluation = match config.evaluators.get("llm_judge_evaluation").unwrap()
             {
                 EvaluatorConfig::LLMJudge(config) => config,
-                _ => panic!("Expected LLMJudge evaluator"),
+                EvaluatorConfig::ExactMatch(_) => {
+                    panic!("Expected LLMJudge evaluator, received ExactMatch")
+                }
             };
             assert_eq!(
                 MetricConfigType::from(llm_judge_evaluation.output_type),
@@ -1224,7 +1230,9 @@ mod tests {
                     assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Max));
                     assert!(judge_config.include.reference_output);
                 }
-                _ => panic!("Expected LLMJudge evaluator config"),
+                EvaluatorConfig::ExactMatch(_) => {
+                    panic!("Expected LLMJudge evaluator config, received ExactMatch")
+                }
             }
 
             // Verify additional function config was created
@@ -1252,7 +1260,9 @@ mod tests {
             // Verify the type conversion from LLMJudgeOutputType to MetricConfigType
             let llm_judge_evaluation = match config.evaluators.get("llm_judge_float").unwrap() {
                 EvaluatorConfig::LLMJudge(config) => config,
-                _ => panic!("Expected LLMJudge evaluator"),
+                EvaluatorConfig::ExactMatch(_) => {
+                    panic!("Expected LLMJudge evaluator, received ExactMatch")
+                }
             };
             assert_eq!(
                 MetricConfigType::from(llm_judge_evaluation.output_type),
@@ -1520,7 +1530,9 @@ mod tests {
                     assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
                     assert!(judge_config.include.reference_output);
                 }
-                _ => panic!("Expected LLMJudge evaluator config"),
+                EvaluatorConfig::ExactMatch(_) => {
+                    panic!("Expected LLMJudge evaluator config, received ExactMatch")
+                }
             }
         }
 
@@ -1590,10 +1602,21 @@ mod tests {
                         VariantConfig::ChatCompletion(cc_config) => {
                             assert_eq!(cc_config.weight, Some(1.0));
                         }
-                        _ => panic!("Expected ChatCompletion variant config"),
+                        VariantConfig::BestOfNSampling(_) => panic!(
+                            "Expected ChatCompletion variant config, received BestOfNSampling"
+                        ),
+                        VariantConfig::Dicl(_) => {
+                            panic!("Expected ChatCompletion variant config, received Dicl")
+                        }
+                        VariantConfig::MixtureOfN(_) => {
+                            panic!("Expected ChatCompletion variant config, received MixtureOfN")
+                        }
+                        VariantConfig::ChainOfThought(_) => {
+                            panic!("Expected ChatCompletion variant config, received MixtureOfN")
+                        }
                     }
                 }
-                _ => panic!("Expected Json function config"),
+                FunctionConfig::Chat(_) => panic!("Expected Json function config, received Chat"),
             }
         }
 
