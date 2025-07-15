@@ -11,6 +11,10 @@ interface DatasetFormFieldProps<T extends FieldValues> {
   allowCreation?: boolean;
 }
 
+/**
+ * This component should be used with react-hook-form only.
+ * For standard RR7 forms we can just use the DatasetSelector component directly.
+ */
 export function DatasetFormField<T extends FieldValues>({
   control,
   name,
