@@ -1,23 +1,24 @@
-//! This module is responsible for sending usage data to the Howdy service.
+//! This module is responsible for sending usage data to the TensorZero Howdy service.
 //! It is configured via the `TENSORZERO_HOWDY_URL` environment variable.
 //! If the `TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_DATA` environment variable is set to `1`,
 //! the usage data will not be sent.
 //!
 //! The usage data is sent every 6 hours.
 //!
-//! The usage data is sent to the Howdy service in the following format:
+//! The usage data is sent to the TensorZero Howdy service in the following format:
 //!
 //! ```json
 //! {
-//!     "deployment_id": "123",
-//!     "inferences": 100,
-//!     "feedbacks": 50,
+//!     "deployment_id": "8c40087ea3a0928229c57c378d1144035cc4334e99ab9b5d1fd880849c16feff",
+//!     "inference_count": 100,
+//!     "feedback_count": 50,
+//!     "gateway_version": "2025.7.0",
 //!     "dryrun": false
 //! }
 //! ```
 //!
 //! We only send an opaque and unidentifiable deployment ID (64 char hex hash)
-//! and the number of inferences and feedbacks to the Howdy service.
+//! and the number of inferences and feedbacks to the TensorZero Howdy service.
 
 use lazy_static::lazy_static;
 use reqwest::Client;
@@ -107,12 +108,13 @@ pub async fn get_howdy_report<'a>(
     deployment_id: &'a str,
 ) -> Result<HowdyReportBody<'a>, String> {
     let dryrun = cfg!(any(test, feature = "e2e_tests"));
-    let (inferences, feedbacks) =
+    let (inference_count, feedback_count) =
         try_join!(count_inferences(clickhouse), count_feedbacks(clickhouse))?;
     Ok(HowdyReportBody {
         deployment_id,
-        inferences,
-        feedbacks,
+        inference_count,
+        feedback_count,
+        gateway_version: crate::endpoints::status::TENSORZERO_VERSION,
         dryrun,
     })
 }
@@ -183,8 +185,9 @@ async fn count_feedbacks(clickhouse: &ClickHouseConnectionInfo) -> Result<String
 #[derive(Debug, Serialize)]
 pub struct HowdyReportBody<'a> {
     pub deployment_id: &'a str,
-    pub inferences: String,
-    pub feedbacks: String,
+    pub inference_count: String,
+    pub feedback_count: String,
+    pub gateway_version: &'static str,
     #[serde(default)]
     pub dryrun: bool,
 }

@@ -49,8 +49,12 @@ async fn test_get_howdy_report() {
     tokio::time::sleep(Duration::from_secs(1)).await;
     let deployment_id = get_deployment_id(&clickhouse).await.unwrap();
     let howdy_report = get_howdy_report(&clickhouse, &deployment_id).await.unwrap();
-    assert_eq!(howdy_report.inferences, "0");
-    assert_eq!(howdy_report.feedbacks, "0");
+    assert_eq!(howdy_report.inference_count, "0");
+    assert_eq!(howdy_report.feedback_count, "0");
+    assert_eq!(
+        howdy_report.gateway_version,
+        tensorzero_core::endpoints::status::TENSORZERO_VERSION
+    );
     // Since we're in an e2e test, this should be true
     assert!(howdy_report.dryrun);
     // Send a chat inference and comment feedback
@@ -115,13 +119,13 @@ async fn test_get_howdy_report() {
 
     // Get the howdy report again
     let new_howdy_report = get_howdy_report(&clickhouse, &deployment_id).await.unwrap();
-    assert!(!new_howdy_report.inferences.is_empty());
-    assert!(!new_howdy_report.feedbacks.is_empty());
+    assert!(!new_howdy_report.inference_count.is_empty());
+    assert!(!new_howdy_report.feedback_count.is_empty());
     // Since we're in an e2e test, this should be true
     assert!(new_howdy_report.dryrun);
     println!("new_howdy_report: {new_howdy_report:?}");
     println!("howdy_report: {howdy_report:?}");
     // Assert that the parsed inference and feedback counts are greater than the old ones
-    assert_eq!(new_howdy_report.inferences, "2");
-    assert_eq!(new_howdy_report.feedbacks, "2");
+    assert_eq!(new_howdy_report.inference_count, "2");
+    assert_eq!(new_howdy_report.feedback_count, "2");
 }
