@@ -313,7 +313,7 @@ export default function CurationMetricSelector<
                   control={control}
                   name={"threshold" as Path<T>}
                   render={({ field: thresholdField }) => (
-                    <FormItem className="flex flex-col gap-1">
+                    <FormItem className="flex flex-col gap-1 border-l pl-4">
                       <FormLabel>Threshold</FormLabel>
                       <Input
                         type="number"
