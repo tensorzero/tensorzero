@@ -884,9 +884,10 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
             &StorageKind::S3Compatible {
                 bucket_name: Some(test_bucket.to_string()),
                 region: Some("us-east-1".to_string()),
-                prefix: prefix.clone(),
                 endpoint: None,
                 allow_http: None,
+                #[cfg(feature = "e2e_tests")]
+                prefix: prefix.clone(),
             },
             &client,
             &format!(
@@ -3933,7 +3934,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         assert_eq!(chunk_episode_id, episode_id);
 
         let blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        for block in blocks.iter() {
+        for block in blocks {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -8412,7 +8413,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         assert_eq!(chunk_episode_id, episode_id);
 
         let blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        for block in blocks.iter() {
+        for block in blocks {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();

@@ -394,7 +394,7 @@ pub fn prepare_together_messages<'a>(
     request_messages: &'a [RequestMessage],
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request_messages.len());
-    for message in request_messages.iter() {
+    for message in request_messages {
         messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
     }
 

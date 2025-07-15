@@ -603,7 +603,7 @@ fn set_clickhouse_format_settings(database_url: &mut Url) {
         }
     }
 
-    for setting in OVERRIDDEN_SETTINGS.iter() {
+    for setting in &OVERRIDDEN_SETTINGS {
         database_url.query_pairs_mut().append_pair(setting, "0");
     }
     database_url.query_pairs_mut().finish();
