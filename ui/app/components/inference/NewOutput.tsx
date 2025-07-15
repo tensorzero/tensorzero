@@ -101,7 +101,7 @@ function renderChatInferenceOutput(output: ChatInferenceOutputRenderingData) {
     <SnippetContent>
       <SnippetMessage>
         {output.length === 0 ? (
-          <EmptyMessage message="No output messages found" />
+          <EmptyMessage message="The output was empty" />
         ) : (
           output.map((block, index) => {
             switch (block.type) {

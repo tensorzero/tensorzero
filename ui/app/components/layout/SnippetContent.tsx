@@ -123,13 +123,26 @@ interface ToolCallMessageProps {
   toolCallId: string;
 }
 
-export function ToolCallMessage({
-  toolName,
-  toolRawName,
-  toolArguments,
-  toolRawArguments,
-  toolCallId,
-}: ToolCallMessageProps) {
+interface ModelInferenceToolCallMessageProps {
+  toolName: string;
+  toolArguments: string;
+  toolCallId: string;
+}
+
+export function ToolCallMessage(
+  toolCall: ToolCallMessageProps | ModelInferenceToolCallMessageProps,
+) {
+  let toolName: string;
+  let toolArguments: string;
+
+  if ("toolRawArguments" in toolCall) {
+    toolName = toolCall.toolName || toolCall.toolRawName;
+    toolArguments = toolCall.toolArguments || toolCall.toolRawArguments;
+  } else {
+    toolName = toolCall.toolName;
+    toolArguments = toolCall.toolArguments;
+  }
+
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label
@@ -137,10 +150,10 @@ export function ToolCallMessage({
         icon={<Terminal className="text-fg-muted h-3 w-3" />}
       />
       <ToolDetails
-        name={toolName || toolRawName}
+        name={toolName}
         nameLabel={toolName ? "Name" : "Name (Invalid)"}
-        id={toolCallId}
-        payload={toolArguments || toolRawArguments}
+        id={toolCall.toolCallId}
+        payload={toolArguments}
         payloadLabel={toolArguments ? "Arguments" : "Arguments (Invalid)"}
         enforceJson={true}
       />

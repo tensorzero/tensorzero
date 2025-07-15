@@ -627,6 +627,7 @@ async function parseModelInferenceRow(
     .array(modelInferenceInputMessageSchema)
     .parse(JSON.parse(row.input_messages));
   const resolvedMessages = await resolveModelInferenceMessages(parsedMessages);
+  console.log(row.output);
   const processedRow = {
     ...row,
     input_messages: resolvedMessages,
