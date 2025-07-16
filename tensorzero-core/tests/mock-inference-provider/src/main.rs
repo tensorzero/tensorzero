@@ -51,6 +51,9 @@ fn get_listener_address() -> SocketAddr {
     }
 }
 
+/// # Panics
+///
+/// Panics if unable to install a `Ctrl+C` handler, or, on a Unix system, if failed to install a `SIGTERM` handler.
 pub async fn shutdown_signal() {
     let ctrl_c = async {
         signal::ctrl_c()
