@@ -11,6 +11,14 @@ env:
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
 
 jobs:
+  check-version-consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Check version consistency
+        run: ./ci/check-version-consistency.sh
+
   check-docker-compose:
     permissions:
       # Permission to checkout the repository
@@ -475,6 +483,7 @@ jobs:
     if: always()
     needs:
       [
+        check-version-consistency,
         check-docker-compose,
         check-python-client-build,
         check-node-bindings,
