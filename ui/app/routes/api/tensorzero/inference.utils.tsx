@@ -3,6 +3,7 @@ import { useFetcher, type FetcherFormProps } from "react-router";
 import type { SubmitTarget, FetcherSubmitOptions } from "react-router";
 import type {
   ContentBlockOutput,
+  DisplayInput,
   JsonInferenceOutput,
 } from "~/utils/clickhouse/common";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
@@ -11,6 +12,18 @@ import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { resolvedInputToTensorZeroInput } from "./inference";
 import { logger } from "~/utils/logger";
+import type {
+  JsonValue,
+  ResolvedInput as TensorZeroResolvedInput,
+  ResolvedInputMessage as TensorZeroResolvedInputMessage,
+  ResolvedInputMessageContent as TensorZeroResolvedInputMessageContent,
+  ToolCallConfigDatabaseInsert,
+} from "tensorzero-node";
+import type {
+  Input,
+  InputMessage,
+  InputMessageContent,
+} from "~/utils/clickhouse/common";
 
 interface InferenceActionError {
   message: string;
@@ -156,6 +169,91 @@ export function useInferenceActionFetcher() {
   } satisfies ActionFetcher;
 }
 
+// Convert TensorZero's ResolvedInput to our Input type
+export function tensorZeroResolvedInputToInput(
+  resolvedInput: TensorZeroResolvedInput,
+): Input {
+  return {
+    system: resolvedInput.system ?? undefined,
+    messages: resolvedInput.messages.map(
+      tensorZeroResolvedMessageToInputMessage,
+    ),
+  };
+}
+
+function tensorZeroResolvedMessageToInputMessage(
+  message: TensorZeroResolvedInputMessage,
+): InputMessage {
+  return {
+    role: message.role,
+    content: message.content.map(tensorZeroResolvedContentToInputContent),
+  };
+}
+
+function tensorZeroResolvedContentToInputContent(
+  content: TensorZeroResolvedInputMessageContent,
+): InputMessageContent {
+  switch (content.type) {
+    case "text":
+      return content;
+    case "tool_call":
+      return {
+        type: "tool_call",
+        id: content.id,
+        name: content.name,
+        arguments: content.arguments,
+      };
+    case "tool_result":
+      return {
+        type: "tool_result",
+        id: content.id,
+        name: content.name,
+        result: content.result,
+      };
+    case "raw_text":
+      return content;
+    case "thought":
+      return {
+        type: "thought",
+        text: content.text,
+        signature: content.signature,
+      };
+    case "file": {
+      // Handle the StoragePath conversion properly
+      const storageKind = content.storage_path.kind;
+      let convertedKind;
+
+      if (storageKind.type === "s3_compatible") {
+        // Ensure bucket_name is not null
+        convertedKind = {
+          ...storageKind,
+          bucket_name: storageKind.bucket_name || "",
+        };
+      } else {
+        convertedKind = storageKind;
+      }
+
+      return {
+        type: "file",
+        file: {
+          url: null,
+          mime_type: content.file.mime_type,
+        },
+        storage_path: {
+          path: content.storage_path.path,
+          kind: convertedKind,
+        },
+      };
+    }
+    case "unknown":
+      return {
+        type: "unknown",
+        data: content.data,
+        model_provider_name: content.model_provider_name,
+      };
+  }
+}
+
 interface InferenceActionArgs {
   source: "inference";
   resource: ParsedInferenceRow;
@@ -168,8 +266,21 @@ interface DatapointActionArgs {
   variant: string;
 }
 
+interface ClickHouseDatapointActionArgs {
+  source: "clickhouse_datapoint";
+  input: DisplayInput;
+  functionName: string;
+  // Optional fields for json / chat datapoints
+  tool_params?: ToolCallConfigDatabaseInsert;
+  output_schema?: JsonValue;
+  variant: string;
+}
+
 export function prepareInferenceActionRequest(
-  args: InferenceActionArgs | DatapointActionArgs,
+  args:
+    | InferenceActionArgs
+    | DatapointActionArgs
+    | ClickHouseDatapointActionArgs,
 ) {
   // Prepare request based on source and function type
   let request;
@@ -178,7 +289,18 @@ export function prepareInferenceActionRequest(
     args.resource.function_name === "tensorzero::default"
   ) {
     request = prepareDefaultFunctionRequest(args.resource, args.variant);
+  } else if (args.source === "clickhouse_datapoint") {
+    // Convert TensorZero's ResolvedInput to our Input type first
+
+    request = {
+      function_name: args.functionName,
+      input: resolvedInputToTensorZeroInput(args.input),
+      variant_name: args.variant,
+      tool_params: args.tool_params,
+      output_schema: args.output_schema,
+    };
   } else {
+    // For other sources, the input is already a DisplayInput
     const tensorZeroInput = resolvedInputToTensorZeroInput(args.resource.input);
     const extra_body =
       args.source === "inference" ? args.resource.extra_body : undefined;
@@ -190,6 +312,9 @@ export function prepareInferenceActionRequest(
       extra_body,
     };
   }
+
+  console.log("request");
+  console.log(request);
 
   return request;
 }
