@@ -41,14 +41,14 @@ test("should be able to add, edit and save a datapoint", async ({ page }) => {
   await page.getByText("Add to dataset").click();
 
   // Wait for the CommandInput by its placeholder text to be visible
-  const commandInput = page.getByPlaceholder("Create or find dataset...");
+  const commandInput = page.getByPlaceholder("Create or find a dataset...");
   await commandInput.waitFor({ state: "visible" });
   await commandInput.fill(datasetName);
 
   // Wait for the "Create" option to appear in the dropdown
   const createOption = page
     .locator("[cmdk-item]")
-    .filter({ hasText: "Create" });
+    .filter({ hasText: datasetName });
   await createOption.waitFor({ state: "visible" });
   await createOption.click();
 

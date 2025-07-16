@@ -42,7 +42,7 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "SGLang";
-const PROVIDER_TYPE: &str = "sglang";
+pub const PROVIDER_TYPE: &str = "sglang";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]

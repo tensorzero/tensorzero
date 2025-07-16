@@ -22,7 +22,7 @@ test.describe("Custom user agent", () => {
       .getByRole("combobox")
       .filter({ hasText: "Select a function" })
       .click();
-    await page.getByRole("option", { name: "extract_entities JSON" }).click();
+    await page.getByRole("option", { name: "extract_entities" }).click();
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a metric" })
@@ -79,7 +79,7 @@ model_name = "mock-inference-finetune-1234"
       .getByRole("combobox")
       .filter({ hasText: "Select a function" })
       .click();
-    await page.getByRole("option", { name: "extract_entities JSON" }).click();
+    await page.getByRole("option", { name: "extract_entities" }).click();
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a metric" })
@@ -136,7 +136,7 @@ model_name = "mock-inference-finetune-1234"
       .getByRole("combobox")
       .filter({ hasText: "Select a function" })
       .click();
-    await page.getByRole("option", { name: "image_judger Chat" }).click();
+    await page.getByRole("option", { name: "image_judger" }).click();
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a metric" })
@@ -191,7 +191,7 @@ model_name = "mock-inference-finetune-1234"
       .getByRole("combobox")
       .filter({ hasText: "Select a function" })
       .click();
-    await page.getByRole("option", { name: "extract_entities JSON" }).click();
+    await page.getByRole("option", { name: "extract_entities" }).click();
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a metric" })
@@ -246,7 +246,7 @@ test.describe("Error handling", () => {
       .getByRole("combobox")
       .filter({ hasText: "Select a function" })
       .click();
-    await page.getByRole("option", { name: "extract_entities JSON" }).click();
+    await page.getByRole("option", { name: "extract_entities" }).click();
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a metric" })
