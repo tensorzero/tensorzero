@@ -6,6 +6,7 @@ import {
   useFetcher,
   Link,
   useAsyncError,
+  type RouteHandle,
 } from "react-router";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
@@ -41,6 +42,10 @@ import { Label } from "~/components/ui/label";
 import { CodeEditor } from "~/components/ui/code-editor";
 
 const DEFAULT_LIMIT = 10;
+
+export const handle: RouteHandle = {
+  crumb: () => ["Playground"],
+};
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
