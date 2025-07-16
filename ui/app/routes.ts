@@ -9,32 +9,41 @@ export default [
   index("routes/index.tsx"),
 
   // API routes
-  route(
-    "api/curated_inferences/count",
-    "routes/api/curated_inferences/count.route.ts",
-  ),
-  route(
-    "api/datasets/count_inserts",
-    "routes/api/datasets/count_inserts.route.ts",
-  ),
-  route(
-    "api/datasets/count/dataset/:dataset_name/function/:function_name",
-    "routes/api/datasets/count_dataset_function.route.ts",
-  ),
-  route(
-    "api/dynamic_evaluations/search_runs",
-    "routes/api/dynamic_evaluations/search_runs/route.ts",
-  ),
-  route(
-    "api/evaluations/search_runs/:evaluation_name",
-    "routes/api/evaluations/search_runs/$evaluation_name/route.ts",
-  ),
-  route(
-    "api/function/:function_name/feedback_counts",
-    "routes/api/function/$function_name/feedback_counts.route.ts",
-  ),
-  route("api/tensorzero/inference", "routes/api/tensorzero/inference.ts"),
-  route("api/tensorzero/status", "routes/api/tensorzero/status.ts"),
+  ...prefix("api", [
+    route(
+      "curated_inferences/count",
+      "routes/api/curated_inferences/count.route.ts",
+    ),
+
+    ...prefix("datasets", [
+      route("counts", "routes/api/datasets/counts.route.ts"),
+      route("count_inserts", "routes/api/datasets/count_inserts.route.ts"),
+      route(
+        "count/dataset/:dataset_name/function/:function_name",
+        "routes/api/datasets/count_dataset_function.route.ts",
+      ),
+    ]),
+
+    route(
+      "dynamic_evaluations/search_runs",
+      "routes/api/dynamic_evaluations/search_runs/route.ts",
+    ),
+
+    route(
+      "evaluations/search_runs/:evaluation_name",
+      "routes/api/evaluations/search_runs/$evaluation_name/route.ts",
+    ),
+
+    route(
+      "function/:function_name/feedback_counts",
+      "routes/api/function/$function_name/feedback_counts.route.ts",
+    ),
+
+    ...prefix("tensorzero", [
+      route("inference", "routes/api/tensorzero/inference.ts"),
+      route("status", "routes/api/tensorzero/status.ts"),
+    ]),
+  ]),
 
   // Playground
   route("playground", "routes/playground/route.tsx"),
