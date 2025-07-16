@@ -638,7 +638,7 @@ async def test_async_inference_streaming_nonexistent_function(
     assert exc_info.value.status_code == 404
     assert (
         str(exc_info.value)
-        == 'TensorZeroError (status code 404): {"error":"Unknown function: does_not_exist"}'
+        == 'TensorZeroError (status code 404): {"error":"Unknown function: does_not_exist","error_json":{"UnknownFunction":{"name":"does_not_exist"}}}'
     )
 
 
@@ -1017,7 +1017,7 @@ async def test_async_tensorzero_error(async_client: AsyncTensorZeroGateway):
 
     assert (
         str(excinfo.value)
-        == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function"}'
+        == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function","error_json":{"UnknownFunction":{"name":"not_a_function"}}}'
     )
 
 
@@ -2051,7 +2051,7 @@ def test_sync_tensorzero_error(sync_client: TensorZeroGateway):
 
     assert (
         str(excinfo.value)
-        == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function"}'
+        == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function","error_json":{"UnknownFunction":{"name":"not_a_function"}}}'
     )
 
 
