@@ -2389,11 +2389,11 @@ mod tests {
         // Case 2: Only Thought blocks
         let content_blocks = vec![
             ContentBlockOutput::Thought(Thought {
-                text: "thinking...".to_string(),
+                text: Some("thinking...".to_string()),
                 signature: None,
             }),
             ContentBlockOutput::Thought(Thought {
-                text: "still thinking".to_string(),
+                text: Some("still thinking".to_string()),
                 signature: Some("sig".to_string()),
             }),
         ];
@@ -2406,14 +2406,14 @@ mod tests {
         // Case 3: Mixed Text, Thought, ToolCall
         let content_blocks = vec![
             ContentBlockOutput::Thought(Thought {
-                text: "first thought".to_string(),
+                text: Some("first thought".to_string()),
                 signature: None,
             }),
             ContentBlockOutput::Text(Text {
                 text: "Some text".to_string(),
             }),
             ContentBlockOutput::Thought(Thought {
-                text: "second thought".to_string(),
+                text: Some("second thought".to_string()),
                 signature: Some("sig2".to_string()),
             }),
             ContentBlockOutput::ToolCall(ToolCall {
@@ -2464,7 +2464,7 @@ mod tests {
                 text: "A".to_string(),
             }),
             ContentBlockOutput::Thought(Thought {
-                text: "final thought".to_string(),
+                text: Some("final thought".to_string()),
                 signature: None,
             }),
         ];
@@ -2474,7 +2474,9 @@ mod tests {
         assert_eq!(auxiliary_content.len(), 1);
         assert_eq!(json_block_index, Some(0));
         match &auxiliary_content[0] {
-            ContentBlockOutput::Thought(t) => assert_eq!(t.text, "final thought"),
+            ContentBlockOutput::Thought(t) => {
+                assert_eq!(t.text, Some("final thought".to_string()))
+            }
             _ => panic!("Expected Thought block"),
         }
     }

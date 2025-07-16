@@ -493,7 +493,7 @@ impl ClickHouseConnectionInfo {
                             message: format!("Failed to deserialize response: {e:?}"),
                         })
                     })
-                    .and_then(|inference| inference.try_into())
+                    .and_then(query_builder::ClickHouseStoredInference::try_into)
             })
             .collect::<Result<Vec<StoredInference>, Error>>()?;
         Ok(inferences)
@@ -652,7 +652,10 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
     // username, password, and query-strings are optional, so we don't need to validate them
 
     // Validate that the path is either empty or ends with the database name (a single segment)
-    let mut path_segments: Vec<_> = url.path_segments().map(|s| s.collect()).unwrap_or_default();
+    let mut path_segments: Vec<_> = url
+        .path_segments()
+        .map(Iterator::collect)
+        .unwrap_or_default();
     if let Some(last) = path_segments.last() {
         if last.is_empty() {
             path_segments.pop();

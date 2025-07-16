@@ -748,7 +748,7 @@ impl TryFrom<&RequestMessage> for Message {
         let content: Vec<BedrockContentBlock> = inference_message
             .content
             .iter()
-            .map(|block| block.try_into())
+            .map(TryInto::try_into)
             .collect::<Result<Vec<Option<BedrockContentBlock>>, _>>()?
             .into_iter()
             .flatten()
@@ -832,7 +832,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             })?
             .content
             .into_iter()
-            .map(|block| block.try_into())
+            .map(TryInto::try_into)
             .collect::<Result<Vec<ContentBlockOutput>, _>>()?;
 
         if model_id.contains("claude")

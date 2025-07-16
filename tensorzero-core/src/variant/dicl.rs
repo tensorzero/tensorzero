@@ -430,7 +430,7 @@ impl DiclConfig {
                 .output
                 .clone()
                 .into_iter()
-                .map(|x| x.into())
+                .map(ContentBlockChatOutput::into)
                 .collect(),
             Example::Json(json_example) => {
                 vec![json_example.output.raw.clone().unwrap_or_default().into()]
@@ -723,8 +723,10 @@ mod tests {
         );
 
         // Second message should be from Assistant with content blocks
-        let expected_content: Vec<ContentBlock> =
-            chat_output.into_iter().map(|x| x.into()).collect();
+        let expected_content: Vec<ContentBlock> = chat_output
+            .into_iter()
+            .map(ContentBlockChatOutput::into)
+            .collect();
 
         assert_eq!(chat_messages[1].role, Role::Assistant);
         assert_eq!(chat_messages[1].content, expected_content);
