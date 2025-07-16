@@ -89,12 +89,21 @@ export async function loader({ request }: Route.LoaderArgs) {
         status: 404,
       });
     }
-    return refreshInference(
-      datapoint,
-      functionName,
-      functionConfig,
-      refreshVariantName,
-    );
+    try {
+      return await refreshInference(
+        datapoint,
+        functionName,
+        functionConfig,
+        refreshVariantName,
+      );
+    } catch (error) {
+      // Return error as part of the response instead of throwing
+      return {
+        type: "refreshInferenceError" as const,
+        error:
+          error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
   }
   const inputs = datapoints
     ? await Promise.all(
@@ -196,7 +205,10 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const config = useConfig();
   // Handle refresh response differently
-  if (loaderData.type === "refreshInference") {
+  if (
+    loaderData.type === "refreshInference" ||
+    loaderData.type === "refreshInferenceError"
+  ) {
     // This shouldn't happen at the page level, only in the fetcher
     return null;
   }
@@ -410,6 +422,8 @@ function DatapointPlaygroundOutput({
   // Get the refreshed data if available
   const refreshedInference =
     fetcher.data?.type === "refreshInference" ? fetcher.data.inference : null;
+  const refreshError =
+    fetcher.data?.type === "refreshInferenceError" ? fetcher.data.error : null;
 
   if (!serverInference && !refreshedInference) {
     return (
@@ -422,7 +436,7 @@ function DatapointPlaygroundOutput({
   }
 
   // Show loading state when refreshing
-  if (isRefreshing) {
+  if (isRefreshing && !refreshError) {
     return (
       <div className="group relative">
         <div className="flex min-h-[8rem] items-center justify-center">
@@ -450,7 +464,17 @@ function DatapointPlaygroundOutput({
         <Refresh />
       </Button>
 
-      {refreshedInference ? (
+      {refreshError ? (
+        // Display refresh error
+        <div className="flex min-h-[8rem] items-center justify-center">
+          <div className="max-h-[16rem] max-w-md overflow-y-auto px-4 text-center text-red-600">
+            <p className="font-semibold">Error</p>
+            <p className="mt-1 text-sm">
+              <CodeEditor value={refreshError} readOnly />
+            </p>
+          </div>
+        </div>
+      ) : refreshedInference ? (
         // Display refreshed data directly
         <NewOutput
           output={
