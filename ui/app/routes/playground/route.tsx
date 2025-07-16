@@ -180,17 +180,17 @@ async function refreshInference(
 }
 
 export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
-  const {
-    type,
-    functionName,
-    datasetName,
-    datapoints,
-    inputs,
-    serverInferences,
-  } = loaderData;
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const config = useConfig();
+  // Handle refresh response differently
+  if (loaderData.type === "refreshInference") {
+    // This shouldn't happen at the page level, only in the fetcher
+    return null;
+  }
+
+  const { functionName, datasetName, datapoints, inputs, serverInferences } =
+    loaderData;
 
   // Get selected variants from search params
   const selectedVariants = searchParams.getAll("variant");
@@ -286,37 +286,37 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {datapoints.map((datapoint, index) => (
-                    <tr key={datapoint.id} className="border-t">
-                      <td className="bg-background sticky left-0 z-10 border-r p-4 font-mono text-sm">
-                        {datapoint.id}
-                      </td>
-                      {selectedVariants.map((variant, variantIndex) => {
-                        const inferenceIndex =
-                          index * selectedVariants.length + variantIndex;
-                        return (
-                          <td
-                            key={`${datapoint.id}-${variant}`}
-                            className={`p-4 ${
-                              selectedVariants.length <= 3
-                                ? ""
-                                : "w-80 min-w-80"
-                            }`}
-                          >
-                            <DatapointPlaygroundOutput
-                              datapoint={datapoint}
-                              input={inputs[index]}
-                              functionName={functionName}
-                              variantName={variant}
-                              serverInference={
-                                serverInferences?.[inferenceIndex]
-                              }
-                            />
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                  {datapoints.map(
+                    (datapoint: TensorZeroDatapoint, index: number) => (
+                      <tr key={datapoint.id} className="border-t">
+                        <td className="bg-background sticky left-0 z-10 border-r p-4 font-mono text-sm">
+                          {datapoint.id}
+                        </td>
+                        {selectedVariants.map((variant, variantIndex) => {
+                          const inferenceIndex =
+                            index * selectedVariants.length + variantIndex;
+                          return (
+                            <td
+                              key={`${datapoint.id}-${variant}`}
+                              className={`p-4 ${
+                                selectedVariants.length <= 3
+                                  ? ""
+                                  : "w-80 min-w-80"
+                              }`}
+                            >
+                              <DatapointPlaygroundOutput
+                                datapoint={datapoint}
+                                variantName={variant}
+                                serverInference={
+                                  serverInferences?.[inferenceIndex]
+                                }
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ),
+                  )}
                 </tbody>
               </table>
             </div>
@@ -328,20 +328,24 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
 
 interface DatapointPlaygroundOutputProps {
   datapoint: TensorZeroDatapoint;
-  input: DisplayInput;
-  functionName: string;
   variantName: string;
   serverInference: Promise<InferenceResponse> | undefined;
 }
 function DatapointPlaygroundOutput({
   datapoint,
-  input,
-  functionName,
   variantName,
   serverInference,
 }: DatapointPlaygroundOutputProps) {
-  const fetcher = useFetcher();
-  if (!serverInference) {
+  const fetcher = useFetcher<typeof loader>();
+
+  // Check if currently refreshing
+  const isRefreshing = fetcher.state !== "idle";
+
+  // Get the refreshed data if available
+  const refreshedInference =
+    fetcher.data?.type === "refreshInference" ? fetcher.data.inference : null;
+
+  if (!serverInference && !refreshedInference) {
     return (
       <div className="flex h-32 items-center justify-center">
         <div className="text-muted-foreground text-sm">
@@ -350,6 +354,18 @@ function DatapointPlaygroundOutput({
       </div>
     );
   }
+
+  // Show loading state when refreshing
+  if (isRefreshing) {
+    return (
+      <div className="group relative">
+        <div className="flex h-32 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="group relative">
       <Button
@@ -362,46 +378,68 @@ function DatapointPlaygroundOutput({
           // Set the refresh params
           queryParams.set("refreshDatapointId", datapoint.id);
           queryParams.set("refreshVariantName", variantName);
-          url.search = queryParams.toString();
-          const result = fetcher.load(url.toString());
+          fetcher.load(`/playground?${queryParams.toString()}`);
         }}
       >
         <Refresh />
       </Button>
 
-      <Suspense
-        fallback={
-          <div className="flex h-32 items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin" />
-          </div>
-        }
-      >
-        <Await
-          resolve={serverInference}
-          errorElement={
+      {refreshedInference ? (
+        // Display refreshed data directly
+        <div className="flex h-32 items-center justify-center">
+          <NewOutput
+            output={
+              "content" in refreshedInference
+                ? refreshedInference.content
+                : refreshedInference.output
+            }
+          />
+        </div>
+      ) : (
+        // Display initial server inference with Suspense
+        <Suspense
+          fallback={
             <div className="flex h-32 items-center justify-center">
-              <div className="text-center text-red-600">
-                <p className="font-semibold">Error</p>
-                <p className="text-sm">Failed to load inference</p>
-              </div>
+              <Loader2 className="h-8 w-8 animate-spin" />
             </div>
           }
         >
-          {(response) => {
-            let output;
-            if ("content" in response) {
-              output = response.content;
-            } else {
-              output = response.output;
-            }
-            return (
+          <Await
+            resolve={serverInference}
+            errorElement={
               <div className="flex h-32 items-center justify-center">
-                <NewOutput output={output} />
+                <div className="text-center text-red-600">
+                  <p className="font-semibold">Error</p>
+                  <p className="text-sm">Failed to load inference</p>
+                </div>
               </div>
-            );
-          }}
-        </Await>
-      </Suspense>
+            }
+          >
+            {(response) => {
+              if (!response) {
+                return (
+                  <div className="flex h-32 items-center justify-center">
+                    <div className="text-muted-foreground text-sm">
+                      No response available
+                    </div>
+                  </div>
+                );
+              }
+              let output;
+              if ("content" in response) {
+                output = response.content;
+              } else {
+                output = response.output;
+              }
+              return (
+                <div className="flex h-32 items-center justify-center">
+                  <NewOutput output={output} />
+                </div>
+              );
+            }}
+          </Await>
+        </Suspense>
+      )}
     </div>
   );
 }
