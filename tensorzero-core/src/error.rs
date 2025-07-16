@@ -1187,7 +1187,8 @@ impl IntoResponse for Error {
             "error": self.to_string(),
         });
         if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
-            body["error_json"] = serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
+            body["error_json"] =
+                serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
         }
         (self.status_code(), Json(body)).into_response()
     }
