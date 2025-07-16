@@ -1029,10 +1029,12 @@ async def test_async_feedback_invalid_input(async_client: AsyncTensorZeroGateway
 
 @pytest.mark.asyncio
 async def test_async_tensorzero_error_http():
-    async_client = await AsyncTensorZeroGateway.build_http(
+    async_client = AsyncTensorZeroGateway.build_http(
         gateway_url="http://localhost:3000",
         verbose_errors=True,
+        async_setup=False,
     )
+    assert isinstance(async_client, AsyncTensorZeroGateway)
     with pytest.raises(TensorZeroError) as excinfo:
         await async_client.inference(
             function_name="not_a_function", input={"messages": []}
@@ -1046,10 +1048,12 @@ async def test_async_tensorzero_error_http():
 
 @pytest.mark.asyncio
 async def test_async_tensorzero_error_embedded():
-    async_client = await AsyncTensorZeroGateway.build_embedded(
+    async_client = AsyncTensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
         clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        async_setup=False,
     )
+    assert isinstance(async_client, AsyncTensorZeroGateway)
     with pytest.raises(TensorZeroError) as excinfo:
         await async_client.inference(
             function_name="not_a_function", input={"messages": []}
