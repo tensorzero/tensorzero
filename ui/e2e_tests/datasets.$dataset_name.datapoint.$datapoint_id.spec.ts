@@ -69,7 +69,7 @@ test("should be able to add, edit and save a datapoint", async ({ page }) => {
   const topic = v7();
   const input = `{"topic":"${topic}"}`;
 
-  await page.locator("textarea.font-mono").first().fill(input);
+  await page.locator("div[contenteditable='true']").first().fill(input);
 
   // Save the datapoint
   await page.getByRole("button", { name: "Save" }).click();
