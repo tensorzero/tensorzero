@@ -19,12 +19,14 @@ interface VariantFilterProps {
   variants: VariantData[];
   selectedValues: string[];
   setSelectedValues: React.Dispatch<React.SetStateAction<string[]>>;
+  disabled?: boolean;
 }
 
 export function VariantFilter({
   variants,
   selectedValues,
   setSelectedValues,
+  disabled,
 }: VariantFilterProps) {
   const [open, setOpen] = React.useState(false);
   const comboboxRef = React.useRef<HTMLInputElement | null>(null);
@@ -42,25 +44,35 @@ export function VariantFilter({
   const areAllSelected = selectedValues.length === variants.length;
 
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Root open={open} onOpenChange={disabled ? undefined : setOpen}>
       <ComboboxProvider
         open={open}
-        setOpen={setOpen}
+        setOpen={disabled ? undefined : setOpen}
         selectedValue={selectedValues}
-        setSelectedValue={(values) => {
-          if (values.includes("ALL")) {
-            setSelectedValues((v) =>
-              variants.length === v.length ? [] : variants.map((v) => v.name),
-            );
-          } else {
-            setSelectedValues(values);
-          }
-        }}
-        setValue={(value) => {
-          startTransition(() => {
-            setSearchValue(value);
-          });
-        }}
+        setSelectedValue={
+          disabled
+            ? undefined
+            : (values) => {
+                if (values.includes("ALL")) {
+                  setSelectedValues((v) =>
+                    variants.length === v.length
+                      ? []
+                      : variants.map((v) => v.name),
+                  );
+                } else {
+                  setSelectedValues(values);
+                }
+              }
+        }
+        setValue={
+          disabled
+            ? undefined
+            : (value) => {
+                startTransition(() => {
+                  setSearchValue(value);
+                });
+              }
+        }
       >
         <ComboboxLabel className="sr-only" render={<label />}>
           Filter by variant
@@ -70,6 +82,7 @@ export function VariantFilter({
             ref={comboboxRef}
             placeholder="Filter by variant..."
             className="combobox"
+            disabled={disabled}
             render={<Input />}
           />
         </Popover.Anchor>
