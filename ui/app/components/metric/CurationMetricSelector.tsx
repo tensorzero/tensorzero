@@ -6,7 +6,13 @@ import {
   type PathValue,
 } from "react-hook-form";
 import type { Config } from "tensorzero-node";
-import { FormField, FormItem, FormLabel } from "~/components/ui/form";
+import {
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormMessage,
+} from "~/components/ui/form";
 import {
   Popover,
   PopoverContent,
@@ -207,8 +213,8 @@ export default function CurationMetricSelector<
                       <CommandGroup
                         heading={
                           <div className="text-fg-tertiary flex w-full items-center justify-between">
-                            <span>Function Metrics</span>
-                            <span>Inferences</span>
+                            <span>Feedback</span>
+                            <span>Count</span>
                           </div>
                         }
                       >
@@ -232,15 +238,7 @@ export default function CurationMetricSelector<
                                 : "text-fg-tertiary font-normal",
                             )}
                           >
-                            {metricsFetcher.data?.metrics
-                              ? metricsFetcher.data.metrics
-                                  .reduce(
-                                    (total, metric) =>
-                                      total + metric.feedback_count,
-                                    0,
-                                  )
-                                  .toLocaleString()
-                              : "0"}
+                            N/A
                           </span>
                         </CommandItem>
                         {Object.entries(metrics)
@@ -315,15 +313,18 @@ export default function CurationMetricSelector<
                   render={({ field: thresholdField }) => (
                     <FormItem className="flex flex-col gap-1 border-l pl-4">
                       <FormLabel>Threshold</FormLabel>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        {...thresholdField}
-                        value={thresholdField.value?.toString() ?? ""}
-                        onChange={(e) => {
-                          thresholdField.onChange(Number(e.target.value));
-                        }}
-                      />
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          {...thresholdField}
+                          value={thresholdField.value?.toString() ?? ""}
+                          onChange={(e) => {
+                            thresholdField.onChange(Number(e.target.value));
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
