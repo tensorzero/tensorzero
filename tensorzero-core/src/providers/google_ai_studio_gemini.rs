@@ -447,7 +447,10 @@ impl<'a> TryFrom<&'a RequestMessage> for GeminiContent<'a> {
             match block {
                 ContentBlock::Thought(thought @ Thought { text, signature }) => {
                     // Gemini never produces 'thought: true' at the moment, and there's no documentation
-                    // on whether or not they should be passed back in. Let's warn and discard for now.
+                    // on whether or not they should be passed back in.
+                    // As a result, we don't attempt to feed `Thought.text` back to Gemini, as this would
+                    // require us to set 'thought: true' in the request.
+                    // Instead, we just warn and discard the content block.
                     if text.is_some() {
                         warn_discarded_thought_block(PROVIDER_TYPE, thought);
                     } else if let Some(signature) = signature {
