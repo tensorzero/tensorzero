@@ -5,6 +5,7 @@ import {
   Await,
   useFetcher,
   Link,
+  useAsyncError,
 } from "react-router";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
@@ -19,7 +20,7 @@ import {
   tensorZeroResolvedInputToInput,
 } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import type {
   FunctionConfig,
   Datapoint as TensorZeroDatapoint,
@@ -37,6 +38,7 @@ import PageButtons from "~/components/utils/PageButtons";
 import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.server";
 import InputSnippet from "~/components/inference/InputSnippet";
 import { Label } from "~/components/ui/label";
+import { CodeEditor } from "~/components/ui/code-editor";
 
 const DEFAULT_LIMIT = 10;
 
@@ -306,12 +308,24 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                         >
                           {variant}
                         </Link>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            updateSearchParams({
+                              variant: selectedVariants.filter(
+                                (v) => v !== variant,
+                              ),
+                            });
+                          }}
+                        >
+                          <X />
+                        </Button>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                {/* Data rows */}
                 {datapoints.map(
                   (datapoint: TensorZeroDatapoint, index: number) => (
                     <div
@@ -454,17 +468,7 @@ function DatapointPlaygroundOutput({
             </div>
           }
         >
-          <Await
-            resolve={serverInference}
-            errorElement={
-              <div className="flex min-h-[8rem] items-center justify-center">
-                <div className="text-center text-red-600">
-                  <p className="font-semibold">Error</p>
-                  <p className="text-sm">Failed to load inference</p>
-                </div>
-              </div>
-            }
-          >
+          <Await resolve={serverInference} errorElement={<InferenceError />}>
             {(response) => {
               if (!response) {
                 return (
@@ -486,6 +490,26 @@ function DatapointPlaygroundOutput({
           </Await>
         </Suspense>
       )}
+    </div>
+  );
+}
+
+function InferenceError() {
+  const error = useAsyncError();
+  const isInferenceError = error instanceof Error;
+
+  return (
+    <div className="flex min-h-[8rem] items-center justify-center">
+      <div className="max-h-[16rem] max-w-md overflow-y-auto px-4 text-center text-red-600">
+        <p className="font-semibold">Error</p>
+        <p className="mt-1 text-sm">
+          {isInferenceError ? (
+            <CodeEditor value={error.message} readOnly />
+          ) : (
+            "Failed to load inference"
+          )}
+        </p>
+      </div>
     </div>
   );
 }
