@@ -45,6 +45,9 @@ export default [
     ]),
   ]),
 
+  // Playground
+  route("playground", "routes/playground/route.tsx"),
+
   // Datasets
   route("datasets", "routes/datasets/layout.tsx", [
     index("routes/datasets/route.tsx"),
