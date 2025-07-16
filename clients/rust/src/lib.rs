@@ -13,6 +13,7 @@ pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
+use tensorzero_core::howdy::setup_howdy;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
@@ -286,6 +287,7 @@ impl ClientBuilder {
                                 source: e.into(),
                             })
                         })?;
+                setup_howdy(clickhouse_connection_info.clone());
                 let http_client = if let Some(http_client) = self.http_client {
                     http_client
                 } else {
@@ -312,6 +314,19 @@ impl ClientBuilder {
                 })
             }
         }
+    }
+
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub async fn build_from_state(state: AppStateData) -> Result<Client, ClientBuilderError> {
+        Ok(Client {
+            mode: ClientMode::EmbeddedGateway {
+                gateway: EmbeddedGateway { state },
+                timeout: None,
+            },
+            verbose_errors: false,
+            #[cfg(feature = "e2e_tests")]
+            last_body: Default::default(),
+        })
     }
 
     /// Builds a `Client` in HTTPGateway mode, erroring if the mode is not HTTPGateway
@@ -1148,7 +1163,7 @@ impl Client {
         let mut version = headers
             .get("x-tensorzero-gateway-version")
             .and_then(|v| v.to_str().ok())
-            .map(|v| v.to_string());
+            .map(str::to_string);
         if cfg!(feature = "e2e_tests") {
             if let Ok(version_override) = env::var("TENSORZERO_E2E_GATEWAY_VERSION_OVERRIDE") {
                 version = Some(version_override);
@@ -1209,7 +1224,7 @@ pub async fn get_config_no_verify_credentials(path: PathBuf) -> Result<Config, T
 fn compare_versions(first: &str, second: &str) -> Result<Ordering, TensorZeroError> {
     let extract_numbers = |s: &str| {
         s.split('.')
-            .map(|x| x.parse::<u32>())
+            .map(str::parse::<u32>)
             .collect::<Result<Vec<_>, _>>()
     };
     let first_components = extract_numbers(first).map_err(|e| TensorZeroError::Other {

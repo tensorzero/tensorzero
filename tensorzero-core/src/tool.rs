@@ -585,7 +585,7 @@ impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
             tools_available: tool_call_config
                 .tools_available
                 .into_iter()
-                .map(|tool| tool.into())
+                .map(ToolConfig::into)
                 .collect(),
             tool_choice: tool_call_config.tool_choice,
             parallel_tool_calls: tool_call_config.parallel_tool_calls,

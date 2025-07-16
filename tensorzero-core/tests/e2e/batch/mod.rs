@@ -367,7 +367,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             .unwrap();
 
     // Sort inferences by inference_id to ensure consistent ordering
-    inference_responses.sort_by_key(|response| response.inference_id());
+    inference_responses.sort_by_key(tensorzero::InferenceResponse::inference_id);
 
     assert_eq!(inference_responses.len(), 2);
     let inference_response_1 = &inference_responses[0];

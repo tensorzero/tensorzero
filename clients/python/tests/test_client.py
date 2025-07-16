@@ -312,8 +312,45 @@ async def test_async_thought_input(async_client: AsyncTensorZeroGateway):
                             "signature": "my_first_signature",
                         },
                         Thought(
-                            text="my_second_thought", signature="my_second_signature"
+                            text="my_second_thought",
+                            signature="my_second_signature",
+                            _internal_provider_type="dummy",
                         ),
+                        Thought(
+                            text="my_discarded_thought",
+                            signature="my_discarded_signature",
+                            _internal_provider_type="wrong_provider_type",
+                        ),
+                    ],
+                }
+            ],
+        },
+        tags={"key": "value"},
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert len(result.content) == 1
+    assert isinstance(result.content[0], Text)
+    # The last thought should be discarded, since '_internal_provider_type' does not match
+    assert (
+        result.content[0].text
+        == '{"system":null,"messages":[{"role":"user","content":[{"type":"thought","text":"my_first_thought","signature":"my_first_signature"},{"type":"thought","text":"my_second_thought","signature":"my_second_signature","_internal_provider_type":"dummy"}]}]}'
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_thought_signature_only_input(async_client: AsyncTensorZeroGateway):
+    result = await async_client.inference(
+        model_name="dummy::echo_request_messages",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "thought",
+                            "signature": "my_first_signature",
+                        },
+                        Thought(signature="my_second_signature"),
                     ],
                 }
             ],
@@ -325,7 +362,39 @@ async def test_async_thought_input(async_client: AsyncTensorZeroGateway):
     assert isinstance(result.content[0], Text)
     assert (
         result.content[0].text
-        == '{"system":null,"messages":[{"role":"user","content":[{"type":"thought","text":"my_first_thought","signature":"my_first_signature"},{"type":"thought","text":"my_second_thought","signature":"my_second_signature"}]}]}'
+        == '{"system":null,"messages":[{"role":"user","content":[{"type":"thought","text":null,"signature":"my_first_signature"},{"type":"thought","text":null,"signature":"my_second_signature"}]}]}'
+    )
+
+
+def test_display_thought():
+    t1 = Thought(signature="my_signature")
+    assert (
+        str(t1)
+        == "Thought(text=None, type='thought', signature='my_signature', _internal_provider_type=None)"
+    )
+    assert (
+        repr(t1)
+        == "Thought(text=None, type='thought', signature='my_signature', _internal_provider_type=None)"
+    )
+
+    t2 = Thought(text="my_text", signature="my_signature")
+    assert (
+        str(t2)
+        == "Thought(text='my_text', type='thought', signature='my_signature', _internal_provider_type=None)"
+    )
+    assert (
+        repr(t2)
+        == "Thought(text='my_text', type='thought', signature='my_signature', _internal_provider_type=None)"
+    )
+
+    t3 = Thought(text="my_text")
+    assert (
+        str(t3)
+        == "Thought(text='my_text', type='thought', signature=None, _internal_provider_type=None)"
+    )
+    assert (
+        repr(t3)
+        == "Thought(text='my_text', type='thought', signature=None, _internal_provider_type=None)"
     )
 
 

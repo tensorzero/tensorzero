@@ -405,7 +405,7 @@ impl RenderedSample {
                 .iter()
                 .map(|x| content_block_chat_output_to_python(py, x.clone()))
                 .collect::<PyResult<Vec<_>>>()?;
-            PyList::new(py, output).map(|list| list.into_any())
+            PyList::new(py, output).map(Bound::into_any)
         } else {
             Ok(py.None().into_bound(py))
         }
@@ -422,7 +422,7 @@ impl RenderedSample {
                     .collect::<PyResult<Vec<_>>>()
             })
             .collect::<PyResult<Vec<_>>>()?;
-        PyList::new(py, dispreferred_outputs).map(|list| list.into_any())
+        PyList::new(py, dispreferred_outputs).map(Bound::into_any)
     }
 
     #[getter]

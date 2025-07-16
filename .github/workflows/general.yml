@@ -21,6 +21,8 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      - name: Set DNS
+        run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
@@ -449,7 +451,7 @@ jobs:
           done
 
       - name: Test (Rust)
-        run: cargo test-optimization -- --skip gcp --skip together
+        run: cargo test-optimization-mock
 
   build-gateway-container:
     uses: ./.github/workflows/build-gateway-container.yml

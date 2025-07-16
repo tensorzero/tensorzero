@@ -32,7 +32,7 @@ use super::openai::{
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
 const PROVIDER_NAME: &str = "Azure";
-const PROVIDER_TYPE: &str = "azure";
+pub const PROVIDER_TYPE: &str = "azure";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]

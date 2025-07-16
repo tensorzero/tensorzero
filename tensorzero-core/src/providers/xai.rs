@@ -43,7 +43,7 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "xAI";
-const PROVIDER_TYPE: &str = "xai";
+pub const PROVIDER_TYPE: &str = "xai";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]

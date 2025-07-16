@@ -78,6 +78,7 @@ match_same_arms = "deny"       # partial progress towards pedantic
 panic = "deny"
 print_stderr = "deny"
 print_stdout = "deny"
+redundant_closure_for_method_calls = "deny"
 todo = "deny"
 unimplemented = "deny"
 uninlined_format_args = "deny"
