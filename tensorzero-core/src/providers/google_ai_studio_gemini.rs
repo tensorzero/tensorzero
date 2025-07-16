@@ -47,7 +47,7 @@ use super::helpers::inject_extra_request_data_and_send;
 use super::openai::convert_stream_error;
 
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
-const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
+pub const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 /// See the `GCPVertexGeminiProvider` struct docs for information about our handling 'thought' and unknown blocks.
@@ -445,7 +445,13 @@ impl<'a> TryFrom<&'a RequestMessage> for GeminiContent<'a> {
         let mut iter = message.content.iter();
         while let Some(block) = iter.next() {
             match block {
-                ContentBlock::Thought(thought @ Thought { text, signature }) => {
+                ContentBlock::Thought(
+                    thought @ Thought {
+                        text,
+                        signature,
+                        provider_type: _,
+                    },
+                ) => {
                     // Gemini never produces 'thought: true' at the moment, and there's no documentation
                     // on whether or not they should be passed back in.
                     // As a result, we don't attempt to feed `Thought.text` back to Gemini, as this would
@@ -862,6 +868,7 @@ fn content_part_to_tensorzero_chunk(
                     id: last_thought_id.to_string(),
                     text: Some(text),
                     signature: part.thought_signature,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             // Handle 'thought/thoughtSignature' with no other fields
@@ -873,6 +880,7 @@ fn content_part_to_tensorzero_chunk(
                     id: last_thought_id.to_string(),
                     text: None,
                     signature: part.thought_signature,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             _ => {
@@ -905,6 +913,7 @@ fn content_part_to_tensorzero_chunk(
             id: last_thought_id.to_string(),
             text: None,
             signature: Some(thought_signature),
+            provider_type: Some(PROVIDER_TYPE.to_string()),
         }));
     }
 
@@ -968,6 +977,7 @@ fn convert_part_to_output(
                 output.push(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
                     text: Some(text),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             // Handle 'thought' with no other fields
@@ -977,6 +987,7 @@ fn convert_part_to_output(
                 output.push(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
                     text: None,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             _ => {
@@ -1004,6 +1015,7 @@ fn convert_part_to_output(
         output.push(ContentBlockOutput::Thought(Thought {
             signature: Some(thought_signature),
             text: None,
+            provider_type: Some(PROVIDER_TYPE.to_string()),
         }));
     }
     match part.data {

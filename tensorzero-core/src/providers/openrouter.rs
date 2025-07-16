@@ -53,7 +53,7 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "OpenRouter";
-const PROVIDER_TYPE: &str = "openrouter";
+pub const PROVIDER_TYPE: &str = "openrouter";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]

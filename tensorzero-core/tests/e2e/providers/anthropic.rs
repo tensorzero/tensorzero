@@ -821,10 +821,14 @@ async fn test_streaming_thinking() {
     assert_eq!(clickhouse_content_blocks[1]["type"], "text");
     assert_eq!(clickhouse_content_blocks[2]["type"], "tool_call");
 
-    assert_eq!(clickhouse_content_blocks[0]["text"], content_blocks["0"]);
     assert_eq!(
-        clickhouse_content_blocks[0]["signature"],
-        content_block_signatures["0"]
+        clickhouse_content_blocks[0],
+        serde_json::json!({
+            "type": "thought",
+            "text": content_blocks["0"],
+            "signature": content_block_signatures["0"],
+            "_internal_provider_type": "anthropic",
+        })
     );
     assert_eq!(clickhouse_content_blocks[1]["text"], content_blocks["1"]);
 

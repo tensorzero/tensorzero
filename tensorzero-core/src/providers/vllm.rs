@@ -30,7 +30,7 @@ use crate::providers::helpers::{
 use crate::providers::openai::check_api_base_suffix;
 
 const PROVIDER_NAME: &str = "vLLM";
-const PROVIDER_TYPE: &str = "vllm";
+pub const PROVIDER_TYPE: &str = "vllm";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
