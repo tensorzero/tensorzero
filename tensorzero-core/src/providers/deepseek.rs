@@ -51,7 +51,7 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "DeepSeek";
-const PROVIDER_TYPE: &str = "deepseek";
+pub const PROVIDER_TYPE: &str = "deepseek";
 
 #[derive(Debug)]
 pub enum DeepSeekCredentials {
@@ -516,6 +516,7 @@ fn deepseek_to_tensorzero_chunk(
                 text: Some(reasoning),
                 signature: None,
                 id: "0".to_string(),
+                provider_type: Some(PROVIDER_TYPE.to_string()),
             }));
         }
         if let Some(tool_calls) = choice.delta.tool_calls {
@@ -664,6 +665,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
             content.push(ContentBlockOutput::Thought(Thought {
                 text: Some(reasoning),
                 signature: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
             }));
         }
         if let Some(text) = message.content {
@@ -970,6 +972,7 @@ mod tests {
             ContentBlockOutput::Thought(Thought {
                 text: Some("I'm thinking about the weather".to_string()),
                 signature: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
             })
         );
 

@@ -35,7 +35,7 @@ pub struct AWSSagemakerProvider {
     #[serde(skip)]
     client: aws_sdk_sagemakerruntime::Client,
     #[serde(skip)] // TODO: add a way to Serialize the WrappedProvider
-    hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
+    pub hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
     #[serde(skip)]
     base_config: aws_sdk_sagemakerruntime::config::Builder,
 }
