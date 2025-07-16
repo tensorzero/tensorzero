@@ -34,6 +34,7 @@ import { Refresh } from "~/components/icons/Icons";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
 import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.server";
+import InputSnippet from "~/components/inference/InputSnippet";
 
 const DEFAULT_LIMIT = 10;
 
@@ -286,7 +287,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                 <thead className="sticky top-0 z-20">
                   <tr>
                     <th className="bg-background sticky left-0 z-30 border-r border-b p-4 text-left font-medium">
-                      Datapoint ID
+                      Datapoint Input
                     </th>
                     {selectedVariants.map((variant) => (
                       <th
@@ -305,7 +306,10 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                     (datapoint: TensorZeroDatapoint, index: number) => (
                       <tr key={datapoint.id} className="border-t">
                         <td className="bg-background sticky left-0 z-10 border-r p-4 font-mono text-sm">
-                          {datapoint.id}
+                          <InputSnippet
+                            messages={inputs[index].messages}
+                            system={inputs[index].system}
+                          />
                         </td>
                         {selectedVariants.map((variant, variantIndex) => {
                           const inferenceIndex =
