@@ -51,9 +51,12 @@ pub async fn start_gateway_on_random_port(
     while let Some(line) = stdout.next_line().await.unwrap() {
         println!("gateway output line: {line}");
         output.push(line.clone());
+        if line.contains("└") {
+            // We're done logging the startup message
+            break;
+        }
         if line.contains("listening on 0.0.0.0:") {
             listening_line = Some(line);
-            break;
         }
     }
 
