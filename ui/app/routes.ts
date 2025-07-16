@@ -36,6 +36,9 @@ export default [
   route("api/tensorzero/inference", "routes/api/tensorzero/inference.ts"),
   route("api/tensorzero/status", "routes/api/tensorzero/status.ts"),
 
+  // Playground
+  route("playground", "routes/playground/route.tsx"),
+
   // Datasets
   route("datasets", "routes/datasets/layout.tsx", [
     index("routes/datasets/route.tsx"),
