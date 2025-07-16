@@ -313,9 +313,6 @@ export function prepareInferenceActionRequest(
     };
   }
 
-  console.log("request");
-  console.log(request);
-
   return request;
 }
 
