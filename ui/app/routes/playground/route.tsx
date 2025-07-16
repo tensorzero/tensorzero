@@ -219,6 +219,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                             input={inputs[index]}
                             functionName={functionName}
                             variantName={variant}
+                            serverInference={serverInferences[index][variant]}
                           />
                         </td>
                       ))}
@@ -265,37 +266,17 @@ function DatapointPlaygroundOutput({
     handlePromise();
   }, [serverInference]);
 
-  const { submit, data, state } = variantInferenceFetcher;
-  useEffect(() => {
-    const request = prepareInferenceActionRequest({
-      source: variantSource,
-      input,
-      functionName,
-      variant: variantName,
-      tool_params:
-        datapoint?.type === "chat"
-          ? (datapoint.tool_params ?? undefined)
-          : undefined,
-      output_schema:
-        datapoint?.type === "json" ? datapoint.output_schema : null,
-    });
-    const formData = new FormData();
-    formData.append("data", JSON.stringify(request));
-    submit(formData);
-  }, [data, state, variantSource, input, functionName, variantName, datapoint]);
-  console.log(variantInferenceFetcher.data);
-
   return (
     <>
-      {variantInferenceIsLoading ? (
+      {loading ? (
         <div className="flex h-32 items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
-      ) : variantInferenceFetcher.error ? (
+      ) : error ? (
         <div className="flex h-32 items-center justify-center">
           <div className="text-center text-red-600">
             <p className="font-semibold">Error</p>
-            <p className="text-sm">{variantInferenceFetcher.error?.message}</p>
+            <p className="text-sm">{error.message}</p>
           </div>
         </div>
       ) : (
