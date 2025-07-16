@@ -32,6 +32,10 @@ import {
 import NewOutput from "~/components/inference/NewOutput";
 import { Refresh } from "~/components/icons/Icons";
 import { Button } from "~/components/ui/button";
+import PageButtons from "~/components/utils/PageButtons";
+import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.server";
+
+const DEFAULT_LIMIT = 10;
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -39,7 +43,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const functionName = searchParams.get("functionName");
   const limit = searchParams.get("limit")
     ? parseInt(searchParams.get("limit")!)
-    : 10;
+    : DEFAULT_LIMIT;
   const offset = searchParams.get("offset")
     ? parseInt(searchParams.get("offset")!)
     : 0;
@@ -56,14 +60,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
   const datasetName = searchParams.get("datasetName");
   const selectedVariants = searchParams.getAll("variant");
-  const datapoints = datasetName
-    ? await listDatapoints(
-        datasetName,
-        functionName ?? undefined,
-        limit,
-        offset,
-      )
-    : undefined;
+  const [datapoints, totalDatapoints] = datasetName
+    ? await Promise.all([
+        listDatapoints(datasetName, functionName ?? undefined, limit, offset),
+        functionName
+          ? countDatapointsForDatasetFunction(datasetName, functionName)
+          : null,
+      ])
+    : [undefined, null];
   // If we're refreshing a specific datapoint/variant, we should short-circuit the loader
   // and return the inference result
   if (
@@ -143,6 +147,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     datapoints,
     inputs,
     serverInferences,
+    totalDatapoints,
+    offset,
+    limit,
   };
 }
 
@@ -189,8 +196,16 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     return null;
   }
 
-  const { functionName, datasetName, datapoints, inputs, serverInferences } =
-    loaderData;
+  const {
+    functionName,
+    datasetName,
+    datapoints,
+    inputs,
+    serverInferences,
+    totalDatapoints,
+    offset,
+    limit,
+  } = loaderData;
 
   // Get selected variants from search params
   const selectedVariants = searchParams.getAll("variant");
@@ -322,6 +337,20 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
             </div>
           </div>
         )}
+      <PageButtons
+        onPreviousPage={() => {
+          const newOffset = Math.max(0, offset - limit);
+          updateSearchParams({ offset: newOffset.toString() });
+        }}
+        onNextPage={() => {
+          const newOffset = offset + limit;
+          updateSearchParams({ offset: newOffset.toString() });
+        }}
+        disablePrevious={offset === 0}
+        disableNext={
+          totalDatapoints ? offset + limit >= totalDatapoints : false
+        }
+      />
     </PageLayout>
   );
 }
