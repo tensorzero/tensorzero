@@ -4,6 +4,7 @@ import {
   data,
   Await,
   useFetcher,
+  Link,
 } from "react-router";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
@@ -279,6 +280,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
       {selectedVariants.length > 0 &&
         datapoints &&
         datapoints.length > 0 &&
+        datasetName &&
         inputs &&
         functionName && (
           <div className="-mx-4 mt-6 md:-mx-8 lg:-mx-16">
@@ -298,7 +300,12 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                         key={variant}
                         className="border-r p-4 font-medium last:border-r-0"
                       >
-                        {variant}
+                        <Link
+                          to={`/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variant)}`}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {variant}
+                        </Link>
                       </div>
                     ))}
                   </div>
@@ -312,6 +319,15 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                       className="grid grid-cols-[400px_1fr] border-b"
                     >
                       <div className="bg-background sticky left-0 z-10 border-r p-4 font-mono text-sm">
+                        <div className="text-xs text-gray-500">
+                          Datapoint:{" "}
+                          <Link
+                            to={`/datasets/${encodeURIComponent(datasetName)}/datapoint/${datapoint.id}`}
+                            className="text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            {datapoint.id}
+                          </Link>
+                        </div>
                         <InputSnippet
                           messages={inputs[index].messages}
                           system={inputs[index].system}
