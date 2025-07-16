@@ -35,6 +35,7 @@ import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
 import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.server";
 import InputSnippet from "~/components/inference/InputSnippet";
+import { Label } from "~/components/ui/label";
 
 const DEFAULT_LIMIT = 10;
 
@@ -222,7 +223,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
         name: variantName,
         color: undefined,
       }))
-    : undefined;
+    : [];
 
   const updateSearchParams = (
     updates: Record<string, string | string[] | null>,
@@ -248,6 +249,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader name="Playground" />
+      <Label>Function</Label>
       <FunctionSelector
         selected={functionName}
         onSelect={(value) =>
@@ -255,24 +257,25 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
         }
         functions={config.functions}
       />
+      <Label>Dataset</Label>
       <DatasetSelector
         selected={datasetName ?? undefined}
         onSelect={(value) => updateSearchParams({ datasetName: value })}
         allowCreation={false}
       />
-      {functionName && datasetName && variantData && (
-        <VariantFilter
-          variants={variantData}
-          selectedValues={selectedVariants}
-          setSelectedValues={(valuesOrUpdater) => {
-            const newValues =
-              typeof valuesOrUpdater === "function"
-                ? valuesOrUpdater(selectedVariants)
-                : valuesOrUpdater;
-            updateSearchParams({ variant: newValues });
-          }}
-        />
-      )}
+      <Label>Variants</Label>
+      <VariantFilter
+        disabled={!functionName || !datasetName}
+        variants={variantData}
+        selectedValues={selectedVariants}
+        setSelectedValues={(valuesOrUpdater) => {
+          const newValues =
+            typeof valuesOrUpdater === "function"
+              ? valuesOrUpdater(selectedVariants)
+              : valuesOrUpdater;
+          updateSearchParams({ variant: newValues });
+        }}
+      />
       {selectedVariants.length > 0 &&
         datapoints &&
         datapoints.length > 0 &&
