@@ -197,16 +197,13 @@ pub fn resolved_input_message_content_to_python(
     match content {
         ResolvedInputMessageContent::Text { value } => {
             let text_content_block = import_text_content_block(py)?;
-            match value {
-                Value::String(s) => {
-                    let kwargs = [(intern!(py, "text"), s)].into_py_dict(py)?;
-                    text_content_block.call(py, (), Some(&kwargs))
-                }
-                _ => {
-                    let value = serialize_to_dict(py, value)?;
-                    let kwargs = [(intern!(py, "arguments"), value)].into_py_dict(py)?;
-                    text_content_block.call(py, (), Some(&kwargs))
-                }
+            if let Value::String(s) = value {
+                let kwargs = [(intern!(py, "text"), s)].into_py_dict(py)?;
+                text_content_block.call(py, (), Some(&kwargs))
+            } else {
+                let value = serialize_to_dict(py, value)?;
+                let kwargs = [(intern!(py, "arguments"), value)].into_py_dict(py)?;
+                text_content_block.call(py, (), Some(&kwargs))
             }
         }
         ResolvedInputMessageContent::ToolCall(tool_call) => {

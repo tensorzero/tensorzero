@@ -430,23 +430,20 @@ fn delete_json_pointer(mut value: &mut serde_json::Value, pointer: &str) -> Resu
                     }
                 },
                 Value::Array(list) => {
-                    match parse_index(&token) {
-                        Some(index) => {
-                            if let Some(target) = list.get_mut(index) {
-                                value = target;
-                            } else {
-                                tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - index `{token}` out of bounds");
-                                // If a parent of our target pointer doesn't exist, then do nothing,
-                                // since `value`` is already an object where the target pointer doesn't exist
-                                return Ok(());
-                            }
-                        }
-                        None => {
-                            tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - non-numeric array index `{token}`");
+                    if let Some(index) = parse_index(&token) {
+                        if let Some(target) = list.get_mut(index) {
+                            value = target;
+                        } else {
+                            tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - index `{token}` out of bounds");
                             // If a parent of our target pointer doesn't exist, then do nothing,
                             // since `value`` is already an object where the target pointer doesn't exist
                             return Ok(());
                         }
+                    } else {
+                        tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - non-numeric array index `{token}`");
+                        // If a parent of our target pointer doesn't exist, then do nothing,
+                        // since `value`` is already an object where the target pointer doesn't exist
+                        return Ok(());
                     }
                 }
                 other => {

@@ -12,36 +12,29 @@ pub(super) fn run_exact_match_evaluator(
     match (inference_response, datapoint) {
         (InferenceResponse::Chat(response), Datapoint::Chat(datapoint)) => {
             debug!("Running exact match evaluation for chat response");
-            match &datapoint.output {
-                // Right now this is order-sensitive, but we may consider relaxing this in the future
-                Some(output) => {
-                    let matches = output == &response.content;
-                    debug!(matches = %matches, "Chat exact match comparison completed");
-                    Ok(Some(Value::Bool(matches)))
-                }
-                None => {
-                    debug!("No reference output available for chat comparison");
-                    Ok(None)
-                }
+            if let Some(output) = &datapoint.output {
+                let matches = output == &response.content;
+                debug!(matches = %matches, "Chat exact match comparison completed");
+                Ok(Some(Value::Bool(matches)))
+            } else {
+                debug!("No reference output available for chat comparison");
+                Ok(None)
             }
         }
         (InferenceResponse::Json(json_completion), Datapoint::Json(json_inference)) => {
             debug!("Running exact match evaluation for JSON response");
-            match &json_inference.output {
-                Some(output) => {
-                    // `output.parsed` is an Option<Value> but it should always be Some here
-                    if output.parsed.is_none() {
-                        warn!("Datapoint {} has no parsed output", json_inference.id);
-                        return Ok(None);
-                    }
-                    let matches = output.parsed == json_completion.output.parsed;
-                    debug!(matches = %matches, "JSON exact match comparison completed");
-                    Ok(Some(Value::Bool(matches)))
+            if let Some(output) = &json_inference.output {
+                // `output.parsed` is an Option<Value> but it should always be Some here
+                if output.parsed.is_none() {
+                    warn!("Datapoint {} has no parsed output", json_inference.id);
+                    return Ok(None);
                 }
-                None => {
-                    debug!("No reference output available for JSON comparison");
-                    Ok(None)
-                }
+                let matches = output.parsed == json_completion.output.parsed;
+                debug!(matches = %matches, "JSON exact match comparison completed");
+                Ok(Some(Value::Bool(matches)))
+            } else {
+                debug!("No reference output available for JSON comparison");
+                Ok(None)
             }
         }
         _ => {

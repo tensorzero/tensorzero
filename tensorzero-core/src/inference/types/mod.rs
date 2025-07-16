@@ -1626,32 +1626,27 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                             }
                         }
                         ContentBlockChunk::ToolCall(tool_call) => {
-                            match blocks
+                            if let Some(ContentBlockOutput::ToolCall(existing_tool_call)) = blocks
                                 .get_mut(&(ContentBlockOutputType::ToolCall, tool_call.id.clone()))
                             {
-                                // If there is already a tool call block with this id, append to it
-                                Some(ContentBlockOutput::ToolCall(existing_tool_call)) => {
-                                    // We assume that the ID is present and complete in the first chunk
-                                    // and that the name and arguments are accumulated with more chunks.
-                                    if let Some(raw_name) = tool_call.raw_name {
-                                        existing_tool_call.name.push_str(&raw_name);
-                                    }
-                                    existing_tool_call
-                                        .arguments
-                                        .push_str(&tool_call.raw_arguments);
+                                // We assume that the ID is present and complete in the first chunk
+                                // and that the name and arguments are accumulated with more chunks.
+                                if let Some(raw_name) = tool_call.raw_name {
+                                    existing_tool_call.name.push_str(&raw_name);
                                 }
-                                // If there is no tool call block, create one
-                                _ => {
-                                    if ttft.is_none() {
-                                        ttft = Some(chunk.latency);
-                                    }
-                                    blocks.insert(
-                                        (ContentBlockOutputType::ToolCall, tool_call.id.clone()),
-                                        ContentBlockOutput::ToolCall(tool_call_chunk_to_tool_call(
-                                            tool_call,
-                                        )),
-                                    );
+                                existing_tool_call
+                                    .arguments
+                                    .push_str(&tool_call.raw_arguments);
+                            } else {
+                                if ttft.is_none() {
+                                    ttft = Some(chunk.latency);
                                 }
+                                blocks.insert(
+                                    (ContentBlockOutputType::ToolCall, tool_call.id.clone()),
+                                    ContentBlockOutput::ToolCall(tool_call_chunk_to_tool_call(
+                                        tool_call,
+                                    )),
+                                );
                             }
                         }
                     }
@@ -1661,26 +1656,21 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                 if let Some(chunk_finish_reason) = chunk.finish_reason {
                     finish_reason = Some(chunk_finish_reason);
                 }
-                match blocks.get_mut(&(ContentBlockOutputType::Text, "".to_string())) {
-                    // If there is already a text block, append to it
-                    Some(ContentBlockOutput::Text(Text {
-                        text: existing_text,
-                    })) => {
-                        if let Some(raw) = chunk.raw {
-                            existing_text.push_str(&raw);
-                        }
+                if let Some(ContentBlockOutput::Text(Text {
+                    text: existing_text,
+                })) = blocks.get_mut(&(ContentBlockOutputType::Text, "".to_string()))
+                {
+                    if let Some(raw) = chunk.raw {
+                        existing_text.push_str(&raw);
                     }
-                    // If there is no text block, create one
-                    _ => {
-                        // We put this here and below rather than in the loop start because we
-                        // only want to set TTFT if there is some real content
-                        if ttft.is_none() {
-                            ttft = Some(chunk.latency);
-                        }
-                        if let Some(raw) = chunk.raw {
-                            blocks
-                                .insert((ContentBlockOutputType::Text, "".to_string()), raw.into());
-                        }
+                } else {
+                    // We put this here and below rather than in the loop start because we
+                    // only want to set TTFT if there is some real content
+                    if ttft.is_none() {
+                        ttft = Some(chunk.latency);
+                    }
+                    if let Some(raw) = chunk.raw {
+                        blocks.insert((ContentBlockOutputType::Text, "".to_string()), raw.into());
                     }
                 }
                 if let Some(thought) = chunk.thought {
@@ -1866,18 +1856,15 @@ fn handle_textual_content_block<F, A>(
     F: FnOnce(String) -> ContentBlockOutput,
     A: FnOnce(&mut ContentBlockOutput, &str),
 {
-    match blocks.get_mut(&key) {
-        // If there is already a block, append to it
-        Some(existing_block) => append_text(existing_block, &text),
-        // If there is no block, create one
-        _ => {
-            // We only want to set TTFT if there is some real content
-            if ttft.is_none() {
-                *ttft = Some(chunk_latency);
-            }
-            if !text.is_empty() {
-                blocks.insert(key, create_block(text));
-            }
+    if let Some(existing_block) = blocks.get_mut(&key) {
+        append_text(existing_block, &text)
+    } else {
+        // We only want to set TTFT if there is some real content
+        if ttft.is_none() {
+            *ttft = Some(chunk_latency);
+        }
+        if !text.is_empty() {
+            blocks.insert(key, create_block(text));
         }
     }
 }

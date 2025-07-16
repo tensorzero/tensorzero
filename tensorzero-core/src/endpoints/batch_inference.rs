@@ -827,14 +827,13 @@ pub async fn write_completed_batch_inference<'a>(
             raw_response,
             usage,
             finish_reason,
-        } = match response.elements.remove(&inference_id) {
-            Some(inference_response) => inference_response,
-            None => {
-                Error::new(ErrorDetails::MissingBatchInferenceResponse {
-                    inference_id: Some(inference_id),
-                });
-                continue;
-            }
+        } = if let Some(inference_response) = response.elements.remove(&inference_id) {
+            inference_response
+        } else {
+            _ = Error::new(ErrorDetails::MissingBatchInferenceResponse {
+                inference_id: Some(inference_id),
+            });
+            continue;
         };
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),

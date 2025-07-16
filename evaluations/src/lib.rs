@@ -351,15 +351,12 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
     } = params;
 
     debug!("Processing tool parameters");
-    let dynamic_tool_params = match datapoint.tool_call_config() {
-        Some(tool_params) => {
-            debug!("Tool parameters found, processing");
-            get_tool_params_args(tool_params, function_config).await
-        }
-        None => {
-            debug!("No tool parameters found");
-            DynamicToolParams::default()
-        }
+    let dynamic_tool_params = if let Some(tool_params) = datapoint.tool_call_config() {
+        debug!("Tool parameters found, processing");
+        get_tool_params_args(tool_params, function_config).await
+    } else {
+        debug!("No tool parameters found");
+        DynamicToolParams::default()
     };
     debug!("Processing output schema");
     let output_schema = match (datapoint.output_schema(), function_config) {
