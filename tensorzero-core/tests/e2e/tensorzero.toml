@@ -209,12 +209,12 @@ location = "us-central1"
 project_id = "tensorzero-public"
 credential_location = "sdk"
 
-[models."gemini-2.5-pro-preview-06-05"]
+[models."gcp-gemini-2.5-pro"]
 routing = ["gcp_vertex_gemini"]
 
-[models."gemini-2.5-pro-preview-06-05".providers.gcp_vertex_gemini]
+[models."gcp-gemini-2.5-pro".providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
-model_id = "gemini-2.5-pro-preview-06-05"
+model_id = "gcp-gemini-2.5-pro"
 location = "global"
 project_id = "tensorzero-public"
 # Set the thinking budget to the minimum value.
@@ -263,7 +263,7 @@ routing = ["google_ai_studio_gemini"]
 
 [models."gemini-2.5-pro".providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
-model_name = "gemini-2.5-pro-preview-06-05"
+model_name = "gcp-gemini-2.5-pro"
 # Set the thinking budget to the minimum value.
 # This speeds up our tests, saves us some tokens, and prevents the model from
 # hitting our token limit
@@ -276,7 +276,7 @@ routing = ["google_ai_studio_gemini"]
 
 [models."gemini-2.5-pro-dynamic".providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
-model_name = "gemini-2.5-pro-preview-06-05"
+model_name = "gcp-gemini-2.5-pro"
 api_key_location = "dynamic::google_ai_studio_api_key"
 # Set the thinking budget to the minimum value.
 # This speeds up our tests, saves us some tokens, and prevents the model from
@@ -1027,7 +1027,7 @@ extra_headers = [{ name = "Authorization", value = "invalid_gcp_vertex_auth" }]
 
 [functions.basic_test.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-06-05"
+model = "gcp-gemini-2.5-pro"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 500
 
@@ -1764,7 +1764,7 @@ max_tokens = 100
 
 [functions.json_success.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-06-05"
+model = "gcp-gemini-2.5-pro"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -1772,7 +1772,7 @@ max_tokens = 500
 
 [functions.json_success.variants.gcp-vertex-gemini-pro-implicit]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-06-05"
+model = "gcp-gemini-2.5-pro"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -2152,7 +2152,7 @@ max_tokens = 100
 
 [functions.json_success.variants.gcp_vertex_gemini_pro_json_mode_off]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-06-05"
+model = "gcp-gemini-2.5-pro"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -2176,7 +2176,7 @@ max_tokens = 100
 
 [functions.json_success.variants.google_ai_studio_gemini_pro_002_json_mode_off]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-06-05"
+model = "gcp-gemini-2.5-pro"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -2382,7 +2382,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-06-05"
+model = "gcp-gemini-2.5-pro"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
@@ -2390,7 +2390,7 @@ max_tokens = 500
 
 [functions.dynamic_json.variants.gcp-vertex-gemini-pro-implicit]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-06-05"
+model = "gcp-gemini-2.5-pro"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -2864,7 +2864,7 @@ max_tokens = 100
 
 [functions.weather_helper.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-06-05"
+model = "gcp-gemini-2.5-pro"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 500
 
