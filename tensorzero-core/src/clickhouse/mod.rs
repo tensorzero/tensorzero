@@ -204,14 +204,7 @@ impl ClickHouseConnectionInfo {
         parameters: &HashMap<&str, &str>,
     ) -> Result<ClickHouseResponse, Error> {
         match self {
-            Self::Disabled => Ok(ClickHouseResponse {
-                response: "".to_string(),
-                metadata: ClickHouseResponseMetadata {
-                    read_rows: 0,
-                    written_rows: 0,
-                },
-            }),
-            Self::Mock { .. } => Ok(ClickHouseResponse {
+            Self::Disabled | Self::Mock { .. } => Ok(ClickHouseResponse {
                 response: "".to_string(),
                 metadata: ClickHouseResponseMetadata {
                     read_rows: 0,
@@ -393,8 +386,7 @@ impl ClickHouseConnectionInfo {
 
     pub async fn create_database(&self) -> Result<(), Error> {
         match self {
-            Self::Disabled => {}
-            Self::Mock { .. } => {}
+            Self::Disabled | Self::Mock { .. } => {}
             Self::Production {
                 database_url,
                 database,

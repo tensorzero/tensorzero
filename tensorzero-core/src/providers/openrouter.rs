@@ -102,8 +102,7 @@ impl TryFrom<Credential> for OpenRouterCredentials {
         match credentials {
             Credential::Static(key) => Ok(OpenRouterCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(OpenRouterCredentials::Dynamic(key_name)),
-            Credential::None => Ok(OpenRouterCredentials::None),
-            Credential::Missing => Ok(OpenRouterCredentials::None),
+            Credential::Missing | Credential::None => Ok(OpenRouterCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for OpenRouter provider".to_string(),
             })),
@@ -559,7 +558,7 @@ impl OpenRouterRequestMessage<'_> {
             OpenRouterRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
             OpenRouterRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 OpenRouterContentBlock::Text { text } => text.to_lowercase().contains(value),
-                OpenRouterContentBlock::ImageUrl { .. } => false,
+                OpenRouterContentBlock::ImageUrl { .. } |
                 // Don't inspect the contents of 'unknown' blocks
                 OpenRouterContentBlock::Unknown { data: _ } => false,
             }),
@@ -569,7 +568,7 @@ impl OpenRouterRequestMessage<'_> {
                         OpenRouterContentBlock::Text { text } => {
                             text.to_lowercase().contains(value)
                         }
-                        OpenRouterContentBlock::ImageUrl { .. } => false,
+                        OpenRouterContentBlock::ImageUrl { .. } |
                         // Don't inspect the contents of 'unknown' blocks
                         OpenRouterContentBlock::Unknown { data: _ } => false,
                     })
@@ -1107,11 +1106,12 @@ pub(super) enum OpenRouterFinishReason {
 impl From<OpenRouterFinishReason> for FinishReason {
     fn from(finish_reason: OpenRouterFinishReason) -> Self {
         match finish_reason {
-            OpenRouterFinishReason::Stop => FinishReason::Stop,
-            OpenRouterFinishReason::Length => FinishReason::Length,
             OpenRouterFinishReason::ContentFilter => FinishReason::ContentFilter,
-            OpenRouterFinishReason::ToolCalls => FinishReason::ToolCall,
-            OpenRouterFinishReason::FunctionCall => FinishReason::ToolCall,
+            OpenRouterFinishReason::Length => FinishReason::Length,
+            OpenRouterFinishReason::Stop => FinishReason::Stop,
+            OpenRouterFinishReason::FunctionCall | OpenRouterFinishReason::ToolCalls => {
+                FinishReason::ToolCall
+            }
             OpenRouterFinishReason::Unknown => FinishReason::Unknown,
         }
     }

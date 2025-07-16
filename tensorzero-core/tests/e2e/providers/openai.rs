@@ -815,10 +815,7 @@ async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceReq
         ModelInferenceRequestJsonMode::Off => {
             json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false})
         }
-        ModelInferenceRequestJsonMode::On => {
-            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"json_object"}})
-        }
-        ModelInferenceRequestJsonMode::Strict => {
+        ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
             json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"json_object"}})
         }
     };
