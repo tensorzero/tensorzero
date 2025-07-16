@@ -5,7 +5,7 @@ import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import { useConfig } from "~/context/config";
 import { getConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
-import { listDatapoints } from "~/utils/tensorzero.server";
+import { getTensorZeroClient, listDatapoints } from "~/utils/tensorzero.server";
 import { VariantFilter } from "~/components/function/variant/variant-filter";
 import {
   prepareInferenceActionRequest,
@@ -16,7 +16,11 @@ import { resolveInput } from "~/utils/resolve.server";
 import { Loader2 } from "lucide-react";
 import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import {
+  InferenceRequestSchema,
+  type InferenceResponse,
+} from "~/utils/tensorzero";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -36,6 +40,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     });
   }
   const datasetName = searchParams.get("datasetName");
+  const selectedVariants = searchParams.getAll("variant");
   const datapoints = datasetName
     ? await listDatapoints(
         datasetName,
@@ -52,11 +57,55 @@ export async function loader({ request }: Route.LoaderArgs) {
         }),
       )
     : undefined;
-  return { functionName, datasetName, datapoints, inputs };
+
+  // Create a closure we can apply to each datapoint x variant pair
+  // and return the promises from the loader
+  const serverInference = async (
+    input: DisplayInput,
+    datapoint: TensorZeroDatapoint,
+    functionName: string,
+    variantName: string,
+  ) => {
+    const request = prepareInferenceActionRequest({
+      source: "clickhouse_datapoint",
+      input,
+      functionName,
+      variant: variantName,
+      tool_params:
+        datapoint?.type === "chat"
+          ? (datapoint.tool_params ?? undefined)
+          : undefined,
+      output_schema:
+        datapoint?.type === "json" ? datapoint.output_schema : null,
+    });
+    const result = InferenceRequestSchema.safeParse(request);
+    if (!result.success) {
+      throw new Error("Invalid request");
+    }
+    return await getTensorZeroClient().inference({
+      ...result.data,
+      stream: false,
+    });
+  };
+  // Do not block on all the server inferences, just return the promises
+  // For each datapoint, we run all inferences in parallel
+  const serverInferences =
+    functionName && datapoints && inputs
+      ? datapoints.map((datapoint, index) => {
+          return Promise.all(
+            selectedVariants.map((variant) =>
+              serverInference(inputs[index], datapoint, functionName, variant),
+            ),
+          );
+        })
+      : undefined;
+
+  return { functionName, datasetName, datapoints, inputs, serverInferences };
 }
 
 export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
-  const { functionName, datasetName, datapoints, inputs } = loaderData;
+  const { functionName, datasetName, datapoints, inputs, serverInferences } =
+    loaderData;
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const config = useConfig();
@@ -189,18 +238,32 @@ interface DatapointPlaygroundOutputProps {
   input: DisplayInput;
   functionName: string;
   variantName: string;
+  serverInference: Promise<InferenceResponse>;
 }
 function DatapointPlaygroundOutput({
   datapoint,
   input,
   functionName,
   variantName,
+  serverInference,
 }: DatapointPlaygroundOutputProps) {
-  const variantInferenceFetcher = useInferenceActionFetcher();
-  const variantSource = "clickhouse_datapoint";
-  const variantInferenceIsLoading =
-    variantInferenceFetcher.state === "submitting" ||
-    variantInferenceFetcher.state === "loading";
+  const [response, setResponse] = useState<InferenceResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  useEffect(() => {
+    if (!serverInference) return;
+    const handlePromise = async () => {
+      try {
+        const result = await serverInference;
+        setResponse(result);
+        setLoading(false);
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error(String(err)));
+        setLoading(false);
+      }
+    };
+    handlePromise();
+  }, [serverInference]);
 
   const { submit, data, state } = variantInferenceFetcher;
   useEffect(() => {
