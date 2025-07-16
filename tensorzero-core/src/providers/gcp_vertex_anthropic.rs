@@ -37,7 +37,7 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, RequestMessage, Usage,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{build_creds_caching_default_with_fn, CredentialLocation};
+use crate::model::CredentialLocation;
 use crate::model::{fully_qualified_name, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -112,20 +112,24 @@ pub async fn make_gcp_sdk_credentials(provider_type: &str) -> Result<GCPVertexCr
 }
 
 impl GCPVertexAnthropicProvider {
+    async fn build_credentials(
+        cred_location: CredentialLocation,
+    ) -> Result<GCPVertexCredentials, Error> {
+        GCPVertexCredentials::new(
+            Some(cred_location),
+            &DEFAULT_CREDENTIALS,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+        )
+        .await
+    }
     // Constructs a provider from a shorthand string of the form:
     // * 'projects/<project_id>/locations/<location>/publishers/anthropic/models/XXX'
     // * 'projects/<project_id>/locations/<location>/endpoints/XXX'
     //
     // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
     pub async fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default_with_fn(
-            None,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-        )?;
-
+        let credentials = Self::build_credentials(default_api_key_location()).await?;
         // We only support model urls with the publisher 'anthropic'
         let shorthand_url = parse_shorthand_url(&project_url_path, "anthropic")?;
         let (location, model_id) = match shorthand_url {
@@ -161,18 +165,8 @@ impl GCPVertexAnthropicProvider {
     ) -> Result<Self, Error> {
         let default_location = default_api_key_location();
         let cred_location = api_key_location.as_ref().unwrap_or(&default_location);
+        let credentials = Self::build_credentials(cred_location.clone()).await?;
 
-        let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
-            make_gcp_sdk_credentials(PROVIDER_TYPE).await?
-        } else {
-            build_creds_caching_default_with_fn(
-                api_key_location,
-                default_api_key_location(),
-                PROVIDER_TYPE,
-                &DEFAULT_CREDENTIALS,
-                |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-            )?
-        };
         let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
