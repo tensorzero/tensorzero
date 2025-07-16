@@ -1,4 +1,4 @@
-import { useSearchParams, useNavigate, data } from "react-router";
+import { useSearchParams, useNavigate, data, Await } from "react-router";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
@@ -10,17 +10,17 @@ import { VariantFilter } from "~/components/function/variant/variant-filter";
 import {
   prepareInferenceActionRequest,
   tensorZeroResolvedInputToInput,
-  useInferenceActionFetcher,
 } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { Loader2 } from "lucide-react";
 import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import { useEffect, useState } from "react";
+import { Suspense } from "react";
 import {
   InferenceRequestSchema,
   type InferenceResponse,
 } from "~/utils/tensorzero";
+import NewOutput from "~/components/inference/NewOutput";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -88,16 +88,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     });
   };
   // Do not block on all the server inferences, just return the promises
-  // For each datapoint, we run all inferences in parallel
+  // Create a flat array of promises, one for each datapoint/variant combination
   const serverInferences =
     functionName && datapoints && inputs
-      ? datapoints.map((datapoint, index) => {
-          return Promise.all(
-            selectedVariants.map((variant) =>
-              serverInference(inputs[index], datapoint, functionName, variant),
-            ),
-          );
-        })
+      ? datapoints.flatMap((datapoint, index) =>
+          selectedVariants.map((variant) =>
+            serverInference(inputs[index], datapoint, functionName, variant),
+          ),
+        )
       : undefined;
 
   return { functionName, datasetName, datapoints, inputs, serverInferences };
@@ -152,7 +150,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
       <PageHeader name="Playground" />
       <FunctionSelector
         selected={functionName}
-        onSelect={(value) => updateSearchParams({ functionName: value })}
+        onSelect={(value) => updateSearchParams({ functionName: value, variant: null })}
         functions={config.functions}
       />
       <DatasetSelector
@@ -207,22 +205,30 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                       <td className="bg-background sticky left-0 z-10 border-r p-4 font-mono text-sm">
                         {datapoint.id}
                       </td>
-                      {selectedVariants.map((variant) => (
-                        <td
-                          key={`${datapoint.id}-${variant}`}
-                          className={`p-4 ${
-                            selectedVariants.length <= 3 ? "" : "w-80 min-w-80"
-                          }`}
-                        >
-                          <DatapointPlaygroundOutput
-                            datapoint={datapoint}
-                            input={inputs[index]}
-                            functionName={functionName}
-                            variantName={variant}
-                            serverInference={serverInferences[index][variant]}
-                          />
-                        </td>
-                      ))}
+                      {selectedVariants.map((variant, variantIndex) => {
+                        const inferenceIndex =
+                          index * selectedVariants.length + variantIndex;
+                        return (
+                          <td
+                            key={`${datapoint.id}-${variant}`}
+                            className={`p-4 ${
+                              selectedVariants.length <= 3
+                                ? ""
+                                : "w-80 min-w-80"
+                            }`}
+                          >
+                            <DatapointPlaygroundOutput
+                              datapoint={datapoint}
+                              input={inputs[index]}
+                              functionName={functionName}
+                              variantName={variant}
+                              serverInference={
+                                serverInferences?.[inferenceIndex]
+                              }
+                            />
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
@@ -239,7 +245,7 @@ interface DatapointPlaygroundOutputProps {
   input: DisplayInput;
   functionName: string;
   variantName: string;
-  serverInference: Promise<InferenceResponse>;
+  serverInference: Promise<InferenceResponse> | undefined;
 }
 function DatapointPlaygroundOutput({
   datapoint,
@@ -248,44 +254,49 @@ function DatapointPlaygroundOutput({
   variantName,
   serverInference,
 }: DatapointPlaygroundOutputProps) {
-  const [response, setResponse] = useState<InferenceResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-  useEffect(() => {
-    if (!serverInference) return;
-    const handlePromise = async () => {
-      try {
-        const result = await serverInference;
-        setResponse(result);
-        setLoading(false);
-      } catch (err) {
-        setError(err instanceof Error ? err : new Error(String(err)));
-        setLoading(false);
-      }
-    };
-    handlePromise();
-  }, [serverInference]);
+  if (!serverInference) {
+    return (
+      <div className="flex h-32 items-center justify-center">
+        <div className="text-muted-foreground text-sm">
+          No inference available
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <>
-      {loading ? (
+    <Suspense
+      fallback={
         <div className="flex h-32 items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
-      ) : error ? (
-        <div className="flex h-32 items-center justify-center">
-          <div className="text-center text-red-600">
-            <p className="font-semibold">Error</p>
-            <p className="text-sm">{error.message}</p>
+      }
+    >
+      <Await
+        resolve={serverInference}
+        errorElement={
+          <div className="flex h-32 items-center justify-center">
+            <div className="text-center text-red-600">
+              <p className="font-semibold">Error</p>
+              <p className="text-sm">Failed to load inference</p>
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="flex h-32 items-center justify-center">
-          <div className="text-muted-foreground text-sm">
-            Output will appear here.
-          </div>
-        </div>
-      )}
-    </>
+        }
+      >
+        {(response) => {
+          let output;
+          if ("content" in response) {
+            output = response.content;
+          } else {
+            output = response.output;
+          }
+          return (
+            <div className="flex h-32 items-center justify-center">
+              <NewOutput output={output} />
+            </div>
+          );
+        }}
+      </Await>
+    </Suspense>
   );
 }
