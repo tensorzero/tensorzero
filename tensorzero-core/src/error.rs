@@ -41,6 +41,16 @@ pub fn set_debug(debug: bool) -> Result<(), Error> {
     })
 }
 
+static UNSTABLE_ERROR_JSON: OnceCell<bool> = OnceCell::const_new();
+
+pub fn set_unstable_error_json(unstable_error_json: bool) -> Result<(), Error> {
+    UNSTABLE_ERROR_JSON.set(unstable_error_json).map_err(|_| {
+        Error::new(ErrorDetails::Config {
+            message: "Failed to set unstable error JSON".to_string(),
+        })
+    })
+}
+
 pub fn warn_discarded_thought_block(provider_type: &str, thought: &Thought) {
     if *DEBUG.get().unwrap_or(&false) {
         tracing::warn!("Provider type `{provider_type}` does not support input thought blocks, discarding: {thought:?}");
@@ -1173,10 +1183,12 @@ impl std::error::Error for Error {}
 impl IntoResponse for Error {
     /// Log the error and convert it into an Axum response
     fn into_response(self) -> Response {
-        let body = json!({
+        let mut body = json!({
             "error": self.to_string(),
-            "error_json": serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string())),
         });
+        if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
+            body["error_json"] = serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
+        }
         (self.status_code(), Json(body)).into_response()
     }
 }

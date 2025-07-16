@@ -658,10 +658,7 @@ async def test_async_inference_streaming_nonexistent_function(
             pass
 
     assert exc_info.value.status_code == 404
-    assert (
-        str(exc_info.value)
-        == 'TensorZeroError (status code 404): {"error":"Unknown function: does_not_exist","error_json":{"UnknownFunction":{"name":"does_not_exist"}}}'
-    )
+    assert '"error":"Unknown function: does_not_exist"' in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -1031,7 +1028,11 @@ async def test_async_feedback_invalid_input(async_client: AsyncTensorZeroGateway
 
 
 @pytest.mark.asyncio
-async def test_async_tensorzero_error(async_client: AsyncTensorZeroGateway):
+async def test_async_tensorzero_error_http():
+    async_client = await AsyncTensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000",
+        verbose_errors=True,
+    )
     with pytest.raises(TensorZeroError) as excinfo:
         await async_client.inference(
             function_name="not_a_function", input={"messages": []}
@@ -1040,6 +1041,23 @@ async def test_async_tensorzero_error(async_client: AsyncTensorZeroGateway):
     assert (
         str(excinfo.value)
         == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function","error_json":{"UnknownFunction":{"name":"not_a_function"}}}'
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_tensorzero_error_embedded():
+    async_client = await AsyncTensorZeroGateway.build_embedded(
+        config_file=TEST_CONFIG_FILE,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+    )
+    with pytest.raises(TensorZeroError) as excinfo:
+        await async_client.inference(
+            function_name="not_a_function", input={"messages": []}
+        )
+
+    assert (
+        str(excinfo.value)
+        == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function"}'
     )
 
 
@@ -2067,13 +2085,31 @@ def test_sync_feedback_invalid_input(sync_client: TensorZeroGateway):
         )
 
 
-def test_sync_tensorzero_error(sync_client: TensorZeroGateway):
+def test_sync_tensorzero_error_http():
+    sync_client = TensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000",
+        verbose_errors=True,
+    )
     with pytest.raises(TensorZeroError) as excinfo:
         sync_client.inference(function_name="not_a_function", input={"messages": []})
 
     assert (
         str(excinfo.value)
         == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function","error_json":{"UnknownFunction":{"name":"not_a_function"}}}'
+    )
+
+
+def test_sync_tensorzero_error_embedded():
+    sync_client = TensorZeroGateway.build_embedded(
+        config_file=TEST_CONFIG_FILE,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+    )
+    with pytest.raises(TensorZeroError) as excinfo:
+        sync_client.inference(function_name="not_a_function", input={"messages": []})
+
+    assert (
+        str(excinfo.value)
+        == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function"}'
     )
 
 

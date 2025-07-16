@@ -125,6 +125,13 @@ pub struct GatewayConfig {
     // If set, all of the HTTP endpoints will have this path prepended.
     // E.g. a base path of `/custom/prefix` will cause the inference endpoint to become `/custom/prefix/inference`.
     pub base_path: Option<String>,
+    /// If enabled, adds an 'error_json' field alongside the human-readable 'error' field
+    /// in HTTP error responses. This contains a JSON-serialized version of the error.
+    /// While 'error_json' will always be valid JSON when present, the exact contents is unstable,
+    /// and may change at any time without warning.
+    /// For now, this is only supported in the standalone gateway, and not in the embedded gateway.
+    #[serde(default)]
+    pub unstable_error_json: bool,
 }
 
 fn serialize_optional_socket_addr<S>(
