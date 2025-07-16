@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
+use serde::{Serialize, Serializer};
 use serde_json::{json, Value};
 use std::fmt::{Debug, Display};
 use tokio::sync::OnceCell;
@@ -81,7 +82,7 @@ impl<T: Debug + Display> Display for DisplayOrDebugGateway<T> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
 // We box `ErrorDetails` per the `clippy::result_large_err` lint
 pub struct Error(Box<ErrorDetails>);
@@ -113,6 +114,27 @@ impl Error {
     }
 }
 
+fn serialize_status<S>(code: &Option<StatusCode>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match code {
+        Some(c) => serializer.serialize_u16(c.as_u16()),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn serialize_if_debug<T, S>(data: T, serializer: S) -> Result<S::Ok, S::Error>
+where
+    T: Serialize,
+    S: Serializer,
+{
+    if *DEBUG.get().unwrap_or(&false) {
+        return data.serialize(serializer);
+    }
+    serializer.serialize_none()
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(&self.0, f)
@@ -125,7 +147,7 @@ impl From<ErrorDetails> for Error {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 pub enum ErrorDetails {
     AllVariantsFailed {
         errors: HashMap<String, Error>,
@@ -200,9 +222,12 @@ pub enum ErrorDetails {
     },
     InferenceClient {
         message: String,
+        #[serde(serialize_with = "serialize_status")]
         status_code: Option<StatusCode>,
         provider_type: String,
+        #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
+        #[serde(serialize_with = "serialize_if_debug")]
         raw_response: Option<String>,
     },
     InferenceNotFound {
@@ -211,7 +236,9 @@ pub enum ErrorDetails {
     InferenceServer {
         message: String,
         provider_type: String,
+        #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
+        #[serde(serialize_with = "serialize_if_debug")]
         raw_response: Option<String>,
     },
     InvalidClientMode {
@@ -1146,7 +1173,10 @@ impl std::error::Error for Error {}
 impl IntoResponse for Error {
     /// Log the error and convert it into an Axum response
     fn into_response(self) -> Response {
-        let body = json!({"error": self.to_string()});
+        let body = json!({
+            "error": self.to_string(),
+            "error_json": serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string())),
+        });
         (self.status_code(), Json(body)).into_response()
     }
 }
