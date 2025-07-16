@@ -108,9 +108,7 @@ pub struct TimeoutsConfig {
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub struct GatewayConfig {
+pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
     pub bind_address: Option<std::net::SocketAddr>,
     #[serde(default)]
@@ -120,12 +118,72 @@ pub struct GatewayConfig {
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
     /// Defaults to `false`
     #[serde(default)]
-    pub enable_template_filesystem_access: bool,
+    pub enable_template_filesystem_access: Option<bool>,
+    #[serde(default)]
+    pub template_filesystem_access: Option<TemplateFilesystemAccess>,
     #[serde(default)]
     pub export: ExportConfig,
     // If set, all of the HTTP endpoints will have this path prepended.
     // E.g. a base path of `/custom/prefix` will cause the inference endpoint to become `/custom/prefix/inference`.
     pub base_path: Option<String>,
+}
+
+impl UninitializedGatewayConfig {
+    pub fn load(self) -> Result<GatewayConfig, Error> {
+        if self.enable_template_filesystem_access.is_some() {
+            tracing::warn!("Deprecation warning: `gateway.enable_template_filesystem_access` is deprecated. Please use `[gateway.template_filesystem_access]` instead");
+        }
+        let template_filesystem_access = match (
+            self.enable_template_filesystem_access,
+            self.template_filesystem_access,
+        ) {
+            (Some(enabled), None) => TemplateFilesystemAccess {
+                enabled,
+                base_path: None,
+            },
+            (None, Some(template_filesystem_access)) => template_filesystem_access,
+            (None, None) => Default::default(),
+            (Some(_), Some(_)) => {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: "`gateway.enable_template_filesystem_access` and `gateway.template_filesystem_access` cannot both be set".to_string(),
+                }));
+            }
+        };
+        Ok(GatewayConfig {
+            bind_address: self.bind_address,
+            observability: self.observability,
+            debug: self.debug,
+            template_filesystem_access,
+            export: self.export,
+            base_path: self.base_path,
+        })
+    }
+}
+
+#[derive(Default, Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct GatewayConfig {
+    pub bind_address: Option<std::net::SocketAddr>,
+    pub observability: ObservabilityConfig,
+    pub debug: bool,
+    pub template_filesystem_access: TemplateFilesystemAccess,
+    pub export: ExportConfig,
+    // If set, all of the HTTP endpoints will have this path prepended.
+    // E.g. a base path of `/custom/prefix` will cause the inference endpoint to become `/custom/prefix/inference`.
+    pub base_path: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct TemplateFilesystemAccess {
+    /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
+    /// Defaults to `false`
+    #[serde(default)]
+    enabled: bool,
+    base_path: Option<PathBuf>,
 }
 
 fn serialize_optional_socket_addr<S>(
@@ -515,7 +573,7 @@ impl Config {
         .collect::<HashMap<_, _>>();
 
         let mut config = Config {
-            gateway: uninitialized_config.gateway,
+            gateway: uninitialized_config.gateway.load()?,
             models: models.try_into().map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!("Failed to load models: {e}"),
@@ -540,10 +598,14 @@ impl Config {
         let template_paths = config.get_templates();
         config.templates.initialize(
             template_paths,
-            config
-                .gateway
-                .enable_template_filesystem_access
-                .then_some(base_path.clone()),
+            config.gateway.template_filesystem_access.enabled.then_some(
+                config
+                    .gateway
+                    .template_filesystem_access
+                    .base_path
+                    .clone()
+                    .unwrap_or(base_path.clone()),
+            ),
         )?;
 
         // Validate the config
@@ -850,7 +912,7 @@ pub trait LoadableConfig<T> {
 #[serde(deny_unknown_fields)]
 struct UninitializedConfig {
     #[serde(default)]
-    pub gateway: GatewayConfig,
+    pub gateway: UninitializedGatewayConfig,
     #[serde(default)]
     pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
     #[serde(default)]

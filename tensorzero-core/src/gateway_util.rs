@@ -274,7 +274,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
         };
@@ -326,7 +326,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
         };
@@ -349,7 +349,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
         };
@@ -374,7 +374,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
         };
