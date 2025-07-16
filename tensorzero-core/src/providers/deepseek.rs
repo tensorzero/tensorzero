@@ -359,11 +359,12 @@ impl<'a> DeepSeekRequest<'a> {
             ..
         } = *request;
 
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
 
         if request.json_mode == ModelInferenceRequestJsonMode::Strict {

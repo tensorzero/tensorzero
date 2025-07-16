@@ -528,9 +528,10 @@ impl InferenceProvider for DummyProvider {
         };
         let system = request.system.clone();
         let input_messages = request.messages.clone();
-        let finish_reason = match self.model_name.contains("tool") {
-            true => Some(FinishReason::ToolCall),
-            false => Some(FinishReason::Stop),
+        let finish_reason = if self.model_name.contains("tool") {
+            Some(FinishReason::ToolCall)
+        } else {
+            Some(FinishReason::Stop)
         };
         Ok(ProviderInferenceResponse {
             id,
@@ -631,9 +632,10 @@ impl InferenceProvider for DummyProvider {
         };
 
         let content_chunk_len = content_chunks.len();
-        let finish_reason = match is_tool_call {
-            true => Some(FinishReason::ToolCall),
-            false => Some(FinishReason::Stop),
+        let finish_reason = if is_tool_call {
+            Some(FinishReason::ToolCall)
+        } else {
+            Some(FinishReason::Stop)
         };
         let split_tool_name = self.model_name == "tool_split_name";
         let slow_second_chunk = self.model_name == "slow_second_chunk";
