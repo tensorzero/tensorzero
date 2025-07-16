@@ -46,7 +46,7 @@ use super::helpers::inject_extra_request_data_and_send;
 use super::openai::convert_stream_error;
 
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
-const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
+pub const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 /// See the `GCPVertexGeminiProvider` struct docs for information about our handling 'thought' and unknown blocks.
@@ -771,6 +771,7 @@ fn content_part_to_tensorzero_chunk(
                     id: "0".to_string(),
                     text: Some(text),
                     signature: part.thought_signature,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 })));
             }
             // Handle 'thought/thoughtSignature' with no other fields
@@ -781,6 +782,7 @@ fn content_part_to_tensorzero_chunk(
                     id: "0".to_string(),
                     text: None,
                     signature: part.thought_signature,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 })));
             }
             _ => {
@@ -854,6 +856,7 @@ fn convert_part_to_output(
                 return Ok(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
                     text: Some(text),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             // Handle 'thought/thoughtSignature' with no other fields
@@ -863,6 +866,7 @@ fn convert_part_to_output(
                 return Ok(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
                     text: None,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             _ => {
