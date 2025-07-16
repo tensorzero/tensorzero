@@ -50,7 +50,7 @@ lazy_static! {
 }
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const PROVIDER_NAME: &str = "Anthropic";
-const PROVIDER_TYPE: &str = "anthropic";
+pub const PROVIDER_TYPE: &str = "anthropic";
 
 fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("ANTHROPIC_API_KEY".to_string())
@@ -851,6 +851,7 @@ fn convert_to_output(
         }) => Ok(ContentBlockOutput::Thought(Thought {
             text: Some(thinking),
             signature: Some(signature),
+            provider_type: Some(PROVIDER_TYPE.to_string()),
         })),
         FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown {
             data: data.into_owned(),
@@ -1104,6 +1105,7 @@ fn anthropic_to_tensorzero_stream_message(
                         text: Some(thinking),
                         signature: None,
                         id: index.to_string(),
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,
                     raw_message,
@@ -1117,6 +1119,7 @@ fn anthropic_to_tensorzero_stream_message(
                         text: None,
                         signature: Some(signature),
                         id: index.to_string(),
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,
                     raw_message,
@@ -1167,6 +1170,7 @@ fn anthropic_to_tensorzero_stream_message(
                     text: Some(thinking),
                     signature: Some(signature),
                     id: index.to_string(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 })],
                 None,
                 raw_message,

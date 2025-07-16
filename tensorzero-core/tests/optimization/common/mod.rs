@@ -25,12 +25,12 @@ use tensorzero_core::{
     variant::JsonMode,
 };
 
-mod fireworks_sft;
-mod gcp_vertex_gemini_sft;
-mod openai_sft;
-mod together_sft;
+pub mod fireworks_sft;
+pub mod gcp_vertex_gemini_sft;
+pub mod openai_sft;
+pub mod together_sft;
 
-static FERRIS_PNG: &[u8] = include_bytes!("../e2e/providers/ferris.png");
+static FERRIS_PNG: &[u8] = include_bytes!("../../e2e/providers/ferris.png");
 
 fn use_mock_inference_provider() -> bool {
     std::env::var("TENSORZERO_USE_MOCK_INFERENCE_PROVIDER").is_ok()
@@ -42,6 +42,7 @@ pub trait OptimizationTestCase {
     fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo;
 }
 
+#[allow(clippy::allow_attributes, dead_code)]
 pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let optimizer_info = test_case
         .get_optimizer_info(use_mock_inference_provider())
@@ -127,6 +128,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
 }
 
 /// Runs launch_optimization_workflow and then polls for the workflow using the Rust client
+#[allow(clippy::allow_attributes, dead_code)]
 pub async fn run_workflow_test_case_with_tensorzero_client(
     test_case: &impl OptimizationTestCase,
     client: &tensorzero::Client,
@@ -350,6 +352,7 @@ fn generate_image_example() -> RenderedSample {
     }
 }
 
+#[allow(clippy::allow_attributes, dead_code)]
 pub async fn make_embedded_gateway() -> Client {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
@@ -364,6 +367,7 @@ pub async fn make_embedded_gateway() -> Client {
     .unwrap()
 }
 
+#[allow(clippy::allow_attributes, dead_code)]
 pub async fn make_http_gateway() -> Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
         url: "http://localhost:3000".parse().unwrap(),
@@ -382,7 +386,7 @@ macro_rules! optimization_test_case {
         ::paste::paste! {
             #[tokio::test(flavor = "multi_thread")]
             async fn [<test_slow_optimization_ $fn_name>]() {
-                $crate::run_test_case(&$constructor).await;
+                $crate::common::run_test_case(&$constructor).await;
             }
         }
     };
@@ -397,8 +401,8 @@ macro_rules! embedded_workflow_test_case {
         ::paste::paste! {
             #[tokio::test(flavor = "multi_thread")]
             async fn [<test_embedded_slow_optimization_ $fn_name>]() {
-                let client = $crate::make_embedded_gateway().await;
-                $crate::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
+                let client = $crate::common::make_embedded_gateway().await;
+                $crate::common::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
             }
         }
     };
@@ -413,8 +417,8 @@ macro_rules! http_workflow_test_case {
         ::paste::paste! {
             #[tokio::test]
             async fn [<test_http_slow_optimization_ $fn_name>]() {
-                let client = $crate::make_http_gateway().await;
-                $crate::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
+                let client = $crate::common::make_http_gateway().await;
+                $crate::common::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
             }
         }
     };
