@@ -2,6 +2,7 @@
 # dependencies = [
 #   "requests",
 #   "parquet-tools",
+#   "awscli",
 # ]
 # ///
 
