@@ -281,50 +281,50 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
         datapoints.length > 0 &&
         inputs &&
         functionName && (
-          <div className="-mx-8 mt-6 md:-mx-16 lg:-mx-32 xl:-mx-48 2xl:-mx-64">
-            <div className="mx-auto h-[calc(100vh-200px)] overflow-auto px-4">
-              <table
-                className={selectedVariants.length <= 3 ? "w-full" : ""}
-                style={{ borderCollapse: "collapse" }}
-              >
-                <thead className="sticky top-0 z-20">
-                  <tr>
-                    <th className="bg-background sticky left-0 z-30 border-r border-b p-4 text-left font-medium">
-                      Datapoint Input
-                    </th>
+          <div className="-mx-4 mt-6 md:-mx-8 lg:-mx-16">
+            <div
+              className="overflow-x-auto overflow-y-auto px-4"
+              style={{ maxHeight: "calc(100vh - 200px)" }}
+            >
+              <div className="min-w-fit">
+                {/* Header row with sticky positioning */}
+                <div className="bg-background sticky top-0 z-20 grid grid-cols-[400px_1fr] border-b">
+                  <div className="bg-background sticky left-0 z-30 border-r p-4 font-medium">
+                    Datapoint Input
+                  </div>
+                  <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
                     {selectedVariants.map((variant) => (
-                      <th
+                      <div
                         key={variant}
-                        className={`bg-background border-b p-4 text-left font-medium ${
-                          selectedVariants.length <= 3 ? "" : "w-80 min-w-80"
-                        }`}
+                        className="border-r p-4 font-medium last:border-r-0"
                       >
                         {variant}
-                      </th>
+                      </div>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {datapoints.map(
-                    (datapoint: TensorZeroDatapoint, index: number) => (
-                      <tr key={datapoint.id} className="border-t">
-                        <td className="bg-background sticky left-0 z-10 border-r p-4 font-mono text-sm">
-                          <InputSnippet
-                            messages={inputs[index].messages}
-                            system={inputs[index].system}
-                          />
-                        </td>
+                  </div>
+                </div>
+
+                {/* Data rows */}
+                {datapoints.map(
+                  (datapoint: TensorZeroDatapoint, index: number) => (
+                    <div
+                      key={datapoint.id}
+                      className="grid grid-cols-[400px_1fr] border-b"
+                    >
+                      <div className="bg-background sticky left-0 z-10 border-r p-4 font-mono text-sm">
+                        <InputSnippet
+                          messages={inputs[index].messages}
+                          system={inputs[index].system}
+                        />
+                      </div>
+                      <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
                         {selectedVariants.map((variant, variantIndex) => {
                           const inferenceIndex =
                             index * selectedVariants.length + variantIndex;
                           return (
-                            <td
+                            <div
                               key={`${datapoint.id}-${variant}`}
-                              className={`p-4 ${
-                                selectedVariants.length <= 3
-                                  ? ""
-                                  : "w-80 min-w-80"
-                              }`}
+                              className="border-r p-4 last:border-r-0"
                             >
                               <DatapointPlaygroundOutput
                                 datapoint={datapoint}
@@ -333,14 +333,14 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                                   serverInferences?.[inferenceIndex]
                                 }
                               />
-                            </td>
+                            </div>
                           );
                         })}
-                      </tr>
-                    ),
-                  )}
-                </tbody>
-              </table>
+                      </div>
+                    </div>
+                  ),
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -383,7 +383,7 @@ function DatapointPlaygroundOutput({
 
   if (!serverInference && !refreshedInference) {
     return (
-      <div className="flex h-32 items-center justify-center">
+      <div className="flex min-h-[8rem] items-center justify-center">
         <div className="text-muted-foreground text-sm">
           No inference available
         </div>
@@ -395,7 +395,7 @@ function DatapointPlaygroundOutput({
   if (isRefreshing) {
     return (
       <div className="group relative">
-        <div className="flex h-32 items-center justify-center">
+        <div className="flex min-h-[8rem] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       </div>
@@ -422,20 +422,18 @@ function DatapointPlaygroundOutput({
 
       {refreshedInference ? (
         // Display refreshed data directly
-        <div className="flex h-32 items-center justify-center">
-          <NewOutput
-            output={
-              "content" in refreshedInference
-                ? refreshedInference.content
-                : refreshedInference.output
-            }
-          />
-        </div>
+        <NewOutput
+          output={
+            "content" in refreshedInference
+              ? refreshedInference.content
+              : refreshedInference.output
+          }
+        />
       ) : (
         // Display initial server inference with Suspense
         <Suspense
           fallback={
-            <div className="flex h-32 items-center justify-center">
+            <div className="flex min-h-[8rem] items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin" />
             </div>
           }
@@ -443,7 +441,7 @@ function DatapointPlaygroundOutput({
           <Await
             resolve={serverInference}
             errorElement={
-              <div className="flex h-32 items-center justify-center">
+              <div className="flex min-h-[8rem] items-center justify-center">
                 <div className="text-center text-red-600">
                   <p className="font-semibold">Error</p>
                   <p className="text-sm">Failed to load inference</p>
@@ -454,7 +452,7 @@ function DatapointPlaygroundOutput({
             {(response) => {
               if (!response) {
                 return (
-                  <div className="flex h-32 items-center justify-center">
+                  <div className="flex min-h-[8rem] items-center justify-center">
                     <div className="text-muted-foreground text-sm">
                       No response available
                     </div>
@@ -467,11 +465,7 @@ function DatapointPlaygroundOutput({
               } else {
                 output = response.output;
               }
-              return (
-                <div className="flex h-32 items-center justify-center">
-                  <NewOutput output={output} />
-                </div>
-              );
+              return <NewOutput output={output} />;
             }}
           </Await>
         </Suspense>
