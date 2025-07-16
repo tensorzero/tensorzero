@@ -493,7 +493,7 @@ impl InferenceProvider for OpenAIProvider {
             get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         request_url
             .path_segments_mut()
-            .map_err(|_| {
+            .map_err(|()| {
                 Error::new(ErrorDetails::Inference {
                     message: "Failed to get mutable path segments".to_string(),
                 })
