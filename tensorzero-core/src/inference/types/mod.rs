@@ -284,7 +284,6 @@ impl Role {
 /// These RequestMessages are collected into a ModelInferenceRequest,
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
-
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, ts(export))]
@@ -430,7 +429,7 @@ impl RequestMessage {
             .iter()
             .map(|c| content_block_to_python(py, c))
             .collect::<PyResult<Vec<_>>>()?;
-        PyList::new(py, content).map(|list| list.into_any())
+        PyList::new(py, content).map(Bound::into_any)
     }
 
     #[getter]
@@ -878,6 +877,7 @@ impl From<Value> for ResolvedInputMessageContent {
 fn deserialize_content<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<InputMessageContent>, D::Error> {
+    #[expect(clippy::redundant_closure_for_method_calls)]
     UntaggedEnumVisitor::new()
         .string(|text| {
             Ok(vec![InputMessageContent::Text(TextKind::Text {
@@ -1094,7 +1094,7 @@ impl InferenceResult {
     pub fn usage_considering_cached(&self) -> Usage {
         self.model_inference_results()
             .iter()
-            .map(|r| r.usage_considering_cached())
+            .map(ModelInferenceResponseWithMetadata::usage_considering_cached)
             .sum()
     }
 
@@ -1523,7 +1523,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
     let raw_response = raw_response.unwrap_or_else(|| {
         value
             .iter()
-            .map(|chunk| chunk.raw_response())
+            .map(InferenceResultChunk::raw_response)
             .collect::<Vec<&str>>()
             .join("\n")
     });
@@ -1562,7 +1562,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                 text.text,
                                 &mut ttft,
                                 chunk.latency,
-                                |text| text.into(),
+                                Into::into,
                                 |block, text| {
                                     if let ContentBlockOutput::Text(Text {
                                         text: existing_text,
