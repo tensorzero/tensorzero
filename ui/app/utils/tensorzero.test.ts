@@ -68,13 +68,10 @@ describe("update datapoints", () => {
       },
       source_inference_id: null,
       is_custom: true,
+      id: "01960832-7028-743c-8c44-a598aa5130fd",
     };
 
-    await tensorZeroClient.updateDatapoint(
-      "test",
-      "01960832-7028-743c-8c44-a598aa5130fd",
-      datapoint,
-    );
+    await tensorZeroClient.updateDatapoint("test", datapoint);
 
     const retrievedDatapoint = await getDatapoint(
       "test",
@@ -84,5 +81,15 @@ describe("update datapoints", () => {
       datapoint.source_inference_id,
     );
     expect(retrievedDatapoint?.is_custom).toBe(true);
+  });
+
+  test("should list datapoints", async () => {
+    const datapoints = await tensorZeroClient.listDatapoints(
+      "foo",
+      "extract_entities",
+      10,
+    );
+    expect(datapoints.length).toBe(1);
+    expect(datapoints[0].id).toBe("01960832-7028-743c-8c44-a598aa5130fd");
   });
 });

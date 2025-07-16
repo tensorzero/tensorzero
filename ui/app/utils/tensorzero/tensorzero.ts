@@ -9,6 +9,7 @@ import {
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
 import { logger } from "~/utils/logger";
+import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 
 /**
  * JSON types.
@@ -257,6 +258,7 @@ export type ToolParams = z.infer<typeof ToolParamsSchema>;
  * Base schema for datapoints with common fields
  */
 const BaseDatapointSchema = z.object({
+  id: z.string().uuid(),
   function_name: z.string(),
   input: InputSchema,
   output: JSONValueSchema,
@@ -484,15 +486,10 @@ export class TensorZeroClient {
    */
   async updateDatapoint(
     datasetName: string,
-    datapointId: string,
     datapoint: Datapoint,
   ): Promise<DatapointResponse> {
     if (!datasetName || typeof datasetName !== "string") {
       throw new Error("Dataset name must be a non-empty string");
-    }
-
-    if (!datapointId || typeof datapointId !== "string") {
-      throw new Error("Datapoint ID must be a non-empty string");
     }
 
     // Validate the datapoint using the Zod schema
@@ -501,7 +498,7 @@ export class TensorZeroClient {
       throw new Error(`Invalid datapoint: ${validationResult.error.message}`);
     }
 
-    const endpoint = `/internal/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapointId)}`;
+    const endpoint = `/internal/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapoint.id)}`;
 
     const response = await this.fetch(endpoint, {
       method: "PUT",
@@ -516,6 +513,38 @@ export class TensorZeroClient {
     const body = await response.json();
     return DatapointResponseSchema.parse(body);
   }
+
+  async listDatapoints(
+    dataset_name: string,
+    function_name?: string,
+    limit?: number,
+    offset?: number,
+  ): Promise<TensorZeroDatapoint[]> {
+    const params = new URLSearchParams();
+    if (function_name) {
+      params.append("function_name", function_name);
+    }
+    if (limit !== undefined) {
+      params.append("limit", limit.toString());
+    }
+    if (offset !== undefined) {
+      params.append("offset", offset.toString());
+    }
+
+    const queryString = params.toString();
+    const endpoint = `/datasets/${encodeURIComponent(dataset_name)}/datapoints${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, {
+      method: "GET",
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = await response.json();
+    return body as TensorZeroDatapoint[];
+  }
+
   async getObject(storagePath: StoragePath): Promise<string> {
     const endpoint = `/internal/object_storage?storage_path=${encodeURIComponent(JSON.stringify(storagePath))}`;
     const response = await this.fetch(endpoint, { method: "GET" });
