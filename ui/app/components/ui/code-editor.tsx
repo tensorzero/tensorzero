@@ -163,6 +163,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       "&.cm-focused": {
         outline: "none !important",
       },
+      ".cm-gutters": {
+        fontFamily: "var(--font-mono) !important",
+      },
     });
 
     const exts: Extension[] = [...LANGUAGE_EXTENSIONS[language], customTheme];

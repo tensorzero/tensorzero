@@ -666,14 +666,14 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.image_test.variants.gcp_vertex]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-06-05"
+model = "gcp-gemini-2.5-pro"
 
-[models."gemini-2.5-pro-preview-06-05"]
+[models."gcp-gemini-2.5-pro"]
 routing = ["gcp_vertex_gemini"]
 
-[models."gemini-2.5-pro-preview-06-05".providers.gcp_vertex_gemini]
+[models."gcp-gemini-2.5-pro".providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
-model_id = "gemini-2.5-pro-preview-06-05"
+model_id = "gemini-2.5-pro"
 location = "global"
 project_id = "tensorzero-public"
 
@@ -1730,6 +1730,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
                         content: vec![ClientInputMessageContent::Thought(Thought {
                             text: Some("My TensorZero thought".to_string()),
                             signature: Some("My TensorZero signature".to_string()),
+                            provider_type: None,
                         })],
                     },
                     ClientInputMessage {
@@ -3073,8 +3074,8 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 }
 
 pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
-    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-06-05'
-    if provider.model_name.starts_with("gemini-2.5-pro") {
+    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
+    if provider.model_name.contains("gemini-2.5-pro") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -3315,8 +3316,8 @@ pub async fn check_inference_params_response(
 pub async fn test_inference_params_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-06-05'
-    if provider.model_name.starts_with("gemini-2.5-pro") {
+    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
+    if provider.model_name.contains("gemini-2.5-pro") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -5426,7 +5427,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
 
     // NOTE - Gemini 2.5 produces 'UNEXPECTED_TOOL_CALL' here
     // See https://github.com/tensorzero/tensorzero/issues/2329
-    if provider.model_name == "gemini-2.5-pro-preview-06-05" {
+    if provider.model_name == "gcp-gemini-2.5-pro" {
         return;
     }
 
@@ -5675,7 +5676,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
 ) {
     // Gemini 2.5 Pro will produce 'executableCode' blocks for this test, which we don't support
     // in streaming mode (since we don't have "unknown" streaming chunks)
-    if provider.model_name.starts_with("gemini-2.5-pro") {
+    if provider.model_name.contains("gemini-2.5-pro") {
         return;
     }
 
@@ -10146,7 +10147,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("gemini-2.5-pro") {
+    let max_tokens = if provider.model_name.contains("gemini-2.5-pro") {
         500
     } else if provider.model_name.starts_with("o1") {
         1000
@@ -10281,7 +10282,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     // {"generationConfig": {"thinkingConfig": {"thinkingBudget": 0 }}
     // This prevents us from setting a low max_tokens, since the thinking tokens will
     // use up all of the output tokens before an actual response is generated.
-    if provider.model_name.starts_with("gemini-2.5-pro") {
+    if provider.model_name.contains("gemini-2.5-pro") {
         return;
     }
 

@@ -32,7 +32,7 @@ use tensorzero_core::clickhouse::migration_manager::{
 use tensorzero_core::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
 
-struct DeleteDbOnDrop {
+pub struct DeleteDbOnDrop {
     database: String,
     client: ClickHouseConnectionInfo,
     allow_db_missing: bool,
@@ -71,7 +71,7 @@ impl Drop for DeleteDbOnDrop {
 /// happen even if the test panics).
 /// This helps to reduce peak disk usage on CI.
 /// If `allow_db_missing` is true, then we'll use 'DROP DATABASE IF EXISTS' instead of 'DROP DATABASE'
-fn get_clean_clickhouse(allow_db_missing: bool) -> (ClickHouseConnectionInfo, DeleteDbOnDrop) {
+pub fn get_clean_clickhouse(allow_db_missing: bool) -> (ClickHouseConnectionInfo, DeleteDbOnDrop) {
     let database = format!(
         "tensorzero_e2e_tests_migration_manager_{}",
         Uuid::now_v7().simple()

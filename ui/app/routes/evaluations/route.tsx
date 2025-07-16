@@ -18,7 +18,6 @@ import {
   runEvaluation,
   type InferenceCacheSetting,
 } from "~/utils/evaluations.server";
-import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { logger } from "~/utils/logger";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -27,16 +26,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   const searchParams = new URLSearchParams(url.search);
   const offset = parseInt(searchParams.get("offset") || "0");
   const pageSize = parseInt(searchParams.get("pageSize") || "15");
-  const [evaluationRuns, datasetCounts] = await Promise.all([
-    getEvaluationRunInfo(pageSize, offset),
-    getDatasetCounts(),
-  ]);
-  const dataset_names = datasetCounts.map((dataset) => dataset.dataset_name);
+  const evaluationRuns = await getEvaluationRunInfo(pageSize, offset);
 
   return {
     totalEvaluationRuns,
     evaluationRuns,
-    dataset_names,
     offset,
     pageSize,
   };
@@ -73,13 +67,7 @@ export default function EvaluationSummaryPage({
   loaderData,
 }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const {
-    totalEvaluationRuns,
-    evaluationRuns,
-    offset,
-    pageSize,
-    dataset_names,
-  } = loaderData;
+  const { totalEvaluationRuns, evaluationRuns, offset, pageSize } = loaderData;
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -112,7 +100,6 @@ export default function EvaluationSummaryPage({
       <LaunchEvaluationModal
         isOpen={launchEvaluationModalIsOpen}
         onClose={() => setLaunchEvaluationModalIsOpen(false)}
-        datasetNames={dataset_names}
       />
     </PageLayout>
   );

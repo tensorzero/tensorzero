@@ -1,13 +1,10 @@
-use crate::{
-    embedded_workflow_test_case, http_workflow_test_case, optimization_test_case,
-    OptimizationTestCase,
-};
+use crate::common::OptimizationTestCase;
 use tensorzero_core::optimization::{
     openai_sft::UninitializedOpenAISFTConfig, UninitializedOptimizerConfig,
     UninitializedOptimizerInfo,
 };
 
-struct OpenAISFTTestCase();
+pub struct OpenAISFTTestCase();
 
 impl OptimizationTestCase for OpenAISFTTestCase {
     fn supports_image_data(&self) -> bool {
@@ -38,7 +35,3 @@ impl OptimizationTestCase for OpenAISFTTestCase {
         }
     }
 }
-
-optimization_test_case!(openai_sft, OpenAISFTTestCase());
-embedded_workflow_test_case!(openai_sft, OpenAISFTTestCase());
-http_workflow_test_case!(openai_sft, OpenAISFTTestCase());
