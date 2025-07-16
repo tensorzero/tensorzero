@@ -1,8 +1,11 @@
 use crate::common::OptimizationTestCase;
-use tensorzero_core::{model::CredentialLocation, optimization::{
-    gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig, UninitializedOptimizerConfig,
-    UninitializedOptimizerInfo,
-}};
+use tensorzero_core::{
+    model::CredentialLocation,
+    optimization::{
+        gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig, UninitializedOptimizerConfig,
+        UninitializedOptimizerInfo,
+    },
+};
 
 pub struct GCPVertexGeminiSFTTestCase();
 
