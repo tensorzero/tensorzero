@@ -13,7 +13,7 @@ import { Input } from "~/components/ui/input";
 import clsx from "clsx";
 import { Separator } from "~/components/ui/separator";
 
-export type VariantData = { color: string; name: string };
+export type VariantData = { color?: string; name: string };
 
 interface VariantFilterProps {
   variants: VariantData[];
@@ -151,7 +151,7 @@ function VariantFilterItem({
       <span className="flex items-center gap-2">
         {color && (
           <span
-            // style={{ "--_bg-color": color }}
+            style={{ "--_bg-color": color } as React.CSSProperties}
             className="block h-2 w-2 rounded-xs bg-[var(--_bg-color)]"
           />
         )}
