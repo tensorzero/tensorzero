@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -uxo pipefail
-script_path=$(dirname "$0")
+script_path=$(dirname $(realpath -s $0))
 dir_path=$(dirname "$1")
 # Since the Cursor integration requires ngrok and ngrok will fail with fake credentials, we skip it
 if [[ "$dir_path" == */cursor ]]; then
