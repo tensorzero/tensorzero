@@ -422,11 +422,11 @@ async fn test_gemini_trailing_thought() {
     let response_json = response.json::<Value>().await.unwrap();
     let error = response_json.get("error").unwrap().as_str().unwrap();
     assert!(
-        error.contains("Thought block with signature must be followed by a content block in Gemini"),
+        error
+            .contains("Thought block with signature must be followed by a content block in Gemini"),
         "Unexpected error message: {error}"
     );
 }
-
 
 #[tokio::test]
 async fn test_gemini_double_thought() {
@@ -465,7 +465,9 @@ async fn test_gemini_double_thought() {
     let response_json = response.json::<Value>().await.unwrap();
     let error = response_json.get("error").unwrap().as_str().unwrap();
     assert!(
-        error.contains("Thought block with signature cannot be followed by another thought block in Gemini"),
+        error.contains(
+            "Thought block with signature cannot be followed by another thought block in Gemini"
+        ),
         "Unexpected error message: {error}"
     );
 }
