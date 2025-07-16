@@ -327,6 +327,9 @@ fn is_openrouter_request(uri: &http::Uri) -> bool {
         .unwrap_or(false)
 }
 
+/// # Panics
+///
+/// Will panic if unable to create a cache directory.
 pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>) {
     use tracing_subscriber::EnvFilter;
 

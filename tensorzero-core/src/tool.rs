@@ -452,6 +452,9 @@ impl ToolCallOutput {
 }
 
 impl ToolCallConfig {
+    /// # Panics
+    ///
+    /// Panics if unable to unwrap the passed-in value.
     #[cfg(test)]
     pub fn implicit_from_value(value: &Value) -> Self {
         let parameters = StaticJSONSchema::from_value(value).unwrap();

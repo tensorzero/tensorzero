@@ -1293,7 +1293,10 @@ impl JsonInferenceDatabaseInsert {
     }
 }
 
-// Function to get the current timestamp in seconds
+/// Function to get the current timestamp in seconds
+/// # Panics
+///
+/// Panics if some adjustment was made to the device time.
 pub fn current_timestamp() -> u64 {
     #[expect(clippy::expect_used)]
     SystemTime::now()
