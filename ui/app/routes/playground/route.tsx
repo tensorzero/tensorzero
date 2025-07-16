@@ -1,4 +1,10 @@
-import { useSearchParams, useNavigate, data, Await } from "react-router";
+import {
+  useSearchParams,
+  useNavigate,
+  data,
+  Await,
+  useFetcher,
+} from "react-router";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
@@ -13,7 +19,10 @@ import {
 } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { Loader2 } from "lucide-react";
-import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
+import type {
+  FunctionConfig,
+  Datapoint as TensorZeroDatapoint,
+} from "tensorzero-node";
 import type { DisplayInput } from "~/utils/clickhouse/common";
 import { Suspense } from "react";
 import {
@@ -21,6 +30,8 @@ import {
   type InferenceResponse,
 } from "~/utils/tensorzero";
 import NewOutput from "~/components/inference/NewOutput";
+import { Refresh } from "~/components/icons/Icons";
+import { Button } from "~/components/ui/button";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -32,8 +43,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const offset = searchParams.get("offset")
     ? parseInt(searchParams.get("offset")!)
     : 0;
+  const refreshVariantName = searchParams.get("refreshVariantName");
+  const refreshDatapointId = searchParams.get("refreshDatapointId");
   const config = await getConfig();
-  const functionConfig = functionName ? config.functions[functionName] : null;
+  const functionConfig = functionName
+    ? (config.functions[functionName] ?? null)
+    : null;
   if (functionName && !functionConfig) {
     throw data(`Function config not found for function ${functionName}`, {
       status: 404,
@@ -49,6 +64,29 @@ export async function loader({ request }: Route.LoaderArgs) {
         offset,
       )
     : undefined;
+  // If we're refreshing a specific datapoint/variant, we should short-circuit the loader
+  // and return the inference result
+  if (
+    refreshDatapointId &&
+    refreshVariantName &&
+    functionName &&
+    functionConfig
+  ) {
+    const datapoint = datapoints?.find(
+      (datapoint) => datapoint.id === refreshDatapointId,
+    );
+    if (!datapoint) {
+      throw data(`Datapoint not found for id ${refreshDatapointId}`, {
+        status: 404,
+      });
+    }
+    return refreshInference(
+      datapoint,
+      functionName,
+      functionConfig,
+      refreshVariantName,
+    );
+  }
   const inputs = datapoints
     ? await Promise.all(
         datapoints.map(async (datapoint) => {
@@ -98,12 +136,58 @@ export async function loader({ request }: Route.LoaderArgs) {
         )
       : undefined;
 
-  return { functionName, datasetName, datapoints, inputs, serverInferences };
+  return {
+    type: "pageLoad" as const,
+    functionName,
+    datasetName,
+    datapoints,
+    inputs,
+    serverInferences,
+  };
+}
+
+async function refreshInference(
+  datapoint: TensorZeroDatapoint,
+  functionName: string,
+  functionConfig: FunctionConfig,
+  variantName: string,
+) {
+  const inputData = tensorZeroResolvedInputToInput(datapoint.input);
+  const displayInput = await resolveInput(inputData, functionConfig ?? null);
+
+  const request = prepareInferenceActionRequest({
+    source: "clickhouse_datapoint",
+    input: displayInput,
+    functionName,
+    variant: variantName,
+    tool_params:
+      datapoint?.type === "chat"
+        ? (datapoint.tool_params ?? undefined)
+        : undefined,
+    output_schema: datapoint?.type === "json" ? datapoint.output_schema : null,
+  });
+  const result = InferenceRequestSchema.safeParse(request);
+  if (!result.success) {
+    throw new Error("Invalid request");
+  }
+  return {
+    type: "refreshInference" as const,
+    inference: await getTensorZeroClient().inference({
+      ...result.data,
+      stream: false,
+    }),
+  };
 }
 
 export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
-  const { functionName, datasetName, datapoints, inputs, serverInferences } =
-    loaderData;
+  const {
+    type,
+    functionName,
+    datasetName,
+    datapoints,
+    inputs,
+    serverInferences,
+  } = loaderData;
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const config = useConfig();
@@ -150,7 +234,9 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
       <PageHeader name="Playground" />
       <FunctionSelector
         selected={functionName}
-        onSelect={(value) => updateSearchParams({ functionName: value, variant: null })}
+        onSelect={(value) =>
+          updateSearchParams({ functionName: value, variant: null })
+        }
         functions={config.functions}
       />
       <DatasetSelector
@@ -254,6 +340,7 @@ function DatapointPlaygroundOutput({
   variantName,
   serverInference,
 }: DatapointPlaygroundOutputProps) {
+  const fetcher = useFetcher();
   if (!serverInference) {
     return (
       <div className="flex h-32 items-center justify-center">
@@ -263,40 +350,58 @@ function DatapointPlaygroundOutput({
       </div>
     );
   }
-
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-32 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </div>
-      }
-    >
-      <Await
-        resolve={serverInference}
-        errorElement={
+    <div className="group relative">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute top-1 left-1 z-10 opacity-0 transition-opacity group-hover:opacity-100"
+        onClick={() => {
+          const url = new URL(window.location.href);
+          const queryParams = new URLSearchParams(url.search);
+          // Set the refresh params
+          queryParams.set("refreshDatapointId", datapoint.id);
+          queryParams.set("refreshVariantName", variantName);
+          url.search = queryParams.toString();
+          const result = fetcher.load(url.toString());
+        }}
+      >
+        <Refresh />
+      </Button>
+
+      <Suspense
+        fallback={
           <div className="flex h-32 items-center justify-center">
-            <div className="text-center text-red-600">
-              <p className="font-semibold">Error</p>
-              <p className="text-sm">Failed to load inference</p>
-            </div>
+            <Loader2 className="h-8 w-8 animate-spin" />
           </div>
         }
       >
-        {(response) => {
-          let output;
-          if ("content" in response) {
-            output = response.content;
-          } else {
-            output = response.output;
-          }
-          return (
+        <Await
+          resolve={serverInference}
+          errorElement={
             <div className="flex h-32 items-center justify-center">
-              <NewOutput output={output} />
+              <div className="text-center text-red-600">
+                <p className="font-semibold">Error</p>
+                <p className="text-sm">Failed to load inference</p>
+              </div>
             </div>
-          );
-        }}
-      </Await>
-    </Suspense>
+          }
+        >
+          {(response) => {
+            let output;
+            if ("content" in response) {
+              output = response.content;
+            } else {
+              output = response.output;
+            }
+            return (
+              <div className="flex h-32 items-center justify-center">
+                <NewOutput output={output} />
+              </div>
+            );
+          }}
+        </Await>
+      </Suspense>
+    </div>
   );
 }

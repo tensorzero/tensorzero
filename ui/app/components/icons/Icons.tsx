@@ -1,4 +1,4 @@
-import { UserPen } from "lucide-react";
+import { RefreshCw, UserPen } from "lucide-react";
 import React from "react";
 
 export interface IconProps {
@@ -541,6 +541,12 @@ export const SequenceChecks: React.FC<IconProps> = (props) => (
 );
 
 export const UserFeedback: React.FC = () => <UserPen size={12} />;
+
+export const Refresh: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <RefreshCw size={12} />
+  </IconWrapper>
+);
 
 export const iconComponents: Record<string, React.FC<IconProps>> = {
   TensorZeroLogo,
