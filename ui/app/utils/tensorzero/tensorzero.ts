@@ -101,6 +101,26 @@ export const ImageContentSchema = z
   );
 export type ImageContent = z.infer<typeof ImageContentSchema>;
 
+/**
+ * Thought content for Chain of Thought reasoning
+ */
+export const ThoughtContentSchema = z.object({
+  type: z.literal("thought"),
+  text: z.string().nullable(),
+  signature: z.string().nullable().optional(),
+});
+export type ThoughtContent = z.infer<typeof ThoughtContentSchema>;
+
+/**
+ * Unknown content type for model-specific content
+ */
+export const UnknownContentSchema = z.object({
+  type: z.literal("unknown"),
+  data: JSONValueSchema,
+  model_provider_name: z.string().nullable(),
+});
+export type UnknownContent = z.infer<typeof UnknownContentSchema>;
+
 export const InputMessageContentSchema = z.union([
   TextContentSchema,
   TextArgumentsContentSchema,
@@ -108,6 +128,8 @@ export const InputMessageContentSchema = z.union([
   ToolCallContentSchema,
   ToolResultContentSchema,
   ImageContentSchema,
+  ThoughtContentSchema,
+  UnknownContentSchema,
 ]);
 
 export type InputMessageContent = z.infer<typeof InputMessageContentSchema>;
