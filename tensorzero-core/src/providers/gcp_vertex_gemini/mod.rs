@@ -654,7 +654,7 @@ impl GCPVertexCredentials {
             build_creds_caching_default_with_fn(
                 cred_location,
                 default_location,
-                PROVIDER_TYPE,
+                provider_type,
                 cache,
                 |creds| build_non_sdk_credentials(creds, provider_type),
             )
