@@ -45,9 +45,6 @@ export default [
     ]),
   ]),
 
-  // Playground
-  route("playground", "routes/playground/route.tsx"),
-
   // Datasets
   route("datasets", "routes/datasets/layout.tsx", [
     index("routes/datasets/route.tsx"),
@@ -86,6 +83,9 @@ export default [
       "routes/dynamic_evaluations/projects/$project_name/route.tsx",
     ),
   ]),
+
+  // Playground
+  route("playground", "routes/playground/route.tsx"),
 
   ...prefix("observability", [
     route("functions", "routes/observability/functions/layout.tsx", [
