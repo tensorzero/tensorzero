@@ -55,7 +55,7 @@ use super::openai::convert_stream_error;
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
 #[expect(unused)]
 const PROVIDER_NAME: &str = "GCP Vertex Anthropic";
-const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
+pub const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
