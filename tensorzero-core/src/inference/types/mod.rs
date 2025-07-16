@@ -2658,7 +2658,9 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_json_result) => {
+                panic!("Expected Chat inference response, received Json")
+            }
         };
         assert_eq!(chat_result.inference_id, inference_id);
         assert_eq!(chat_result.created, created);
@@ -2774,7 +2776,9 @@ mod tests {
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_chat_result) => {
+                panic!("Expected Json inference response, received Chat")
+            }
         }
 
         // Test Case 4: a JSON string that fails validation and usage only in last chunk
@@ -2845,7 +2849,9 @@ mod tests {
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_chat_result) => {
+                panic!("Expected Json inference response, received Chat")
+            }
         }
 
         // Test case 5: chunks with some None content
@@ -2939,7 +2945,9 @@ mod tests {
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
             }
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_json_result) => {
+                panic!("Expected Chat inference response, received Json")
+            }
         }
 
         // Test Case 6: a JSON function with implicit tool call config
@@ -3042,7 +3050,9 @@ mod tests {
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_chat_result) => {
+                panic!("Expected Json inference response, received Chat")
+            }
         }
         // Test Case 7: a JSON string with a dynamic schema that passes validation and also include usage in each chunk
         let inference_id = Uuid::now_v7();
@@ -3154,7 +3164,9 @@ mod tests {
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_chat_result) => {
+                panic!("Expected Json inference response, received Chat")
+            }
         }
     }
 
@@ -3268,7 +3280,9 @@ mod tests {
         );
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_json_result) => {
+                panic!("Expected Chat inference response, received Json")
+            }
         };
         assert_eq!(chat_result.inference_id, inference_id);
         assert_eq!(chat_result.created, created);
@@ -3376,7 +3390,9 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_json_result) => {
+                panic!("Expected Chat inference response, received Json")
+            }
         };
 
         assert_eq!(chat_result.content.len(), 1);
@@ -3462,7 +3478,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response, received Json"),
         };
 
         assert_eq!(chat_result.content.len(), 2);
@@ -3472,7 +3488,16 @@ mod tests {
                 assert_eq!(tool_call.raw_arguments, r#"{"location": "NYC"}"#);
                 assert_eq!(tool_call.id, "tool_1");
             }
-            _ => panic!("Expected first tool call block"),
+            ContentBlockChatOutput::Text(_) => panic!("Expected ToolCall content, received Text"),
+            ContentBlockChatOutput::Thought(_) => {
+                panic!("Expected ToolCall content, received Thought")
+            }
+            ContentBlockChatOutput::Unknown {
+                data: _,
+                model_provider_name: _,
+            } => {
+                panic!("Expected ToolCall content, received Unknown")
+            }
         }
         match &chat_result.content[1] {
             ContentBlockChatOutput::ToolCall(tool_call) => {
@@ -3539,7 +3564,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response, received Json"),
         };
 
         assert_eq!(chat_result.content.len(), 1);
@@ -3549,7 +3574,16 @@ mod tests {
                 assert_eq!(tool_call.raw_arguments, r#"{"key": "value"}"#);
                 assert_eq!(tool_call.id, "tool_1");
             }
-            _ => panic!("Expected tool call block"),
+            ContentBlockChatOutput::Text(_) => panic!("Expected ToolCall block, received Text"),
+            ContentBlockChatOutput::Thought(_) => {
+                panic!("Expected ToolCall block, received Thought")
+            }
+            ContentBlockChatOutput::Unknown {
+                data: _,
+                model_provider_name: _,
+            } => {
+                panic!("Expected ToolCall block, received Unknown")
+            }
         }
 
         // Test case 4: Mixed content with text and tool calls preserving order
@@ -3620,7 +3654,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response, received Json"),
         };
 
         assert_eq!(chat_result.content.len(), 2);
@@ -3632,7 +3666,18 @@ mod tests {
                     "I'll help you with that. Let me search for information."
                 );
             }
-            _ => panic!("Expected text block first"),
+            ContentBlockChatOutput::Thought(_) => {
+                panic!("Expected Text block first, received Thought")
+            }
+            ContentBlockChatOutput::ToolCall(_) => {
+                panic!("Expected Text block first, received ToolCall")
+            }
+            ContentBlockChatOutput::Unknown {
+                data: _,
+                model_provider_name: _,
+            } => {
+                panic!("Expected Text block first, received Unknown")
+            }
         }
         match &chat_result.content[1] {
             ContentBlockChatOutput::ToolCall(tool_call) => {
@@ -3640,7 +3685,18 @@ mod tests {
                 assert_eq!(tool_call.raw_arguments, r#"{"query": "weather today"}"#);
                 assert_eq!(tool_call.id, "tool_1");
             }
-            _ => panic!("Expected tool call block second"),
+            ContentBlockChatOutput::Text(_) => {
+                panic!("Expected ToolCall block second, received Text")
+            }
+            ContentBlockChatOutput::Thought(_) => {
+                panic!("Expected ToolCall block second, received Thought")
+            }
+            ContentBlockChatOutput::Unknown {
+                data: _,
+                model_provider_name: _,
+            } => {
+                panic!("Expected ToolCall block second, received Unknown")
+            }
         }
 
         // Test case 5: Tool call with empty name parts that should result in empty final name
@@ -3685,7 +3741,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response, received Json"),
         };
 
         assert_eq!(chat_result.content.len(), 1);
@@ -3695,7 +3751,16 @@ mod tests {
                 assert_eq!(tool_call.raw_arguments, r#"{"test": true}"#);
                 assert_eq!(tool_call.id, "tool_1");
             }
-            _ => panic!("Expected tool call block"),
+            ContentBlockChatOutput::Text(_) => panic!("Expected ToolCall block, received Text"),
+            ContentBlockChatOutput::Thought(_) => {
+                panic!("Expected ToolCall block, received Thought")
+            }
+            ContentBlockChatOutput::Unknown {
+                data: _,
+                model_provider_name: _,
+            } => {
+                panic!("Expected ToolCall block, received Unknown")
+            }
         }
 
         // Test case 6: Complex multi-tool name accumulation across multiple chunks
@@ -3802,7 +3867,9 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_json_result) => {
+                panic!("Expected Chat inference response, received Json")
+            }
         };
 
         assert_eq!(chat_result.content.len(), 3);
@@ -3812,7 +3879,18 @@ mod tests {
                 assert_eq!(tool_call.raw_arguments, r#"{"location": "Paris"}"#);
                 assert_eq!(tool_call.id, "tool_1");
             }
-            _ => panic!("Expected first tool call block"),
+            ContentBlockChatOutput::Text(_) => {
+                panic!("Expected first ToolCall block, received Text")
+            }
+            ContentBlockChatOutput::Thought(_) => {
+                panic!("Expected first ToolCall block, received Thought")
+            }
+            ContentBlockChatOutput::Unknown {
+                data: _,
+                model_provider_name: _,
+            } => {
+                panic!("Expected first ToolCall block, received Unknown")
+            }
         }
         match &chat_result.content[1] {
             ContentBlockChatOutput::ToolCall(tool_call) => {
@@ -3820,15 +3898,34 @@ mod tests {
                 assert_eq!(tool_call.raw_arguments, r#"{"operation": "5*5"}"#);
                 assert_eq!(tool_call.id, "tool_2");
             }
-            _ => panic!("Expected second tool call block"),
+            ContentBlockChatOutput::Text(_) => {
+                panic!("Expected second ToolCall block, received Text")
+            }
+            ContentBlockChatOutput::Thought(_) => {
+                panic!("Expected second ToolCall block, received Thought")
+            }
+            ContentBlockChatOutput::Unknown {
+                data: _,
+                model_provider_name: _,
+            } => panic!("Expected second ToolCall block, received Unknown"),
         }
+
         match &chat_result.content[2] {
             ContentBlockChatOutput::ToolCall(tool_call) => {
                 assert_eq!(tool_call.raw_name, "send_email"); // "send_" + "email"
                 assert_eq!(tool_call.raw_arguments, r#"{"message": "Hello world"}"#);
                 assert_eq!(tool_call.id, "tool_3");
             }
-            _ => panic!("Expected third tool call block"),
+            ContentBlockChatOutput::Text(_) => {
+                panic!("Expected third ToolCall block, received Text")
+            }
+            ContentBlockChatOutput::Thought(_) => {
+                panic!("Expected third ToolCall block, received Thought")
+            }
+            ContentBlockChatOutput::Unknown {
+                data: _,
+                model_provider_name: _,
+            } => panic!("Expected third ToolCall block, received Unknown"),
         }
     }
 
@@ -3846,7 +3943,30 @@ mod tests {
             InputMessageContent::Text(TextKind::Text { text }) => {
                 assert_eq!(text, "Hello, world!")
             }
-            _ => panic!("Expected Text content: {message:?}"),
+            InputMessageContent::Text(TextKind::Arguments { .. }) => {
+                panic!("Expected Text content: {message:?}. Object type: Arguments")
+            }
+            InputMessageContent::Text(TextKind::LegacyValue { .. }) => {
+                panic!("Expected Text content: {message:?}. Object type: LegacyValue")
+            }
+            InputMessageContent::File(_) => {
+                panic!("Expected Text content: {message:?}. Object type: File")
+            }
+            InputMessageContent::RawText { .. } => {
+                panic!("Expected Text content: {message:?}. Object type: RawText")
+            }
+            InputMessageContent::Thought(_) => {
+                panic!("Expected Text content: {message:?}. Object type: Thought")
+            }
+            InputMessageContent::ToolCall(_) => {
+                panic!("Expected Text content: {message:?}. Object type: ToolCall")
+            }
+            InputMessageContent::ToolResult(_) => {
+                panic!("Expected Text content: {message:?}. Object type: ToolResult")
+            }
+            InputMessageContent::Unknown { .. } => {
+                panic!("Expected Text content: {message:?}. Object type: Unknown")
+            }
         }
 
         // Test case for object content
@@ -3858,12 +3978,46 @@ mod tests {
         assert_eq!(message.role, Role::Assistant);
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
+            // your expected case
             InputMessageContent::Text(TextKind::Arguments { arguments }) => {
                 assert_eq!(arguments, json!({"key": "value"}).as_object().unwrap())
             }
-            _ => panic!("Expected Text content"),
-        }
 
+            // other TextKind variants
+            InputMessageContent::Text(TextKind::Text { text }) => {
+                panic!("Expected Arguments content, received Text: {text:?}")
+            }
+            InputMessageContent::Text(TextKind::LegacyValue {
+                value: legacy_value,
+            }) => {
+                panic!("Expected Arguments content, received LegacyValue: {legacy_value:?}")
+            }
+
+            // any non‐Text content
+            InputMessageContent::File(_) => {
+                panic!("Expected Arguments content, received File")
+            }
+            InputMessageContent::RawText { value } => {
+                panic!("Expected Arguments content, received RawText: {value:?}")
+            }
+            InputMessageContent::Thought(_) => {
+                panic!("Expected Arguments content, received Thought")
+            }
+            InputMessageContent::ToolCall(_) => {
+                panic!("Expected Arguments content, received ToolCall")
+            }
+            InputMessageContent::ToolResult(_) => {
+                panic!("Expected Arguments content, received ToolResult")
+            }
+            InputMessageContent::Unknown {
+                data,
+                model_provider_name,
+            } => {
+                panic!(
+                    "Expected Arguments content, received Unknown {{ data: {data:?}, provider: {model_provider_name:?} }}"
+                )
+            }
+        }
         // Test case for multiple content items
         let input = json!({
             "role": "user",
@@ -3879,7 +4033,37 @@ mod tests {
             InputMessageContent::Text(TextKind::LegacyValue { value }) => {
                 assert_eq!(value, "Hello")
             }
-            _ => panic!("Expected Text content"),
+            InputMessageContent::Text(TextKind::Text { text }) => {
+                panic!("Expected LegacyValue content, received Text: {text:?}")
+            }
+
+            InputMessageContent::Text(TextKind::Arguments { arguments }) => {
+                panic!("Expected LegacyValue content, received Text: {arguments:?}")
+            }
+            // any non‐Text content
+            InputMessageContent::File(_) => {
+                panic!("Expected LegacyValue content, received File")
+            }
+            InputMessageContent::RawText { value } => {
+                panic!("Expected LegacyValue content, received RawText: {value:?}")
+            }
+            InputMessageContent::Thought(_) => {
+                panic!("Expected LegacyValue content, received Thought")
+            }
+            InputMessageContent::ToolCall(_) => {
+                panic!("Expected LegacyValue content, received ToolCall")
+            }
+            InputMessageContent::ToolResult(_) => {
+                panic!("Expected LegacyValue content, received ToolResult")
+            }
+            InputMessageContent::Unknown {
+                data,
+                model_provider_name,
+            } => {
+                panic!(
+                    "Expected LegacyValue content, received Unknown {{ data: {data:?}, provider: {model_provider_name:?} }}"
+                )
+            }
         }
         match &message.content[1] {
             InputMessageContent::ToolCall(tool_call) => {
@@ -3889,7 +4073,30 @@ mod tests {
                 assert_eq!(tool_call.raw_name, None);
                 assert_eq!(tool_call.raw_arguments, None);
             }
-            _ => panic!("Expected ToolCall content"),
+
+            InputMessageContent::Text(kind) => {
+                panic!("Expected ToolCall content, received Text({kind:?})")
+            }
+            InputMessageContent::ToolResult(result) => {
+                panic!("Expected ToolCall content, received ToolResult({result:?})")
+            }
+            InputMessageContent::RawText { value } => {
+                panic!("Expected ToolCall content, received RawText({value})")
+            }
+            InputMessageContent::Thought(thought) => {
+                panic!("Expected ToolCall content, received Thought({thought:?})")
+            }
+            InputMessageContent::File(file) => {
+                panic!("Expected ToolCall content, received File({file:?})")
+            }
+            InputMessageContent::Unknown {
+                data,
+                model_provider_name,
+            } => {
+                panic!(
+                    "Expected ToolCall content, received Unknown {{ data: {data:?}, provider: {model_provider_name:?} }}"
+                )
+            }
         }
         // Test case for multiple content items with JSON object in text block
         let input = json!({
@@ -3902,26 +4109,85 @@ mod tests {
         let message: InputMessage = serde_json::from_value(input).unwrap();
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 2);
+        // First match: expect LegacyValue JSON in content[0]
         match &message.content[0] {
             InputMessageContent::Text(TextKind::LegacyValue { value }) => {
                 assert_eq!(
                     value,
                     &json!({"complex": "json", "with": ["nested", "array"]})
-                )
+                );
             }
-            _ => panic!("Expected Text content with JSON object"),
+            // Other TextKind variants
+            InputMessageContent::Text(TextKind::Text { text }) => {
+                panic!("Expected LegacyValue, got Text: {text:?}");
+            }
+            InputMessageContent::Text(TextKind::Arguments { arguments }) => {
+                panic!("Expected LegacyValue, got Arguments: {arguments:?}");
+            }
+
+            // Non‐Text variants
+            InputMessageContent::ToolCall(tc) => {
+                panic!("Expected LegacyValue, got ToolCall: {tc:?}");
+            }
+            InputMessageContent::ToolResult(tr) => {
+                panic!("Expected LegacyValue, got ToolResult: {tr:?}");
+            }
+            InputMessageContent::RawText { value: v } => {
+                panic!("Expected LegacyValue, got RawText: {v}");
+            }
+            InputMessageContent::Thought(th) => {
+                panic!("Expected LegacyValue, got Thought: {th:?}");
+            }
+            InputMessageContent::File(f) => {
+                panic!("Expected LegacyValue, got File: {f:?}");
+            }
+            InputMessageContent::Unknown {
+                data,
+                model_provider_name,
+            } => {
+                panic!(
+                    "Expected LegacyValue, got Unknown {{ data: {data:?}, provider: {model_provider_name:?} }}"
+                );
+            }
         }
+
+        // Second match: expect ToolCall in content[1]
         match &message.content[1] {
             InputMessageContent::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "456");
                 assert_eq!(tool_call.name, Some("another_tool".to_string()));
                 assert_eq!(tool_call.arguments, Some(json!({"key":"value"})));
                 assert_eq!(tool_call.raw_name, None);
-                assert_eq!(tool_call.raw_arguments, None,);
+                assert_eq!(tool_call.raw_arguments, None);
             }
-            _ => panic!("Expected ToolCall content"),
-        }
 
+            // Text variants
+            InputMessageContent::Text(kind) => {
+                panic!("Expected ToolCall, got Text: {kind:?}");
+            }
+
+            // Other non‐ToolCall variants
+            InputMessageContent::ToolResult(result) => {
+                panic!("Expected ToolCall, got ToolResult: {result:?}");
+            }
+            InputMessageContent::RawText { value } => {
+                panic!("Expected ToolCall, got RawText: {value}");
+            }
+            InputMessageContent::Thought(thought) => {
+                panic!("Expected ToolCall, got Thought: {thought:?}");
+            }
+            InputMessageContent::File(file) => {
+                panic!("Expected ToolCall, got File: {file:?}");
+            }
+            InputMessageContent::Unknown {
+                data,
+                model_provider_name,
+            } => {
+                panic!(
+                    "Expected ToolCall, got Unknown {{ data: {data:?}, provider: {model_provider_name:?} }}"
+                );
+            }
+        }
         // Test case for invalid role
         let input = json!({
             "role": "invalid_role",
@@ -4106,8 +4372,26 @@ mod tests {
             .get(&(ContentBlockOutputType::Text, "1".to_string()))
             .unwrap()
         {
-            ContentBlockOutput::Text(Text { text }) => assert_eq!(text, "Hello"),
-            _ => panic!("Expected text block"),
+            ContentBlockOutput::Text(Text { text }) => {
+                assert_eq!(text, "Hello");
+            }
+
+            ContentBlockOutput::ToolCall(tool_call) => {
+                panic!("Expected Text block, got ToolCall: {tool_call:?}");
+            }
+
+            ContentBlockOutput::Thought(thought) => {
+                panic!("Expected Text block, got Thought: {thought:?}");
+            }
+
+            ContentBlockOutput::Unknown {
+                data,
+                model_provider_name,
+            } => {
+                panic!(
+                    "Expected Text block, got Unknown: data={data:?}, provider={model_provider_name:?}"
+                );
+            }
         }
 
         // Test case 2: Append to existing text block
@@ -4133,10 +4417,27 @@ mod tests {
             .get(&(ContentBlockOutputType::Text, "1".to_string()))
             .unwrap()
         {
-            ContentBlockOutput::Text(Text { text }) => assert_eq!(text, "Hello World"),
-            _ => panic!("Expected text block"),
-        }
+            ContentBlockOutput::Text(Text { text }) => {
+                assert_eq!(text, "Hello World");
+            }
 
+            ContentBlockOutput::ToolCall(tool_call) => {
+                panic!("Expected Text block, got ToolCall: {tool_call:?}");
+            }
+
+            ContentBlockOutput::Thought(thought) => {
+                panic!("Expected Text block, got Thought: {thought:?}");
+            }
+
+            ContentBlockOutput::Unknown {
+                data,
+                model_provider_name,
+            } => {
+                panic!(
+                    "Expected Text block, got Unknown: data={data:?}, provider={model_provider_name:?}"
+                );
+            }
+        }
         // Test case 3: Empty text should not create block
         handle_textual_content_block(
             &mut blocks,
@@ -4190,7 +4491,23 @@ mod tests {
             }) => {
                 assert_eq!(text, &Some("Thinking...".to_string()))
             }
-            _ => panic!("Expected thought block"),
+
+            ContentBlockOutput::Text(Text { text }) => {
+                panic!("Expected Thought block, got Text: {text:?}");
+            }
+
+            ContentBlockOutput::ToolCall(tool_call) => {
+                panic!("Expected Thought block, got ToolCall: {tool_call:?}");
+            }
+
+            ContentBlockOutput::Unknown {
+                data,
+                model_provider_name,
+            } => {
+                panic!(
+                    "Expected Thought block, got Unknown: data={data:?}, provider={model_provider_name:?}"
+                );
+            }
         }
     }
 }

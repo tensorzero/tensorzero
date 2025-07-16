@@ -1380,8 +1380,8 @@ mod tests {
                 assert_eq!(fused.output, expected_content);
                 assert_eq!(fused.model_inference_results.len(), 3);
             }
-            _ => {
-                panic!("Expected a Chat inference result");
+            InferenceResult::Chat(_chat) => {
+                panic!("Expected a Json inference result, received Chat");
             }
         }
         // Set up fuser with a provider that fails
@@ -1451,8 +1451,8 @@ mod tests {
             InferenceResult::Chat(chat_choice) => {
                 assert_eq!(chat_choice.model_inference_results.len(), 2);
             }
-            _ => {
-                panic!("Expected a Chat inference result");
+            InferenceResult::Json(_json_choice) => {
+                panic!("Expected a Chat inference result, received Json");
             }
         }
         // Depending on implementation, you might check which candidate was selected
@@ -1534,8 +1534,8 @@ mod tests {
                 // But, it's a random choice, so we can't assert on the specific index
                 assert!(chat_choice.model_inference_results.len() == 3);
             }
-            _ => {
-                panic!("Expected a Chat inference result");
+            InferenceResult::Json(_json_choice) => {
+                panic!("Expected a Chat inference result, received Json");
             }
         }
         // Test case: No answer choices (should return an error)

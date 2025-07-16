@@ -1397,7 +1397,9 @@ mod tests {
                 );
                 assert_eq!(chat_response.inference_params, inference_params);
             }
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_json_response) => {
+                panic!("Expected Chat inference response, received Json")
+            }
         }
 
         // Test case 5: tool call
@@ -1485,7 +1487,9 @@ mod tests {
                 );
                 assert_eq!(chat_response.inference_params, inference_params);
             }
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_json_response) => {
+                panic!("Expected Chat inference response, received Json")
+            }
         }
 
         // Test case 5: JSON output was supposed to happen but it did not
@@ -1554,7 +1558,9 @@ mod tests {
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(json_result.inference_params, inference_params);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_chat_result) => {
+                panic!("Expected Json inference response, received Chat")
+            }
         }
         let messages = vec![ResolvedInputMessage {
             role: Role::User,
@@ -1637,7 +1643,9 @@ mod tests {
                 );
                 assert_eq!(json_result.inference_params, inference_params);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_chat_result) => {
+                panic!("Expected Json inference response, received Chat")
+            }
         }
         // Test case 7: Dynamic JSON output happens and works
         let hardcoded_output_schema = serde_json::json!({
@@ -1749,7 +1757,9 @@ mod tests {
                 );
                 assert_eq!(json_result.inference_params, inference_params);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_chat_result) => {
+                panic!("Expected Json inference response, received Chat")
+            }
         }
         // Test case 8: Dynamic JSON output fails
         let hardcoded_output_schema = serde_json::json!({
@@ -1868,7 +1878,9 @@ mod tests {
                 };
                 assert_eq!(json_result.inference_params, expected_inference_params);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_chat) => {
+                panic!("Expected Json inference response, received Chat")
+            }
         }
     }
 
@@ -2064,7 +2076,9 @@ mod tests {
             .unwrap();
         let first_chunk = match stream.next().await.unwrap().unwrap() {
             InferenceResultChunk::Chat(chunk) => chunk,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResultChunk::Json(_json) => {
+                panic!("Expected Chat inference response, received Json")
+            }
         };
         assert_eq!(
             first_chunk.content,
@@ -2094,7 +2108,9 @@ mod tests {
             }
             let chunk = match chunk {
                 InferenceResultChunk::Chat(chunk) => chunk,
-                _ => panic!("Expected Chat inference response"),
+                InferenceResultChunk::Json(_json) => {
+                    panic!("Expected Chat inference response, received Json")
+                }
             };
             assert_eq!(
                 chunk.content,

@@ -389,7 +389,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             assert_eq!(chat_inference_response.usage.input_tokens, 10);
             assert_eq!(chat_inference_response.usage.output_tokens, 20);
         }
-        _ => panic!("Unexpected inference response type"),
+        InferenceResponse::Json(_) => panic!("Expected Chat inference response, received Json"),
     }
 
     match inference_response_2 {
@@ -404,7 +404,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             assert_eq!(chat_inference_response.usage.input_tokens, 20);
             assert_eq!(chat_inference_response.usage.output_tokens, 30);
         }
-        _ => panic!("Unexpected inference response type"),
+        InferenceResponse::Json(_) => panic!("Expected Chat inference response, received Json"),
     }
 
     sleep(Duration::from_millis(200)).await;
@@ -603,7 +603,7 @@ async fn test_write_read_completed_batch_inference_json() {
                 Some(FinishReason::Stop)
             );
         }
-        _ => panic!("Unexpected inference response type"),
+        InferenceResponse::Chat(_) => panic!("Expected Json inference response, received Chat"),
     }
 
     match response_2 {
@@ -619,7 +619,7 @@ async fn test_write_read_completed_batch_inference_json() {
                 Some(FinishReason::ToolCall)
             );
         }
-        _ => panic!("Unexpected inference response type"),
+        InferenceResponse::Chat(_) => panic!("Expected Json inference response, received Chat"),
     }
 
     sleep(Duration::from_millis(200)).await;
