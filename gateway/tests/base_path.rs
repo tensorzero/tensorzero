@@ -86,7 +86,7 @@ async fn test_base_path(child_data: ChildData) {
         .unwrap();
     assert_eq!(
         bad_inference_response,
-        r#"{"error":"Route not found: POST /inference"}"#
+        r#"{"error":"Route not found: POST /inference","error_json":{"RouteNotFound":{"path":"/inference","method":"POST"}}}"#
     );
 
     let no_trailing_slash_client =

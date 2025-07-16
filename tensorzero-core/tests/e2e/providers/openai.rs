@@ -290,7 +290,7 @@ async fn test_default_function_default_tool_choice() {
                 "description": "Get the current temperature",
                 "parameters": {
                   "$schema": "http://json-schema.org/draft-07/schema#",
-                  "type": "object",
+                  "type": "",
                   "description": "Get the current temperature in Celsius for a given location.",
                   "properties": {
                     "location": {
@@ -673,7 +673,12 @@ async fn test_chat_function_json_override_with_mode_implicit_tool() {
     assert_eq!(
         response_json,
         serde_json::json!({
-            "error": "JSON mode `implicit_tool` is not supported for chat functions"
+            "error": "JSON mode `implicit_tool` is not supported for chat functions",
+            "error_json": {
+                "InvalidRequest": {
+                    "message": "JSON mode `implicit_tool` is not supported for chat functions"
+                }
+            }
         })
     );
 }
@@ -816,10 +821,10 @@ async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceReq
             json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false})
         }
         ModelInferenceRequestJsonMode::On => {
-            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"json_object"}})
+            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"json_"}})
         }
         ModelInferenceRequestJsonMode::Strict => {
-            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"json_object"}})
+            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"json_"}})
         }
     };
     assert_eq!(raw_request_val, expected_request);
@@ -1268,7 +1273,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
 
     let credentials = Credentials::from_keys(&r2_access_key_id, &r2_secret_access_key, None);
 
-    // Our S3-compatible object store checks for these variables, giving them
+    // Our S3-compatible  store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
     std::env::set_var("S3_ACCESS_KEY_ID", r2_access_key_id);
     std::env::set_var("S3_SECRET_ACCESS_KEY", r2_secret_access_key);
@@ -1308,7 +1313,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
         &client,
         &format!(
             r#"
-    [object_storage]
+    [_storage]
     type = "s3_compatible"
     endpoint = "{endpoint}"
     bucket_name = "{test_bucket}"
@@ -1462,7 +1467,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     let credentials =
         Credentials::from_keys(&gcloud_access_key_id, &gcloud_secret_access_key, None);
 
-    // Our S3-compatible object store checks for these variables, giving them
+    // Our S3-compatible  store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
     std::env::set_var("S3_ACCESS_KEY_ID", gcloud_access_key_id);
     std::env::set_var("S3_SECRET_ACCESS_KEY", gcloud_secret_access_key);
@@ -1502,7 +1507,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
         &client,
         &format!(
             r#"
-    [object_storage]
+    [_storage]
     type = "s3_compatible"
     endpoint = "{endpoint}"
     bucket_name = "{test_bucket}"
@@ -1535,7 +1540,7 @@ pub async fn test_image_inference_with_provider_docker_minio() {
 
     let credentials = Credentials::from_keys(&minio_access_key_id, &minio_secret_access_key, None);
 
-    // Our S3-compatible object store checks for these variables, giving them
+    // Our S3-compatible  store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
     std::env::set_var("S3_ACCESS_KEY_ID", minio_access_key_id);
     std::env::set_var("S3_SECRET_ACCESS_KEY", minio_secret_access_key);
@@ -1575,7 +1580,7 @@ pub async fn test_image_inference_with_provider_docker_minio() {
         &client,
         &format!(
             r#"
-    [object_storage]
+    [_storage]
     type = "s3_compatible"
     endpoint = "{endpoint}"
     bucket_name = "{test_bucket}"
