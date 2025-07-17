@@ -3,7 +3,6 @@ import {
   useNavigate,
   data,
   Await,
-  useFetcher,
   Link,
   useAsyncError,
   type RouteHandle,
@@ -23,12 +22,9 @@ import {
 } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { Loader2, X } from "lucide-react";
-import type {
-  FunctionConfig,
-  Datapoint as TensorZeroDatapoint,
-} from "tensorzero-node";
+import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import {
   InferenceRequestSchema,
   type InferenceResponse,
@@ -91,8 +87,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const offset = searchParams.get("offset")
     ? parseInt(searchParams.get("offset")!)
     : 0;
-  const refreshVariantName = searchParams.get("refreshVariantName");
-  const refreshDatapointId = searchParams.get("refreshDatapointId");
+  // const refreshVariantName = searchParams.get("refreshVariantName");
+  // const refreshDatapointId = searchParams.get("refreshDatapointId");
   const config = await getConfig();
   const functionConfig = functionName
     ? (config.functions[functionName] ?? null)
@@ -114,6 +110,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     : [undefined, null];
   // If we're refreshing a specific datapoint/variant, we should short-circuit the loader
   // and return the inference result
+  /*
   if (
     refreshDatapointId &&
     refreshVariantName &&
@@ -143,7 +140,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           error instanceof Error ? error.message : "Unknown error occurred",
       };
     }
-  }
+  }*/
   const inputs = datapoints
     ? await Promise.all(
         datapoints.map(async (datapoint) => {
@@ -209,7 +206,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   return {
-    type: "pageLoad" as const,
     functionName,
     datasetName,
     datapoints,
@@ -221,75 +217,62 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-async function refreshInference(
-  datapoint: TensorZeroDatapoint,
-  functionName: string,
-  functionConfig: FunctionConfig,
-  variantName: string,
-) {
-  const inputData = tensorZeroResolvedInputToInput(datapoint.input);
-  const displayInput = await resolveInput(inputData, functionConfig ?? null);
+// async function refreshInference(
+//   datapoint: TensorZeroDatapoint,
+//   functionName: string,
+//   functionConfig: FunctionConfig,
+//   variantName: string,
+// ) {
+//   const inputData = tensorZeroResolvedInputToInput(datapoint.input);
+//   const displayInput = await resolveInput(inputData, functionConfig ?? null);
 
-  const request = prepareInferenceActionRequest({
-    source: "clickhouse_datapoint",
-    input: displayInput,
-    functionName,
-    variant: variantName,
-    tool_params:
-      datapoint?.type === "chat"
-        ? (datapoint.tool_params ?? undefined)
-        : undefined,
-    output_schema: datapoint?.type === "json" ? datapoint.output_schema : null,
-  });
-  const result = InferenceRequestSchema.safeParse(request);
-  if (!result.success) {
-    throw new Error("Invalid request");
-  }
-  return {
-    type: "refreshInference" as const,
-    inference: await getTensorZeroClient().inference({
-      ...result.data,
-      stream: false,
-    }),
-  };
-}
+//   const request = prepareInferenceActionRequest({
+//     source: "clickhouse_datapoint",
+//     input: displayInput,
+//     functionName,
+//     variant: variantName,
+//     tool_params:
+//       datapoint?.type === "chat"
+//         ? (datapoint.tool_params ?? undefined)
+//         : undefined,
+//     output_schema: datapoint?.type === "json" ? datapoint.output_schema : null,
+//   });
+//   const result = InferenceRequestSchema.safeParse(request);
+//   if (!result.success) {
+//     throw new Error("Invalid request");
+//   }
+//   return {
+//     type: "refreshInference" as const,
+//     inference: await getTensorZeroClient().inference({
+//       ...result.data,
+//       stream: false,
+//     }),
+//   };
+// }
 
 export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const [searchParams] = useSearchParams();
+  const selectedVariants = searchParams.getAll("variant");
   const navigate = useNavigate();
   const config = useConfig();
-  const serverInferences = useMemo(
-    () =>
-      loaderData.type === "pageLoad" ? loaderData.serverInferences : new Map(),
-    [loaderData],
-  );
-  const { map, setPromise, setMap } =
-    useNestedPromiseMap<InferenceResponse>(serverInferences);
-  useEffect(() => {
-    setMap(serverInferences);
-  }, [serverInferences, setMap]);
-
-  // Handle refresh response differently
-  if (
-    loaderData.type === "refreshInference" ||
-    loaderData.type === "refreshInferenceError"
-  ) {
-    // This shouldn't happen at the page level, only in the fetcher
-    return null;
-  }
-
   const {
     functionName,
     datasetName,
     datapoints,
     inputs,
+    serverInferences,
     totalDatapoints,
     offset,
     limit,
   } = loaderData;
+  const { map, setPromise } = useClientInferences(
+    functionName,
+    datapoints,
+    inputs,
+    selectedVariants,
+    serverInferences,
+  );
 
-  // Get selected variants from search params
-  const selectedVariants = searchParams.getAll("variant");
   const functionConfig = functionName ? config.functions[functionName] : null;
   if (functionName && !functionConfig) {
     throw data(`Function config not found for function ${functionName}`, {
@@ -436,6 +419,9 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                                 serverInference={map
                                   .get(variant)
                                   ?.get(datapoint.id)}
+                                setPromise={setPromise}
+                                input={inputs[index]}
+                                functionName={functionName}
                               />
                             </div>
                           );
@@ -470,39 +456,43 @@ interface DatapointPlaygroundOutputProps {
   datapoint: TensorZeroDatapoint;
   variantName: string;
   serverInference: Promise<InferenceResponse> | undefined;
+  setPromise: (
+    variantName: string,
+    datapointId: string,
+    promise: Promise<InferenceResponse>,
+  ) => void;
+  input: DisplayInput;
+  functionName: string;
 }
 function DatapointPlaygroundOutput({
   datapoint,
   variantName,
   serverInference,
+  setPromise,
+  input,
+  functionName,
 }: DatapointPlaygroundOutputProps) {
-  const fetcher = useFetcher<typeof loader>();
-
-  // Check if currently refreshing
-  const isRefreshing = fetcher.state !== "idle";
-
-  // Get the refreshed data if available
-  const refreshedInference =
-    fetcher.data?.type === "refreshInference" ? fetcher.data.inference : null;
-  const refreshError =
-    fetcher.data?.type === "refreshInferenceError" ? fetcher.data.error : null;
-
-  if (!serverInference && !refreshedInference) {
+  if (!serverInference) {
     return (
       <div className="flex min-h-[8rem] items-center justify-center">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="absolute top-1 left-1 z-10 opacity-0 transition-opacity group-hover:opacity-100"
+          onClick={() => {
+            refreshClientInference(
+              setPromise,
+              input,
+              datapoint,
+              variantName,
+              functionName,
+            );
+          }}
+        >
+          <Refresh />
+        </Button>
         <div className="text-muted-foreground text-sm">
           No inference available
-        </div>
-      </div>
-    );
-  }
-
-  // Show loading state when refreshing
-  if (isRefreshing && !refreshError) {
-    return (
-      <div className="group relative">
-        <div className="flex min-h-[8rem] items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       </div>
     );
@@ -515,67 +505,45 @@ function DatapointPlaygroundOutput({
         size="icon"
         className="absolute top-1 left-1 z-10 opacity-0 transition-opacity group-hover:opacity-100"
         onClick={() => {
-          const url = new URL(window.location.href);
-          const queryParams = new URLSearchParams(url.search);
-          // Set the refresh params
-          queryParams.set("refreshDatapointId", datapoint.id);
-          queryParams.set("refreshVariantName", variantName);
-          fetcher.load(`/playground?${queryParams.toString()}`);
+          refreshClientInference(
+            setPromise,
+            input,
+            datapoint,
+            variantName,
+            functionName,
+          );
         }}
       >
         <Refresh />
       </Button>
-
-      {refreshError ? (
-        // Display refresh error
-        <div className="flex min-h-[8rem] items-center justify-center">
-          <div className="max-h-[16rem] max-w-md overflow-y-auto px-4 text-center text-red-600">
-            <p className="font-semibold">Error</p>
-            <p className="mt-1 text-sm">
-              <CodeEditor value={refreshError} readOnly />
-            </p>
+      <Suspense
+        fallback={
+          <div className="flex min-h-[8rem] items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin" />
           </div>
-        </div>
-      ) : refreshedInference ? (
-        // Display refreshed data directly
-        <NewOutput
-          output={
-            "content" in refreshedInference
-              ? refreshedInference.content
-              : refreshedInference.output
-          }
-        />
-      ) : (
-        // Display initial server inference with Suspense
-        <Suspense
-          fallback={
-            <div className="flex min-h-[8rem] items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-          }
-        >
-          <Await resolve={serverInference} errorElement={<InferenceError />}>
-            {(response) => {
-              if (!response) {
-                return (
-                  <div className="flex min-h-[8rem] items-center justify-center">
-                    <div className="text-muted-foreground text-sm">
-                      No response available
-                    </div>
+        }
+      >
+        <Await resolve={serverInference} errorElement={<InferenceError />}>
+          {(response) => {
+            if (!response) {
+              return (
+                <div className="flex min-h-[8rem] items-center justify-center">
+                  <div className="text-muted-foreground text-sm">
+                    No response available
                   </div>
-                );
-              }
-              let output;
-              if ("content" in response) {
-                output = response.content;
-              } else {
-                output = response.output;
-              }
-              return <NewOutput output={output} />;
-            }}
-          </Await>
-        </Suspense>
-      )}
+                </div>
+              );
+            }
+            let output;
+            if ("content" in response) {
+              output = response.content;
+            } else {
+              output = response.output;
+            }
+            return <NewOutput output={output} />;
+          }}
+        </Await>
+      </Suspense>
     </div>
   );
 }
@@ -611,11 +579,92 @@ function useNestedPromiseMap<T>(initialMap: NestedPromiseMap<T>) {
         const innerMap = newMap.get(outerKey) || new Map();
         const newInnerMap = new Map(innerMap);
         newInnerMap.set(innerKey, promise);
-        newMap.set(outerKey, innerMap);
+        newMap.set(outerKey, newInnerMap);
         return newMap;
       });
     },
     [],
   );
   return { map, setPromise, setMap };
+}
+
+function useClientInferences(
+  functionName: string | null,
+  datapoints: TensorZeroDatapoint[] | undefined,
+  inputs: DisplayInput[] | undefined,
+  selectedVariants: string[],
+  serverInferences: NestedPromiseMap<InferenceResponse>,
+) {
+  const { map, setPromise, setMap } =
+    useNestedPromiseMap<InferenceResponse>(serverInferences);
+  useEffect(() => {
+    setMap(serverInferences);
+  }, [serverInferences, setMap]);
+  // Effect to ensure all needed inferences are present
+  useEffect(() => {
+    if (!functionName || !datapoints || !inputs) return;
+
+    // Check each required combination
+    selectedVariants.forEach((variant) => {
+      // Ensure the variant key exists in the map
+      if (!map.has(variant)) {
+        map.set(variant, new Map());
+      }
+
+      datapoints.forEach((datapoint, index) => {
+        // Check if this inference already exists in the map
+        const existingPromise = map.get(variant)?.get(datapoint.id);
+
+        // If it doesn't exist, create it
+        if (!existingPromise) {
+          const input = inputs[index];
+          refreshClientInference(
+            setPromise,
+            input,
+            datapoint,
+            variant,
+            functionName,
+          );
+        }
+      });
+    });
+  }, [functionName, datapoints, inputs, selectedVariants, map, setPromise]);
+
+  return { map, setPromise, setMap };
+}
+
+function refreshClientInference(
+  setPromise: (
+    outerKey: string,
+    innerKey: string,
+    promise: Promise<InferenceResponse>,
+  ) => void,
+  input: DisplayInput,
+  datapoint: TensorZeroDatapoint,
+  variantName: string,
+  functionName: string,
+) {
+  const request = prepareInferenceActionRequest({
+    source: "clickhouse_datapoint",
+    input,
+    functionName,
+    variant: variantName,
+    tool_params:
+      datapoint?.type === "chat"
+        ? (datapoint.tool_params ?? undefined)
+        : undefined,
+    output_schema: datapoint?.type === "json" ? datapoint.output_schema : null,
+  });
+  // The API endpoint takes form data so we need to stringify it and send as data
+  const formData = new FormData();
+  formData.append("data", JSON.stringify(request));
+  const responsePromise = async () => {
+    const response = await fetch("/api/tensorzero/inference", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await response.json();
+    return data;
+  };
+  setPromise(variantName, datapoint.id, responsePromise());
 }
