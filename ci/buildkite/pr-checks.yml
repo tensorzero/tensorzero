@@ -2,7 +2,7 @@ agents:
   queue: "linux-amd64-small"
 
 steps:
-  - label: "Check TensorZero version consistency between Cargo.toml and TypeScript ui/package.json"
+  - label: "Check TensorZero version consistency between Rust (`Cargo.toml`) and TypeScript (`ui/package.json`)"
     command: ./ci/check-version-consistency.sh
 
 notify:
