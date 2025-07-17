@@ -174,15 +174,32 @@ interface ToolCallMessageProps {
   ) => void;
 }
 
-export function ToolCallMessage({
-  toolName,
-  toolRawName,
-  toolArguments,
-  toolRawArguments,
-  toolCallId,
-  isEditing,
-  onChange,
-}: ToolCallMessageProps) {
+interface ModelInferenceToolCallMessageProps {
+  toolName: string;
+  toolArguments: string;
+  toolCallId: string;
+}
+
+export function ToolCallMessage(
+  toolCall: ToolCallMessageProps | ModelInferenceToolCallMessageProps,
+) {
+  let toolName: string;
+  let toolArguments: string;
+  let nameLabel: string;
+  let payloadLabel: string;
+
+  if ("toolRawArguments" in toolCall) {
+    nameLabel = toolCall.toolName ? "Name" : "Name (Invalid)";
+    payloadLabel = toolCall.toolArguments ? "Arguments" : "Arguments (Invalid)";
+    toolName = toolCall.toolName || toolCall.toolRawName;
+    toolArguments = toolCall.toolArguments || toolCall.toolRawArguments;
+  } else {
+    nameLabel = "Name";
+    payloadLabel = "Arguments";
+    toolName = toolCall.toolName;
+    toolArguments = toolCall.toolArguments;
+  }
+
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label
@@ -190,13 +207,13 @@ export function ToolCallMessage({
         icon={<Terminal className="text-fg-muted h-3 w-3" />}
       />
       <ToolDetails
-        name={toolName || toolRawName}
-        nameLabel={toolName ? "Name" : "Name (Invalid)"}
-        id={toolCallId}
-        payload={toolArguments || toolRawArguments}
-        payloadLabel={toolArguments ? "Arguments" : "Arguments (Invalid)"}
-        isEditing={isEditing}
-        onChange={onChange}
+        name={toolName}
+        nameLabel={nameLabel}
+        id={toolCall.toolCallId}
+        payload={toolArguments}
+        payloadLabel={payloadLabel}
+        isEditing={"isEditing" in toolCall ? toolCall.isEditing : undefined}
+        onChange={"onChange" in toolCall ? toolCall.onChange : undefined}
         enforceJson={true}
       />
     </div>

@@ -11,6 +11,7 @@ bind_address = "0.0.0.0:3000"
 debug = true
 template_filesystem_access.enabled = true
 export.otlp.traces.enabled = true
+unstable_error_json = true
 
 [object_storage]
 type = "disabled"

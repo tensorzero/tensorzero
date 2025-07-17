@@ -277,6 +277,7 @@ mod tests {
             template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
+            unstable_error_json: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -299,6 +300,7 @@ mod tests {
                 enabled: None,
                 async_writes: false,
             },
+            unstable_error_json: false,
             ..Default::default()
         };
         let config = Box::leak(Box::new(Config {
@@ -329,6 +331,7 @@ mod tests {
             template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
+            unstable_error_json: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -352,6 +355,7 @@ mod tests {
             template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
+            unstable_error_json: false,
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -377,6 +381,7 @@ mod tests {
             template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
+            unstable_error_json: false,
         };
         let config = Config {
             gateway: gateway_config,

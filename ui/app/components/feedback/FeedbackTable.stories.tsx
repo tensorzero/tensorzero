@@ -27,6 +27,7 @@ const config: Config = {
     enable_template_filesystem_access: false,
     bind_address: "localhost:8080",
     base_path: "/",
+    unstable_error_json: false,
   },
   object_store_info: { kind: { type: "disabled" } },
   provider_types: {

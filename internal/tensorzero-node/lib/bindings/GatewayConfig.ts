@@ -10,4 +10,12 @@ export type GatewayConfig = {
   template_filesystem_access: TemplateFilesystemAccess;
   export: ExportConfig;
   base_path: string | null;
+  /**
+   * If enabled, adds an 'error_json' field alongside the human-readable 'error' field
+   * in HTTP error responses. This contains a JSON-serialized version of the error.
+   * While 'error_json' will always be valid JSON when present, the exact contents is unstable,
+   * and may change at any time without warning.
+   * For now, this is only supported in the standalone gateway, and not in the embedded gateway.
+   */
+  unstable_error_json: boolean;
 };
