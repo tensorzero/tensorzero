@@ -3,8 +3,9 @@
 # Exit on any error
 set -e
 
-# Print Rust version
+# Print Rust and cargo versions
 rustc --version
+cargo --version
 
 # Extract version from Cargo.toml
 CARGO_VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
