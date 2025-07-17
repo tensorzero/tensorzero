@@ -1,0 +1,10 @@
+agents:
+  queue: "t0-merge-queue"
+
+steps:
+  - label: "Check Version Consistency"
+    command: ./ci/check-version-consistency.sh
+
+notify:
+  - github_commit_status:
+      context: "pr-checks-buildkite"
