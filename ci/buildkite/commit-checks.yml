@@ -7,8 +7,11 @@ steps:
 
   - label: "Build `tensorzero/gateway` Docker container"
     command: docker build -t tensorzero/gateway -f gateway/Dockerfile .
-    agents:
-      queue: "linux-amd64-large"
+    key: "build-gateway-docker-container"
+
+  - label: "Launch `tensorzero/gateway` Docker container"
+    command: docker run -d --name tensorzero-gateway tensorzero/gateway
+    depends_on: "build-gateway-docker-container"
 
 notify:
   - github_commit_status:
