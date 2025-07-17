@@ -7,6 +7,7 @@ import {
   Link,
   useAsyncError,
   type RouteHandle,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
@@ -27,7 +28,7 @@ import type {
   Datapoint as TensorZeroDatapoint,
 } from "tensorzero-node";
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import { Suspense } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   InferenceRequestSchema,
   type InferenceResponse,
@@ -46,6 +47,39 @@ const DEFAULT_LIMIT = 10;
 export const handle: RouteHandle = {
   crumb: () => ["Playground"],
 };
+
+/**
+ * We will skip revalidation on navigation in the case where:
+ * - The previous route was the same as the current route
+ * - The previous route shared the same functionName, datasetName, limit, and offset
+ */
+export function shouldRevalidate(arg: ShouldRevalidateFunctionArgs) {
+  const { currentUrl, nextUrl } = arg;
+  // First check that the base route is the same
+  if (currentUrl.pathname !== nextUrl.pathname) {
+    return true;
+  }
+  // Then check that the search params are the same
+  const currentSearchParams = new URLSearchParams(currentUrl.search);
+  const nextSearchParams = new URLSearchParams(nextUrl.search);
+  const currentFunctionName = currentSearchParams.get("functionName");
+  const nextFunctionName = nextSearchParams.get("functionName");
+  const currentDatasetName = currentSearchParams.get("datasetName");
+  const nextDatasetName = nextSearchParams.get("datasetName");
+  const currentLimit = currentSearchParams.get("limit");
+  const nextLimit = nextSearchParams.get("limit");
+  const currentOffset = currentSearchParams.get("offset");
+  const nextOffset = nextSearchParams.get("offset");
+  if (
+    currentFunctionName === nextFunctionName &&
+    currentDatasetName === nextDatasetName &&
+    currentLimit === nextLimit &&
+    currentOffset === nextOffset
+  ) {
+    return false;
+  }
+  return true;
+}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -149,15 +183,30 @@ export async function loader({ request }: Route.LoaderArgs) {
     });
   };
   // Do not block on all the server inferences, just return the promises
-  // Create a flat array of promises, one for each datapoint/variant combination
-  const serverInferences =
-    functionName && datapoints && inputs
-      ? datapoints.flatMap((datapoint, index) =>
-          selectedVariants.map((variant) =>
-            serverInference(inputs[index], datapoint, functionName, variant),
-          ),
-        )
-      : undefined;
+  // Create a map of maps of promises, one for each datapoint/variant combination
+  // The structure should be: serverInferences[variantName][datapointId] = promise
+  // We can use this to avoid re-running the same inference multiple times
+  const serverInferences = new Map<
+    string,
+    Map<string, Promise<InferenceResponse>>
+  >();
+  for (const variant of selectedVariants) {
+    serverInferences.set(variant, new Map());
+  }
+  if (datapoints && inputs && functionName) {
+    for (let index = 0; index < datapoints.length; index++) {
+      const datapoint = datapoints[index];
+      const input = inputs[index];
+      for (const variant of selectedVariants) {
+        serverInferences
+          .get(variant)
+          ?.set(
+            datapoint.id,
+            serverInference(input, datapoint, functionName, variant),
+          );
+      }
+    }
+  }
 
   return {
     type: "pageLoad" as const,
@@ -209,6 +258,17 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const config = useConfig();
+  const serverInferences = useMemo(
+    () =>
+      loaderData.type === "pageLoad" ? loaderData.serverInferences : new Map(),
+    [loaderData],
+  );
+  const { map, setPromise, setMap } =
+    useNestedPromiseMap<InferenceResponse>(serverInferences);
+  useEffect(() => {
+    setMap(serverInferences);
+  }, [serverInferences, setMap]);
+
   // Handle refresh response differently
   if (
     loaderData.type === "refreshInference" ||
@@ -223,7 +283,6 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     datasetName,
     datapoints,
     inputs,
-    serverInferences,
     totalDatapoints,
     offset,
     limit,
@@ -365,9 +424,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                         />
                       </div>
                       <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
-                        {selectedVariants.map((variant, variantIndex) => {
-                          const inferenceIndex =
-                            index * selectedVariants.length + variantIndex;
+                        {selectedVariants.map((variant) => {
                           return (
                             <div
                               key={`${datapoint.id}-${variant}`}
@@ -376,9 +433,9 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                               <DatapointPlaygroundOutput
                                 datapoint={datapoint}
                                 variantName={variant}
-                                serverInference={
-                                  serverInferences?.[inferenceIndex]
-                                }
+                                serverInference={map
+                                  .get(variant)
+                                  ?.get(datapoint.id)}
                               />
                             </div>
                           );
@@ -541,4 +598,24 @@ function InferenceError() {
       </div>
     </div>
   );
+}
+
+type NestedPromiseMap<T> = Map<string, Map<string, Promise<T>>>;
+
+function useNestedPromiseMap<T>(initialMap: NestedPromiseMap<T>) {
+  const [map, setMap] = useState<NestedPromiseMap<T>>(initialMap);
+  const setPromise = useCallback(
+    (outerKey: string, innerKey: string, promise: Promise<T>) => {
+      setMap((prevMap) => {
+        const newMap = new Map(prevMap);
+        const innerMap = newMap.get(outerKey) || new Map();
+        const newInnerMap = new Map(innerMap);
+        newInnerMap.set(innerKey, promise);
+        newMap.set(outerKey, innerMap);
+        return newMap;
+      });
+    },
+    [],
+  );
+  return { map, setPromise, setMap };
 }
