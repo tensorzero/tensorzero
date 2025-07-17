@@ -25,11 +25,6 @@ export async function getNativeTensorZeroClient(): Promise<TensorZeroClient> {
   );
   return _tensorZeroClient;
 }
-
-export function launch_sft_job(data: SFTFormValues): Promise<SFTJob> {
-  return launch_sft_job_native(data);
-}
-
 class NativeSFTJob extends SFTJob {
   private jobStatus: OptimizationJobInfo | "created";
   private provider: "openai" | "fireworks" | "mistral";
@@ -126,7 +121,17 @@ class NativeSFTJob extends SFTJob {
   }
 }
 
-async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
+export async function poll_sft_job(
+  jobHandle: OptimizationJobHandle,
+): Promise<OptimizationJobInfo> {
+  const client = await getNativeTensorZeroClient();
+  const status = await client.experimentalPollOptimization(jobHandle);
+  return status;
+}
+
+export async function launch_sft_job(
+  data: SFTFormValues,
+): Promise<OptimizationJobHandle> {
   const openAINativeSFTBase = getEnv().OPENAI_BASE_URL;
   const fireworksNativeSFTBase = getEnv().FIREWORKS_BASE_URL;
   let filters: InferenceFilterTreeNode | null = null;
@@ -180,7 +185,7 @@ async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
     format: "JsonEachRow",
     optimizer_config: optimizerConfig,
   });
-  return NativeSFTJob.from_job_handle_with_form_data(job, data);
+  return job;
 }
 
 export async function createFilters(

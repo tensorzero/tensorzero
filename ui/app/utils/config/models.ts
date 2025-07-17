@@ -1,5 +1,5 @@
 import { stringify } from "smol-toml";
-import type { ProviderConfig } from "tensorzero-node";
+import type { OptimizerOutput, ProviderConfig } from "tensorzero-node";
 
 type ProviderType = ProviderConfig["type"];
 
@@ -25,24 +25,22 @@ export function get_fine_tuned_provider_config(
   return providerConfig;
 }
 
-export function dump_provider_config(
-  modelName: string,
-  providerConfig: ProviderConfig,
-) {
-  const fullyQualifiedProviderConfig = {
-    models: {
-      [modelName]: {
-        routing: [modelName],
-        providers: {
-          [modelName]: providerConfig,
-        },
-      },
-    },
-  };
-  const rawSerializedModelConfig = stringify(fullyQualifiedProviderConfig);
-  const lines = rawSerializedModelConfig.split("\n");
-  const linesWithoutFirst = lines.slice(1);
-  linesWithoutFirst.splice(3, 1);
-  const trimmedSerializedModelConfig = linesWithoutFirst.join("\n");
-  return trimmedSerializedModelConfig;
+export function dump_optimizer_output(optimizerOutput: OptimizerOutput) {
+  return stringify(optimizerOutput);
+  // const fullyQualifiedProviderConfig = {
+  //   models: {
+  //     [modelName]: {
+  //       routing: [modelName],
+  //       providers: {
+  //         [modelName]: providerConfig,
+  //       },
+  //     },
+  //   },
+  // };
+  // const rawSerializedModelConfig = stringify(fullyQualifiedProviderConfig);
+  // const lines = rawSerializedModelConfig.split("\n");
+  // const linesWithoutFirst = lines.slice(1);
+  // linesWithoutFirst.splice(3, 1);
+  // const trimmedSerializedModelConfig = linesWithoutFirst.join("\n");
+  // return trimmedSerializedModelConfig;
 }

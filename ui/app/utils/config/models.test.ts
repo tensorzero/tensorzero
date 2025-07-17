@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { get_fine_tuned_provider_config, dump_provider_config } from "./models";
+import {
+  get_fine_tuned_provider_config,
+  dump_optimizer_output,
+} from "./models";
 
 describe("get_fine_tuned_model_config", () => {
   it("should create correct config for fireworks model", async () => {
