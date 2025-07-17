@@ -115,4 +115,4 @@ configMap:
 
       # [object_storage]
       # type = "filesystem"
-      # path = /app/storage/
+      # path = "/app/storage/"
