@@ -39,7 +39,7 @@ const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_secs(5);
 const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1200);
 
 /// The expected payload is a JSON object with the following fields:
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
     // the episode ID client is providing feedback for (either this or `inference_id` must be set but not both)
@@ -272,7 +272,7 @@ async fn write_comment(
 
 async fn write_demonstration(
     connection_info: ClickHouseConnectionInfo,
-    config: &Config<'_>,
+    config: &Config,
     params: &Params,
     inference_id: Uuid,
     feedback_id: Uuid,
@@ -313,7 +313,7 @@ async fn write_demonstration(
 
 async fn write_float(
     connection_info: ClickHouseConnectionInfo,
-    config: &Config<'_>,
+    config: &Config,
     params: &Params,
     target_id: Uuid,
     feedback_id: Uuid,
@@ -348,7 +348,7 @@ async fn write_float(
 
 async fn write_boolean(
     connection_info: ClickHouseConnectionInfo,
-    config: &Config<'_>,
+    config: &Config,
     params: &Params,
     target_id: Uuid,
     feedback_id: Uuid,
@@ -461,6 +461,7 @@ async fn get_function_name(
     let function_name = connection_info
         .run_query_synchronous_no_params(query)
         .await?
+        .response
         .trim()
         .to_string();
     if function_name.is_empty() {
@@ -559,7 +560,7 @@ pub async fn validate_parse_demonstration(
             };
             let content_blocks: Vec<ContentBlockOutput> = content_blocks
                 .into_iter()
-                .map(|block| block.try_into())
+                .map(DemonstrationContentBlock::try_into)
                 .collect::<Result<Vec<ContentBlockOutput>, Error>>()?;
             let parsed_value = parse_chat_output(content_blocks, Some(&tool_call_config)).await;
             for block in &parsed_value {
@@ -643,8 +644,8 @@ async fn get_dynamic_demonstration_info(
                 )
                 .await?;
 
-            let tool_params_result =
-                serde_json::from_str::<ToolParamsResult>(&result).map_err(|e| {
+            let tool_params_result = serde_json::from_str::<ToolParamsResult>(&result.response)
+                .map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
                         message: format!("Failed to parse demonstration result: {e}"),
                     })
@@ -655,7 +656,7 @@ async fn get_dynamic_demonstration_info(
                 // This is consistent with how they are serialized at inference time.
                 tool_params_result
                     .tool_params
-                    .map(|x| x.into())
+                    .map(ToolCallConfigDatabaseInsert::into)
                     .unwrap_or_default(),
             ))
         }
@@ -670,7 +671,7 @@ async fn get_dynamic_demonstration_info(
                     ]),
                 )
                 .await?;
-            let result_value = serde_json::from_str::<Value>(&result).map_err(|e| {
+            let result_value = serde_json::from_str::<Value>(&result.response).map_err(|e| {
                 Error::new(ErrorDetails::ClickHouseQuery {
                     message: format!("Failed to parse demonstration result: {e}"),
                 })

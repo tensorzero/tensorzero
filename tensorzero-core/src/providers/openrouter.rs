@@ -10,7 +10,6 @@ use std::borrow::Cow;
 use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
-use tracing::instrument;
 use url::Url;
 #[cfg(test)]
 use uuid::Uuid;
@@ -54,11 +53,14 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "OpenRouter";
-const PROVIDER_TYPE: &str = "openrouter";
+pub const PROVIDER_TYPE: &str = "openrouter";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct OpenRouterProvider {
     model_name: String,
+    #[serde(skip)]
     credentials: OpenRouterCredentials,
 }
 
@@ -612,13 +614,7 @@ pub(super) fn prepare_openrouter_tools<'a>(
             if tool_config.tools_available.is_empty() {
                 return (None, None, None);
             }
-            let tools = Some(
-                tool_config
-                    .tools_available
-                    .iter()
-                    .map(|tool| tool.into())
-                    .collect(),
-            );
+            let tools = Some(tool_config.tools_available.iter().map(Into::into).collect());
             let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
             (tools, tool_choice, parallel_tool_calls)
@@ -902,48 +898,6 @@ impl<'a> From<&'a ToolConfig> for OpenRouterTool<'a> {
             },
             strict: tool.strict(),
         }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct OpenRouterBatchParams<'a> {
-    file_id: Cow<'a, str>,
-    batch_id: Cow<'a, str>,
-}
-
-impl<'a> OpenRouterBatchParams<'a> {
-    #[instrument(name = "OpenRouterBatchParams::from_ref", skip_all, fields(%value))]
-    fn from_ref(value: &'a Value) -> Result<Self, Error> {
-        let file_id = value
-            .get("file_id")
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidBatchParams {
-                    message: "Missing file_id in batch params".to_string(),
-                })
-            })?
-            .as_str()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidBatchParams {
-                    message: "file_id must be a string".to_string(),
-                })
-            })?;
-        let batch_id = value
-            .get("batch_id")
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidBatchParams {
-                    message: "Missing batch_id in batch params".to_string(),
-                })
-            })?
-            .as_str()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidBatchParams {
-                    message: "batch_id must be a string".to_string(),
-                })
-            })?;
-        Ok(Self {
-            file_id: Cow::Borrowed(file_id),
-            batch_id: Cow::Borrowed(batch_id),
-        })
     }
 }
 
@@ -1328,7 +1282,7 @@ fn openrouter_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {

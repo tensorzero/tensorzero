@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::Deserialize;
+use serde::Serialize;
 
 use crate::config_parser::LoadableConfig;
 use crate::config_parser::PathWithContents;
@@ -39,7 +40,9 @@ use super::{
 /// We need a helper to deserialize the config because it relies on
 /// a path to a file for system instructions and we need to use the
 /// load() step to get the fully qualified path.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct DiclConfig {
     pub weight: Option<f64>,
     pub embedding_model: Arc<str>,
@@ -371,6 +374,7 @@ impl DiclConfig {
 
         // Parse each line into RawExample (since we will have some serialized JSON strings inside it)
         let raw_examples: Vec<RawExample> = result
+            .response
             .lines()
             .map(serde_json::from_str::<RawExample>)
             .collect::<Result<Vec<_>, _>>()
@@ -426,7 +430,7 @@ impl DiclConfig {
                 .output
                 .clone()
                 .into_iter()
-                .map(|x| x.into())
+                .map(ContentBlockChatOutput::into)
                 .collect(),
             Example::Json(json_example) => {
                 vec![json_example.output.raw.clone().unwrap_or_default().into()]
@@ -719,8 +723,10 @@ mod tests {
         );
 
         // Second message should be from Assistant with content blocks
-        let expected_content: Vec<ContentBlock> =
-            chat_output.into_iter().map(|x| x.into()).collect();
+        let expected_content: Vec<ContentBlock> = chat_output
+            .into_iter()
+            .map(ContentBlockChatOutput::into)
+            .collect();
 
         assert_eq!(chat_messages[1].role, Role::Assistant);
         assert_eq!(chat_messages[1].content, expected_content);

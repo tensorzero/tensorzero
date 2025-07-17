@@ -1,6 +1,7 @@
+import { logger } from "~/utils/logger";
 import { getConfig } from "../config/index.server";
 import { resolveInput } from "../resolve.server";
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 import { CountSchema, inputSchema } from "./common";
 import {
   EvaluationRunInfoSchema,
@@ -45,7 +46,7 @@ export async function getEvaluationRunInfos(
       toUInt128(toUUID(evaluation_run_id)) DESC
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -63,7 +64,10 @@ export async function getEvaluationRunInfosForDatapoint(
   function_name: string,
 ): Promise<EvaluationRunInfo[]> {
   const config = await getConfig();
-  const function_type = config.functions[function_name].type;
+  const function_type = config.functions[function_name]?.type;
+  if (!function_type) {
+    throw new Error(`Function ${function_name} not found in config`);
+  }
   const inference_table_name =
     function_type === "chat" ? "ChatInference" : "JsonInference";
 
@@ -83,7 +87,7 @@ export async function getEvaluationRunInfosForDatapoint(
     GROUP BY
       tags['tensorzero::evaluation_run_id']
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -103,7 +107,7 @@ async function parseEvaluationResult(
   // Parse the input field
   const parsedInput = inputSchema.parse(JSON.parse(result.input));
   const config = await getConfig();
-  const functionConfig = config.functions[function_name];
+  const functionConfig = config.functions[function_name] || null;
   const resolvedInput = await resolveInput(parsedInput, functionConfig);
 
   // Parse the outputs
@@ -146,7 +150,7 @@ async function parseEvaluationResultWithVariant(
       parsedResultWithVariant,
     );
   } catch (error) {
-    console.warn(
+    logger.warn(
       "Failed to parse evaluation result with variant using structure-based detection:",
       error,
     );
@@ -257,7 +261,7 @@ export async function getEvaluationResults(
 
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -338,7 +342,7 @@ export async function getEvaluationStatistics(
     toUInt128(toUUID(filtered_inference.tags['tensorzero::evaluation_run_id'])) DESC
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -371,7 +375,7 @@ export async function countDatapointsForEvaluation(
       FROM all_datapoint_ids
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -390,7 +394,7 @@ export async function countTotalEvaluationRuns() {
   const query = `
     SELECT toUInt32(uniqExact(value)) as count FROM TagInference WHERE key = 'tensorzero::evaluation_run_id'
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
   });
@@ -429,7 +433,7 @@ export async function getEvaluationRunInfo(
     LIMIT {limit:UInt32}
     OFFSET {offset:UInt32}
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -467,7 +471,7 @@ export async function searchEvaluationRuns(
     OFFSET {offset:UInt32}
     `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -488,11 +492,18 @@ export async function getEvaluationsForDatapoint(
   evaluation_run_ids: string[],
 ): Promise<ParsedEvaluationResultWithVariant[]> {
   const config = await getConfig();
-  const function_name = config.evaluations[evaluation_name].function_name;
+  const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw new Error(`Evaluation ${evaluation_name} not found in config`);
+  }
+  const function_name = evaluation_config.function_name;
   if (!function_name) {
     throw new Error(`evaluation ${evaluation_name} not found in config`);
   }
   const function_config = config.functions[function_name];
+  if (!function_config) {
+    throw new Error(`Function ${function_name} not found in config`);
+  }
   const function_type = function_config.type;
   const inference_table_name =
     function_type === "chat" ? "ChatInference" : "JsonInference";
@@ -501,7 +512,7 @@ export async function getEvaluationsForDatapoint(
       ? "ChatInferenceDatapoint"
       : "JsonInferenceDatapoint";
 
-  const evaluators = config.evaluations[evaluation_name].evaluators;
+  const evaluators = evaluation_config.evaluators;
   const metric_names = Object.keys(evaluators).map((evaluatorName) =>
     getEvaluatorMetricName(evaluation_name, evaluatorName),
   );
@@ -568,7 +579,7 @@ export async function getEvaluationsForDatapoint(
 
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -630,7 +641,7 @@ export async function pollForEvaluations(
   }
 
   if (!found) {
-    console.warn(
+    logger.warn(
       `Evaluation with feedback ${new_feedback_id} for datapoint ${datapoint_id} not found after ${max_retries} retries.`,
     );
   }
@@ -689,7 +700,7 @@ export async function pollForEvaluationResults(
   }
 
   if (!found) {
-    console.warn(
+    logger.warn(
       `Evaluation result with feedback ${new_feedback_id} not found after ${max_retries} retries.`,
     );
   }

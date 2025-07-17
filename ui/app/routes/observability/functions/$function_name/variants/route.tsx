@@ -21,7 +21,7 @@ import {
   getVariantPerformances,
   type TimeWindowUnit,
 } from "~/utils/clickhouse/function";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { getInferenceTableName } from "~/utils/clickhouse/common";
@@ -34,6 +34,7 @@ import {
   SectionsGroup,
   SectionHeader,
 } from "~/components/layout/PageLayout";
+import { logger } from "~/utils/logger";
 
 export const handle: RouteHandle = {
   crumb: (match) => ["Variants", match.params.variant_name!],
@@ -144,8 +145,8 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
       },
     );
   }
-  const variant_config = function_config.variants[variant_name];
-  if (!variant_config) {
+  const variant_info = function_config.variants[variant_name];
+  if (!variant_info) {
     throw new Response(
       "Variant not found. This likely means there is data in ClickHouse from an old TensorZero config.",
       {
@@ -191,6 +192,15 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
+  const metricsExcludingDemonstrations = useMemo(
+    () => ({
+      metrics: metricsWithFeedback.metrics.filter(
+        ({ metric_type }) => metric_type !== "demonstration",
+      ),
+    }),
+    [metricsWithFeedback],
+  );
+
   const [time_granularity, setTimeGranularity] =
     useState<TimeWindowUnit>("week");
   const handleTimeGranularityChange = (granularity: TimeWindowUnit) => {
@@ -207,7 +217,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <BasicInfo
-            variantConfig={variant_config}
+            variantConfig={variant_info.inner}
             function_name={function_name}
             function_type={function_type}
           />
@@ -216,7 +226,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
         <SectionLayout>
           <SectionHeader heading="Metrics" />
           <MetricSelector
-            metricsWithFeedback={metricsWithFeedback}
+            metricsWithFeedback={metricsExcludingDemonstrations}
             selectedMetric={metric_name || ""}
             onMetricChange={handleMetricChange}
           />
@@ -232,7 +242,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Templates" />
-          <VariantTemplate variantConfig={variant_config} />
+          <VariantTemplate variantConfig={variant_info.inner} />
         </SectionLayout>
 
         <SectionLayout>
@@ -259,7 +269,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

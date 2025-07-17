@@ -32,11 +32,12 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
-    collect_chunks, Base64File, ChatInferenceDatabaseInsert, CollectChunksArgs,
-    ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
-    InferenceResultChunk, InferenceResultStream, Input, InternalJsonInferenceOutput,
-    JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
-    RequestMessage, ResolvedInput, ResolvedInputMessageContent, Usage,
+    collect_chunks, Base64File, ChatInferenceDatabaseInsert, ChatInferenceResultChunk,
+    CollectChunksArgs, ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason,
+    InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
+    InternalJsonInferenceOutput, JsonInferenceDatabaseInsert, JsonInferenceOutput,
+    JsonInferenceResultChunk, ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput,
+    ResolvedInputMessageContent, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
@@ -142,6 +143,7 @@ pub async fn inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        ..
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
@@ -197,7 +199,7 @@ pub struct InferenceIds {
     )
 )]
 pub async fn inference(
-    config: Arc<Config<'static>>,
+    config: Arc<Config>,
     http_client: &reqwest::Client,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
@@ -528,13 +530,13 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                 Arc::new(FunctionConfig::Chat(FunctionConfigChat {
                     variants: [(
                         model_name.clone(),
-                        VariantInfo {
+                        Arc::new(VariantInfo {
                             timeouts: Default::default(),
                             inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
                                 model: (&**model_name).into(),
                                 ..Default::default()
                             }),
-                        },
+                        }),
                     )]
                     .into_iter()
                     .collect(),
@@ -562,13 +564,17 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
 
 fn create_stream(
     function: Arc<FunctionConfig>,
-    config: Arc<Config<'static>>,
+    config: Arc<Config>,
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
+        let mut extra_usage = Some(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).sum());
+        if extra_usage == Some(Usage { input_tokens: 0, output_tokens: 0 }) {
+            extra_usage = None;
+        }
         let mut inference_ttft = None;
         while let Some(chunk) = stream.next().await {
             if inference_ttft.is_none() {
@@ -577,11 +583,42 @@ fn create_stream(
             match chunk {
                 Ok(chunk) => {
                     buffer.push(chunk.clone());
-                    if let Some(chunk) = prepare_response_chunk(&metadata, chunk) {
+                    if let Some(chunk) = prepare_response_chunk(&metadata, chunk, &mut extra_usage) {
                         yield Ok(chunk);
                     }
                 }
                 Err(e) => yield Err(e),
+            }
+        }
+        // We didn't find an existing chunk to add 'extra_usage' (either because the underlying
+        // stream had no usage information, or because we returned zero usage due to caching)
+        if let Some(extra_usage) = extra_usage {
+            let usage_chunk = match &*function {
+                FunctionConfig::Chat(_model_provider) => {
+                    InferenceResultChunk::Chat(ChatInferenceResultChunk {
+                        created: 0,
+                        content: vec![],
+                        usage: Some(extra_usage),
+                        finish_reason: None,
+                        latency: Duration::from_millis(0),
+                        raw_response: "".to_string(),
+                    })
+                }
+                FunctionConfig::Json(_) => {
+                    InferenceResultChunk::Json(JsonInferenceResultChunk {
+                        thought: None,
+                        created: 0,
+                        usage: Some(extra_usage),
+                        latency: Duration::from_millis(0),
+                        raw: None,
+                        raw_response: "".to_string(),
+                        finish_reason: None,
+                    })
+                }
+            };
+            buffer.push(usage_chunk.clone());
+            if let Some(chunk) = prepare_response_chunk(&metadata, usage_chunk, &mut None) {
+                yield Ok(chunk);
             }
         }
         if !metadata.dryrun {
@@ -686,6 +723,7 @@ fn create_stream(
 fn prepare_response_chunk(
     metadata: &InferenceMetadata,
     chunk: InferenceResultChunk,
+    extra_usage: &mut Option<Usage>,
 ) -> Option<InferenceResponseChunk> {
     InferenceResponseChunk::new(
         chunk,
@@ -694,6 +732,7 @@ fn prepare_response_chunk(
         metadata.variant_name.clone(),
         metadata.cached,
         metadata.include_original_response,
+        extra_usage,
     )
 }
 
@@ -787,7 +826,7 @@ async fn write_file(
 
 async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    config: &Config<'_>,
+    config: &Config,
     input: ResolvedInput,
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
@@ -879,13 +918,14 @@ pub struct JsonInferenceResponse {
 
 impl InferenceResponse {
     pub fn new(inference_result: InferenceResult, episode_id: Uuid, variant_name: String) -> Self {
+        let usage = inference_result.usage_considering_cached();
         match inference_result {
             InferenceResult::Chat(result) => InferenceResponse::Chat(ChatInferenceResponse {
                 inference_id: result.inference_id,
                 episode_id,
                 variant_name,
                 content: result.content,
-                usage: result.usage,
+                usage,
                 original_response: result.original_response,
                 finish_reason: result.finish_reason,
             }),
@@ -897,7 +937,7 @@ impl InferenceResponse {
                     episode_id,
                     variant_name,
                     output,
-                    usage: result.usage,
+                    usage,
                     original_response: result.original_response,
                     finish_reason: result.finish_reason,
                 })
@@ -1002,7 +1042,34 @@ impl InferenceResponseChunk {
         variant_name: String,
         cached: bool,
         include_original_response: bool,
+        extra_usage: &mut Option<Usage>,
     ) -> Option<Self> {
+        let mut result_usage = if cached {
+            // When our outer inference result is cached, don't
+            // add `extra_usage` to it. We'll append a final usage chunk
+            // in `create_stream` if needed
+            Some(ZERO_USAGE)
+        } else {
+            inference_result.usage().copied()
+        };
+        // The first time we encounter an empty chunk that already has usage information set,
+        // add `extra_usage` to the chunk.
+        // If we never encounter any empty chunks with usage, we'll append one ourselves
+        // in `create_stream`
+        // We do this in both cached and non-cached mode, so that our decision to emit
+        // an extra usage chunk is consistent across both modes.
+        if let Some(result_usage) = &mut result_usage {
+            let is_empty = match &inference_result {
+                InferenceResultChunk::Chat(result) => result.content.is_empty(),
+                InferenceResultChunk::Json(result) => result.raw.is_none(),
+            };
+            if is_empty {
+                if let Some(extra_usage) = extra_usage.take() {
+                    result_usage.input_tokens += extra_usage.input_tokens;
+                    result_usage.output_tokens += extra_usage.output_tokens;
+                }
+            }
+        }
         Some(match inference_result {
             InferenceResultChunk::Chat(result) => {
                 InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
@@ -1012,11 +1079,7 @@ impl InferenceResponseChunk {
                     content: result.content,
                     // Token usage is intended to represent 'billed tokens',
                     // so set it to zero if the result is cached
-                    usage: if cached {
-                        Some(ZERO_USAGE)
-                    } else {
-                        result.usage
-                    },
+                    usage: result_usage,
                     finish_reason: result.finish_reason,
                     original_chunk: include_original_response.then_some(result.raw_response),
                 })
@@ -1032,11 +1095,7 @@ impl InferenceResponseChunk {
                     raw: result.raw.unwrap_or_default(),
                     // Token usage is intended to represent 'billed tokens',
                     // so set it to zero if the result is cached
-                    usage: if cached {
-                        Some(ZERO_USAGE)
-                    } else {
-                        result.usage
-                    },
+                    usage: result_usage,
                     finish_reason: result.finish_reason,
                     original_chunk: include_original_response.then_some(result.raw_response),
                 })
@@ -1203,7 +1262,7 @@ mod tests {
             include_original_response: false,
         };
 
-        let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
+        let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
         match result {
             InferenceResponseChunk::Chat(c) => {
                 assert_eq!(c.inference_id, inference_metadata.inference_id);
@@ -1256,7 +1315,7 @@ mod tests {
             include_original_response: false,
         };
 
-        let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
+        let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
         match result {
             InferenceResponseChunk::Json(c) => {
                 assert_eq!(c.inference_id, inference_metadata.inference_id);

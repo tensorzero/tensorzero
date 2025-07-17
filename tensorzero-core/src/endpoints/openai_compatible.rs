@@ -40,6 +40,7 @@ use crate::inference::types::{
 };
 use crate::tool::{DynamicToolParams, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult};
 use crate::variant::JsonMode;
+use serde::Deserializer;
 
 use super::inference::{
     InferenceCredentials, InferenceOutput, InferenceResponse, InferenceResponseChunk,
@@ -53,6 +54,7 @@ pub async fn inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        ..
     }): AppState,
     headers: HeaderMap,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
@@ -477,7 +479,7 @@ impl Params {
                             message: "variant_name header is not valid UTF-8".to_string(),
                         })
                     })
-                    .map(|s| s.to_string())
+                    .map(str::to_string)
             })
             .transpose()?;
         let header_dryrun = headers
@@ -503,10 +505,10 @@ impl Params {
             allowed_tools: None,
             additional_tools: openai_compatible_params
                 .tools
-                .map(|tools| tools.into_iter().map(|tool| tool.into()).collect()),
+                .map(|tools| tools.into_iter().map(OpenAICompatibleTool::into).collect()),
             tool_choice: openai_compatible_params
                 .tool_choice
-                .map(|tool_choice| tool_choice.into()),
+                .map(ChatCompletionToolChoiceOption::into),
             parallel_tool_calls: openai_compatible_params.parallel_tool_calls,
         };
         let output_schema = match openai_compatible_params.response_format {
@@ -684,17 +686,47 @@ struct OpenAICompatibleFile {
     // We do not so we require these two fields
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(untagged, deny_unknown_fields, rename_all = "snake_case")]
+#[derive(Debug)]
 // Two mutually exclusive modes - the standard OpenAI text, and our special TensorZero mode
 pub enum TextContent {
     /// A normal openai text content block: `{"type": "text", "text": "Some content"}`. The `type` key comes from the parent `OpenAICompatibleContentBlock`
     RawText { text: String },
     /// A special TensorZero mode: `{"type": "text", "tensorzero::arguments": {"custom_key": "custom_val"}}`.
     TensorZeroArguments {
-        #[serde(default, rename = "tensorzero::arguments")]
         tensorzero_arguments: Map<String, Value>,
     },
+}
+
+impl<'de> Deserialize<'de> for TextContent {
+    fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
+        let mut object: Map<String, Value> = Map::deserialize(de)?;
+        let text = object.remove("text");
+        let arguments = object.remove("tensorzero::arguments");
+        match (text, arguments) {
+            (Some(text), None) => Ok(TextContent::RawText {
+                text: match text {
+                    Value::String(text) => text,
+                    _ => return Err(serde::de::Error::custom(
+                        "`text` must be a string when using `\"type\": \"text\"`",
+                    )),
+                },
+            }),
+            (None, Some(arguments)) => Ok(TextContent::TensorZeroArguments {
+                tensorzero_arguments: match arguments {
+                    Value::Object(arguments) => arguments,
+                    _ => return Err(serde::de::Error::custom(
+                        "`tensorzero::arguments` must be an object when using `\"type\": \"text\"`",
+                    )),
+                },
+            }),
+            (Some(_), Some(_)) => Err(serde::de::Error::custom(
+                "Only one of `text` or `tensorzero::arguments` can be set when using `\"type\": \"text\"`",
+            )),
+            (None, None) => Err(serde::de::Error::custom(
+                "Either `text` or `tensorzero::arguments` must be set when using `\"type\": \"text\"`",
+            )),
+        }
+    }
 }
 
 fn parse_base64_image_data_url(url: &str) -> Result<(MediaType, &str), Error> {
@@ -739,6 +771,23 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                         InputMessageContent::File(File::Base64 { mime_type: filename_to_mime_type(&file.filename)?, data: file.file_data })
                     }
                     Err(e) => {
+                        if let Some(obj) = val.as_object() {
+                            // If the user tried using any 'tensorzero::' fields, we assume that they were deliberately trying to use TensorZero,
+                            // and weren't passing in some other OpenAI-compatible content block type that we don't know about.
+                            // We emit an error in this case, since the user incorrectly used TensorZero-specific values
+                            if obj.keys().any(|k| k.starts_with("tensorzero::")) {
+                                return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                    message: format!("Invalid TensorZero content block: {e}"),
+                                }));
+                            } else if obj.keys().any(|k| *k == "type") {
+                                // If the 'type' key is set, assume that the user was trying to specify an OpenAI-compatible content block,
+                                // (rather than using the deprecated behavior of directly passing a JSON object for the TensorZero function arguments),
+                                // Since we encountered a parse error, we reject this as an invalid OpenAI-compatible content block
+                                return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                    message: format!("Invalid content block: {e}"),
+                                }));
+                            }
+                        }
                         tracing::warn!(r#"Deprecation Warning: Content block `{val}` was not a valid OpenAI content block. Please use `{{"type": "text", "tensorzero::arguments": {{"custom": "data"}}` to pass arbitrary JSON values to TensorZero: {e}"#);
                         if let Value::Object(obj) = val {
                             InputMessageContent::Text(TextKind::Arguments { arguments: obj })
@@ -937,7 +986,7 @@ struct OpenAICompatibleChoiceChunk {
 
 fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
     // if it’s None → skip, or if the Vec is empty → skip
-    v.as_ref().is_none_or(|vec| vec.is_empty())
+    v.as_ref().is_none_or(Vec::is_empty)
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -961,7 +1010,7 @@ fn convert_inference_response_chunk_to_openai_compatible(
                 episode_id: c.episode_id.to_string(),
                 choices: vec![OpenAICompatibleChoiceChunk {
                     index: 0,
-                    finish_reason: c.finish_reason.map(|finish_reason| finish_reason.into()),
+                    finish_reason: c.finish_reason.map(FinishReason::into),
                     logprobs: None,
                     delta: OpenAICompatibleDelta {
                         content,
@@ -982,7 +1031,7 @@ fn convert_inference_response_chunk_to_openai_compatible(
             episode_id: c.episode_id.to_string(),
             choices: vec![OpenAICompatibleChoiceChunk {
                 index: 0,
-                finish_reason: c.finish_reason.map(|finish_reason| finish_reason.into()),
+                finish_reason: c.finish_reason.map(FinishReason::into),
                 logprobs: None,
                 delta: OpenAICompatibleDelta {
                     content: Some(c.raw),
@@ -1461,22 +1510,9 @@ mod tests {
             "type": "text",
             "my_custom_arg": 123
         }]);
-        let value = convert_openai_message_content(other_content.clone()).unwrap();
-        assert_eq!(
-            value,
-            vec![InputMessageContent::Text(TextKind::Arguments {
-                arguments: json!({
-                    "type": "text",
-                    "my_custom_arg": 123
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
-            })]
-        );
-        assert!(logs_contain(
-            r#"Content block `{"type":"text","my_custom_arg":123}` was not a valid OpenAI content block."#
-        ));
+        let err = convert_openai_message_content(other_content.clone())
+            .expect_err("Should not accept invalid block");
+        assert_eq!(err.to_string(), "Invalid request to OpenAI-compatible endpoint: Invalid content block: Either `text` or `tensorzero::arguments` must be set when using `\"type\": \"text\"`");
     }
 
     #[test]

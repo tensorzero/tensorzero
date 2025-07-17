@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::fmt::Display;
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -8,6 +9,7 @@ use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::fmt::Debug;
 use tokio::time::Instant;
 
 use super::helpers::{
@@ -16,7 +18,10 @@ use super::helpers::{
 use crate::cache::ModelProviderRequest;
 use crate::config_parser::skip_credential_validation;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{
+    warn_discarded_thought_block, warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error,
+    ErrorDetails,
+};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::file::require_image;
@@ -32,7 +37,7 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, RequestMessage, Usage,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{build_creds_caching_default_with_fn, CredentialLocation};
+use crate::model::CredentialLocation;
 use crate::model::{fully_qualified_name, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -50,73 +55,81 @@ use super::openai::convert_stream_error;
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
 #[expect(unused)]
 const PROVIDER_NAME: &str = "GCP Vertex Anthropic";
-const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
+pub const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct GCPVertexAnthropicProvider {
     model_id: String,
     request_url: String,
     streaming_request_url: String,
     audience: String,
+    #[serde(skip)]
     credentials: GCPVertexCredentials,
 }
 
 static DEFAULT_CREDENTIALS: OnceLock<GCPVertexCredentials> = OnceLock::new();
 
-pub async fn make_gcp_sdk_credentials(
+fn handle_gcp_error(
     // This is only used in test mode
     #[cfg_attr(not(any(test, feature = "e2e_tests")), expect(unused_variables))]
     provider_type: &str,
+    e: impl Display + Debug,
 ) -> Result<GCPVertexCredentials, Error> {
-    let creds_result = google_cloud_auth::credentials::Builder::default().build();
-
-    let handle_err = |e| {
-        if skip_credential_validation() {
-            #[cfg(any(test, feature = "e2e_tests"))]
-            {
-                tracing::warn!(
-                    "Failed to get GCP SDK credentials for a model provider of type `{provider_type}`, so the associated tests will likely fail: {e}",
-                );
-            }
-            Ok(GCPVertexCredentials::None)
-        } else {
-            Err(Error::new(ErrorDetails::GCPCredentials {
-                message: format!(
-                    "Failed to create GCP Vertex credentials from SDK: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            }))
+    if skip_credential_validation() {
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            tracing::warn!(
+                "Failed to get GCP SDK credentials for a model provider of type `{provider_type}`, so the associated tests will likely fail: {e}",
+            );
         }
-    };
+        Ok(GCPVertexCredentials::None)
+    } else {
+        Err(Error::new(ErrorDetails::GCPCredentials {
+            message: format!(
+                "Failed to create GCP Vertex credentials from SDK: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
+        }))
+    }
+}
+
+pub async fn make_gcp_sdk_credentials(provider_type: &str) -> Result<GCPVertexCredentials, Error> {
+    let creds_result = google_cloud_auth::credentials::Builder::default().build();
 
     let creds = match creds_result {
         Ok(creds) => creds,
         Err(e) => {
-            return handle_err(e);
+            return handle_gcp_error(provider_type, e);
         }
     };
     // Test that the credentials are valid by getting headers
     match creds.headers(http::Extensions::default()).await {
         Ok(_) => Ok(GCPVertexCredentials::Sdk(creds)),
-        Err(e) => handle_err(e),
+        Err(e) => handle_gcp_error(provider_type, e),
     }
 }
 
 impl GCPVertexAnthropicProvider {
+    async fn build_credentials(
+        cred_location: CredentialLocation,
+    ) -> Result<GCPVertexCredentials, Error> {
+        GCPVertexCredentials::new(
+            Some(cred_location),
+            &DEFAULT_CREDENTIALS,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+        )
+        .await
+    }
     // Constructs a provider from a shorthand string of the form:
     // * 'projects/<project_id>/locations/<location>/publishers/anthropic/models/XXX'
     // * 'projects/<project_id>/locations/<location>/endpoints/XXX'
     //
     // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
     pub async fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default_with_fn(
-            None,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-        )?;
-
+        let credentials = Self::build_credentials(default_api_key_location()).await?;
         // We only support model urls with the publisher 'anthropic'
         let shorthand_url = parse_shorthand_url(&project_url_path, "anthropic")?;
         let (location, model_id) = match shorthand_url {
@@ -152,18 +165,8 @@ impl GCPVertexAnthropicProvider {
     ) -> Result<Self, Error> {
         let default_location = default_api_key_location();
         let cred_location = api_key_location.as_ref().unwrap_or(&default_location);
+        let credentials = Self::build_credentials(cred_location.clone()).await?;
 
-        let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
-            make_gcp_sdk_credentials(PROVIDER_TYPE).await?
-        } else {
-            build_creds_caching_default_with_fn(
-                api_key_location,
-                default_api_key_location(),
-                PROVIDER_TYPE,
-                &DEFAULT_CREDENTIALS,
-                |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-            )?
-        };
         let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
@@ -313,7 +316,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             builder,
         )
         .await?;
-        let mut stream = stream_anthropic(event_source, start_time).peekable();
+        let mut stream = stream_anthropic(event_source, start_time, model_provider).peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
         if matches!(
             request.json_mode,
@@ -356,7 +359,9 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 fn stream_anthropic(
     mut event_source: EventSource,
     start_time: Instant,
+    model_provider: &ModelProvider,
 ) -> ProviderInferenceResponseStreamInner {
+    let discard_unknown_chunks = model_provider.discard_unknown_chunks;
     Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
         while let Some(ev) = event_source.next().await {
@@ -388,6 +393,7 @@ fn stream_anthropic(
                                 data,
                                 start_time.elapsed(),
                                 &mut current_tool_id,
+                                discard_unknown_chunks,
                             )
                         });
 
@@ -592,7 +598,7 @@ impl<'a> TryFrom<&'a RequestMessage> for GCPVertexAnthropicMessage<'a> {
         let content: Vec<FlattenUnknown<GCPVertexAnthropicMessageContent>> = inference_message
             .content
             .iter()
-            .map(|block| block.try_into())
+            .map(TryInto::try_into)
             .collect::<Result<Vec<Option<FlattenUnknown<GCPVertexAnthropicMessageContent>>>, _>>()?
             .into_iter()
             .flatten()
@@ -658,12 +664,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             if matches!(c.tool_choice, ToolChoice::None) {
                 None
             } else {
-                Some(
-                    c.tools_available
-                        .iter()
-                        .map(|tool| tool.into())
-                        .collect::<Vec<_>>(),
-                )
+                Some(c.tools_available.iter().map(Into::into).collect::<Vec<_>>())
             }
         });
         // `tool_choice` should only be set if tools are set and non-empty
@@ -909,7 +910,7 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
                 raw_response,
                 usage: response.usage.into(),
                 latency,
-                finish_reason: response.stop_reason.map(|r| r.into()),
+                finish_reason: response.stop_reason.map(AnthropicStopReason::into),
             },
         ))
     }
@@ -966,11 +967,11 @@ enum GCPVertexAnthropicMessageBlock {
 #[serde(tag = "type", rename_all = "snake_case")]
 enum GCPVertexAnthropicStreamMessage {
     ContentBlockDelta {
-        delta: GCPVertexAnthropicMessageBlock,
+        delta: FlattenUnknown<'static, GCPVertexAnthropicMessageBlock>,
         index: u32,
     },
     ContentBlockStart {
-        content_block: GCPVertexAnthropicMessageBlock,
+        content_block: FlattenUnknown<'static, GCPVertexAnthropicMessageBlock>,
         index: u32,
     },
     ContentBlockStop {
@@ -980,7 +981,7 @@ enum GCPVertexAnthropicStreamMessage {
         error: Value,
     },
     MessageDelta {
-        delta: AnthropicMessageDelta,
+        delta: FlattenUnknown<'static, AnthropicMessageDelta>,
         usage: Value,
     },
     MessageStart {
@@ -1001,9 +1002,13 @@ fn anthropic_to_tensorzero_stream_message(
     message: GCPVertexAnthropicStreamMessage,
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
+    discard_unknown_chunks: bool,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match message {
-        GCPVertexAnthropicStreamMessage::ContentBlockDelta { delta, index } => match delta {
+        GCPVertexAnthropicStreamMessage::ContentBlockDelta {
+            delta: FlattenUnknown::Normal(delta),
+            index,
+        } => match delta {
             GCPVertexAnthropicMessageBlock::TextDelta { text } => {
                 Ok(Some(ProviderInferenceResponseChunk::new(
                     vec![ContentBlockChunk::Text(TextChunk {
@@ -1046,7 +1051,7 @@ fn anthropic_to_tensorzero_stream_message(
             .into()),
         },
         GCPVertexAnthropicStreamMessage::ContentBlockStart {
-            content_block,
+            content_block: FlattenUnknown::Normal(content_block),
             index,
         } => match content_block {
             GCPVertexAnthropicMessageBlock::Text { text } => {
@@ -1094,14 +1099,17 @@ fn anthropic_to_tensorzero_stream_message(
             raw_response: None,
         }
         .into()),
-        GCPVertexAnthropicStreamMessage::MessageDelta { usage, delta } => {
+        GCPVertexAnthropicStreamMessage::MessageDelta {
+            usage,
+            delta: FlattenUnknown::Normal(delta),
+        } => {
             let usage = parse_usage_info(&usage);
             Ok(Some(ProviderInferenceResponseChunk::new(
                 vec![],
                 Some(usage.into()),
                 raw_message,
                 message_latency,
-                delta.stop_reason.map(|s| s.into()),
+                delta.stop_reason.map(AnthropicStopReason::into),
             )))
         }
         GCPVertexAnthropicStreamMessage::MessageStart { message } => {
@@ -1120,6 +1128,54 @@ fn anthropic_to_tensorzero_stream_message(
         }
         GCPVertexAnthropicStreamMessage::MessageStop | GCPVertexAnthropicStreamMessage::Ping => {
             Ok(None)
+        }
+        GCPVertexAnthropicStreamMessage::ContentBlockDelta {
+            delta: FlattenUnknown::Unknown(delta),
+            index: _,
+        } => {
+            if discard_unknown_chunks {
+                warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
+                return Ok(None);
+            }
+            Err(ErrorDetails::InferenceServer {
+                message: "Unsupported content block type for ContentBlockDelta".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(delta.to_string()),
+            }
+            .into())
+        }
+        GCPVertexAnthropicStreamMessage::ContentBlockStart {
+            content_block: FlattenUnknown::Unknown(content_block),
+            index: _,
+        } => {
+            if discard_unknown_chunks {
+                warn_discarded_unknown_chunk(PROVIDER_TYPE, &content_block.to_string());
+                return Ok(None);
+            }
+            Err(ErrorDetails::InferenceServer {
+                message: "Unsupported content block type for ContentBlockStart".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(content_block.to_string()),
+            }
+            .into())
+        }
+        GCPVertexAnthropicStreamMessage::MessageDelta {
+            usage: _,
+            delta: FlattenUnknown::Unknown(delta),
+        } => {
+            if discard_unknown_chunks {
+                warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
+                return Ok(None);
+            }
+            Err(ErrorDetails::InferenceServer {
+                message: "Unsupported content block type for MessageDelta".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(delta.to_string()),
+            }
+            .into())
         }
     }
 }
@@ -1147,6 +1203,7 @@ mod tests {
     use super::*;
 
     use serde_json::json;
+    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
@@ -2176,9 +2233,9 @@ mod tests {
         // Test ContentBlockDelta with TextDelta
         let mut current_tool_id = None;
         let content_block_delta = GCPVertexAnthropicStreamMessage::ContentBlockDelta {
-            delta: GCPVertexAnthropicMessageBlock::TextDelta {
+            delta: FlattenUnknown::Normal(GCPVertexAnthropicMessageBlock::TextDelta {
                 text: "Hello".to_string(),
-            },
+            }),
             index: 0,
         };
         let latency = Duration::from_millis(100);
@@ -2187,6 +2244,7 @@ mod tests {
             content_block_delta,
             latency,
             &mut current_tool_id,
+            false,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2203,9 +2261,9 @@ mod tests {
         // Test ContentBlockDelta with InputJsonDelta but no previous tool info
         let mut current_tool_id = None;
         let content_block_delta = GCPVertexAnthropicStreamMessage::ContentBlockDelta {
-            delta: GCPVertexAnthropicMessageBlock::InputJsonDelta {
+            delta: FlattenUnknown::Normal(GCPVertexAnthropicMessageBlock::InputJsonDelta {
                 partial_json: "aaaa: bbbbb".to_string(),
-            },
+            }),
             index: 0,
         };
         let latency = Duration::from_millis(100);
@@ -2214,6 +2272,7 @@ mod tests {
             content_block_delta,
             latency,
             &mut current_tool_id,
+            false,
         );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
@@ -2229,9 +2288,9 @@ mod tests {
         // Test ContentBlockDelta with InputJsonDelta and previous tool info
         let mut current_tool_id = Some("tool_id".to_string());
         let content_block_delta = GCPVertexAnthropicStreamMessage::ContentBlockDelta {
-            delta: GCPVertexAnthropicMessageBlock::InputJsonDelta {
+            delta: FlattenUnknown::Normal(GCPVertexAnthropicMessageBlock::InputJsonDelta {
                 partial_json: "aaaa: bbbbb".to_string(),
-            },
+            }),
             index: 0,
         };
         let latency = Duration::from_millis(100);
@@ -2240,6 +2299,7 @@ mod tests {
             content_block_delta,
             latency,
             &mut current_tool_id,
+            false,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2256,11 +2316,11 @@ mod tests {
         // Test ContentBlockStart with ToolUse
         let mut current_tool_id = None;
         let content_block_start = GCPVertexAnthropicStreamMessage::ContentBlockStart {
-            content_block: GCPVertexAnthropicMessageBlock::ToolUse {
+            content_block: FlattenUnknown::Normal(GCPVertexAnthropicMessageBlock::ToolUse {
                 id: "tool1".to_string(),
                 name: "calculator".to_string(),
                 input: json!({}),
-            },
+            }),
             index: 1,
         };
         let latency = Duration::from_millis(110);
@@ -2269,6 +2329,7 @@ mod tests {
             content_block_start,
             latency,
             &mut current_tool_id,
+            false,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2286,9 +2347,9 @@ mod tests {
         // Test ContentBlockStart with Text
         let mut current_tool_id = None;
         let content_block_start = GCPVertexAnthropicStreamMessage::ContentBlockStart {
-            content_block: GCPVertexAnthropicMessageBlock::Text {
+            content_block: FlattenUnknown::Normal(GCPVertexAnthropicMessageBlock::Text {
                 text: "Hello".to_string(),
-            },
+            }),
             index: 2,
         };
         let latency = Duration::from_millis(120);
@@ -2297,6 +2358,7 @@ mod tests {
             content_block_start,
             latency,
             &mut current_tool_id,
+            false,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2312,9 +2374,9 @@ mod tests {
         // Test ContentBlockStart with InputJsonDelta (should fail)
         let mut current_tool_id = None;
         let content_block_start = GCPVertexAnthropicStreamMessage::ContentBlockStart {
-            content_block: GCPVertexAnthropicMessageBlock::InputJsonDelta {
+            content_block: FlattenUnknown::Normal(GCPVertexAnthropicMessageBlock::InputJsonDelta {
                 partial_json: "aaaa: bbbbb".to_string(),
-            },
+            }),
             index: 3,
         };
         let latency = Duration::from_millis(130);
@@ -2323,6 +2385,7 @@ mod tests {
             content_block_start,
             latency,
             &mut current_tool_id,
+            false,
         );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
@@ -2343,6 +2406,7 @@ mod tests {
             content_block_stop,
             latency,
             &mut current_tool_id,
+            false,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2357,6 +2421,7 @@ mod tests {
             error_message,
             latency,
             &mut current_tool_id,
+            false,
         );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
@@ -2371,10 +2436,10 @@ mod tests {
 
         // Test MessageDelta with usage
         let message_delta = GCPVertexAnthropicStreamMessage::MessageDelta {
-            delta: AnthropicMessageDelta {
+            delta: FlattenUnknown::Normal(AnthropicMessageDelta {
                 stop_reason: Some(AnthropicStopReason::EndTurn),
                 stop_sequence: None,
-            },
+            }),
             usage: json!({"input_tokens": 10, "output_tokens": 20}),
         };
         let latency = Duration::from_millis(140);
@@ -2383,6 +2448,7 @@ mod tests {
             message_delta,
             latency,
             &mut current_tool_id,
+            false,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2403,6 +2469,7 @@ mod tests {
             message_start,
             latency,
             &mut current_tool_id,
+            false,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2421,6 +2488,7 @@ mod tests {
             message_stop,
             latency,
             &mut current_tool_id,
+            false,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2433,6 +2501,7 @@ mod tests {
             ping,
             latency,
             &mut current_tool_id,
+            false,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2508,5 +2577,25 @@ mod tests {
                 }
             )]
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_convert_unknown_chunk_warn() {
+        let res = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
+            GCPVertexAnthropicStreamMessage::ContentBlockStart {
+                content_block: FlattenUnknown::Unknown(Cow::Owned(
+                    serde_json::json!({"my_unknown": "content_block"}),
+                )),
+                index: 0,
+            },
+            Duration::from_secs(0),
+            &mut Default::default(),
+            true,
+        )
+        .unwrap();
+        assert_eq!(res, None);
+        assert!(logs_contain("Discarding unknown chunk"));
     }
 }

@@ -4,3 +4,4 @@
 **/.react-router/
 **/test-results/
 app/utils/minijinja/pkg/
+build/

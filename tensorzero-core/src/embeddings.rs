@@ -84,7 +84,9 @@ impl UninitializedEmbeddingModelConfig {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct EmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, EmbeddingProviderConfig>,
@@ -300,7 +302,9 @@ pub trait EmbeddingProvider {
     ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum EmbeddingProviderConfig {
     OpenAI(OpenAIProvider),
     #[cfg(any(test, feature = "e2e_tests"))]

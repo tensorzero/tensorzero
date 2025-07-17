@@ -32,12 +32,15 @@ use super::openai::{
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
 const PROVIDER_NAME: &str = "Azure";
-const PROVIDER_TYPE: &str = "azure";
+pub const PROVIDER_TYPE: &str = "azure";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct AzureProvider {
     deployment_id: String,
     endpoint: Url,
+    #[serde(skip)]
     credentials: AzureCredentials,
 }
 

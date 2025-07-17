@@ -43,11 +43,14 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "xAI";
-const PROVIDER_TYPE: &str = "xai";
+pub const PROVIDER_TYPE: &str = "xai";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct XAIProvider {
     model_name: String,
+    #[serde(skip)]
     credentials: XAICredentials,
 }
 

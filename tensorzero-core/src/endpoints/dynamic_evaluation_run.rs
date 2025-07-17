@@ -139,7 +139,7 @@ pub async fn dynamic_evaluation_run_episode(
 
 pub fn validate_variant_pins(
     variant_pins: &HashMap<String, String>,
-    config: &Config<'_>,
+    config: &Config,
 ) -> Result<(), Error> {
     for (function_name, variant_name) in variant_pins.iter() {
         let function_config = config.get_function(function_name)?;
@@ -338,15 +338,15 @@ async fn lookup_dynamic_evaluation_run(
     let result = clickhouse
         .run_query_synchronous(query.to_string(), &params)
         .await?;
-    if result.is_empty() {
+    if result.response.is_empty() {
         return Ok(None);
     }
-    let dynamic_evaluation_run: DynamicEvaluationRunInfo =
-        serde_json::from_str(&result).map_err(|_| {
-            Error::new(ErrorDetails::Serialization {
-                message: "Failed to deserialize dynamic evaluation run".to_string(),
-            })
-        })?;
+    let dynamic_evaluation_run: DynamicEvaluationRunInfo = serde_json::from_str(&result.response)
+        .map_err(|_| {
+        Error::new(ErrorDetails::Serialization {
+            message: "Failed to deserialize dynamic evaluation run".to_string(),
+        })
+    })?;
     Ok(Some(dynamic_evaluation_run))
 }
 

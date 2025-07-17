@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
 #[async_trait]
@@ -12,6 +12,25 @@ pub trait Migration {
             .last()
             .unwrap_or("Unknown migration")
             .to_string()
+    }
+    fn migration_num(&self) -> Result<u32, Error> {
+        let name = self.name();
+        let id = name
+            .strip_prefix("Migration")
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::ClickHouseMigration {
+                    id: name.clone(),
+                    message: "Migration name does not start with 'Migration'".to_string(),
+                })
+            })?
+            .parse::<u32>()
+            .map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseMigration {
+                    id: name,
+                    message: format!("Migration has invalid numeric suffix: {e}"),
+                })
+            })?;
+        Ok(id)
     }
     async fn can_apply(&self) -> Result<(), Error>;
     async fn should_apply(&self) -> Result<bool, Error>;

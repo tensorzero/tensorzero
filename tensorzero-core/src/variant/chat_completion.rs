@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
@@ -28,7 +28,9 @@ use super::{
     InferModelRequestArgs, InferenceConfig, ModelUsedInfo, RetryConfig, Variant,
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ChatCompletionConfig {
     pub weight: Option<f64>,
     pub model: Arc<str>,
@@ -1367,18 +1369,18 @@ mod tests {
             .await
             .unwrap();
         assert!(matches!(result, InferenceResult::Chat(_)));
+        assert_eq!(
+            result.usage_considering_cached(),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         match result {
             InferenceResult::Chat(chat_response) => {
                 assert_eq!(
                     chat_response.content,
                     vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
-                );
-                assert_eq!(
-                    chat_response.usage,
-                    Usage {
-                        input_tokens: 10,
-                        output_tokens: 10,
-                    }
                 );
                 assert_eq!(chat_response.model_inference_results.len(), 1);
                 assert_eq!(
@@ -1446,6 +1448,13 @@ mod tests {
             .await
             .unwrap();
         assert!(matches!(result, InferenceResult::Chat(_)));
+        assert_eq!(
+            result.usage_considering_cached(),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         match result {
             InferenceResult::Chat(chat_response) => {
                 assert_eq!(chat_response.content.len(), 1);
@@ -1465,13 +1474,6 @@ mod tests {
                     }
                     _ => panic!("Expected tool call"),
                 }
-                assert_eq!(
-                    chat_response.usage,
-                    Usage {
-                        input_tokens: 10,
-                        output_tokens: 10,
-                    }
-                );
                 assert_eq!(chat_response.model_inference_results.len(), 1);
                 assert_eq!(
                     &*chat_response.model_inference_results[0].model_provider_name,
@@ -1535,19 +1537,19 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(
+            result.usage_considering_cached(),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         match result {
             InferenceResult::Json(json_result) => {
                 assert!(json_result.output.parsed.is_none());
                 assert_eq!(
                     json_result.output.raw,
                     Some(r#"{"location":"Brooklyn","units":"celsius"}"#.to_string())
-                );
-                assert_eq!(
-                    json_result.usage,
-                    Usage {
-                        input_tokens: 10,
-                        output_tokens: 10,
-                    }
                 );
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(json_result.inference_params, inference_params);
@@ -1610,19 +1612,19 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(
+            result.usage_considering_cached(),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         match result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
                 assert_eq!(
                     json_result.output.raw,
                     Some(DUMMY_JSON_RESPONSE_RAW.to_string())
-                );
-                assert_eq!(
-                    json_result.usage,
-                    Usage {
-                        input_tokens: 10,
-                        output_tokens: 10,
-                    }
                 );
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
@@ -1722,19 +1724,19 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(
+            result.usage_considering_cached(),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         match result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
                 assert_eq!(
                     json_result.output.raw,
                     Some(DUMMY_JSON_RESPONSE_RAW.to_string())
-                );
-                assert_eq!(
-                    json_result.usage,
-                    Usage {
-                        input_tokens: 10,
-                        output_tokens: 10,
-                    }
                 );
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
@@ -1829,19 +1831,19 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(
+            result.usage_considering_cached(),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         match result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.output.parsed, None);
                 assert_eq!(
                     json_result.output.raw,
                     Some(DUMMY_JSON_RESPONSE_RAW.to_string())
-                );
-                assert_eq!(
-                    json_result.usage,
-                    Usage {
-                        input_tokens: 10,
-                        output_tokens: 10,
-                    }
                 );
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(

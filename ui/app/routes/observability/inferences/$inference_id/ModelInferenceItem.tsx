@@ -15,7 +15,7 @@ import {
 } from "~/components/layout/PageLayout";
 import {
   Timer,
-  Input,
+  InputIcon,
   Output,
   Calendar,
   Cached,
@@ -25,9 +25,9 @@ import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
 import {
   SnippetLayout,
   SnippetContent,
-  SnippetMessage,
 } from "~/components/layout/SnippetLayout";
-import { CodeMessage } from "~/components/layout/SnippetContent";
+import { CodeEditor } from "~/components/ui/code-editor";
+import NewOutput from "~/components/inference/NewOutput";
 
 interface ModelInferenceItemProps {
   inference: ParsedModelInferenceRow;
@@ -68,7 +68,7 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
             <BasicInfoItemContent>
               <div className="flex flex-row gap-1">
                 <Chip
-                  icon={<Input className="text-fg-tertiary" />}
+                  icon={<InputIcon className="text-fg-tertiary" />}
                   label={`${inference.input_tokens} tok`}
                   tooltip="Input Tokens"
                 />
@@ -123,47 +123,35 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
         <SectionLayout>
           <SectionHeader heading="Input" />
           <InputSnippet
-            input={{
-              system: inference.system,
-              messages: inference.input_messages,
-            }}
+            system={inference.system}
+            messages={inference.input_messages}
           />
         </SectionLayout>
 
         <SectionLayout>
           <SectionHeader heading="Output" />
-          <SnippetLayout>
-            <SnippetContent maxHeight={400}>
-              <SnippetMessage>
-                <CodeMessage
-                  showLineNumbers
-                  content={JSON.stringify(inference.output, null, 2)}
-                />
-              </SnippetMessage>
-            </SnippetContent>
-          </SnippetLayout>
+          <NewOutput output={inference.output} />
         </SectionLayout>
 
         <SectionLayout>
           <SectionHeader heading="Raw Request" />
           <SnippetLayout>
             <SnippetContent maxHeight={400}>
-              <SnippetMessage>
-                <CodeMessage
-                  showLineNumbers
-                  content={(() => {
-                    try {
-                      return JSON.stringify(
-                        JSON.parse(inference.raw_request),
-                        null,
-                        2,
-                      );
-                    } catch {
-                      return inference.raw_request;
-                    }
-                  })()}
-                />
-              </SnippetMessage>
+              <CodeEditor
+                allowedLanguages={["json"]}
+                value={(() => {
+                  try {
+                    return JSON.stringify(
+                      JSON.parse(inference.raw_request),
+                      null,
+                      2,
+                    );
+                  } catch {
+                    return inference.raw_request;
+                  }
+                })()}
+                readOnly
+              />
             </SnippetContent>
           </SnippetLayout>
         </SectionLayout>
@@ -172,22 +160,21 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
           <SectionHeader heading="Raw Response" />
           <SnippetLayout>
             <SnippetContent maxHeight={400}>
-              <SnippetMessage>
-                <CodeMessage
-                  showLineNumbers
-                  content={(() => {
-                    try {
-                      return JSON.stringify(
-                        JSON.parse(inference.raw_response),
-                        null,
-                        2,
-                      );
-                    } catch {
-                      return inference.raw_response;
-                    }
-                  })()}
-                />
-              </SnippetMessage>
+              <CodeEditor
+                allowedLanguages={["json"]}
+                value={(() => {
+                  try {
+                    return JSON.stringify(
+                      JSON.parse(inference.raw_response),
+                      null,
+                      2,
+                    );
+                  } catch {
+                    return inference.raw_response;
+                  }
+                })()}
+                readOnly
+              />
             </SnippetContent>
           </SnippetLayout>
         </SectionLayout>

@@ -59,6 +59,19 @@ WORKDIR /build/ui/app/utils/minijinja
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 RUN wasm-pack build --features console_error_panic_hook
 
+# ========== tensorzero-node-build-env ==========
+
+FROM rust:latest AS tensorzero-node-build-env
+
+RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
+RUN npm install -g pnpm
+
+COPY . /build
+WORKDIR /build/internal/tensorzero-node
+
+RUN pnpm install --frozen-lockfile && pnpm run build
+
+
 # ========== evaluations-build-env ==========
 
 FROM chef AS evaluations-build-env
@@ -83,6 +96,10 @@ WORKDIR /app
 # Copy dependencies from development-dependencies-env
 COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 COPY --from=development-dependencies-env /app/ui/node_modules* /app/ui/node_modules
+# Copy tensorzero-node binding
+COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/dist /app/internal/tensorzero-node/dist
+COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/index.cjs /app/internal/tensorzero-node/index.cjs
+COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/*linux*.node /app/internal/tensorzero-node/
 
 COPY . .
 
@@ -110,6 +127,10 @@ COPY --from=production-dependencies-env /app/ui/node_modules /app/ui/node_module
 
 # Copy the built UI
 COPY --from=build-env /app/ui/build /app/ui/build
+
+# Copy tensorzero-node bindings for runtime (from build-env which has complete node modules)
+COPY --from=build-env /app/internal/tensorzero-node/index.cjs /app/ui/build/index.cjs
+COPY --from=build-env /app/internal/tensorzero-node/*.node /app/ui/build/
 
 # Copy evaluations binary
 COPY --from=evaluations-build-env /release/evaluations /usr/local/bin/evaluations

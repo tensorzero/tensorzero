@@ -111,7 +111,9 @@ pub enum ResolvedInputMessageContent {
     // We may extend this in the future to include other types of content
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct FileWithPath {
     #[serde(alias = "image")]

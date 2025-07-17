@@ -141,11 +141,11 @@ fn make_router() -> axum::Router {
             axum::routing::get(fireworks::get_dataset),
         )
         .route(
-            "/fireworks/v1/accounts/{account_id}/fineTuningJobs",
+            "/fireworks/v1/accounts/{account_id}/supervisedFineTuningJobs",
             axum::routing::post(fireworks::create_fine_tuning_job),
         )
         .route(
-            "/fireworks/v1/accounts/{account_id}/fineTuningJobs/{job_id}",
+            "/fireworks/v1/accounts/{account_id}/supervisedFineTuningJobs/{job_id}",
             axum::routing::get(fireworks::get_fine_tuning_job),
         )
         .route(
@@ -180,6 +180,12 @@ async fn get_openai_fine_tuning_job(
             job.val["estimated_finish"] = finish_at.timestamp().into();
         }
         if let Some(finish_at) = job.finish_at {
+            if job.val["model"].as_str().unwrap().contains("error") {
+                job.val["status"] = "failed".into();
+                job.val["error"] = json!({
+                    "unexpected_error": "failed because the model is an error model"
+                });
+            }
             if chrono::Utc::now() >= finish_at {
                 job.val["status"] = "succeeded".into();
                 job.val["fine_tuned_model"] = "mock-inference-finetune-1234".into();
@@ -256,7 +262,9 @@ async fn create_openai_file(mut form: Multipart) -> Result<Json<serde_json::Valu
                     match result {
                         Ok(row) => {
                             for message in row.messages.iter() {
-                                let Some(content_array) = message.content.as_array() else {
+                                let Some(content_array) =
+                                    message.content.as_ref().and_then(|v| v.as_array())
+                                else {
                                     continue;
                                 };
                                 for content in content_array.iter() {
@@ -316,7 +324,11 @@ struct OpenAIFineTuningRow {
 #[derive(Debug, Deserialize)]
 struct OpenAIFineTuningMessage {
     // role is not used
-    content: Value,
+    #[serde(default)]
+    content: Option<Value>,
+    #[serde(default)]
+    #[expect(unused)]
+    tool_calls: Option<Vec<Value>>,
 }
 
 async fn completions_handler(Json(params): Json<serde_json::Value>) -> Response<Body> {

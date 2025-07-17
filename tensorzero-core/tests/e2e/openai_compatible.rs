@@ -171,7 +171,7 @@ async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 5);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 5);
+    assert!(output_tokens > 0);
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
@@ -440,7 +440,7 @@ async fn test_openai_compatible_route_with_default_function(
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 5);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 5);
+    assert!(output_tokens > 0);
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
@@ -613,7 +613,7 @@ async fn test_openai_compatible_route_with_json_mode_on() {
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 5);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 5);
+    assert!(output_tokens > 0);
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
@@ -750,7 +750,7 @@ async fn test_openai_compatible_route_with_json_schema() {
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 5);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 5);
+    assert!(output_tokens > 0);
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());

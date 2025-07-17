@@ -1,3 +1,19 @@
+#[cfg(feature = "pyo3")]
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+#[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::serialize_to_dict;
+#[cfg(feature = "pyo3")]
+use crate::variant::{
+    BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
+    DiclConfigPyClass, MixtureOfNConfigPyClass, VariantConfig,
+};
+#[cfg(feature = "pyo3")]
+use pyo3::exceptions::{PyKeyError, PyValueError};
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::IntoPyObjectExt;
+use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
@@ -11,7 +27,7 @@ use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
     ChatInferenceResult, ContentBlockOutput, InferenceResult, Input, InputMessageContent,
-    JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, TextKind, Usage,
+    JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, TextKind,
 };
 use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
@@ -20,13 +36,29 @@ use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoic
 use crate::variant::chat_completion::TemplateSchemaInfo;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum FunctionConfig {
     Chat(FunctionConfigChat),
     Json(FunctionConfigJson),
 }
 
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "FunctionConfigChat")]
+pub struct FunctionConfigChatPyClass {
+    pub inner: Arc<FunctionConfig>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "FunctionConfigJson")]
+pub struct FunctionConfigJsonPyClass {
+    pub inner: Arc<FunctionConfig>,
+}
+
 #[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub enum FunctionConfigType {
     Chat,
     Json,
@@ -48,9 +80,143 @@ impl FunctionConfig {
     }
 }
 
-#[derive(Debug, Default)]
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl FunctionConfigChatPyClass {
+    #[getter]
+    fn get_type(&self) -> FunctionConfigType {
+        self.inner.config_type()
+    }
+
+    #[getter]
+    fn get_variants(&self) -> VariantsConfigPyClass {
+        VariantsConfigPyClass {
+            inner: self.inner.variants().clone(),
+        }
+    }
+
+    #[getter]
+    fn get_system_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .system_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+    #[getter]
+    fn get_user_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .user_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+
+    #[getter]
+    fn get_assistant_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .assistant_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl FunctionConfigJsonPyClass {
+    #[getter]
+    fn get_type(&self) -> FunctionConfigType {
+        self.inner.config_type()
+    }
+
+    #[getter]
+    fn get_variants(&self) -> VariantsConfigPyClass {
+        VariantsConfigPyClass {
+            inner: self.inner.variants().clone(),
+        }
+    }
+
+    #[getter]
+    fn get_system_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .system_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+
+    #[getter]
+    fn get_user_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .user_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+
+    #[getter]
+    fn get_assistant_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.inner
+            .assistant_schema()
+            .map(|s| serialize_to_dict(py, s.value))
+            .transpose()?
+            .into_py_any(py)
+    }
+
+    #[getter]
+    fn get_output_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
+        let FunctionConfig::Json(params) = &*self.inner else {
+            return Err(PyValueError::new_err(format!(
+                "FunctionConfig is not a JSON function: {IMPOSSIBLE_ERROR_MESSAGE}"
+            )));
+        };
+        serialize_to_dict(py, params.output_schema.value)
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(mapping, name = "VariantsConfig")]
+pub struct VariantsConfigPyClass {
+    pub inner: HashMap<String, Arc<VariantInfo>>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl VariantsConfigPyClass {
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn __getitem__<'py>(&self, py: Python<'py>, key: &str) -> PyResult<Bound<'py, PyAny>> {
+        let v = self
+            .inner
+            .get(key)
+            .cloned()
+            .ok_or_else(|| PyKeyError::new_err(key.to_string()))?;
+        match &v.inner {
+            VariantConfig::ChatCompletion(_) => {
+                ChatCompletionConfigPyClass { inner: v }.into_bound_py_any(py)
+            }
+            VariantConfig::BestOfNSampling(_) => {
+                BestOfNSamplingConfigPyClass { inner: v }.into_bound_py_any(py)
+            }
+            VariantConfig::Dicl(_) => DiclConfigPyClass { inner: v }.into_bound_py_any(py),
+            VariantConfig::MixtureOfN(_) => {
+                MixtureOfNConfigPyClass { inner: v }.into_bound_py_any(py)
+            }
+            VariantConfig::ChainOfThought(_) => {
+                ChainOfThoughtConfigPyClass { inner: v }.into_bound_py_any(py)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct FunctionConfigChat {
-    pub variants: HashMap<String, VariantInfo>, // variant name => variant config
+    pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub system_schema: Option<StaticJSONSchema>,
     pub user_schema: Option<StaticJSONSchema>,
     pub assistant_schema: Option<StaticJSONSchema>,
@@ -60,9 +226,11 @@ pub struct FunctionConfigChat {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct FunctionConfigJson {
-    pub variants: HashMap<String, VariantInfo>, // variant name => variant config
+    pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub system_schema: Option<StaticJSONSchema>,
     pub user_schema: Option<StaticJSONSchema>,
     pub assistant_schema: Option<StaticJSONSchema>,
@@ -72,7 +240,7 @@ pub struct FunctionConfigJson {
 }
 
 impl FunctionConfig {
-    pub fn variants(&self) -> &HashMap<String, VariantInfo> {
+    pub fn variants(&self) -> &HashMap<String, Arc<VariantInfo>> {
         match self {
             FunctionConfig::Chat(params) => &params.variants,
             FunctionConfig::Json(params) => &params.variants,
@@ -170,14 +338,12 @@ impl FunctionConfig {
     }
 
     #[instrument(skip_all, fields(inference_id))]
-    #[expect(clippy::too_many_arguments)]
-    pub async fn prepare_response<'a, 'request>(
+    pub async fn prepare_response<'request>(
         &self,
         inference_id: Uuid,
         content_blocks: Vec<ContentBlockOutput>,
-        usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'_, 'request>,
         inference_params: InferenceParams,
         original_response: Option<String>,
     ) -> Result<InferenceResult, Error> {
@@ -186,7 +352,6 @@ impl FunctionConfig {
                 ChatInferenceResult::new(
                     inference_id,
                     content_blocks,
-                    usage,
                     model_inference_results,
                     inference_config.tool_config,
                     inference_params,
@@ -234,7 +399,6 @@ impl FunctionConfig {
                     parsed_output,
                     json_block_index,
                     auxiliary_content,
-                    usage,
                     model_inference_results,
                     output_schema.value().clone(),
                     inference_params,
@@ -433,10 +597,10 @@ fn validate_single_message(
 /// Sample a variant from the function based on variant weights (uniform random selection)
 pub fn sample_variant<'a>(
     candidate_variant_names: &mut Vec<&'a str>,
-    variants: &'a HashMap<String, VariantInfo>,
+    variants: &'a HashMap<String, Arc<VariantInfo>>,
     function_name: &str,
     episode_id: &Uuid,
-) -> Result<(&'a str, &'a VariantInfo), Error> {
+) -> Result<(&'a str, &'a Arc<VariantInfo>), Error> {
     // Compute the total weight of variants present in variant_names
     let total_weight = candidate_variant_names
         .iter()
@@ -536,6 +700,7 @@ mod tests {
     use crate::inference::types::Latency;
     use crate::inference::types::Text;
     use crate::inference::types::Thought;
+    use crate::inference::types::Usage;
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
@@ -1375,20 +1540,20 @@ mod tests {
     #[test]
     fn test_sample_variant() {
         // Helper function to create a HashMap of variant names to their weights
-        fn create_variants(variant_weights: &[(&str, f64)]) -> HashMap<String, VariantInfo> {
+        fn create_variants(variant_weights: &[(&str, f64)]) -> HashMap<String, Arc<VariantInfo>> {
             variant_weights
                 .iter()
                 .map(|&(name, weight)| {
                     (
                         name.to_string(),
-                        VariantInfo {
+                        Arc::new(VariantInfo {
                             inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
                                 weight: Some(weight),
                                 model: "model-name".into(),
                                 ..Default::default()
                             }),
                             timeouts: Default::default(),
-                        },
+                        }),
                     )
                 })
                 .collect()
@@ -1397,7 +1562,7 @@ mod tests {
         // Helper function to test the distribution of variant weights by sampling them many times
         // and checking if the observed distribution is close to the expected distribution
         fn test_variant_distribution(
-            variants: &HashMap<String, VariantInfo>,
+            variants: &HashMap<String, Arc<VariantInfo>>,
             sample_size: usize,
             tolerance: f64,
         ) {
@@ -1604,7 +1769,7 @@ mod tests {
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
-            usage: usage.clone(),
+            usage,
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
@@ -1630,7 +1795,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -1641,12 +1805,12 @@ mod tests {
         assert!(logs_contain(
             "Failed to parse output from JSON function response"
         ));
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
                 assert_eq!(result.output.raw, Some("Hello, world!".to_string()));
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.finish_reason, Some(FinishReason::Stop));
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
@@ -1671,7 +1835,7 @@ mod tests {
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
-            usage: usage.clone(),
+            usage,
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
@@ -1682,7 +1846,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -1690,6 +1853,7 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -1701,7 +1865,6 @@ mod tests {
                     result.output.raw,
                     Some("{\"name\": \"Jerry\", \"age\": 30}".to_string())
                 );
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
@@ -1725,7 +1888,7 @@ mod tests {
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
-            usage: usage.clone(),
+            usage,
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
@@ -1736,7 +1899,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -1744,6 +1906,7 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -1752,7 +1915,6 @@ mod tests {
                     result.output.raw,
                     Some("{\"name\": \"Jerry\", \"age\": \"thirty\"}".to_string())
                 );
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
             }
@@ -1779,7 +1941,7 @@ mod tests {
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
-            usage: usage.clone(),
+            usage,
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
@@ -1792,7 +1954,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -1801,12 +1962,12 @@ mod tests {
             .await
             .unwrap();
         assert!(logs_contain("JSON Schema validation failed"));
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
                 assert_eq!(result.output.raw, Some("tool_call_arguments".to_string()));
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
             }
@@ -1833,7 +1994,7 @@ mod tests {
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
-            usage: usage.clone(),
+            usage,
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ContentFilter),
@@ -1846,7 +2007,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -1854,6 +2014,7 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -1865,7 +2026,6 @@ mod tests {
                     result.output.raw,
                     Some(r#"{"name": "Jerry", "age": 30}"#.to_string())
                 );
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ContentFilter));
             }
@@ -1887,7 +2047,7 @@ mod tests {
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
-            usage: usage.clone(),
+            usage,
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
@@ -1900,7 +2060,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -1908,12 +2067,12 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
                 assert!(result.output.raw.is_none());
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.finish_reason, model_response.finish_reason);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
@@ -1961,7 +2120,7 @@ mod tests {
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
-            usage: usage.clone(),
+            usage,
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
@@ -1972,7 +2131,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -1980,12 +2138,12 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
                 assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
@@ -2009,7 +2167,7 @@ mod tests {
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
-            usage: usage.clone(),
+            usage,
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             finish_reason: None,
@@ -2020,7 +2178,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -2028,6 +2185,7 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -2036,7 +2194,6 @@ mod tests {
                     result.output.raw,
                     Some(r#"{"response": "forty-two"}"#.to_string())
                 );
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
@@ -2062,7 +2219,7 @@ mod tests {
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
-            usage: usage.clone(),
+            usage,
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
@@ -2075,7 +2232,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -2084,12 +2240,12 @@ mod tests {
             .await
             .unwrap();
         assert!(logs_contain("JSON Schema validation failed"));
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
                 assert_eq!(result.output.raw, Some("tool_call_arguments".to_string()));
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
@@ -2115,7 +2271,7 @@ mod tests {
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
-            usage: usage.clone(),
+            usage,
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             finish_reason: None,
@@ -2128,7 +2284,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -2136,12 +2291,12 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
                 assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
@@ -2177,7 +2332,7 @@ mod tests {
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
-            usage: usage.clone(),
+            usage,
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
@@ -2188,7 +2343,6 @@ mod tests {
             .prepare_response(
                 inference_id,
                 content_blocks,
-                usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
@@ -2196,12 +2350,12 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.usage_considering_cached(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
                 assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
-                assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::Stop));
             }
@@ -2235,12 +2389,14 @@ mod tests {
         // Case 2: Only Thought blocks
         let content_blocks = vec![
             ContentBlockOutput::Thought(Thought {
-                text: "thinking...".to_string(),
+                text: Some("thinking...".to_string()),
                 signature: None,
+                provider_type: None,
             }),
             ContentBlockOutput::Thought(Thought {
-                text: "still thinking".to_string(),
+                text: Some("still thinking".to_string()),
                 signature: Some("sig".to_string()),
+                provider_type: None,
             }),
         ];
         let (raw_output, auxiliary_content, json_block_index) =
@@ -2252,15 +2408,17 @@ mod tests {
         // Case 3: Mixed Text, Thought, ToolCall
         let content_blocks = vec![
             ContentBlockOutput::Thought(Thought {
-                text: "first thought".to_string(),
+                text: Some("first thought".to_string()),
                 signature: None,
+                provider_type: None,
             }),
             ContentBlockOutput::Text(Text {
                 text: "Some text".to_string(),
             }),
             ContentBlockOutput::Thought(Thought {
-                text: "second thought".to_string(),
+                text: Some("second thought".to_string()),
                 signature: Some("sig2".to_string()),
+                provider_type: None,
             }),
             ContentBlockOutput::ToolCall(ToolCall {
                 id: "id2".to_string(),
@@ -2310,8 +2468,9 @@ mod tests {
                 text: "A".to_string(),
             }),
             ContentBlockOutput::Thought(Thought {
-                text: "final thought".to_string(),
+                text: Some("final thought".to_string()),
                 signature: None,
+                provider_type: None,
             }),
         ];
         let (raw_output, auxiliary_content, json_block_index) =
@@ -2320,7 +2479,9 @@ mod tests {
         assert_eq!(auxiliary_content.len(), 1);
         assert_eq!(json_block_index, Some(0));
         match &auxiliary_content[0] {
-            ContentBlockOutput::Thought(t) => assert_eq!(t.text, "final thought"),
+            ContentBlockOutput::Thought(t) => {
+                assert_eq!(t.text, Some("final thought".to_string()))
+            }
             _ => panic!("Expected Thought block"),
         }
     }

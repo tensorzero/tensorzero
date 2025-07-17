@@ -14,7 +14,7 @@ import Chip from "~/components/ui/Chip";
 import {
   Timer,
   Calendar,
-  Input,
+  InputIcon,
   Output,
   Cached,
 } from "~/components/icons/Icons";
@@ -49,7 +49,7 @@ export default function BasicInfo({
   const config = useConfig();
   const variantType =
     config.functions[inference.function_name]?.variants[inference.variant_name]
-      ?.type;
+      ?.inner.type;
 
   // Create timestamp tooltip
   const timestampTooltip = createTimestampTooltip(inference.timestamp);
@@ -110,7 +110,7 @@ export default function BasicInfo({
         <BasicInfoItemTitle>Usage</BasicInfoItemTitle>
         <BasicInfoItemContent>
           <Chip
-            icon={<Input className="text-fg-tertiary" />}
+            icon={<InputIcon className="text-fg-tertiary" />}
             label={`${inferenceUsage?.input_tokens ?? ""} tok`}
             tooltip="Input Tokens"
           />

@@ -154,8 +154,8 @@ func TestBasicInference(t *testing.T) {
 
 		// Validate Usage
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
-		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
-		assert.Equal(t, int64(20), resp.Usage.TotalTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(11), resp.Usage.TotalTokens)
 		assert.Equal(t, "stop", resp.Choices[0].FinishReason)
 	})
 	// TODO: [test_async_basic_inference]
@@ -194,8 +194,8 @@ func TestBasicInference(t *testing.T) {
 
 		// Validate Usage
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
-		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
-		assert.Equal(t, int64(20), resp.Usage.TotalTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(11), resp.Usage.TotalTokens)
 		assert.Equal(t, "stop", resp.Choices[0].FinishReason)
 
 	})
@@ -257,8 +257,8 @@ func TestBasicInference(t *testing.T) {
 		// Validate usage
 		require.NotNil(t, resp.Usage)
 		require.Equal(t, int64(10), resp.Usage.PromptTokens)
-		require.Equal(t, int64(10), resp.Usage.CompletionTokens)
-		require.Equal(t, int64(20), resp.Usage.TotalTokens)
+		require.Equal(t, int64(1), resp.Usage.CompletionTokens)
+		require.Equal(t, int64(11), resp.Usage.TotalTokens)
 
 		// Second request (cached)
 		req.WithExtraFields(map[string]any{
@@ -345,7 +345,7 @@ func TestBasicInference(t *testing.T) {
 		assert.Nil(t, resp.Choices[0].Message.ToolCalls, "Tool calls should be nil")
 		// Validate usage
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
-		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
 	})
 
 	t.Run("it should handle chat function null response", func(t *testing.T) {
@@ -542,7 +542,7 @@ func TestBasicInference(t *testing.T) {
 
 		// Validate usage
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
-		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
 	})
 
 	t.Run("it should handle json invalid system", func(t *testing.T) {
@@ -618,7 +618,7 @@ func TestBasicInference(t *testing.T) {
 
 		// Validate usage
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
-		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
 	})
 }
 
@@ -1011,7 +1011,10 @@ func TestStreamingInference(t *testing.T) {
 				IncludeUsage: openai.Bool(false), // No usage information
 			},
 		}
-		addEpisodeIDToRequest(t, req, episodeID)
+		req.WithExtraFields(map[string]any{
+			"tensorzero::episode_id":   episodeID.String(),
+			"tensorzero::variant_name": "test-diff-schema",
+		})
 
 		// Start streaming
 		stream := client.Chat.Completions.NewStreaming(ctx, *req)
@@ -1059,7 +1062,7 @@ func TestStreamingInference(t *testing.T) {
 				continue
 			}
 			// Validate the model
-			assert.Equal(t, "tensorzero::function_name::json_success::variant_name::test", chunk.Model, "Model mismatch")
+			assert.Equal(t, "tensorzero::function_name::json_success::variant_name::test-diff-schema", chunk.Model, "Model mismatch")
 			// Validate inference ID consistency
 			if previousInferenceID != "" {
 				assert.Equal(t, previousInferenceID, chunk.ID, "Inference ID should remain consistent across chunks")
@@ -1134,8 +1137,8 @@ func TestToolCallingInference(t *testing.T) {
 		assert.Equal(t, `{"location":"Brooklyn","units":"celsius"}`, toolCall.Function.Arguments, "Function arguments do not match")
 		// Validate the Usage
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
-		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
-		assert.Equal(t, int64(20), resp.Usage.TotalTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(11), resp.Usage.TotalTokens)
 		assert.Equal(t, "tool_calls", resp.Choices[0].FinishReason)
 	})
 
@@ -1174,8 +1177,8 @@ func TestToolCallingInference(t *testing.T) {
 		assert.Equal(t, `{"location":"Brooklyn","units":"Celsius"}`, toolCall.Function.Arguments, "Function arguments do not match")
 		// Validate usage
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
-		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
-		assert.Equal(t, int64(20), resp.Usage.TotalTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(11), resp.Usage.TotalTokens)
 		assert.Equal(t, "tool_calls", resp.Choices[0].FinishReason)
 	})
 
