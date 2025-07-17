@@ -1,3 +1,4 @@
+use futures::future::try_join_all;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
@@ -503,11 +504,15 @@ impl Config {
             .collect::<Result<HashMap<_, _>, _>>()?;
 
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
-        let optimizers = uninitialized_config
-            .optimizers
-            .into_iter()
-            .map(|(name, config)| config.load().map(|c| (name, c)))
-            .collect::<Result<HashMap<_, _>, _>>()?;
+        let optimizers = try_join_all(
+            uninitialized_config
+                .optimizers
+                .into_iter()
+                .map(|(name, config)| async { config.load().await.map(|c| (name, c)) }),
+        )
+        .await?
+        .into_iter()
+        .collect::<HashMap<_, _>>();
 
         let mut config = Config {
             gateway: uninitialized_config.gateway,
