@@ -34,7 +34,7 @@ impl TryFrom<&str> for InferenceOutputSource {
             "inference" => Ok(InferenceOutputSource::Inference),
             "demonstration" => Ok(InferenceOutputSource::Demonstration),
             _ => Err(Error::new(ErrorDetails::InvalidInferenceOutputSource {
-                source: value.to_string(),
+                source_kind: value.to_string(),
             })),
         }
     }

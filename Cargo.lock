@@ -4402,6 +4402,7 @@ dependencies = [
  "tempfile",
  "tensorzero",
  "tensorzero-derive",
+ "thiserror 2.0.12",
  "tokio",
  "tokio-stream",
  "toml 0.8.23",
