@@ -93,6 +93,15 @@ ui:
           - path: /
             pathType: Prefix
 
+# Persistence Configuration
+persistence:
+  enabled: false
+  size: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClass: ""
+  mountPath: /app/storage
+
 # TensorZero Configuration
 configMap:
   data:
@@ -103,3 +112,7 @@ configMap:
       [functions.my_function_name.variants.my_variant_name]
       type = "chat_completion"
       model = "openai::gpt-4o-mini"
+
+      # [object_storage]
+      # type = "filesystem"
+      # path = "/app/storage/"
