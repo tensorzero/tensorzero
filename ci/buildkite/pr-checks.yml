@@ -1,5 +1,5 @@
 agents:
-  queue: "t0-merge-queue"
+  queue: "linux-amd64-small"
 
 steps:
   - label: "Check Version Consistency"
