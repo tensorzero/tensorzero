@@ -251,9 +251,10 @@ jobs:
         run: |
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
+          echo "RUST_LOG=debug" >> examples/production-deployment/.env
 
       - name: Run docker compose for production deployment tests
-        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
+        run: docker compose -f examples/production-deployment/docker-compose.yml -f ./ci/internal-network.yml up -d --wait
 
       - name: Run inference for production deployment tests
         run: examples/production-deployment/run.sh
