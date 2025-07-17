@@ -1,10 +1,8 @@
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
-import { SFTJob, type SFTJobStatus } from "./common";
 import { TensorZeroClient } from "tensorzero-node";
 import type {
   InferenceFilterTreeNode,
   InferenceOutputSource,
-  JsonValue,
   OptimizationJobHandle,
   OptimizationJobInfo,
   UninitializedOptimizerInfo,
@@ -25,107 +23,13 @@ export async function getNativeTensorZeroClient(): Promise<TensorZeroClient> {
   );
   return _tensorZeroClient;
 }
-class NativeSFTJob extends SFTJob {
-  private jobStatus: OptimizationJobInfo | "created";
-  private provider: "openai" | "fireworks" | "mistral";
-  constructor(
-    public jobHandle: OptimizationJobHandle,
-    public formData: SFTFormValues,
-  ) {
-    super();
-    this.jobHandle = jobHandle;
-    this.formData = formData;
-    this.jobStatus = "created";
-    this.provider = formData.model.provider;
-  }
-
-  static from_job_handle_with_form_data(
-    jobHandle: OptimizationJobHandle,
-    formData: SFTFormValues,
-  ): NativeSFTJob {
-    return new NativeSFTJob(jobHandle, formData);
-  }
-
-  status(): SFTJobStatus {
-    if (this.jobStatus === "created") {
-      return {
-        status: "idle",
-      };
-    }
-    switch (this.jobStatus.status) {
-      case "pending":
-        return {
-          status: "running",
-          modelProvider: this.provider,
-          jobUrl: this.jobHandle.job_url,
-          formData: this.formData,
-          rawData: {
-            status: "ok",
-            info: this.jobStatus,
-          },
-        };
-      case "failed": {
-        const stringifiedError = JSON.stringify(this.jobStatus.error, null, 2);
-        return {
-          status: "error",
-          modelProvider: this.provider,
-          formData: this.formData,
-          jobUrl: this.jobHandle.job_url,
-          rawData: {
-            status: "error",
-            message: stringifiedError,
-          },
-          error: stringifiedError,
-        };
-      }
-      case "completed": {
-        // NOTE: the native SFT backend actually returns a model provider that is all we need
-        // and guaranteed to match the Rust type.
-        // For now we squeeze it through the existing interface.
-        // In the future we should just rip all this code and render it directly
-        const provider = Object.keys(this.jobStatus.output.providers)[0];
-        if (!provider) {
-          throw new Error("No provider found");
-        }
-        return {
-          status: "completed",
-          modelProvider: this.provider,
-          formData: this.formData,
-          jobUrl: this.jobHandle.job_url,
-          rawData: {
-            status: "ok",
-            info: this.jobStatus,
-          },
-          result: provider,
-        };
-      }
-    }
-  }
-
-  async poll(): Promise<SFTJob> {
-    const client = await getNativeTensorZeroClient();
-    logger.debug("Polling job", this.jobHandle);
-    try {
-      const status = await client.experimentalPollOptimization(this.jobHandle);
-      this.jobStatus = status;
-    } catch (e) {
-      logger.error(e);
-      this.jobStatus = {
-        status: "failed",
-        message: `Job failed: ${e}`,
-        error: e as JsonValue,
-      };
-    }
-    logger.debug("Job status", this.jobStatus);
-    return this;
-  }
-}
 
 export async function poll_sft_job(
   jobHandle: OptimizationJobHandle,
 ): Promise<OptimizationJobInfo> {
   const client = await getNativeTensorZeroClient();
   const status = await client.experimentalPollOptimization(jobHandle);
+  logger.debug("SFT job status", { status });
   return status;
 }
 
