@@ -382,7 +382,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             );
             match &chat_inference_response.content[0] {
                 ContentBlockChatOutput::Text(text_block) => {
-                    assert_eq!(text_block.text, "hello world")
+                    assert_eq!(text_block.text, "hello world");
                 }
                 _ => panic!("Unexpected content block type"),
             }
@@ -397,7 +397,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             assert_eq!(chat_inference_response.inference_id, inference_id2);
             match &chat_inference_response.content[0] {
                 ContentBlockChatOutput::Text(text_block) => {
-                    assert_eq!(text_block.text, "goodbye world")
+                    assert_eq!(text_block.text, "goodbye world");
                 }
                 _ => panic!("Unexpected content block type"),
             }

@@ -1852,7 +1852,7 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
                     None,
                     true,
                 )
-                .await
+                .await;
             }
             "auto_unused" => {
                 check_tool_use_tool_choice_auto_unused_inference_response(
@@ -1861,7 +1861,7 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
                     None,
                     true,
                 )
-                .await
+                .await;
             }
             "required" => {
                 check_tool_use_tool_choice_required_inference_response(
@@ -1870,7 +1870,7 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
                     None,
                     true,
                 )
-                .await
+                .await;
             }
             "none" => {
                 check_tool_use_tool_choice_none_inference_response(
@@ -1879,7 +1879,7 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
                     None,
                     true,
                 )
-                .await
+                .await;
             }
             "specific" => {
                 check_tool_use_tool_choice_specific_inference_response(
@@ -1888,7 +1888,7 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
                     None,
                     true,
                 )
-                .await
+                .await;
             }
             _ => panic!("Unknown test type"),
         }
@@ -1979,7 +1979,7 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
                     None,
                     true,
                 )
-                .await
+                .await;
             }
             "auto_unused" => {
                 check_tool_use_tool_choice_auto_unused_inference_response(
@@ -1988,7 +1988,7 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
                     None,
                     true,
                 )
-                .await
+                .await;
             }
             "required" => {
                 check_tool_use_tool_choice_required_inference_response(
@@ -1997,7 +1997,7 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
                     None,
                     true,
                 )
-                .await
+                .await;
             }
             "none" => {
                 check_tool_use_tool_choice_none_inference_response(
@@ -2006,7 +2006,7 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
                     None,
                     true,
                 )
-                .await
+                .await;
             }
             "specific" => {
                 check_tool_use_tool_choice_specific_inference_response(
@@ -2015,7 +2015,7 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
                     None,
                     true,
                 )
-                .await
+                .await;
             }
             _ => panic!("Unknown test type"),
         }

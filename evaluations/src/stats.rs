@@ -54,7 +54,7 @@ impl EvaluationStats {
         }
         match evaluation_update {
             EvaluationUpdate::Success(evaluation_info) => {
-                self.evaluation_infos.push(evaluation_info)
+                self.evaluation_infos.push(evaluation_info);
             }
             EvaluationUpdate::Error(evaluation_error) => {
                 self.evaluation_errors.push(evaluation_error);

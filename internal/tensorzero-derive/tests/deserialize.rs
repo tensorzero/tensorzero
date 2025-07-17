@@ -33,7 +33,7 @@ fn test_good_deserialize() {
             },
             field2: true,
         }
-    )
+    );
 }
 
 #[test]

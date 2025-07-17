@@ -183,7 +183,7 @@ pub async fn make_gcp_object_store(
 
     match credentials {
         GCPVertexCredentials::Static { raw, parsed: _ } => {
-            builder = builder.with_service_account_key(raw.expose_secret())
+            builder = builder.with_service_account_key(raw.expose_secret());
         }
         GCPVertexCredentials::Dynamic(key_name) => {
             let key = dynamic_api_keys.get(key_name).ok_or_else(|| {

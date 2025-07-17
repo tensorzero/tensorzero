@@ -8,5 +8,5 @@ fn main() {
     if std::env::var("TENSORZERO_SKIP_BUILD_INFO").is_ok() {
         println!("cargo:rerun-if-env-changed=TENSORZERO_SKIP_BUILD_INFO");
     }
-    built::write_built_file().expect("Failed to acquire build-time information")
+    built::write_built_file().expect("Failed to acquire build-time information");
 }

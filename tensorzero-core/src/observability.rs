@@ -37,7 +37,7 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
     );
 
     if let Some(exporter) = override_exporter {
-        provider = provider.with_simple_exporter(exporter)
+        provider = provider.with_simple_exporter(exporter);
     } else {
         provider = provider.with_batch_exporter(
             opentelemetry_otlp::SpanExporter::builder()

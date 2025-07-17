@@ -140,7 +140,7 @@ pub async fn feedback(
                 feedback_id,
                 dryrun,
             )
-            .await?
+            .await?;
         }
         FeedbackType::Demonstration => {
             write_demonstration(
@@ -151,7 +151,7 @@ pub async fn feedback(
                 feedback_id,
                 dryrun,
             )
-            .await?
+            .await?;
         }
         FeedbackType::Float => {
             write_float(
@@ -162,7 +162,7 @@ pub async fn feedback(
                 feedback_id,
                 dryrun,
             )
-            .await?
+            .await?;
         }
         FeedbackType::Boolean => {
             write_boolean(
@@ -173,7 +173,7 @@ pub async fn feedback(
                 feedback_id,
                 dryrun,
             )
-            .await?
+            .await?;
         }
     }
 

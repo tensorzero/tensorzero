@@ -618,7 +618,7 @@ pub async fn insert_datapoint(
                     is_custom: true,
                     source_inference_id: None,
                     staled_at: None,
-                })
+                });
             }
             FunctionConfig::Json(json_function_config) => {
                 let json: JsonDatapointInsert = serde_json::from_value(datapoint).map_err(|e| {

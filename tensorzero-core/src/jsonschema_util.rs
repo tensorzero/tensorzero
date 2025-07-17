@@ -282,7 +282,7 @@ mod tests {
                 "Failed to compile JSON Schema `{}`: \"invalid\" is not valid under any of the schemas listed in the 'anyOf' keyword",
                 temp_file.path().display()
             )
-        )
+        );
     }
 
     #[test]
@@ -292,7 +292,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err().to_string(),
             "Failed to read JSON Schema `nonexistent_file.json`: No such file or directory (os error 2)".to_string()
-        )
+        );
     }
 
     #[tokio::test]
