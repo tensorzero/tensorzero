@@ -56,13 +56,5 @@
     "lint:check": "eslint . --max-warnings=0 --config eslint.config.js --cache --ignore-pattern \"dist/\" --ignore-pattern \"index.d.ts\"",
     "universal": "napi universal",
     "version": "napi version"
-  },
-  "optionalDependencies": {
-    "tensorzero-node-darwin-arm64": "0.0.0",
-    "tensorzero-node-linux-arm64-gnu": "0.0.0",
-    "tensorzero-node-linux-arm64-musl": "0.0.0",
-    "tensorzero-node-darwin-x64": "0.0.0",
-    "tensorzero-node-linux-x64-gnu": "0.0.0",
-    "tensorzero-node-linux-x64-musl": "0.0.0"
   }
 }
