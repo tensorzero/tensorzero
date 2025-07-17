@@ -15,7 +15,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.7.1"
+version = "2025.7.2"
 rust-version = "1.85.0"
 license = "Apache-2.0"
 
@@ -75,6 +75,7 @@ allow_attributes = "deny"
 dbg_macro = "deny"
 expect_used = "deny"
 explicit_iter_loop = "deny"
+match_bool = "deny"
 panic = "deny"
 print_stderr = "deny"
 print_stdout = "deny"

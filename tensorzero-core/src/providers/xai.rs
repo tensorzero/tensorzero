@@ -346,11 +346,12 @@ impl<'a> XAIRequest<'a> {
             ..
         } = *request;
 
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
 
         let response_format = XAIResponseFormat::new(&request.json_mode, request.output_schema);
