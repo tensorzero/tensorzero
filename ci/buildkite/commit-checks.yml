@@ -8,30 +8,32 @@ steps:
   # - label: "Build `tensorzero/gateway` Docker container"
   #   command: docker build -t tensorzero/gateway:ci -f gateway/Dockerfile .
   #   key: "build-gateway-docker-container"
-
-  - label: ":rust: Build"
+  - label: ":rust: Build Gateway"
     key: "rust-build"
-    command: cargo build --workspace --verbose
-    plugins:
-      - artifacts#v1.9.3:
-          upload: "target"
-          compressed: target.tgz
+    command: cargo build --verbose -p gateway
+    cache: "target"
+    # plugins:
+    #   - artifacts#v1.9.3:
+    #       upload: "target"
+    #       compressed: target.tgz
 
-  - label: ":rust: Lint"
+  - label: ":rust: Lint Gateway"
     depends_on: "rust-build"
     command: cargo fmt -- --check
-    plugins:
-      - artifacts#v1.9.3:
-          download: "target"
-          compressed: target.tgz
+    cache: "target"
+    # plugins:
+    #   - artifacts#v1.9.3:
+    #       download: "target"
+    #       compressed: target.tgz
 
   - label: ":rust: Clippy"
     depends_on: "rust-build"
     command: cargo clippy
-    plugins:
-      - artifacts#v1.9.3:
-          download: "target"
-          compressed: target.tgz
+    cache: "target"
+    # plugins:
+    #   - artifacts#v1.9.3:
+    #       download: "target"
+    #       compressed: target.tgz
 
 notify:
   - github_commit_status:
