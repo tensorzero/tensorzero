@@ -300,6 +300,7 @@ mod tests {
     use crate::{
         inference::types::{ContentBlockChatOutput, ModelInput, RequestMessage, Role, Text},
         providers::openai::OpenAIContentBlock,
+        testing::MAY_3_2021,
     };
     use serde_json::json;
 
@@ -363,7 +364,7 @@ mod tests {
             "id": "ftjob-123",
             "status": "succeeded",
             "fine_tuned_model": "ft:gpt-3.5-turbo:my-org:custom_suffix:id",
-            "created_at": 1620000000,
+            "created_at": MAY_3_2021,
             "metadata": {},
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(succeeded_model).unwrap();
@@ -381,7 +382,7 @@ mod tests {
             "status": "succeeded",
             "result_files": ["file-abc"],
             "fine_tuned_model": "ft:gpt-3.5-turbo:my-org:custom_suffix:id",
-            "created_at": 1620000000,
+            "created_at": MAY_3_2021,
             "metadata": {},
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(succeeded_file).unwrap();
@@ -397,7 +398,7 @@ mod tests {
         let running = json!({
             "id": "ftjob-789",
             "status": "running",
-            "created_at": 1620000000,
+            "created_at": MAY_3_2021,
             "metadata": {},
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(running).unwrap();
@@ -408,7 +409,7 @@ mod tests {
         let failed = json!({
             "id": "ftjob-abc",
             "status": "failed",
-            "created_at": 1620000000,
+            "created_at": MAY_3_2021,
             "metadata": {},
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(failed).unwrap();
@@ -419,7 +420,7 @@ mod tests {
         let validating = json!({
             "id": "ftjob-def",
             "status": "validating_files",
-            "created_at": 1620000000,
+            "created_at": MAY_3_2021,
             "metadata": {},
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(validating).unwrap();
@@ -430,7 +431,7 @@ mod tests {
         let queued = json!({
             "id": "ftjob-ghi",
             "status": "queued",
-            "created_at": 1620000000,
+            "created_at": MAY_3_2021,
             "metadata": {},
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(queued).unwrap();
@@ -450,7 +451,7 @@ mod tests {
             "id": "ftjob-jkl",
             "status": "succeeded",
             // "fine_tuned_model": null, // This would be an issue
-            "created_at": 1620000000,
+            "created_at": MAY_3_2021,
             "metadata": {},
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(succeeded_missing_model).unwrap();
@@ -461,7 +462,7 @@ mod tests {
         let missing_status = json!({
             "id": "ftjob-mno",
             // "status": "running", // Status is missing
-            "created_at": 1620000000,
+            "created_at": MAY_3_2021,
             "metadata": {},
         });
         assert!(serde_json::from_value::<OpenAIFineTuningJob>(missing_status).is_err());

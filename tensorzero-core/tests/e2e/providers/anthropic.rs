@@ -18,6 +18,8 @@ use tensorzero_core::clickhouse::test_helpers::{
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
+pub const MAX_TOKENS: u32 = 128_000;
+
 async fn get_providers() -> E2ETestProviders {
     let credentials = match std::env::var("ANTHROPIC_API_KEY") {
         Ok(key) => HashMap::from([("anthropic_api_key".to_string(), key)]),
@@ -153,7 +155,7 @@ async fn test_thinking_rejected_128k() {
             ]},
         "params": {
             "chat_completion": {
-                "max_tokens": 128000,
+                "max_tokens": MAX_TOKENS,
             }
         },
         "stream": false,
@@ -231,7 +233,7 @@ async fn test_thinking_inference_extra_header_128k() {
             ]},
         "params": {
             "chat_completion": {
-                "max_tokens": 128000,
+                "max_tokens": MAX_TOKENS,
             }
         },
         "extra_headers": [
@@ -306,7 +308,7 @@ async fn test_thinking_128k() {
             ]},
         "params": {
             "chat_completion": {
-                "max_tokens": 128000,
+                "max_tokens": MAX_TOKENS,
             }
         },
         "stream": false,
