@@ -19,7 +19,7 @@ steps:
 
   - label: ":rust: Lint Gateway"
     depends_on: "rust-build"
-    command: cargo fmt -- --check
+    command: cargo fmt -p gateway -- --check
     cache: "target"
     # plugins:
     #   - artifacts#v1.9.3:
@@ -28,7 +28,7 @@ steps:
 
   - label: ":rust: Clippy"
     depends_on: "rust-build"
-    command: cargo clippy
+    command: cargo clippy -p gateway
     cache: "target"
     # plugins:
     #   - artifacts#v1.9.3:
