@@ -10,7 +10,7 @@ steps:
   #   key: "build-gateway-docker-container"
   - label: ":rust: Build Gateway"
     key: "rust-build"
-    command: cargo build --verbose -p gateway
+    command: cargo build -p gateway
     cache: "target"
     # plugins:
     #   - artifacts#v1.9.3:
