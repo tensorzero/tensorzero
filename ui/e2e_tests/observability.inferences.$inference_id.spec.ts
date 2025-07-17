@@ -381,4 +381,35 @@ test("should be able to add a datapoint from the inference page", async ({
   await expect(page.url()).toMatch(
     new RegExp(`/datasets/${datasetName}/datapoint/.*`),
   );
+
+  // Next, let's delete the dataset by going to the list datasets page
+  await page.goto("/datasets");
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Set up dialog handler before triggering the dialog
+  page.on("dialog", async (dialog) => {
+    // Confirm the deletion
+    await dialog.accept();
+  });
+
+  // Find the row containing our dataset
+  const datasetRow = page.locator("tr").filter({ hasText: datasetName });
+
+  // Hover over the row to make the delete button visible
+  await datasetRow.hover();
+
+  // Click on the delete button (trash icon)
+  const deleteButton = datasetRow
+    .locator("button")
+    .filter({ has: page.locator("svg") });
+  await deleteButton.click();
+
+  // Wait for the deletion to complete and page to update
+  await page.waitForTimeout(1000);
+
+  // Assert that the dataset name is not in the list of datasets anymore
+  await expect(
+    page.locator("tr").filter({ hasText: datasetName }),
+  ).not.toBeVisible();
 });
