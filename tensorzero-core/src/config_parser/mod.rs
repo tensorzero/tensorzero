@@ -163,6 +163,7 @@ impl UninitializedGatewayConfig {
             template_filesystem_access,
             export: self.export,
             base_path: self.base_path,
+            unstable_error_json: self.unstable_error_json,
         })
     }
 }
@@ -179,6 +180,7 @@ pub struct GatewayConfig {
     // If set, all of the HTTP endpoints will have this path prepended.
     // E.g. a base path of `/custom/prefix` will cause the inference endpoint to become `/custom/prefix/inference`.
     pub base_path: Option<String>,
+    pub unstable_error_json: bool,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
