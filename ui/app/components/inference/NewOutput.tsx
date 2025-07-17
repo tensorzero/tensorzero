@@ -99,11 +99,11 @@ function renderJsonInferenceOutput(output: JsonInferenceOutputRenderingData) {
 function renderChatInferenceOutput(output: ChatInferenceOutputRenderingData) {
   return (
     <SnippetContent>
-      <SnippetMessage>
-        {output.length === 0 ? (
-          <EmptyMessage message="No output messages found" />
-        ) : (
-          output.map((block, index) => {
+      {output.length === 0 ? (
+        <EmptyMessage message="The output was empty" />
+      ) : (
+        <SnippetMessage>
+          {output.map((block, index) => {
             switch (block.type) {
               case "text":
                 return (
@@ -126,9 +126,9 @@ function renderChatInferenceOutput(output: ChatInferenceOutputRenderingData) {
               default:
                 return null;
             }
-          })
-        )}
-      </SnippetMessage>
+          })}
+        </SnippetMessage>
+      )}
     </SnippetContent>
   );
 }
