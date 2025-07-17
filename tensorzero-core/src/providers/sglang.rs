@@ -553,11 +553,12 @@ impl<'a> SGLangRequest<'a> {
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<SGLangRequest<'a>, Error> {
         let response_format = SGLangResponseFormat::new(&request.json_mode, request.output_schema)?;
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
         let messages = prepare_openai_messages(
             request.system.as_deref(),
