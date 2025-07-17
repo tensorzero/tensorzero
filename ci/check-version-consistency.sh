@@ -26,6 +26,8 @@ fi
 
 echo "✅ Version consistency check passed: $CARGO_VERSION"
 
+cargo tree --locked
+
 # Verify Cargo.lock is up to date using cargo tree --locked
 if ! cargo tree --locked >/dev/null 2>&1; then
   echo "❌ Cargo.lock is not up to date with Cargo.toml"
