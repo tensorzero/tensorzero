@@ -56,11 +56,13 @@ export default function DatasetTable({
                 <TableCell>
                   <TableItemTime timestamp={count.last_updated} />
                 </TableCell>
-                <TableCell>
+                <TableCell className="text-right">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={hoveredRow === count.dataset_name ? "" : "invisible"}
+                    className={
+                      hoveredRow === count.dataset_name ? "" : "invisible"
+                    }
                     onClick={() => {
                       if (
                         window.confirm(
