@@ -5,6 +5,9 @@ steps:
   - label: "Check TensorZero version consistency between Rust (`Cargo.toml`) and TypeScript (`ui/package.json`)"
     command: ./ci/check-version-consistency.sh
 
+  - label: "Build `tensorzero/gateway` Docker container"
+    command: docker build -t tensorzero/gateway -f gateway/Dockerfile .
+
 notify:
   - github_commit_status:
-      context: "pr-checks-buildkite"
+      context: "commit-checks-buildkite"
