@@ -47,6 +47,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let optimizer_info = test_case
         .get_optimizer_info(use_mock_inference_provider())
         .load()
+        .await
         .unwrap();
     let client = reqwest::Client::new();
     let test_examples = get_examples(test_case, 10);
