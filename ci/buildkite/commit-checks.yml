@@ -14,14 +14,14 @@ steps:
     command: cargo build -p gateway
     plugins:
       - artifacts#v1.9.3:
-          upload: "target"
+          upload: "target/**/*"
 
   - label: ":rust: Lint Gateway"
     depends_on: "rust-build"
     command: cargo fmt -p gateway -- --check
     plugins:
       - artifacts#v1.9.3:
-          download: "target"
+          download: "target/**/*"
 
   - label: ":rust: Clippy"
     depends_on: "rust-build"
@@ -29,7 +29,7 @@ steps:
     cache: "target"
     plugins:
       - artifacts#v1.9.3:
-          download: "target"
+          download: "target/**/*"
 
 notify:
   - github_commit_status:
