@@ -87,8 +87,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   const offset = searchParams.get("offset")
     ? parseInt(searchParams.get("offset")!)
     : 0;
-  // const refreshVariantName = searchParams.get("refreshVariantName");
-  // const refreshDatapointId = searchParams.get("refreshDatapointId");
   const config = await getConfig();
   const functionConfig = functionName
     ? (config.functions[functionName] ?? null)
@@ -108,39 +106,6 @@ export async function loader({ request }: Route.LoaderArgs) {
           : null,
       ])
     : [undefined, null];
-  // If we're refreshing a specific datapoint/variant, we should short-circuit the loader
-  // and return the inference result
-  /*
-  if (
-    refreshDatapointId &&
-    refreshVariantName &&
-    functionName &&
-    functionConfig
-  ) {
-    const datapoint = datapoints?.find(
-      (datapoint) => datapoint.id === refreshDatapointId,
-    );
-    if (!datapoint) {
-      throw data(`Datapoint not found for id ${refreshDatapointId}`, {
-        status: 404,
-      });
-    }
-    try {
-      return await refreshInference(
-        datapoint,
-        functionName,
-        functionConfig,
-        refreshVariantName,
-      );
-    } catch (error) {
-      // Return error as part of the response instead of throwing
-      return {
-        type: "refreshInferenceError" as const,
-        error:
-          error instanceof Error ? error.message : "Unknown error occurred",
-      };
-    }
-  }*/
   const inputs = datapoints
     ? await Promise.all(
         datapoints.map(async (datapoint) => {
@@ -216,39 +181,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     limit,
   };
 }
-
-// async function refreshInference(
-//   datapoint: TensorZeroDatapoint,
-//   functionName: string,
-//   functionConfig: FunctionConfig,
-//   variantName: string,
-// ) {
-//   const inputData = tensorZeroResolvedInputToInput(datapoint.input);
-//   const displayInput = await resolveInput(inputData, functionConfig ?? null);
-
-//   const request = prepareInferenceActionRequest({
-//     source: "clickhouse_datapoint",
-//     input: displayInput,
-//     functionName,
-//     variant: variantName,
-//     tool_params:
-//       datapoint?.type === "chat"
-//         ? (datapoint.tool_params ?? undefined)
-//         : undefined,
-//     output_schema: datapoint?.type === "json" ? datapoint.output_schema : null,
-//   });
-//   const result = InferenceRequestSchema.safeParse(request);
-//   if (!result.success) {
-//     throw new Error("Invalid request");
-//   }
-//   return {
-//     type: "refreshInference" as const,
-//     inference: await getTensorZeroClient().inference({
-//       ...result.data,
-//       stream: false,
-//     }),
-//   };
-// }
 
 export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const [searchParams] = useSearchParams();
