@@ -5,13 +5,30 @@ steps:
   - label: "Check TensorZero version consistency between Rust (`Cargo.toml`) and TypeScript (`ui/package.json`)"
     command: ./ci/check-version-consistency.sh
 
-  - label: "Build `tensorzero/gateway` Docker container"
-    command: docker build -t tensorzero/gateway:ci -f gateway/Dockerfile .
-    key: "build-gateway-docker-container"
+  # - label: "Build `tensorzero/gateway` Docker container"
+  #   command: docker build -t tensorzero/gateway:ci -f gateway/Dockerfile .
+  #   key: "build-gateway-docker-container"
 
-  - label: "Launch `tensorzero/gateway` Docker container"
-    command: docker run -d --name tensorzero-gateway tensorzero/gateway:ci
-    depends_on: "build-gateway-docker-container"
+  - label: ":rust: Build"
+    command: cargo build --workspace --verbose
+    plugins:
+      - artifacts#v1.9.3:
+          upload: "target"
+          compressed: target.tgz
+
+  - label: ":rust: Lint"
+    command: cargo fmt -- --check
+    plugins:
+      - artifacts#v1.9.3:
+          download: "target"
+          compressed: target.tgz
+
+  - label: ":rust: Clippy"
+    command: cargo clippy
+    plugins:
+      - artifacts#v1.9.3:
+          download: "target"
+          compressed: target.tgz
 
 notify:
   - github_commit_status:
