@@ -75,7 +75,6 @@
     "react-hook-form": "^7.60.0",
     "react-router": "^7.6.3",
     "recharts": "^2.15.4",
-    "shiki": "^3.7.0",
     "smol-toml": "^1.4.1",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
