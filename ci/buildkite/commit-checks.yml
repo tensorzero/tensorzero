@@ -6,11 +6,11 @@ steps:
     command: ./ci/check-version-consistency.sh
 
   - label: "Build `tensorzero/gateway` Docker container"
-    command: docker build -t tensorzero/gateway -f gateway/Dockerfile .
+    command: docker build -t tensorzero/gateway:ci -f gateway/Dockerfile .
     key: "build-gateway-docker-container"
 
   - label: "Launch `tensorzero/gateway` Docker container"
-    command: docker run -d --name tensorzero-gateway tensorzero/gateway
+    command: docker run -d --name tensorzero-gateway tensorzero/gateway:ci
     depends_on: "build-gateway-docker-container"
 
 notify:
