@@ -82,6 +82,7 @@ redundant_closure_for_method_calls = "deny"
 todo = "deny"
 unimplemented = "deny"
 uninlined_format_args = "deny"
+unnecessary_wraps = "deny"
 unreachable = "deny"
 unwrap_used = "deny"
 

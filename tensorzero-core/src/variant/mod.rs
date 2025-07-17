@@ -554,6 +554,7 @@ impl Variant for VariantInfo {
 }
 
 #[expect(clippy::too_many_arguments)]
+#[expect(clippy::unnecessary_wraps)]
 fn prepare_model_inference_request<'a, 'request>(
     messages: Vec<RequestMessage>,
     system: Option<String>,
