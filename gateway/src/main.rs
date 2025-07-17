@@ -236,6 +236,10 @@ async fn main() {
             get(endpoints::datasets::list_datapoints_handler),
         )
         .route(
+            "/datasets/{dataset_name}",
+            delete(endpoints::datasets::stale_dataset_handler),
+        )
+        .route(
             "/datasets/{dataset_name}/datapoints/{datapoint_id}",
             get(endpoints::datasets::get_datapoint_handler),
         )
