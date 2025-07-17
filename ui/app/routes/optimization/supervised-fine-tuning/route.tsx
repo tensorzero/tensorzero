@@ -129,7 +129,8 @@ function SupervisedFineTuningImpl(props: LoaderData) {
 
   const finalResult =
     jobInfo.status === "completed"
-      ? dump_optimizer_output(jobInfo.output)
+      ? // TODO (Viraj, now): fix up the optimizer output to match E2E test
+        dump_optimizer_output(jobInfo.output)
       : null;
   if (finalResult && submissionPhase !== "complete") {
     setSubmissionPhase("complete");
@@ -159,7 +160,7 @@ function SupervisedFineTuningImpl(props: LoaderData) {
                   : "destructive"
             }
           >
-            {jobInfo.status}
+            {jobInfo.status === "pending" ? "running" : jobInfo.status}
           </Badge>
           {formData?.model.provider && (
             <ModelBadge provider={formData.model.provider} />

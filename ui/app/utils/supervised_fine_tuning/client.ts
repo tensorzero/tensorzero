@@ -29,6 +29,9 @@ export async function poll_sft_job(
 ): Promise<OptimizationJobInfo> {
   const client = await getNativeTensorZeroClient();
   const status = await client.experimentalPollOptimization(jobHandle);
+  if (status.status === "pending" && status.estimated_finish) {
+    status.estimated_finish = new Date(status.estimated_finish);
+  }
   logger.debug("SFT job status", { status });
   return status;
 }
