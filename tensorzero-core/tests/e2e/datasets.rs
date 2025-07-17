@@ -1386,6 +1386,12 @@ async fn test_datapoint_insert_synthetic_bad_uuid() {
         resp_json,
         json!({
             "error": "Invalid Datapoint ID: Version must be 7, got 4",
+            "error_json": {
+                "InvalidTensorzeroUuid": {
+                    "kind": "Datapoint",
+                    "message": "Version must be 7, got 4",
+                }
+            }
         })
     );
 }
@@ -1414,6 +1420,11 @@ async fn test_datapoint_insert_synthetic_bad_params() {
         resp_json,
         json!({
             "error": "Failed to deserialize chat datapoint: missing field `input`",
+            "error_json": {
+                "InvalidRequest": {
+                    "message": "Failed to deserialize chat datapoint: missing field `input`"
+                }
+            }
         })
     );
 }

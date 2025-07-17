@@ -379,7 +379,7 @@ async def test_async_inference_streaming_nonexistent_function(async_client):
     assert exc_info.value.status_code == 404
     assert (
         str(exc_info.value)
-        == "Error code: 404 - {'error': 'Unknown function: does_not_exist'}"
+        == "Error code: 404 - {'error': 'Unknown function: does_not_exist', 'error_json': {'UnknownFunction': {'name': 'does_not_exist'}}}"
     )
 
 
@@ -411,7 +411,7 @@ async def test_async_inference_streaming_missing_function(async_client):
     assert exc_info.value.status_code == 400
     assert (
         str(exc_info.value)
-        == "Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: function_name (passed in model field after \"tensorzero::function_name::\") cannot be empty'}"
+        == """Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: function_name (passed in model field after "tensorzero::function_name::") cannot be empty', 'error_json': {'InvalidOpenAICompatibleRequest': {'message': 'function_name (passed in model field after "tensorzero::function_name::") cannot be empty'}}}"""
     )
 
 
@@ -443,7 +443,7 @@ async def test_async_inference_streaming_malformed_function(async_client):
     assert exc_info.value.status_code == 400
     assert (
         str(exc_info.value)
-        == "Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: `model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.'}"
+        == """Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: `model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.', 'error_json': {'InvalidOpenAICompatibleRequest': {'message': '`model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.'}}}"""
     )
 
 
