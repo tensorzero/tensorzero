@@ -57,10 +57,7 @@ async fn test_base_path(child_data: ChildData) {
         .await
         .unwrap();
 
-    assert_eq!(
-        inference_response,
-        r#"{"error":"missing field `input`","error_json":{"JsonRequest":{"message":"missing field `input`"}}}"#
-    );
+    assert_eq!(inference_response, r#"{"error":"missing field `input`"}"#);
 
     // The normal endpoints should not be available
     let bad_health_response = reqwest::Client::new()
@@ -73,7 +70,7 @@ async fn test_base_path(child_data: ChildData) {
         .unwrap();
     assert_eq!(
         bad_health_response,
-        r#"{"error":"Route not found: GET /health","error_json":{"RouteNotFound":{"path":"/health","method":"GET"}}}"#
+        r#"{"error":"Route not found: GET /health"}"#
     );
 
     let bad_inference_response = reqwest::Client::new()
@@ -86,7 +83,7 @@ async fn test_base_path(child_data: ChildData) {
         .unwrap();
     assert_eq!(
         bad_inference_response,
-        r#"{"error":"Route not found: POST /inference","error_json":{"RouteNotFound":{"path":"/inference","method":"POST"}}}"#
+        r#"{"error":"Route not found: POST /inference"}"#
     );
 
     let no_trailing_slash_client =
