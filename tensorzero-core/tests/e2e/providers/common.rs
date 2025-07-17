@@ -4876,8 +4876,6 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     }
 
     if let Some(arguments) = content_block["arguments"].as_object() {
-        let arguments = content_block.get("arguments").unwrap();
-        let arguments = arguments.as_object().unwrap();
         // OpenAI occasionally emits a tool call with an empty object for `arguments`
         assert!(arguments.len() <= 2);
         if let Some(location) = arguments.get("location") {
