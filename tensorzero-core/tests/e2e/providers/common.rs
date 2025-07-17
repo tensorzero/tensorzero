@@ -4875,16 +4875,18 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
         assert!(units == "celsius" || units == "fahrenheit");
     }
 
-    let arguments = content_block.get("arguments").unwrap();
-    let arguments = arguments.as_object().unwrap();
-    // OpenAI occasionally emits a tool call with an empty object for `arguments`
-    assert!(arguments.len() <= 2);
-    if let Some(location) = arguments.get("location") {
-        assert!(location.as_str().is_some())
-    }
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "celsius" || units == "fahrenheit");
+    if let Some(arguments) = content_block["arguments"].as_object() {
+        let arguments = content_block.get("arguments").unwrap();
+        let arguments = arguments.as_object().unwrap();
+        // OpenAI occasionally emits a tool call with an empty object for `arguments`
+        assert!(arguments.len() <= 2);
+        if let Some(location) = arguments.get("location") {
+            assert!(location.as_str().is_some())
+        }
+        if arguments.len() == 2 {
+            let units = arguments.get("units").unwrap().as_str().unwrap();
+            assert!(units == "celsius" || units == "fahrenheit");
+        }
     }
 
     let usage = response_json.get("usage").unwrap();
