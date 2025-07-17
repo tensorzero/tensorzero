@@ -200,7 +200,9 @@ impl ObjectStoreInfo {
             StorageKind::Filesystem { path } => {
                 Some(Arc::new(match LocalFileSystem::new_with_prefix(path) {
                     Ok(object_store) => object_store,
-                    Err(e) => {
+                    Err(e) =>
+                    {
+                        #[expect(clippy::if_not_else)]
                         if !std::fs::exists(path).unwrap_or(false) {
                             if skip_credential_validation() {
                                 tracing::warn!("Filesystem object store path does not exist: {path}. Treating object store as unconfigured");
