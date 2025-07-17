@@ -115,7 +115,8 @@ pub async fn launch_optimization_workflow(
 
     // Launch the optimization job
     optimizer_config
-        .load()?
+        .load()
+        .await?
         .launch(
             http_client,
             train_examples,
@@ -149,7 +150,7 @@ pub async fn launch_optimization(
         val_samples: val_examples,
         optimization_config: optimizer_config,
     } = params;
-    let optimizer = optimizer_config.load()?;
+    let optimizer = optimizer_config.load().await?;
     optimizer
         .launch(
             http_client,

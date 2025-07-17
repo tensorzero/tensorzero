@@ -267,7 +267,7 @@ export const Calendar: React.FC<IconProps> = (props) => (
   </IconWrapper>
 );
 
-export const Input: React.FC<IconProps> = (props) => (
+export const InputIcon: React.FC<IconProps> = (props) => (
   <IconWrapper {...props}>
     <path
       fillRule="evenodd"
@@ -565,7 +565,7 @@ export const iconComponents: Record<string, React.FC<IconProps>> = {
   TypeJson,
   Timer,
   Calendar,
-  Input,
+  Input: InputIcon,
   Output,
   Dataset,
   AddToDataset,
