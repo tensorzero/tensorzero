@@ -18,20 +18,19 @@
 # The optimization process involves the following steps:
 #
 # 1. **Generate candidate instructions and demonstrations**
-#     - Candidate instructions are generated using OpenAI's o1 model based on a system template and an optional schema.
-#         - This is configurable in the `config/tensorzero.toml` file if you want to use a different model.
-#     - Candidate demonstrations are sets of few-shot examples sampled from the training dataset.
+#    - Candidate instructions are generated using OpenAI's o1 model based on a system template and an optional schema.
+#      - This is configurable in the `config/tensorzero.toml` file if you want to use a different model.
+#    - Candidate demonstrations are sets of few-shot examples sampled from the training dataset.
 # 2. **Evaluate Instruction-Demonstration Pairs**
-#     - Sample an instruction and demonstration pair and score it using a Large Language Model (LLM) judge.
-#     - The judge (a TensorZero function utilizing OpenAI's GPT-4o-mini model) scores the quality of the instruction-demonstration pair.
-#     - Scores are aggregated over the evaluation set to produce a final evaluation score.
+#    - Sample an instruction and demonstration pair and score it using a Large Language Model (LLM) judge.
+#    - The judge (a TensorZero function utilizing OpenAI's GPT-4o-mini model) scores the quality of the instruction-demonstration pair.
+#    - Scores are aggregated over the evaluation set to produce a final evaluation score.
 # 3. **Optimization via Search Algorithms**
-#     - Utilize a random search or a Tree-structured Parzen Estimator (TPE) to determine the next instruction and demonstration pair for evaluation.
+#    - Utilize a random search or a Tree-structured Parzen Estimator (TPE) to determine the next instruction and demonstration pair for evaluation.
 # 4. **Iterate the Optimization Process**
-#     - Repeat the optimization process for a fixed number of iterations.
+#    - Repeat the optimization process for a fixed number of iterations.
 # 5. **Select the Best Performing Prompts**
-#     - The instruction and demonstration pairs corresponding to the highest-performing prompts are formatted to yield optimized system templates.
-#
+#    - The instruction and demonstration pairs corresponding to the highest-performing prompts are formatted to yield optimized system templates.
 #
 
 # %% [markdown]
@@ -44,10 +43,11 @@
 # - **Function Name:** The TensorZero function being optimized.
 #
 # - **Model Variant:** The specific function variant to use as an example for the system template.
+#
 
 # %%
 # Configuation arguments for the function you want to optimize the prompt for
-CONFIG_DIR = "../../examples/data-extraction-ner/config"
+CONFIG_DIR = "../../examples/data-extraction-ner/config/tensorzero.toml"
 
 # The name of the function you want to optimize the prompt for
 FUNCTION_NAME = "extract_entities"
@@ -62,6 +62,7 @@ TEMPLATE_VARIANT_NAME = "gpt_4o_mini"
 #
 # - **Task Description:** A summary of the task being optimized.
 # - **Optimization Metric:** The metric used for evaluating prompt effectiveness (e.g. Jaccard similarity between predicted and ground truth entities).
+#
 
 # %%
 # Description of the task you are optimizing the prompt for to be used by the optimizer judge
@@ -76,16 +77,17 @@ METRIC_PROPERTIES = "The metric is the Jaccard similarity between the predicted 
 # The following parameters control the optimization process. Experimenting with different values can help refine results:
 #
 # - **Search Space**
-#     - `NUM_CANDIDATE_INSTRUCTIONS`: Number of candidate instructions to generate.
-#     - `NUM_CANDIDATE_DEMONSTRATIONS`: Number of candidate demonstrations to sample.
+#   - `NUM_CANDIDATE_INSTRUCTIONS`: Number of candidate instructions to generate.
+#   - `NUM_CANDIDATE_DEMONSTRATIONS`: Number of candidate demonstrations to sample.
 # - **Optimization Control**
-#     - `MAX_ITERATIONS`: Number of optimization steps.
-#     - `MAX_EXAMPLES_PER_DEMONSTRATION`: Maximum few-shot examples per demonstration.
+#   - `MAX_ITERATIONS`: Number of optimization steps.
+#   - `MAX_EXAMPLES_PER_DEMONSTRATION`: Maximum few-shot examples per demonstration.
 # - **Evaluation Control**
-#     - `EVAL_FRACTION`: Fraction of the dataset used for scoring generated prompts.
-#     - `MAX_SAMPLES`: Limit on the number of demonstration samples.
+#   - `EVAL_FRACTION`: Fraction of the dataset used for scoring generated prompts.
+#   - `MAX_SAMPLES`: Limit on the number of demonstration samples.
 # - **Reproducibility**
-#     - `SEED`: Random seed for consistent results.
+#   - `SEED`: Random seed for consistent results.
+#
 
 # %%
 # Number of candidate instructions to generate and search over
@@ -113,38 +115,37 @@ MAX_SAMPLES = 100_000
 SEED = 0
 
 # %% [markdown]
-#
 # ## Import Dependencies
+#
 
 # %%
 import asyncio
 import json
-import os
-import warnings
-from copy import deepcopy
-from typing import Any, Dict, List, Optional
+from random import shuffle
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import optuna
-import pandas as pd
-from clickhouse_connect import get_client
 from minijinja import Environment
 from optuna.samplers import TPESampler
 from tensorzero import (
     AsyncTensorZeroGateway,
+    ChatCompletionConfig,
+    ChatInferenceOutput,
     InferenceResponse,
     JsonInferenceResponse,
     RawText,
+    RenderedSample,
     Text,
 )
 from tqdm.asyncio import tqdm_asyncio
 from utils.client_calls import candidate_inference, get_instructions, judge_answer
-from utils.configs.reader import load_config
 
 # %% [markdown]
 # ## Initialize the MIPRO TensorZero Client
 #
 # This client is used to generate candidate instructions and score the quality of responses given the candidate instructions and demonstrations.
+#
 
 # %%
 MAX_CONCURRENT_REQUESTS = 50
@@ -152,7 +153,8 @@ MAX_CONCURRENT_REQUESTS = 50
 # %%
 mipro_client = await AsyncTensorZeroGateway.build_embedded(
     config_file="config/tensorzero.toml",
-    clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"],
+    # clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"],
+    # clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures",
 )
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
@@ -160,143 +162,50 @@ semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 # ## Load Data
 #
 # Load the TensorZero configuration for the function you want to optimize the prompt for.
-
-# %%
-base_config = load_config(CONFIG_DIR)
+#
 
 # %% [markdown]
 # Retrieve the configuration for the variant with the templates we'll use for prompt optimization.
+#
 
 # %%
-assert FUNCTION_NAME in base_config.functions.keys(), (
-    f"No function named `{FUNCTION_NAME}` found in config"
+original_client = await AsyncTensorZeroGateway.build_embedded(
+    config_file=CONFIG_DIR,
+    clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures",
 )
-assert TEMPLATE_VARIANT_NAME in base_config.functions[FUNCTION_NAME].variants.keys(), (
-    f"No variant named `{TEMPLATE_VARIANT_NAME}` found in function `{FUNCTION_NAME}`"
-)
-
-base_function = base_config.functions[FUNCTION_NAME]
-base_variant = deepcopy(base_function.variants[TEMPLATE_VARIANT_NAME])
-
-# %% [markdown]
-# Initialize the ClickHouse client.
 
 # %%
-assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, (
-    "TENSORZERO_CLICKHOUSE_URL environment variable not set"
-)
-
-clickhouse_client = get_client(dsn=os.environ["TENSORZERO_CLICKHOUSE_URL"])
-
-# %% [markdown]
-# Determine the inference table name based on the function type.
-
-# %%
-inference_table_name = {"chat": "ChatInference", "json": "JsonInference"}.get(
-    base_function.type
-)
-
-if inference_table_name is None:
-    raise ValueError(f"Unsupported function type: {base_function.type}")
+config = original_client.experimental_get_config()
+base_function = config.functions[FUNCTION_NAME]
+base_variant = base_function.variants[TEMPLATE_VARIANT_NAME]
+if not isinstance(base_variant, ChatCompletionConfig):
+    raise ValueError("Only chat completion variants are supported")
+# model_name = base_variant.model_name
+model_name = "openai::gpt-4o-mini"
 
 # %% [markdown]
 # Query the inferences and demonstration feedback from ClickHouse.
-
-# %% [markdown]
-# You can use one of the metrics above, or choose `FILTER_METRIC_NAME = "demonstration"` to use ground truth demonstrations.
+#
 
 # %%
-print(base_config.metrics.keys())
+inferences = await original_client.experimental_list_inferences(
+    function_name="extract_entities",
+    output_source="demonstration",  # or "inference"
+    filters=None,
+    # You can also filter by the value of metrics here (e.g.
+    # FloatMetricFilter(
+    # metric_name="jaccard_similarity",
+    # value=0.5,
+    # comparison_operator=">",
+)
+
+print(inferences)
 
 # %%
-FILTER_METRIC_NAME = "demonstration"
-FILTER_METRIC_THRESHOLD = 0.9
-
-if (
-    FILTER_METRIC_NAME != "demonstration"
-):  # If no metric name is provided, use ground truth demonstrations
-    filter_metric = base_config.metrics[FILTER_METRIC_NAME]
-
-# %%
-if (
-    FILTER_METRIC_NAME == "demonstration"
-):  # Assume demonstration feedback is available and used.
-    query = f"""
-    SELECT
-        i.input,
-        f.value as output,
-        i.episode_id
-    FROM
-        {inference_table_name} i
-    JOIN
-        (SELECT
-            inference_id,
-            value,
-            ROW_NUMBER() OVER (PARTITION BY inference_id ORDER BY timestamp DESC) as rn
-        FROM
-            DemonstrationFeedback
-        ) f ON i.id = f.inference_id AND f.rn = 1
-    WHERE
-        i.function_name = %(function_name)s
-    LIMIT %(max_samples)s
-    """
-
-    params = {
-        "function_name": FUNCTION_NAME,
-        "max_samples": MAX_SAMPLES,
-    }
-else:
-    feedback_table_name = {
-        "float": "FloatMetricFeedback",
-        "boolean": "BooleanMetricFeedback",
-    }.get(filter_metric.type)
-
-    inference_join_key = {
-        "episode": "episode_id",
-        "inference": "id",
-    }.get(filter_metric.level)
-
-    if inference_join_key is None:
-        raise ValueError(f"Unsupported metric level: {filter_metric.level}")
-
-    threshold = FILTER_METRIC_THRESHOLD if filter_metric.type == "float" else 0.5
-    comparison_operator = ">=" if filter_metric.optimize == "max" else "<="
-
-    query = f"""
-    SELECT
-        i.input,
-        i.output,
-        i.episode_id,
-        i.function_name,
-        f.value
-    FROM
-        {inference_table_name} i
-    JOIN
-        (SELECT
-            target_id,
-            value,
-            ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
-        FROM
-            {feedback_table_name}
-        WHERE
-            metric_name = %(metric_name)s
-            AND value {comparison_operator} %(threshold)s
-        ) f ON i.{inference_join_key} = f.target_id and f.rn = 1
-    WHERE
-        i.function_name = %(function_name)s
-    LIMIT %(max_samples)s
-    """
-
-    params = {
-        "function_name": FUNCTION_NAME,
-        "max_samples": MAX_SAMPLES,
-        "metric_name": FILTER_METRIC_NAME,
-        "threshold": FILTER_METRIC_THRESHOLD,
-    }
-
-df = clickhouse_client.query_df(query, params)
-
-df.head()
+rendered_samples = await original_client.experimental_render_samples(
+    stored_samples=inferences,
+    variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
+)
 
 # %% [markdown]
 # Retrieve the system, user, and assistant templates in the variant (if any), and initialize a minijinja environment with them.
@@ -304,16 +213,6 @@ df.head()
 
 # %%
 templates = {}
-
-if base_variant.assistant_template is not None:
-    templates["assistant"] = base_variant.assistant_template
-
-if base_variant.system_template is not None:
-    templates["system"] = base_variant.system_template
-
-if base_variant.user_template is not None:
-    templates["user"] = base_variant.user_template
-
 candidate_template = """
 {{ instructions }}
 {% for demo in demonstrations %}
@@ -337,107 +236,33 @@ env = Environment(templates=templates)
 
 # %% [markdown]
 # Render the messages in the input and demonstration columns.
+#
 
 
 # %%
-def render_message(message: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
-    role = message["role"]
-    assert role in ["user", "assistant"], f"Invalid role: {role}"
-    content: List[Dict[str, Any]] = []
-    tool_calls: List[Dict[str, Any]] = []
-    rendered_messages: List[Dict[str, Any]] = []
+def prepare_output(output: ChatInferenceOutput) -> Dict[str, Any]:
+    content = []
+    tool_calls = []
 
-    for content_block in message["content"]:
-        if content_block["type"] == "text":
-            parsed_content = content_block["value"]
-            if not isinstance(parsed_content, str):
-                parsed_content = env.render_template(role, **parsed_content)
-            content.append({"type": "text", "text": parsed_content})
-        elif content_block["type"] == "raw_text":
-            content.append({"type": "text", "text": content_block["value"]})
-        elif content_block["type"] == "thought":
-            content.append(
-                {"type": "text", "text": f"<think>{content_block['text']}</think>"}
-            )
-        elif content_block["type"] == "tool_call" and role == "assistant":
+    for block in output:
+        if block.type == "text":
+            content.append({"type": "text", "text": block.text})
+        elif block.type == "thought":
+            content.append({"type": "text", "text": f"<think>{block.text}</think>"})
+        elif block.type == "tool_call":
             tool_calls.append(
                 {
                     "function": {
-                        "arguments": json.dumps(content_block["arguments"]),
-                        "name": content_block["name"],
+                        "arguments": json.dumps(block.arguments),
+                        "name": block.name,
                     },
-                    "id": content_block["id"],
+                    "id": block.id,
                     "type": "function",
                 }
             )
-        elif content_block["type"] == "tool_result" and role == "user":
-            # Tool results get priority so that they follow the tool call in the conversation.
-            # Any other "user" content will be appended in another message below.
-            rendered_messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": content_block["id"],
-                    "content": content_block["result"],
-                }
-            )
         else:
-            warnings.warn(
-                f"We do not support content block type: {content_block['type']}, dropping example.",
-                UserWarning,
-            )
-            return None
+            raise ValueError(f"Unsupported content type: {block.type}")
 
-    if content or tool_calls:
-        role_message: Dict[str, Any] = {"role": role}
-        if content:
-            role_message["content"] = content
-        if tool_calls:
-            role_message["tool_calls"] = tool_calls
-        rendered_messages.append(role_message)
-
-    return rendered_messages
-
-
-def render_output(
-    output: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    """
-    Parses the assistant message from an observation using the provided function configuration.
-    """
-    content: List[str] = []
-    tool_calls: List[Dict[str, Any]] = []
-
-    if base_function.type == "json":
-        return {"role": "assistant", "content": output["raw"]}
-    elif base_function.type == "chat":
-        for content_block in output:
-            if content_block["type"] == "text":
-                content.append({"type": "text", "text": content_block["text"]})
-            elif content_block["type"] == "thought":
-                content.append(
-                    {"type": "text", "text": f"<think>{content_block['text']}</think>"}
-                )
-            elif content_block["type"] == "tool_call":
-                tool_calls.append(
-                    {
-                        "function": {
-                            "arguments": json.dumps(content_block["arguments"]),
-                            "name": content_block["name"],
-                        },
-                        "id": content_block["id"],
-                        "type": "function",
-                    }
-                )
-            else:
-                warnings.warn(
-                    f"We do not support content block type: {content_block['type']}, dropping example.",
-                    UserWarning,
-                )
-                return None
-    else:
-        raise ValueError(f"Unsupported function type: {base_function.type}")
-
-    # Once we finish collecting all blocks, create one assistant message.
     output_message: Dict[str, Any] = {"role": "assistant"}
     if content:
         output_message["content"] = content
@@ -447,57 +272,56 @@ def render_output(
     return output_message
 
 
-def sample_to_openai_messages(sample) -> List[Dict[str, Any]]:
-    function_input = json.loads(sample["input"])
-
+def sample_to_openai_messages(sample: RenderedSample) -> List[Dict[str, Any]]:
     rendered_messages = []
-
     # Add the system message to the rendered messages
     # If there is data passed in or a system template there must be a system message
-    system = function_input.get("system", {})
-    if len(system) > 0 or base_variant.system_template:
-        if base_variant.system_template:
-            system_message = env.render_template("system", **system)
-            rendered_messages.append({"role": "system", "content": system_message})
-        else:
-            rendered_messages.append({"role": "system", "content": system})
+    system = sample.input.system
+    if system:
+        rendered_messages.append({"role": "system", "content": system})
 
     # Add the input messages to the rendered messages
-    for message in function_input["messages"]:
-        rendered_message = render_message(message)
-        if rendered_message is None:
-            # `render_message` will return None if the message contains an unknown or unsupported content block.
-            # The entire example is dropped if this is the case.
-            return None
-        rendered_messages.extend(render_message(message))
+    for message in sample.input.messages:
+        content = []
+        for part in message.content:
+            if part.type == "text":
+                content.append({"type": "text", "text": part.text})
+            elif part.type == "tool_call":
+                content.append(
+                    {
+                        "type": "tool_call",
+                        "name": part.raw_name,
+                        "arguments": part.raw_arguments,
+                    }
+                )
+            elif part.type == "tool_result":
+                content.append(
+                    {"type": "tool_result", "name": part.name, "result": part.result}
+                )
+            elif part.type == "thought":
+                content.append({"type": "text", "text": f"<think>{part.text}</think>"})
+            else:
+                raise ValueError(f"Unsupported content type: {part.type}")
+        rendered_messages.append({"role": message.role, "content": content})
 
     # Add the output to the messages
-    output = json.loads(sample["output"])
-    rendered_output = render_output(output)
-    if rendered_output is None:
-        # `render_output` will return None if the output contains an unknown or unsupported content block.
-        # The entire example is dropped if this is the case.
-        return None
-    rendered_messages.append(rendered_output)
+    if sample.output:
+        rendered_messages.append(
+            {"role": "assistant", "content": prepare_output(sample.output)}
+        )
 
-    return {"messages": rendered_messages}
+    return rendered_messages
 
-
-df["conversational_messages"] = df.apply(sample_to_openai_messages, axis=1)
-
-# Drop null rows
-df = df[df["conversational_messages"].notna()]
-
-df.head()
 
 # %% [markdown]
 # Split the data into training and evaluation sets.
 # The training set is used to generate candidate demonstrations.
 # The evaluation set is used by the judge to score the quality of the generated prompt.
+#
 
 # %%
 # Get unique episode_ids
-unique_episode_ids = df["episode_id"].unique()
+unique_episode_ids = list(set(sample.episode_id for sample in rendered_samples))
 
 # Shuffle the unique episode_ids
 np.random.seed(42)
@@ -511,23 +335,34 @@ train_episode_ids = unique_episode_ids[:split_index]
 val_episode_ids = unique_episode_ids[split_index:]
 
 # Create training and validation DataFrames based on episode_ids
-train_df = df[df["episode_id"].isin(train_episode_ids)]
-eval_df = df[df["episode_id"].isin(val_episode_ids)]
+train_examples = []
+val_examples = []
+for example in rendered_samples:
+    if example.episode_id in train_episode_ids:
+        train_examples.append((sample_to_openai_messages(example), example))
+    else:
+        val_examples.append((sample_to_openai_messages(example), example))
 
-print(f"Training set size: {len(train_df)}")
-print(f"Evaluation set size: {len(eval_df)}")
-print(f"Actual evaluation fraction: {len(eval_df) / len(df):.2f}")
+print(f"Training set size: {len(train_examples)}")
+print(f"Validation set size: {len(val_examples)}")
+print(f"Actual validation fraction: {len(val_examples) / len(rendered_samples):.2f}")
 
 # %% [markdown]
 # ## Generate Candidate Instructions
 #
 # Given the function's system template as an example, generate a set of candidate instructions to optimize the prompt over.
+#
 
 # %%
+if not isinstance(base_variant, ChatCompletionConfig):
+    raise ValueError("Only chat completion variants are supported")
+
 example_instructions = base_variant.system_template
+if example_instructions is None:
+    raise ValueError("System template is required")
 
 if base_function.system_schema is not None:
-    example_schema = base_function.system_schema.model_json_schema()
+    example_schema = json.dumps(base_function.system_schema.model_json_schema())
 else:
     example_schema = None
 
@@ -554,32 +389,34 @@ for response in responses:
 # ## Generate Candidate Demonstrations
 #
 # Given the training set, generate a set of candidate demonstrations to optimize the prompt over.
+#
 
 
 # %%
 def generate_demonstrations(
-    df: pd.DataFrame,
+    train_examples: List[Tuple[List[Dict[str, Any]], RenderedSample]],
     max_examples_per_demonstration: int,
     seed: int = 42,
 ) -> str:
-    sample = df.sample(
-        n=max_examples_per_demonstration, replace=False, random_state=seed
-    )
+    shuffle(train_examples)
     demonstrations = []
-    for _, row in sample.iterrows():  # type: ignore
-        demonstrations.append(row["conversational_messages"])
+    for example in train_examples[:max_examples_per_demonstration]:
+        demonstrations.append({"messages": example[0]})
     return demonstrations
 
 
 # %%
 candidate_demonstrations = [
     generate_demonstrations(
-        df=train_df,
+        train_examples=train_examples,
         max_examples_per_demonstration=MAX_EXAMPLES_PER_DEMONSTRATION,
         seed=seed,
     )
     for seed in range(NUM_CANDIDATE_DEMONSTRATIONS)
 ]
+
+# %%
+candidate_demonstrations[0]
 
 # %%
 print(
@@ -594,6 +431,7 @@ print(
 # ## Optimize the Prompt
 #
 # ### Define the optimization objective
+#
 
 # %%
 # Initialize online statistics
@@ -627,41 +465,23 @@ async def objective(trial: optuna.Trial):
         "demonstration_index", range(num_demonstrations)
     )
     # Format the candidate prompt
-    candidate_prompt = env.render_template(
+    candidate_system_prompt = env.render_template(
         "candidate",
         instructions=candidate_instructions[instruction_index],
         demonstrations=candidate_demonstrations[demonstration_index],
     )
-    # Create a new variant with the candidate prompt
-    candidate_variant_name = f"{instruction_index}_{demonstration_index}"
-    candidate_config = deepcopy(base_config)
-    candidate_config.functions[FUNCTION_NAME].variants[candidate_variant_name] = (
-        deepcopy(base_variant)
-    )
-    candidate_config.functions[FUNCTION_NAME].variants[
-        candidate_variant_name
-    ].system_template = candidate_prompt
-    candidate_config.functions[FUNCTION_NAME].variants[
-        candidate_variant_name
-    ].name = candidate_variant_name
-    # Write the new config to a temporary directory
-    tmp_config_dir = candidate_config.write()
-    # Build a new client with the new config
-    target_client = await AsyncTensorZeroGateway.build_embedded(
-        config_file=str(tmp_config_dir / "tensorzero.toml"),
-        clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"],
-    )
+
     # Asynchronously generate answers for each query in the evaluation set
     responses = await tqdm_asyncio.gather(
         *[
             candidate_inference(
-                client=target_client,
-                function_name=FUNCTION_NAME,
-                input=json.loads(input_args),
-                variant_name=candidate_variant_name,
+                client=original_client,
+                input=example[1].input,
+                system_prompt=candidate_system_prompt,
+                model_name=model_name,
                 semaphore=semaphore,
             )
-            for input_args in eval_df["input"]
+            for example in val_examples
         ]
     )
 
@@ -673,10 +493,10 @@ async def objective(trial: optuna.Trial):
                 task_description=TASK_DESCRIPTION,
                 metric_properties=METRIC_PROPERTIES,
                 prediction=format_response(response) if response is not None else "",
-                ground_truth=str(ground_truth),
+                ground_truth=str(example[1].output),
                 semaphore=semaphore,
             )
-            for response, ground_truth in zip(responses, eval_df["output"])
+            for response, example in zip(responses, val_examples)
         ]
     )
 
@@ -695,6 +515,7 @@ async def objective(trial: optuna.Trial):
 # ### Random Search
 #
 # We start by sampling a random instruction and demonstration at each iteration in the optimization loop.
+#
 
 # %%
 study_random = optuna.create_study(
@@ -712,7 +533,9 @@ for iteration in range(MAX_ITERATIONS):
 
 # %% [markdown]
 # ### Tree-structured Parzen Estimator
+#
 # Following the MIPRO paper, we use a tree-structured parzen estimator (TPE) to sample the next instruction and demonstration pair to evaluate.
+#
 
 # %%
 study_tpe = optuna.create_study(
@@ -733,6 +556,7 @@ for iteration in range(MAX_ITERATIONS):
 #
 # We now have an estimate of the best instruction and demonstration pair.
 # We can now generate an optimized system template.
+#
 
 # %%
 optimized_system_template = env.render_template(
@@ -745,24 +569,8 @@ optimized_system_template = env.render_template(
 print(optimized_system_template)
 
 # %% [markdown]
-# You can save the optimized configuration file tree.
-
-# %%
-OUTPUT_DIR = "tmp"  # Set to a local path to save the optimized config
-
-optimized_variant_name = "mipro_optimized"
-optimized_config = deepcopy(base_config)
-optimized_config.functions[FUNCTION_NAME].variants[optimized_variant_name] = deepcopy(
-    base_variant
-)
-optimized_config.functions[FUNCTION_NAME].variants[
-    optimized_variant_name
-].system_template = optimized_system_template
-optimized_config.functions[FUNCTION_NAME].variants[
-    optimized_variant_name
-].name = optimized_variant_name
-# write the new config to a temporary directory
-optimized_config_dir = optimized_config.write(base_dir=OUTPUT_DIR)
+# You can make a new variant with this optimized system template.
+#
 
 # %% [markdown]
 # ## Conclusion
