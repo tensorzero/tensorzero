@@ -397,22 +397,22 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                 </div>
               </div>
             </div>
+            <PageButtons
+              onPreviousPage={() => {
+                const newOffset = Math.max(0, offset - limit);
+                updateSearchParams({ offset: newOffset.toString() });
+              }}
+              onNextPage={() => {
+                const newOffset = offset + limit;
+                updateSearchParams({ offset: newOffset.toString() });
+              }}
+              disablePrevious={offset === 0}
+              disableNext={
+                totalDatapoints ? offset + limit >= totalDatapoints : false
+              }
+            />
           </>
         )}
-      <PageButtons
-        onPreviousPage={() => {
-          const newOffset = Math.max(0, offset - limit);
-          updateSearchParams({ offset: newOffset.toString() });
-        }}
-        onNextPage={() => {
-          const newOffset = offset + limit;
-          updateSearchParams({ offset: newOffset.toString() });
-        }}
-        disablePrevious={offset === 0}
-        disableNext={
-          totalDatapoints ? offset + limit >= totalDatapoints : false
-        }
-      />
     </PageLayout>
   );
 }
