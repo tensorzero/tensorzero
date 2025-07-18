@@ -46,7 +46,7 @@ impl TemplateConfig<'_> {
             self.env.set_loader(|name| {
                 Err(minijinja::Error::new(
                     minijinja::ErrorKind::InvalidOperation,
-                    format!("Could not load template '{name}' - if this a dynamic template included from the filesystem, please set [gateway.enable_template_filesystem_access] to `true`")
+                    format!("Could not load template '{name}' - if this a dynamic template included from the filesystem, please set `gateway.template_filesystem_access.enabled` to `true`")
                 ))
             });
         }
