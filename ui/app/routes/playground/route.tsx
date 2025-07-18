@@ -1,6 +1,5 @@
 import {
   useSearchParams,
-  useNavigate,
   data,
   Link,
   type RouteHandle,
@@ -215,9 +214,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const selectedVariants = searchParams.getAll("variant");
-  const navigate = useNavigate();
   const config = useConfig();
 
   const {
@@ -270,7 +268,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
       }
     });
 
-    navigate(`?${newParams.toString()}`, { replace: true });
+    setSearchParams(newParams, { replace: true });
   };
 
   return (
