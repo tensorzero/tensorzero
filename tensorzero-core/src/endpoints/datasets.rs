@@ -364,7 +364,7 @@ pub async fn update_datapoint_handler(
             let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(
                 chat.tool_params
                     .clone()
-                    .map(|x| x.into())
+                    .map(ToolCallConfigDatabaseInsert::into)
                     .unwrap_or_default(),
             );
 
@@ -672,7 +672,7 @@ pub async fn insert_datapoint(
                     Some(JsonInferenceOutput {
                         raw: output
                             .get("raw")
-                            .and_then(|v| v.as_str().map(|s| s.to_string())),
+                            .and_then(|v| v.as_str().map(str::to_string)),
                         parsed: output.get("parsed").cloned(),
                     })
                 } else {
@@ -1568,11 +1568,25 @@ async fn put_json_datapoints(
     Ok(result.metadata.written_rows)
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct StaleDatasetResponse {
     pub num_staled_datapoints: u64,
+}
+
+#[axum::debug_handler(state = AppStateData)]
+pub async fn stale_dataset_handler(
+    State(app_state): AppState,
+    // These are the same as the path params for `list_datapoints_handler`
+    Path(path_params): Path<ListDatapointsPathParams>,
+) -> Result<Json<StaleDatasetResponse>, Error> {
+    let response = stale_dataset(
+        &app_state.clickhouse_connection_info,
+        &path_params.dataset_name,
+    )
+    .await?;
+    Ok(Json(response))
 }
 
 /// Stales all datapoints in a dataset that have not been staled yet.

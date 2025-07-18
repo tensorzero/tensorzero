@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
-    model::{build_creds_caching_default_with_fn, CredentialLocation},
+    model::CredentialLocation,
     optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::gcp_vertex_gemini::{
         default_api_key_location, location_subdomain_prefix,
@@ -18,8 +18,8 @@ use crate::{
             convert_to_optimizer_status, EncryptionSpec, GCPVertexGeminiFineTuningJob,
             GCPVertexGeminiFineTuningRequest, SupervisedHyperparameters, SupervisedTuningSpec,
         },
-        upload_rows_to_gcp_object_store, GCPVertexCredentials, GCPVertexGeminiSupervisedRow,
-        DEFAULT_CREDENTIALS, PROVIDER_TYPE,
+        upload_rows_to_gcp_object_store, GCPVertexCredentials, GCPVertexGeminiProvider,
+        GCPVertexGeminiSupervisedRow, PROVIDER_TYPE,
     },
     stored_inference::RenderedSample,
 };
@@ -187,7 +187,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
 }
 
 impl UninitializedGCPVertexGeminiSFTConfig {
-    pub fn load(self) -> Result<GCPVertexGeminiSFTConfig, Error> {
+    pub async fn load(self) -> Result<GCPVertexGeminiSFTConfig, Error> {
         Ok(GCPVertexGeminiSFTConfig {
             model: self.model,
             bucket_name: self.bucket_name,
@@ -197,13 +197,8 @@ impl UninitializedGCPVertexGeminiSFTConfig {
             adapter_size: self.adapter_size,
             n_epochs: self.n_epochs,
             export_last_checkpoint_only: self.export_last_checkpoint_only,
-            credentials: build_creds_caching_default_with_fn(
-                self.credentials.clone(),
-                default_api_key_location(),
-                PROVIDER_TYPE,
-                &DEFAULT_CREDENTIALS,
-                |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-            )?,
+            credentials: GCPVertexGeminiProvider::build_credentials(self.credentials.clone())
+                .await?,
             credential_location: self.credentials,
             api_base: self.api_base,
             seed: self.seed,
@@ -396,13 +391,8 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
         client: &reqwest::Client,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
-        let gcp_credentials = build_creds_caching_default_with_fn(
-            self.credential_location.clone(),
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-        )?;
+        let gcp_credentials =
+            GCPVertexGeminiProvider::build_credentials(self.credential_location.clone()).await?;
 
         let auth_headers = gcp_credentials
             .get_auth_headers(

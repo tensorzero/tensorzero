@@ -357,7 +357,7 @@ test("should be able to add a datapoint from the inference page", async ({
   await page.waitForTimeout(500);
 
   // Find the CommandInput by its placeholder text
-  const commandInput = page.getByPlaceholder("Create or find dataset...");
+  const commandInput = page.getByPlaceholder("Create or find a dataset...");
   await commandInput.waitFor({ state: "visible" });
   await commandInput.fill(datasetName);
 
@@ -366,9 +366,7 @@ test("should be able to add a datapoint from the inference page", async ({
 
   // Click on the CommandItem that contains the dataset name
   // Using a more flexible selector that looks for text containing "Create"
-  const createOption = page
-    .locator("[cmdk-item]")
-    .filter({ hasText: "Create" });
+  const createOption = page.locator('div[data-value^="create-"][cmdk-item]');
   await createOption.click();
 
   // Click on the "Inference Output" button
@@ -383,4 +381,19 @@ test("should be able to add a datapoint from the inference page", async ({
   await expect(page.url()).toMatch(
     new RegExp(`/datasets/${datasetName}/datapoint/.*`),
   );
+});
+
+test("should load an inference page with a tool call", async ({ page }) => {
+  await page.goto(
+    "/observability/inferences/0196a0ea-7f6e-7960-9087-9002150a46e6",
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  await expect(
+    page.getByText("0196a0ea-7f6e-7960-9087-9002150a46e6").first(),
+  ).toBeVisible();
+  await expect(page.getByText("multi_hop_rag_agent").first()).toBeVisible();
+  await expect(page.getByText("Testerian catechisms").first()).toBeVisible();
 });

@@ -29,8 +29,8 @@ impl GitInfo {
             .peel_to_commit()
             .map_err(|e| TensorZeroError::Git { source: e })?;
         let commit_hash = commit.id().to_string();
-        let commit_message = commit.message().map(|s| s.to_string());
-        let branch = head.name().map(|s| s.to_string());
+        let commit_message = commit.message().map(str::to_string);
+        let branch = head.name().map(str::to_string);
         let origin = repo
             .config()
             .ok()
@@ -38,8 +38,8 @@ impl GitInfo {
             .map(|s| s.to_string());
 
         // Get author and email
-        let author = commit.author().name().map(|s| s.to_string());
-        let author_email = commit.author().email().map(|s| s.to_string());
+        let author = commit.author().name().map(str::to_string);
+        let author_email = commit.author().email().map(str::to_string);
 
         // Check for untracked and modified files
         let statuses = repo.statuses(Some(

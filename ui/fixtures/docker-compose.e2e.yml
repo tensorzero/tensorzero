@@ -54,6 +54,7 @@ services:
       - "3000:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "howdy.tensorzero.com:127.0.0.1"
     depends_on:
       clickhouse:
         condition: service_healthy

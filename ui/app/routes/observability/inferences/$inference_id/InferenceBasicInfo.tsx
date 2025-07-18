@@ -14,7 +14,7 @@ import Chip from "~/components/ui/Chip";
 import {
   Timer,
   Calendar,
-  Input,
+  InputIcon,
   Output,
   Cached,
 } from "~/components/icons/Icons";
@@ -110,7 +110,7 @@ export default function BasicInfo({
         <BasicInfoItemTitle>Usage</BasicInfoItemTitle>
         <BasicInfoItemContent>
           <Chip
-            icon={<Input className="text-fg-tertiary" />}
+            icon={<InputIcon className="text-fg-tertiary" />}
             label={`${inferenceUsage?.input_tokens ?? ""} tok`}
             tooltip="Input Tokens"
           />

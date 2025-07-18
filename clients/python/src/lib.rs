@@ -875,7 +875,7 @@ impl TensorZeroGateway {
             .iter()
             .map(|x| uuid.call(this.py(), (x.to_string(),), None))
             .collect::<Result<Vec<_>, _>>()?;
-        PyList::new(this.py(), uuids).map(|x| x.unbind())
+        PyList::new(this.py(), uuids).map(Bound::unbind)
     }
 
     /// Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.

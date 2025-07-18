@@ -43,7 +43,7 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "xAI";
-const PROVIDER_TYPE: &str = "xai";
+pub const PROVIDER_TYPE: &str = "xai";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -346,11 +346,12 @@ impl<'a> XAIRequest<'a> {
             ..
         } = *request;
 
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
 
         let response_format = XAIResponseFormat::new(&request.json_mode, request.output_schema);
