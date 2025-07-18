@@ -46,16 +46,18 @@ async def candidate_inference(
     client: AsyncTensorZeroGateway,
     function_name: str,
     input: InferenceInput,
-    variant_name: str,
+    system_prompt: str,
+    model_name: str,
     semaphore: asyncio.Semaphore,
     dryrun: bool = True,
 ) -> Optional[Union[InferenceResponse, AsyncIterator[InferenceChunk]]]:
+    input["system"] = system_prompt
     try:
         async with semaphore:
             return await client.inference(
                 function_name=function_name,
                 input=input,
-                variant_name=variant_name,
+                model_name=model_name,
                 dryrun=dryrun,
             )
     except Exception as e:
