@@ -34,6 +34,7 @@ import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.s
 import InputSnippet from "~/components/inference/InputSnippet";
 import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
+import { safeParseInt } from "~/utils/common";
 
 const DEFAULT_LIMIT = 10;
 
@@ -59,10 +60,19 @@ export function shouldRevalidate(arg: ShouldRevalidateFunctionArgs) {
   const nextFunctionName = nextSearchParams.get("functionName");
   const currentDatasetName = currentSearchParams.get("datasetName");
   const nextDatasetName = nextSearchParams.get("datasetName");
-  const currentLimit = currentSearchParams.get("limit");
-  const nextLimit = nextSearchParams.get("limit");
-  const currentOffset = currentSearchParams.get("offset");
-  const nextOffset = nextSearchParams.get("offset");
+  const currentLimit = safeParseInt(
+    currentSearchParams.get("limit"),
+    DEFAULT_LIMIT,
+  );
+  const nextLimit = safeParseInt(nextSearchParams.get("limit"), DEFAULT_LIMIT);
+  const currentOffset = safeParseInt(
+    currentSearchParams.get("offset"),
+    DEFAULT_LIMIT,
+  );
+  const nextOffset = safeParseInt(
+    nextSearchParams.get("offset"),
+    DEFAULT_LIMIT,
+  );
   if (
     currentFunctionName === nextFunctionName &&
     currentDatasetName === nextDatasetName &&
@@ -78,12 +88,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
   const functionName = searchParams.get("functionName");
-  const limit = searchParams.get("limit")
-    ? parseInt(searchParams.get("limit")!)
-    : DEFAULT_LIMIT;
-  const offset = searchParams.get("offset")
-    ? parseInt(searchParams.get("offset")!)
-    : 0;
+  const limit = safeParseInt(searchParams.get("limit"), DEFAULT_LIMIT);
+  const offset = safeParseInt(searchParams.get("offset"), DEFAULT_LIMIT);
 
   let config;
   try {
