@@ -6,6 +6,7 @@ use axum::response::{IntoResponse, Json, Response};
 use serde::{Serialize, Serializer};
 use serde_json::{json, Value};
 use std::fmt::{Debug, Display};
+use thiserror::Error;
 use tokio::sync::OnceCell;
 use url::Url;
 use uuid::Uuid;
@@ -92,7 +93,8 @@ impl<T: Debug + Display> Display for DisplayOrDebugGateway<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, Error, PartialEq, Serialize)]
+#[error(transparent)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
 // We box `ErrorDetails` per the `clippy::result_large_err` lint
 pub struct Error(Box<ErrorDetails>);
@@ -147,19 +149,13 @@ where
     serializer.serialize_none()
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
-    }
-}
-
 impl From<ErrorDetails> for Error {
     fn from(details: ErrorDetails) -> Self {
         Error::new(details)
     }
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, Error, PartialEq, Serialize)]
 pub enum ErrorDetails {
     AllVariantsFailed {
         errors: HashMap<String, Error>,
@@ -262,7 +258,7 @@ pub enum ErrorDetails {
         message: String,
     },
     InvalidInferenceOutputSource {
-        source: String,
+        source_kind: String,
     },
     ObjectStoreWrite {
         message: String,
@@ -969,8 +965,8 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidTensorzeroUuid { message, kind } => {
                 write!(f, "Invalid {kind} ID: {message}")
             }
-            ErrorDetails::InvalidInferenceOutputSource { source } => {
-                write!(f, "Invalid inference output source: {source}. Should be one of: \"inference\" or \"demonstration\".")
+            ErrorDetails::InvalidInferenceOutputSource { source_kind } => {
+                write!(f, "Invalid inference output source: {source_kind}. Should be one of: \"inference\" or \"demonstration\".")
             }
             ErrorDetails::InvalidMetricName { metric_name } => {
                 write!(f, "Invalid metric name: {metric_name}")
@@ -1179,8 +1175,6 @@ impl std::fmt::Display for ErrorDetails {
         }
     }
 }
-
-impl std::error::Error for Error {}
 
 impl IntoResponse for Error {
     /// Log the error and convert it into an Axum response
