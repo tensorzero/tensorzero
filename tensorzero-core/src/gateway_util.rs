@@ -261,7 +261,7 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
-    use crate::config_parser::{GatewayConfig, ObservabilityConfig};
+    use crate::config_parser::{gateway::GatewayConfig, ObservabilityConfig};
 
     #[tokio::test]
     #[traced_test]

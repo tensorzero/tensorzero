@@ -1708,8 +1708,6 @@ async fn e2e_test_inference_original_response_non_stream() {
 
 #[tokio::test]
 async fn test_gateway_template_base_path() {
-    // We use an embedded client so that we can control the number of
-    // requests to the flaky judge.
     let gateway = make_embedded_gateway_with_config(&format!(
         r#"
 [functions.my_test]
