@@ -22,7 +22,7 @@ import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
 import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import { useCallback, useEffect, useState, Profiler } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   InferenceRequestSchema,
   type InferenceResponse,
@@ -68,10 +68,8 @@ export function shouldRevalidate(arg: ShouldRevalidateFunctionArgs) {
     currentLimit === nextLimit &&
     currentOffset === nextOffset
   ) {
-    console.log("should not revalidate");
     return false;
   }
-  console.log("should revalidate");
   return true;
 }
 
@@ -186,24 +184,6 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const config = useConfig();
 
-  // Performance monitoring
-  useEffect(() => {
-    if (typeof window !== "undefined" && "PerformanceObserver" in window) {
-      const observer = new PerformanceObserver((list) => {
-        for (const entry of list.getEntries()) {
-          if (
-            entry.entryType === "measure" &&
-            entry.name.startsWith("variant-update")
-          ) {
-            console.log(`${entry.name}: ${entry.duration.toFixed(2)}ms`);
-          }
-        }
-      });
-      observer.observe({ entryTypes: ["measure"] });
-
-      return () => observer.disconnect();
-    }
-  }, []);
   const {
     functionName,
     datasetName,
@@ -239,11 +219,6 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const updateSearchParams = (
     updates: Record<string, string | string[] | null>,
   ) => {
-    // Mark start of update
-    if (updates.variant !== undefined) {
-      performance.mark("variant-update-start");
-    }
-
     const newParams = new URLSearchParams(searchParams);
 
     Object.entries(updates).forEach(([key, value]) => {
@@ -260,42 +235,6 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     });
 
     navigate(`?${newParams.toString()}`, { replace: true });
-
-    // Measure after next frame
-    if (updates.variant !== undefined) {
-      // First frame - React updates
-      requestAnimationFrame(() => {
-        performance.mark("variant-update-first-frame");
-        console.log("First frame after variant update");
-
-        // Second frame - Browser layout/paint
-        requestAnimationFrame(() => {
-          performance.mark("variant-update-second-frame");
-          console.log("Second frame after variant update");
-
-          // Use setTimeout to ensure paint has completed
-          setTimeout(() => {
-            performance.mark("variant-update-end");
-            performance.measure(
-              "variant-update-total",
-              "variant-update-start",
-              "variant-update-end",
-            );
-            performance.measure(
-              "variant-update-to-first-frame",
-              "variant-update-start",
-              "variant-update-first-frame",
-            );
-            performance.measure(
-              "variant-update-frame-to-frame",
-              "variant-update-first-frame",
-              "variant-update-second-frame",
-            );
-            console.log("Paint should be complete");
-          }, 0);
-        });
-      });
-    }
   };
 
   return (
@@ -334,25 +273,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
         datasetName &&
         inputs &&
         functionName && (
-          <Profiler
-            id="playground-grid"
-            onRender={(
-              id,
-              phase,
-              actualDuration,
-              baseDuration,
-              startTime,
-              commitTime,
-            ) => {
-              console.log(`Playground grid render:`, {
-                phase,
-                actualDuration: `${actualDuration.toFixed(2)}ms`,
-                baseDuration: `${baseDuration.toFixed(2)}ms`,
-                variantCount: selectedVariants.length,
-                datapointCount: datapoints.length,
-              });
-            }}
-          >
+          <>
             <div className="-mx-4 mt-6 md:-mx-8 lg:-mx-16">
               <div
                 className="overflow-x-auto overflow-y-auto px-4"
@@ -442,7 +363,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                 </div>
               </div>
             </div>
-          </Profiler>
+          </>
         )}
       <PageButtons
         onPreviousPage={() => {
@@ -468,7 +389,6 @@ function useNestedPromiseMap<T>(initialMap: NestedPromiseMap<T>) {
   const [map, setMap] = useState<NestedPromiseMap<T>>(initialMap);
   const setPromise = useCallback(
     (outerKey: string, innerKey: string, promise: Promise<T>) => {
-      const startTime = performance.now();
       setMap((prevMap) => {
         const newMap = new Map(prevMap);
         const innerMap = newMap.get(outerKey) || new Map();
@@ -477,10 +397,6 @@ function useNestedPromiseMap<T>(initialMap: NestedPromiseMap<T>) {
         newMap.set(outerKey, newInnerMap);
         return newMap;
       });
-      const endTime = performance.now();
-      console.log(
-        `setPromise for ${outerKey}/${innerKey} took ${(endTime - startTime).toFixed(2)}ms`,
-      );
     },
     [],
   );
@@ -499,98 +415,76 @@ function useClientInferences(
 
   // Single combined effect to handle both server inferences and client inferences
   useEffect(() => {
-    const startTime = performance.now();
-
     if (!functionName || !datapoints || !inputs) return;
 
-    // Collect all updates in a batch
+    // First check if we need any updates
+    let needsUpdate = false;
     const updates: Array<{
       variant: string;
       datapoint: TensorZeroDatapoint;
       input: DisplayInput;
     }> = [];
 
-    // Check each required combination
-    selectedVariants.forEach((variant) => {
-      // Check if variant exists in map
-      const variantMap = map.get(variant);
+    // Use a ref to access the current map without including it in dependencies
+    setMap((prevMap) => {
+      // Check each required combination
+      selectedVariants.forEach((variant) => {
+        const variantMap = prevMap.get(variant);
 
-      datapoints.forEach((datapoint, index) => {
-        // Check if this inference already exists in the map
-        const existingPromise = variantMap?.get(datapoint.id);
+        datapoints.forEach((datapoint, index) => {
+          const existingPromise = variantMap?.get(datapoint.id);
+          if (!existingPromise) {
+            needsUpdate = true;
+            updates.push({ variant, datapoint, input: inputs[index] });
+          }
+        });
+      });
 
-        // If it doesn't exist, collect it for batch update
-        if (!existingPromise) {
-          updates.push({ variant, datapoint, input: inputs[index] });
+      // Only create a new map if we have updates
+      if (!needsUpdate) {
+        return prevMap; // Return the same reference to avoid re-render
+      }
+
+      const newMap = new Map(prevMap);
+
+      // Apply updates
+      updates.forEach(({ variant, datapoint, input }) => {
+        let variantMap = newMap.get(variant);
+        if (!variantMap) {
+          variantMap = new Map();
+          newMap.set(variant, variantMap);
         }
+
+        const request = prepareInferenceActionRequest({
+          source: "clickhouse_datapoint",
+          input,
+          functionName,
+          variant: variant,
+          tool_params:
+            datapoint?.type === "chat"
+              ? (datapoint.tool_params ?? undefined)
+              : undefined,
+          output_schema:
+            datapoint?.type === "json" ? datapoint.output_schema : null,
+        });
+        const formData = new FormData();
+        formData.append("data", JSON.stringify(request));
+        const responsePromise = fetch("/api/tensorzero/inference", {
+          method: "POST",
+          body: formData,
+        }).then(async (response) => {
+          const data = await response.json();
+          if (data.error) {
+            throw new Error(data.error);
+          }
+          return data;
+        });
+        variantMap.set(datapoint.id, responsePromise);
       });
+
+      return newMap;
     });
-
-    // If we have updates, apply them all at once
-    if (updates.length > 0) {
-      setMap((prevMap) => {
-        const newMap = new Map(prevMap);
-
-        // Group updates by variant for efficiency
-        const updatesByVariant = new Map<
-          string,
-          Array<{ datapoint: TensorZeroDatapoint; input: DisplayInput }>
-        >();
-        updates.forEach(({ variant, datapoint, input }) => {
-          if (!updatesByVariant.has(variant)) {
-            updatesByVariant.set(variant, []);
-          }
-          updatesByVariant.get(variant)!.push({ datapoint, input });
-        });
-
-        // Apply all updates
-        updatesByVariant.forEach((variantUpdates, variant) => {
-          let variantMap = newMap.get(variant);
-          if (!variantMap) {
-            variantMap = new Map();
-            newMap.set(variant, variantMap);
-          }
-
-          variantUpdates.forEach(({ datapoint, input }) => {
-            const request = prepareInferenceActionRequest({
-              source: "clickhouse_datapoint",
-              input,
-              functionName,
-              variant: variant,
-              tool_params:
-                datapoint?.type === "chat"
-                  ? (datapoint.tool_params ?? undefined)
-                  : undefined,
-              output_schema:
-                datapoint?.type === "json" ? datapoint.output_schema : null,
-            });
-            const formData = new FormData();
-            formData.append("data", JSON.stringify(request));
-            const responsePromise = fetch("/api/tensorzero/inference", {
-              method: "POST",
-              body: formData,
-            }).then(async (response) => {
-              const data = await response.json();
-              if (data.error) {
-                throw new Error(data.error);
-              }
-              return data;
-            });
-            variantMap.set(datapoint.id, responsePromise);
-          });
-        });
-
-        return newMap;
-      });
-    }
-
-    const endTime = performance.now();
-    const duration = endTime - startTime;
-    console.log(`useClientInferences effect took ${duration.toFixed(4)}ms`);
-    console.log(
-      `Processed ${selectedVariants.length} variants x ${datapoints?.length || 0} datapoints, ${updates.length} new inferences created`,
-    );
-  }, [functionName, datapoints, inputs, selectedVariants, map, setMap]);
+  }, [functionName, datapoints, inputs, selectedVariants, setMap]);
 
   return { map, setPromise, setMap };
 }
