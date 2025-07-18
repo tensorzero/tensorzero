@@ -92,6 +92,7 @@ export default function DatapointPlaygroundOutput({
                 </div>
               );
             }
+            console.log(response);
             let output;
             if ("content" in response) {
               output = response.content;
