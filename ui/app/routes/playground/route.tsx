@@ -2,9 +2,7 @@ import {
   useSearchParams,
   useNavigate,
   data,
-  Await,
   Link,
-  useAsyncError,
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
@@ -21,22 +19,21 @@ import {
   tensorZeroResolvedInputToInput,
 } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
-import { Loader2, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   InferenceRequestSchema,
   type InferenceResponse,
 } from "~/utils/tensorzero";
-import NewOutput from "~/components/inference/NewOutput";
-import { Refresh } from "~/components/icons/Icons";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
 import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.server";
 import InputSnippet from "~/components/inference/InputSnippet";
 import { Label } from "~/components/ui/label";
-import { CodeEditor } from "~/components/ui/code-editor";
+import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
+import { refreshClientInference } from "./utils";
 
 const DEFAULT_LIMIT = 10;
 
@@ -384,122 +381,6 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   );
 }
 
-interface DatapointPlaygroundOutputProps {
-  datapoint: TensorZeroDatapoint;
-  variantName: string;
-  serverInference: Promise<InferenceResponse> | undefined;
-  setPromise: (
-    variantName: string,
-    datapointId: string,
-    promise: Promise<InferenceResponse>,
-  ) => void;
-  input: DisplayInput;
-  functionName: string;
-}
-function DatapointPlaygroundOutput({
-  datapoint,
-  variantName,
-  serverInference,
-  setPromise,
-  input,
-  functionName,
-}: DatapointPlaygroundOutputProps) {
-  if (!serverInference) {
-    return (
-      <div className="flex min-h-[8rem] items-center justify-center">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute top-1 left-1 z-10 opacity-0 transition-opacity group-hover:opacity-100"
-          onClick={() => {
-            refreshClientInference(
-              setPromise,
-              input,
-              datapoint,
-              variantName,
-              functionName,
-            );
-          }}
-        >
-          <Refresh />
-        </Button>
-        <div className="text-muted-foreground text-sm">
-          No inference available
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="group relative">
-      <Button
-        variant="ghost"
-        size="icon"
-        className="absolute top-1 left-1 z-10 opacity-0 transition-opacity group-hover:opacity-100"
-        onClick={() => {
-          refreshClientInference(
-            setPromise,
-            input,
-            datapoint,
-            variantName,
-            functionName,
-          );
-        }}
-      >
-        <Refresh />
-      </Button>
-      <Suspense
-        fallback={
-          <div className="flex min-h-[8rem] items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin" />
-          </div>
-        }
-      >
-        <Await resolve={serverInference} errorElement={<InferenceError />}>
-          {(response) => {
-            if (!response) {
-              return (
-                <div className="flex min-h-[8rem] items-center justify-center">
-                  <div className="text-muted-foreground text-sm">
-                    No response available
-                  </div>
-                </div>
-              );
-            }
-            let output;
-            if ("content" in response) {
-              output = response.content;
-            } else {
-              output = response.output;
-            }
-            return <NewOutput output={output} />;
-          }}
-        </Await>
-      </Suspense>
-    </div>
-  );
-}
-
-function InferenceError() {
-  const error = useAsyncError();
-  const isInferenceError = error instanceof Error;
-
-  return (
-    <div className="flex min-h-[8rem] items-center justify-center">
-      <div className="max-h-[16rem] max-w-md overflow-y-auto px-4 text-center text-red-600">
-        <p className="font-semibold">Error</p>
-        <p className="mt-1 text-sm">
-          {isInferenceError ? (
-            <CodeEditor value={error.message} readOnly />
-          ) : (
-            "Failed to load inference"
-          )}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 type NestedPromiseMap<T> = Map<string, Map<string, Promise<T>>>;
 
 function useNestedPromiseMap<T>(initialMap: NestedPromiseMap<T>) {
@@ -563,40 +444,4 @@ function useClientInferences(
   }, [functionName, datapoints, inputs, selectedVariants, map, setPromise]);
 
   return { map, setPromise, setMap };
-}
-
-function refreshClientInference(
-  setPromise: (
-    outerKey: string,
-    innerKey: string,
-    promise: Promise<InferenceResponse>,
-  ) => void,
-  input: DisplayInput,
-  datapoint: TensorZeroDatapoint,
-  variantName: string,
-  functionName: string,
-) {
-  const request = prepareInferenceActionRequest({
-    source: "clickhouse_datapoint",
-    input,
-    functionName,
-    variant: variantName,
-    tool_params:
-      datapoint?.type === "chat"
-        ? (datapoint.tool_params ?? undefined)
-        : undefined,
-    output_schema: datapoint?.type === "json" ? datapoint.output_schema : null,
-  });
-  // The API endpoint takes form data so we need to stringify it and send as data
-  const formData = new FormData();
-  formData.append("data", JSON.stringify(request));
-  const responsePromise = async () => {
-    const response = await fetch("/api/tensorzero/inference", {
-      method: "POST",
-      body: formData,
-    });
-    const data = await response.json();
-    return data;
-  };
-  setPromise(variantName, datapoint.id, responsePromise());
 }
