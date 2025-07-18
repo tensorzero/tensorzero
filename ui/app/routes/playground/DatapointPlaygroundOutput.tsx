@@ -1,5 +1,5 @@
 import { Loader2 } from "lucide-react";
-import { Suspense } from "react";
+import { Suspense, memo } from "react";
 import { Await, useAsyncError } from "react-router";
 import { Refresh } from "~/components/icons/Icons";
 import NewOutput from "~/components/inference/NewOutput";
@@ -22,17 +22,43 @@ interface DatapointPlaygroundOutputProps {
   input: DisplayInput;
   functionName: string;
 }
-export default function DatapointPlaygroundOutput({
-  datapoint,
-  variantName,
-  serverInference,
-  setPromise,
-  input,
-  functionName,
-}: DatapointPlaygroundOutputProps) {
-  if (!serverInference) {
+const DatapointPlaygroundOutput = memo(
+  function DatapointPlaygroundOutput({
+    datapoint,
+    variantName,
+    serverInference,
+    setPromise,
+    input,
+    functionName,
+  }: DatapointPlaygroundOutputProps) {
+    if (!serverInference) {
+      return (
+        <div className="flex min-h-[8rem] items-center justify-center">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-1 left-1 z-10 opacity-0 transition-opacity group-hover:opacity-100"
+            onClick={() => {
+              refreshClientInference(
+                setPromise,
+                input,
+                datapoint,
+                variantName,
+                functionName,
+              );
+            }}
+          >
+            <Refresh />
+          </Button>
+          <div className="text-muted-foreground text-sm">
+            No inference available
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="flex min-h-[8rem] items-center justify-center">
+      <div className="group relative">
         <Button
           variant="ghost"
           size="icon"
@@ -49,63 +75,50 @@ export default function DatapointPlaygroundOutput({
         >
           <Refresh />
         </Button>
-        <div className="text-muted-foreground text-sm">
-          No inference available
-        </div>
+        <Suspense
+          fallback={
+            <div className="flex min-h-[8rem] items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          }
+        >
+          <Await resolve={serverInference} errorElement={<InferenceError />}>
+            {(response) => {
+              if (!response) {
+                return (
+                  <div className="flex min-h-[8rem] items-center justify-center">
+                    <div className="text-muted-foreground text-sm">
+                      No response available
+                    </div>
+                  </div>
+                );
+              }
+              let output;
+              if ("content" in response) {
+                output = response.content;
+              } else {
+                output = response.output;
+              }
+              return <NewOutput output={output} />;
+            }}
+          </Await>
+        </Suspense>
       </div>
     );
-  }
+  },
+  (prevProps, nextProps) => {
+    return (
+      prevProps.datapoint.id === nextProps.datapoint.id &&
+      prevProps.variantName === nextProps.variantName &&
+      prevProps.functionName === nextProps.functionName &&
+      prevProps.serverInference === nextProps.serverInference &&
+      prevProps.setPromise === nextProps.setPromise &&
+      JSON.stringify(prevProps.input) === JSON.stringify(nextProps.input)
+    );
+  },
+);
 
-  return (
-    <div className="group relative">
-      <Button
-        variant="ghost"
-        size="icon"
-        className="absolute top-1 left-1 z-10 opacity-0 transition-opacity group-hover:opacity-100"
-        onClick={() => {
-          refreshClientInference(
-            setPromise,
-            input,
-            datapoint,
-            variantName,
-            functionName,
-          );
-        }}
-      >
-        <Refresh />
-      </Button>
-      <Suspense
-        fallback={
-          <div className="flex min-h-[8rem] items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin" />
-          </div>
-        }
-      >
-        <Await resolve={serverInference} errorElement={<InferenceError />}>
-          {(response) => {
-            if (!response) {
-              return (
-                <div className="flex min-h-[8rem] items-center justify-center">
-                  <div className="text-muted-foreground text-sm">
-                    No response available
-                  </div>
-                </div>
-              );
-            }
-            console.log(response);
-            let output;
-            if ("content" in response) {
-              output = response.content;
-            } else {
-              output = response.output;
-            }
-            return <NewOutput output={output} />;
-          }}
-        </Await>
-      </Suspense>
-    </div>
-  );
-}
+export default DatapointPlaygroundOutput;
 
 function InferenceError() {
   const error = useAsyncError();

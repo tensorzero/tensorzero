@@ -22,7 +22,7 @@ import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
 import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, Profiler } from "react";
 import {
   InferenceRequestSchema,
   type InferenceResponse,
@@ -33,7 +33,6 @@ import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.s
 import InputSnippet from "~/components/inference/InputSnippet";
 import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
-import { refreshClientInference } from "./utils";
 
 const DEFAULT_LIMIT = 10;
 
@@ -69,8 +68,10 @@ export function shouldRevalidate(arg: ShouldRevalidateFunctionArgs) {
     currentLimit === nextLimit &&
     currentOffset === nextOffset
   ) {
+    console.log("should not revalidate");
     return false;
   }
+  console.log("should revalidate");
   return true;
 }
 
@@ -184,6 +185,25 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const selectedVariants = searchParams.getAll("variant");
   const navigate = useNavigate();
   const config = useConfig();
+
+  // Performance monitoring
+  useEffect(() => {
+    if (typeof window !== "undefined" && "PerformanceObserver" in window) {
+      const observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          if (
+            entry.entryType === "measure" &&
+            entry.name.startsWith("variant-update")
+          ) {
+            console.log(`${entry.name}: ${entry.duration.toFixed(2)}ms`);
+          }
+        }
+      });
+      observer.observe({ entryTypes: ["measure"] });
+
+      return () => observer.disconnect();
+    }
+  }, []);
   const {
     functionName,
     datasetName,
@@ -219,6 +239,11 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const updateSearchParams = (
     updates: Record<string, string | string[] | null>,
   ) => {
+    // Mark start of update
+    if (updates.variant !== undefined) {
+      performance.mark("variant-update-start");
+    }
+
     const newParams = new URLSearchParams(searchParams);
 
     Object.entries(updates).forEach(([key, value]) => {
@@ -235,6 +260,42 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     });
 
     navigate(`?${newParams.toString()}`, { replace: true });
+
+    // Measure after next frame
+    if (updates.variant !== undefined) {
+      // First frame - React updates
+      requestAnimationFrame(() => {
+        performance.mark("variant-update-first-frame");
+        console.log("First frame after variant update");
+
+        // Second frame - Browser layout/paint
+        requestAnimationFrame(() => {
+          performance.mark("variant-update-second-frame");
+          console.log("Second frame after variant update");
+
+          // Use setTimeout to ensure paint has completed
+          setTimeout(() => {
+            performance.mark("variant-update-end");
+            performance.measure(
+              "variant-update-total",
+              "variant-update-start",
+              "variant-update-end",
+            );
+            performance.measure(
+              "variant-update-to-first-frame",
+              "variant-update-start",
+              "variant-update-first-frame",
+            );
+            performance.measure(
+              "variant-update-frame-to-frame",
+              "variant-update-first-frame",
+              "variant-update-second-frame",
+            );
+            console.log("Paint should be complete");
+          }, 0);
+        });
+      });
+    }
   };
 
   return (
@@ -273,95 +334,115 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
         datasetName &&
         inputs &&
         functionName && (
-          <div className="-mx-4 mt-6 md:-mx-8 lg:-mx-16">
-            <div
-              className="overflow-x-auto overflow-y-auto px-4"
-              style={{ maxHeight: "calc(100vh - 200px)" }}
-            >
-              <div className="min-w-fit">
-                {/* Header row with sticky positioning */}
-                <div className="bg-background sticky top-0 z-20 grid grid-cols-[400px_1fr] border-b">
-                  <div className="bg-background sticky left-0 z-30 border-r p-4 font-medium">
-                    Datapoint Input
-                  </div>
-                  <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
-                    {selectedVariants.map((variant) => (
-                      <div
-                        key={variant}
-                        className="border-r p-4 font-medium last:border-r-0"
-                      >
-                        <Link
-                          to={`/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variant)}`}
-                          className="text-blue-600 hover:text-blue-800 hover:underline"
+          <Profiler
+            id="playground-grid"
+            onRender={(
+              id,
+              phase,
+              actualDuration,
+              baseDuration,
+              startTime,
+              commitTime,
+            ) => {
+              console.log(`Playground grid render:`, {
+                phase,
+                actualDuration: `${actualDuration.toFixed(2)}ms`,
+                baseDuration: `${baseDuration.toFixed(2)}ms`,
+                variantCount: selectedVariants.length,
+                datapointCount: datapoints.length,
+              });
+            }}
+          >
+            <div className="-mx-4 mt-6 md:-mx-8 lg:-mx-16">
+              <div
+                className="overflow-x-auto overflow-y-auto px-4"
+                style={{ maxHeight: "calc(100vh - 200px)" }}
+              >
+                <div className="min-w-fit">
+                  {/* Header row with sticky positioning */}
+                  <div className="bg-background sticky top-0 z-20 grid grid-cols-[400px_1fr] border-b">
+                    <div className="bg-background sticky left-0 z-30 border-r p-4 font-medium">
+                      Datapoint Input
+                    </div>
+                    <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
+                      {selectedVariants.map((variant) => (
+                        <div
+                          key={variant}
+                          className="border-r p-4 font-medium last:border-r-0"
                         >
-                          {variant}
-                        </Link>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            updateSearchParams({
-                              variant: selectedVariants.filter(
-                                (v) => v !== variant,
-                              ),
-                            });
-                          }}
-                        >
-                          <X />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {datapoints.map(
-                  (datapoint: TensorZeroDatapoint, index: number) => (
-                    <div
-                      key={datapoint.id}
-                      className="grid grid-cols-[400px_1fr] border-b"
-                    >
-                      <div className="bg-background sticky left-0 z-10 border-r p-4 font-mono text-sm">
-                        <div className="text-xs text-gray-500">
-                          Datapoint:{" "}
                           <Link
-                            to={`/datasets/${encodeURIComponent(datasetName)}/datapoint/${datapoint.id}`}
+                            to={`/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variant)}`}
                             className="text-blue-600 hover:text-blue-800 hover:underline"
                           >
-                            {datapoint.id}
+                            {variant}
                           </Link>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              updateSearchParams({
+                                variant: selectedVariants.filter(
+                                  (v) => v !== variant,
+                                ),
+                              });
+                            }}
+                          >
+                            <X />
+                          </Button>
                         </div>
-                        <InputSnippet
-                          messages={inputs[index].messages}
-                          system={inputs[index].system}
-                        />
-                      </div>
-                      <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
-                        {selectedVariants.map((variant) => {
-                          return (
-                            <div
-                              key={`${datapoint.id}-${variant}`}
-                              className="border-r p-4 last:border-r-0"
-                            >
-                              <DatapointPlaygroundOutput
-                                datapoint={datapoint}
-                                variantName={variant}
-                                serverInference={map
-                                  .get(variant)
-                                  ?.get(datapoint.id)}
-                                setPromise={setPromise}
-                                input={inputs[index]}
-                                functionName={functionName}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
+                      ))}
                     </div>
-                  ),
-                )}
+                  </div>
+
+                  {datapoints.map(
+                    (datapoint: TensorZeroDatapoint, index: number) => (
+                      <div
+                        key={datapoint.id}
+                        className="grid grid-cols-[400px_1fr] border-b"
+                      >
+                        <div className="bg-background sticky left-0 z-10 border-r p-4 font-mono text-sm">
+                          <div className="text-xs text-gray-500">
+                            Datapoint:{" "}
+                            <Link
+                              to={`/datasets/${encodeURIComponent(datasetName)}/datapoint/${datapoint.id}`}
+                              className="text-blue-600 hover:text-blue-800 hover:underline"
+                            >
+                              {datapoint.id}
+                            </Link>
+                          </div>
+                          <InputSnippet
+                            messages={inputs[index].messages}
+                            system={inputs[index].system}
+                          />
+                        </div>
+                        <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
+                          {selectedVariants.map((variant) => {
+                            return (
+                              <div
+                                key={`${datapoint.id}-${variant}`}
+                                className="border-r p-4 last:border-r-0"
+                              >
+                                <DatapointPlaygroundOutput
+                                  datapoint={datapoint}
+                                  variantName={variant}
+                                  serverInference={map
+                                    .get(variant)
+                                    ?.get(datapoint.id)}
+                                  setPromise={setPromise}
+                                  input={inputs[index]}
+                                  functionName={functionName}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          </Profiler>
         )}
       <PageButtons
         onPreviousPage={() => {
@@ -387,6 +468,7 @@ function useNestedPromiseMap<T>(initialMap: NestedPromiseMap<T>) {
   const [map, setMap] = useState<NestedPromiseMap<T>>(initialMap);
   const setPromise = useCallback(
     (outerKey: string, innerKey: string, promise: Promise<T>) => {
+      const startTime = performance.now();
       setMap((prevMap) => {
         const newMap = new Map(prevMap);
         const innerMap = newMap.get(outerKey) || new Map();
@@ -395,6 +477,10 @@ function useNestedPromiseMap<T>(initialMap: NestedPromiseMap<T>) {
         newMap.set(outerKey, newInnerMap);
         return newMap;
       });
+      const endTime = performance.now();
+      console.log(
+        `setPromise for ${outerKey}/${innerKey} took ${(endTime - startTime).toFixed(2)}ms`,
+      );
     },
     [],
   );
@@ -410,38 +496,101 @@ function useClientInferences(
 ) {
   const { map, setPromise, setMap } =
     useNestedPromiseMap<InferenceResponse>(serverInferences);
+
+  // Single combined effect to handle both server inferences and client inferences
   useEffect(() => {
-    setMap(serverInferences);
-  }, [serverInferences, setMap]);
-  // Effect to ensure all needed inferences are present
-  useEffect(() => {
+    const startTime = performance.now();
+
     if (!functionName || !datapoints || !inputs) return;
+
+    // Collect all updates in a batch
+    const updates: Array<{
+      variant: string;
+      datapoint: TensorZeroDatapoint;
+      input: DisplayInput;
+    }> = [];
 
     // Check each required combination
     selectedVariants.forEach((variant) => {
-      // Ensure the variant key exists in the map
-      if (!map.has(variant)) {
-        map.set(variant, new Map());
-      }
+      // Check if variant exists in map
+      const variantMap = map.get(variant);
 
       datapoints.forEach((datapoint, index) => {
         // Check if this inference already exists in the map
-        const existingPromise = map.get(variant)?.get(datapoint.id);
+        const existingPromise = variantMap?.get(datapoint.id);
 
-        // If it doesn't exist, create it
+        // If it doesn't exist, collect it for batch update
         if (!existingPromise) {
-          const input = inputs[index];
-          refreshClientInference(
-            setPromise,
-            input,
-            datapoint,
-            variant,
-            functionName,
-          );
+          updates.push({ variant, datapoint, input: inputs[index] });
         }
       });
     });
-  }, [functionName, datapoints, inputs, selectedVariants, map, setPromise]);
+
+    // If we have updates, apply them all at once
+    if (updates.length > 0) {
+      setMap((prevMap) => {
+        const newMap = new Map(prevMap);
+
+        // Group updates by variant for efficiency
+        const updatesByVariant = new Map<
+          string,
+          Array<{ datapoint: TensorZeroDatapoint; input: DisplayInput }>
+        >();
+        updates.forEach(({ variant, datapoint, input }) => {
+          if (!updatesByVariant.has(variant)) {
+            updatesByVariant.set(variant, []);
+          }
+          updatesByVariant.get(variant)!.push({ datapoint, input });
+        });
+
+        // Apply all updates
+        updatesByVariant.forEach((variantUpdates, variant) => {
+          let variantMap = newMap.get(variant);
+          if (!variantMap) {
+            variantMap = new Map();
+            newMap.set(variant, variantMap);
+          }
+
+          variantUpdates.forEach(({ datapoint, input }) => {
+            const request = prepareInferenceActionRequest({
+              source: "clickhouse_datapoint",
+              input,
+              functionName,
+              variant: variant,
+              tool_params:
+                datapoint?.type === "chat"
+                  ? (datapoint.tool_params ?? undefined)
+                  : undefined,
+              output_schema:
+                datapoint?.type === "json" ? datapoint.output_schema : null,
+            });
+            const formData = new FormData();
+            formData.append("data", JSON.stringify(request));
+            const responsePromise = fetch("/api/tensorzero/inference", {
+              method: "POST",
+              body: formData,
+            }).then(async (response) => {
+              const data = await response.json();
+              if (data.error) {
+                throw new Error(data.error);
+              }
+              return data;
+            });
+            variantMap.set(datapoint.id, responsePromise);
+          });
+        });
+
+        return newMap;
+      });
+    }
+
+    const endTime = performance.now();
+    const duration = endTime - startTime;
+    console.log(`useClientInferences effect took ${duration.toFixed(4)}ms`);
+    console.log(
+      `Processed ${selectedVariants.length} variants x ${datapoints?.length || 0} datapoints, ${updates.length} new inferences created`,
+    );
+  }, [functionName, datapoints, inputs, selectedVariants, map, setMap]);
 
   return { map, setPromise, setMap };
 }
