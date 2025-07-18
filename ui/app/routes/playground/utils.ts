@@ -34,6 +34,10 @@ export function refreshClientInference(
       body: formData,
     });
     const data = await response.json();
+    console.log(data);
+    if (data.error) {
+      throw new Error(data.error);
+    }
     return data;
   };
   setPromise(variantName, datapoint.id, responsePromise());
