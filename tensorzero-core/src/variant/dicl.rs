@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::Path;
 use std::sync::Arc;
 
 use serde::Deserialize;
@@ -605,16 +604,13 @@ pub fn default_system_instructions() -> String {
 }
 
 impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
-    /// Since the system instructions are optional and may be a path to a file,
-    /// we need to load them here so that we can use the base_path to resolve
-    /// any relative paths.
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<DiclConfig, Error> {
+    fn load(self) -> Result<DiclConfig, Error> {
         let system_instructions = match self.system_instructions {
             Some(path) => {
-                let path = base_path.as_ref().join(path.path());
+                let path = path.path();
                 fs::read_to_string(path).map_err(|e| {
                     Error::new(ErrorDetails::Config {
-                        message: format!("Failed to read system instructions: {e}"),
+                        message: format!("Failed to read system instructions from `{path:?}`: {e}"),
                     })
                 })?
             }

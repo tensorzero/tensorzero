@@ -1,5 +1,4 @@
 use std::fmt;
-use std::path::Path;
 
 use futures::future::join_all;
 use rand::Rng;
@@ -80,13 +79,13 @@ pub struct UninitializedFuserConfig {
 }
 
 impl LoadableConfig<MixtureOfNConfig> for UninitializedMixtureOfNConfig {
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<MixtureOfNConfig, Error> {
+    fn load(self) -> Result<MixtureOfNConfig, Error> {
         Ok(MixtureOfNConfig {
             weight: self.weight,
             timeout_s: self.timeout_s,
             candidates: self.candidates,
             fuser: FuserConfig {
-                inner: self.fuser.inner.load(base_path)?,
+                inner: self.fuser.inner.load()?,
             },
         })
     }
