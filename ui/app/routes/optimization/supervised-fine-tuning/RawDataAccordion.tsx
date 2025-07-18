@@ -4,15 +4,15 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "~/components/ui/accordion";
-import type { RawData } from "~/utils/supervised_fine_tuning/common";
 import { useEffect, useState } from "react";
 import { Textarea } from "~/components/ui/textarea";
+import type { OptimizationJobInfo } from "tensorzero-node";
 
 interface RawDataAccordionProps {
-  rawData: RawData;
+  rawData: OptimizationJobInfo;
 }
 
-type RawDataWithTimestamp = RawData & {
+type RawDataWithTimestamp = OptimizationJobInfo & {
   timestamp: Date;
 };
 
@@ -27,7 +27,7 @@ export function RawDataAccordion({ rawData }: RawDataAccordionProps) {
 
   // Update accordion value when new data comes in
   useEffect(() => {
-    if (rawData && rawData.status === "error") {
+    if (rawData && rawData.status === "failed") {
       setAccordionValue("raw-data");
     } else {
       setAccordionValue(undefined);
@@ -46,7 +46,7 @@ export function RawDataAccordion({ rawData }: RawDataAccordionProps) {
   }, [rawData]);
 
   // Add these utility functions
-  const getSerializedData = (entry: RawData) => {
+  const getSerializedData = (entry: OptimizationJobInfo) => {
     return JSON.stringify(entry, null, 2);
   };
 
@@ -55,8 +55,8 @@ export function RawDataAccordion({ rawData }: RawDataAccordionProps) {
     return Math.max(lineCount * 21, 100); // Adjust multiplier as needed
   };
 
-  const getEntryClassName = (entry: RawData) => {
-    return entry.status === "error" ? "border-red-200" : "border-gray-200";
+  const getEntryClassName = (entry: OptimizationJobInfo) => {
+    return entry.status === "failed" ? "border-red-200" : "border-gray-200";
   };
 
   return (
@@ -83,7 +83,7 @@ export function RawDataAccordion({ rawData }: RawDataAccordionProps) {
                   <div className="text-sm text-gray-500">
                     {new Date(entry.timestamp).toLocaleTimeString()}
                   </div>
-                  {entry.status === "error" && (
+                  {entry.status === "failed" && (
                     <div className="text-sm font-medium text-red-600">
                       Error
                     </div>
@@ -93,7 +93,7 @@ export function RawDataAccordion({ rawData }: RawDataAccordionProps) {
                   value={serializedData}
                   style={{ height: `${height}px` }}
                   className={`w-full resize-none rounded border-none bg-slate-100 p-2 font-mono text-sm focus:ring-0 dark:bg-slate-800 ${
-                    entry.status === "error" ? "bg-red-50 text-red-700" : ""
+                    entry.status === "failed" ? "bg-red-50 text-red-700" : ""
                   }`}
                   readOnly
                 />
