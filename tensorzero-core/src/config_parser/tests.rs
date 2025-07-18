@@ -1459,8 +1459,14 @@ async fn test_invalid_toml() {
         .unwrap_err()
         .to_string();
 
-    assert!(err.contains("duplicate key"), "Message is missing 'duplicate key': {err}");
-    assert!(err.contains("models.my-model"), "Message is missing 'models.my-model': {err}");
+    assert!(
+        err.contains("duplicate key"),
+        "Message is missing 'duplicate key': {err}"
+    );
+    assert!(
+        err.contains("models.my-model"),
+        "Message is missing 'models.my-model': {err}"
+    );
 }
 
 #[tokio::test]
