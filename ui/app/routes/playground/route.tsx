@@ -5,6 +5,7 @@ import {
   Link,
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
+  isRouteErrorResponse,
 } from "react-router";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
@@ -83,7 +84,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   const offset = searchParams.get("offset")
     ? parseInt(searchParams.get("offset")!)
     : 0;
-  const config = await getConfig();
+
+  let config;
+  try {
+    config = await getConfig();
+  } catch {
+    throw data("Failed to load configuration", { status: 500 });
+  }
+
   const functionConfig = functionName
     ? (config.functions[functionName] ?? null)
     : null;
@@ -94,22 +102,44 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
   const datasetName = searchParams.get("datasetName");
   const selectedVariants = searchParams.getAll("variant");
-  const [datapoints, totalDatapoints] = datasetName
-    ? await Promise.all([
-        listDatapoints(datasetName, functionName ?? undefined, limit, offset),
-        functionName
-          ? countDatapointsForDatasetFunction(datasetName, functionName)
-          : null,
-      ])
-    : [undefined, null];
-  const inputs = datapoints
-    ? await Promise.all(
-        datapoints.map(async (datapoint) => {
-          const inputData = tensorZeroResolvedInputToInput(datapoint.input);
-          return await resolveInput(inputData, functionConfig ?? null);
-        }),
-      )
-    : undefined;
+
+  let datapoints, totalDatapoints;
+  try {
+    [datapoints, totalDatapoints] = datasetName
+      ? await Promise.all([
+          listDatapoints(datasetName, functionName ?? undefined, limit, offset),
+          functionName
+            ? countDatapointsForDatasetFunction(datasetName, functionName)
+            : null,
+        ])
+      : [undefined, null];
+  } catch (error) {
+    throw data(
+      `Failed to load datapoints: ${error instanceof Error ? error.message : "Unknown error"}`,
+      {
+        status: 500,
+      },
+    );
+  }
+
+  let inputs;
+  try {
+    inputs = datapoints
+      ? await Promise.all(
+          datapoints.map(async (datapoint) => {
+            const inputData = tensorZeroResolvedInputToInput(datapoint.input);
+            return await resolveInput(inputData, functionConfig ?? null);
+          }),
+        )
+      : undefined;
+  } catch (error) {
+    throw data(
+      `Failed to resolve inputs: ${error instanceof Error ? error.message : "Unknown error"}`,
+      {
+        status: 500,
+      },
+    );
+  }
 
   // Create a closure we can apply to each datapoint x variant pair
   // and return the promises from the loader
@@ -487,4 +517,71 @@ function useClientInferences(
   }, [functionName, datapoints, inputs, selectedVariants, setMap]);
 
   return { map, setPromise, setMap };
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  if (isRouteErrorResponse(error)) {
+    return (
+      <PageLayout>
+        <div className="flex min-h-[50vh] flex-col items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-gray-900">
+              {error.status} {error.statusText}
+            </h1>
+            <p className="mt-4 text-lg text-gray-600">{error.data}</p>
+            <Link
+              to="/playground"
+              className="mt-6 inline-block rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            >
+              Go to Playground
+            </Link>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  } else if (error instanceof Error) {
+    return (
+      <PageLayout>
+        <div className="flex min-h-[50vh] flex-col items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-gray-900">Error</h1>
+            <p className="mt-4 text-lg text-gray-600">{error.message}</p>
+            <details className="mt-4 max-w-2xl text-left">
+              <summary className="cursor-pointer text-sm text-gray-500">
+                Stack trace
+              </summary>
+              <pre className="mt-2 overflow-auto rounded bg-gray-100 p-4 text-xs">
+                {error.stack}
+              </pre>
+            </details>
+            <Link
+              to="/playground"
+              className="mt-6 inline-block rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            >
+              Go to Playground
+            </Link>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  } else {
+    return (
+      <PageLayout>
+        <div className="flex min-h-[50vh] flex-col items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-gray-900">Unknown Error</h1>
+            <p className="mt-4 text-lg text-gray-600">
+              An unexpected error occurred. Please try again.
+            </p>
+            <Link
+              to="/playground"
+              className="mt-6 inline-block rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            >
+              Go to Playground
+            </Link>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  }
 }
