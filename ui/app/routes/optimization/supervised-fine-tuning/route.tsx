@@ -187,7 +187,7 @@ export default function SupervisedFineTuning(props: Route.ComponentProps) {
         <PageHeader heading="Supervised Fine-Tuning" />
         <SectionLayout>
           <div className="text-sm text-red-500">
-            Error: {loaderData.jobInfo.message}
+            {JSON.stringify(loaderData.jobInfo.error, null, 2)}
           </div>
         </SectionLayout>
       </PageLayout>
