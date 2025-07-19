@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { DatasetSelector } from "./DatasetSelector";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useArgs } from "storybook/preview-api";
 
 // Ordered incorrectly to test sorting
