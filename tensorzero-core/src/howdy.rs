@@ -22,7 +22,7 @@
 
 use lazy_static::lazy_static;
 use reqwest::Client;
-use serde::Serialize;
+use serde::{Deserialize, Deserializer, Serialize};
 use std::env;
 use tokio::{
     time::{self, Duration},
@@ -30,7 +30,7 @@ use tokio::{
 };
 use tracing::{debug, info};
 
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::{clickhouse::ClickHouseConnectionInfo, endpoints::inference};
 
 lazy_static! {
     /// The URL to send usage data to.
@@ -129,34 +129,69 @@ pub async fn get_howdy_report<'a>(
     })
 }
 
+#[derive(Debug)]
+struct InferenceCounts {
+    inference_count: String,
+    chat_inference_count: String,
+    json_inference_count: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClickHouseInferenceCounts {
+    #[serde(deserialize_with = "deserialize_u64")]
+    chat_inference_count: u64,
+    #[serde(deserialize_with = "deserialize_u64")]
+    json_inference_count: u64,
+}
+
+// Since ClickHouse returns strings for UInt64, we need to deserialize them as u64
+fn deserialize_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    s.parse().map_err(serde::de::Error::custom)
+}
+
 /// Count all inferences in the ClickHouse DB.
 /// This returns a string since u64 cannot be represented in JSON and we simply pass it through to howdy
-async fn count_inferences(clickhouse: &ClickHouseConnectionInfo) -> Result<String, String> {
+async fn count_inferences(
+    clickhouse: &ClickHouseConnectionInfo,
+) -> Result<InferenceCounts, String> {
     let Ok(response) = clickhouse
         .run_query_synchronous_no_params(
-            r#"SELECT SUM(count) AS inference_count
-                  FROM
-                  (
-                    SELECT COUNT() AS count FROM ChatInference
-                    UNION ALL
-                    SELECT COUNT() AS count FROM JsonInference
-                  )
-                  "#
+            r#"
+            SELECT
+                (SELECT COUNT() FROM ChatInference) as chat_inference_count,
+                (SELECT COUNT() FROM JsonInference) as json_inference_count
+            Format JSONEachRow
+            "#
             .to_string(),
         )
         .await
     else {
         return Err("Failed to query ClickHouse for inference count".to_string());
     };
-    let response_str = response.response.trim().to_string();
-    // make sure this parses as a u64
-    if response_str.parse::<u64>().is_err() {
-        return Err(format!(
-            "Failed to parse inference count as u64: {}",
-            response.response
-        ));
-    }
-    Ok(response_str)
+    let response_counts: ClickHouseInferenceCounts = serde_json::from_str(response.response)
+        .map_err(|e| format!("Failed to deserialize ClickHouseInferenceCounts: {e}"))?;
+
+    let inference_count =
+        response_counts.chat_inference_count + response_counts.json_inference_count;
+
+    Ok(InferenceCounts {
+        inference_count: inference_count.to_string(),
+        chat_inference_count: response_counts.chat_inference_count.to_string(),
+        json_inference_count: response_counts.json_inference_count.to_string(),
+    })
+}
+
+#[derive(Debug)]
+struct FeedbackCounts {
+    feedback_count: String,
+    float_metric_feedback_count: String,
+    boolean_metric_feedback_count: String,
+    comment_feedback_count: String,
+    demontration_feedback_count: String,
 }
 
 /// Count all feedbacks in the ClickHouse DB.
@@ -199,6 +234,14 @@ pub struct HowdyReportBody<'a> {
     pub feedback_count: String,
     pub gateway_version: &'static str,
     pub commit_hash: Option<&'static str>,
+    pub input_token_total: Option<String>,
+    pub output_token_total: Option<String>,
+    pub chat_inference_count: Option<String>,
+    pub json_inference_count: Option<String>,
+    pub float_feedback_count: Option<String>,
+    pub boolean_feedback_count: Option<String>,
+    pub comment_feedback_count: Option<String>,
+    pub demonstration_feedback_count: Option<String>,
     #[serde(default)]
     pub dryrun: bool,
 }
