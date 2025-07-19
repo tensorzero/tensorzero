@@ -1,0 +1,18 @@
+[project]
+name = "tensorzero-examples-multimodal-vision-finetuning"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "arxiv>=2.2.0",
+    "ipykernel>=6.29.5",
+    "ipywidgets>=8.1.6",
+    "pandas>=2.2.3",
+    "pymupdf>=1.25.5",
+    "requests>=2.32.3",
+    "tensorzero",
+    "tqdm>=4.67.1",
+]
+
+[dependency-groups]
+dev = ["pyright>=1.1.400"]
