@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import DatasetSelector from "~/components/dataset/DatasetSelector";
 import {
   AlertDialog,
   AlertDialogContent,
