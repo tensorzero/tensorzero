@@ -30,7 +30,7 @@ use tokio::{
 };
 use tracing::{debug, info};
 
-use crate::{clickhouse::ClickHouseConnectionInfo, endpoints::inference};
+use crate::clickhouse::ClickHouseConnectionInfo;
 
 lazy_static! {
     /// The URL to send usage data to.
@@ -117,14 +117,22 @@ pub async fn get_howdy_report<'a>(
     deployment_id: &'a str,
 ) -> Result<HowdyReportBody<'a>, String> {
     let dryrun = cfg!(any(test, feature = "e2e_tests"));
-    let (inference_count, feedback_count) =
+    let (inference_counts, feedback_counts) =
         try_join!(count_inferences(clickhouse), count_feedbacks(clickhouse))?;
     Ok(HowdyReportBody {
         deployment_id,
-        inference_count,
-        feedback_count,
+        inference_count: inference_counts.inference_count,
+        feedback_count: feedback_counts.feedback_count,
         gateway_version: crate::endpoints::status::TENSORZERO_VERSION,
         commit_hash: crate::built_info::GIT_COMMIT_HASH_SHORT,
+        input_token_total: None,  // TODO: implement token counting
+        output_token_total: None, // TODO: implement token counting
+        chat_inference_count: Some(inference_counts.chat_inference_count),
+        json_inference_count: Some(inference_counts.json_inference_count),
+        float_feedback_count: Some(feedback_counts.float_metric_feedback_count),
+        boolean_feedback_count: Some(feedback_counts.boolean_metric_feedback_count),
+        comment_feedback_count: Some(feedback_counts.comment_feedback_count),
+        demonstration_feedback_count: Some(feedback_counts.demonstration_feedback_count),
         dryrun,
     })
 }
@@ -172,7 +180,7 @@ async fn count_inferences(
     else {
         return Err("Failed to query ClickHouse for inference count".to_string());
     };
-    let response_counts: ClickHouseInferenceCounts = serde_json::from_str(response.response)
+    let response_counts: ClickHouseInferenceCounts = serde_json::from_str(&response.response)
         .map_err(|e| format!("Failed to deserialize ClickHouseInferenceCounts: {e}"))?;
 
     let inference_count =
@@ -191,40 +199,55 @@ struct FeedbackCounts {
     float_metric_feedback_count: String,
     boolean_metric_feedback_count: String,
     comment_feedback_count: String,
-    demontration_feedback_count: String,
+    demonstration_feedback_count: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClickHouseFeedbackCounts {
+    #[serde(deserialize_with = "deserialize_u64")]
+    boolean_metric_feedback_count: u64,
+    #[serde(deserialize_with = "deserialize_u64")]
+    float_metric_feedback_count: u64,
+    #[serde(deserialize_with = "deserialize_u64")]
+    demonstration_feedback_count: u64,
+    #[serde(deserialize_with = "deserialize_u64")]
+    comment_feedback_count: u64,
 }
 
 /// Count all feedbacks in the ClickHouse DB.
 /// This returns a string since u64 cannot be represented in JSON and we simply pass it through to howdy
-async fn count_feedbacks(clickhouse: &ClickHouseConnectionInfo) -> Result<String, String> {
+async fn count_feedbacks(clickhouse: &ClickHouseConnectionInfo) -> Result<FeedbackCounts, String> {
     let Ok(response) = clickhouse
         .run_query_synchronous_no_params(
-            r#"SELECT SUM(count) AS feedback_count
-                  FROM
-                  (
-                    SELECT COUNT() AS count FROM BooleanMetricFeedback
-                    UNION ALL
-                    SELECT COUNT() AS count FROM FloatMetricFeedback
-                    UNION ALL
-                    SELECT COUNT() AS count FROM DemonstrationFeedback
-                    UNION ALL
-                    SELECT COUNT() AS count FROM CommentFeedback
-                  )
-                  "#
+            r#"
+            SELECT
+                (SELECT COUNT() FROM BooleanMetricFeedback) as boolean_metric_feedback_count,
+                (SELECT COUNT() FROM FloatMetricFeedback) as float_metric_feedback_count,
+                (SELECT COUNT() FROM DemonstrationFeedback) as demonstration_feedback_count,
+                (SELECT COUNT() FROM CommentFeedback) as comment_feedback_count
+            Format JSONEachRow
+            "#
             .to_string(),
         )
         .await
     else {
         return Err("Failed to query ClickHouse for feedback count".to_string());
     };
-    let response_str = response.response.trim().to_string();
-    if response_str.parse::<u64>().is_err() {
-        return Err(format!(
-            "Failed to parse feedback count as u64: {}",
-            response.response
-        ));
-    }
-    Ok(response_str)
+    let response_counts: ClickHouseFeedbackCounts = serde_json::from_str(&response.response)
+        .map_err(|e| format!("Failed to deserialize ClickHouseFeedbackCounts: {e}"))?;
+
+    let feedback_count = response_counts.boolean_metric_feedback_count
+        + response_counts.float_metric_feedback_count
+        + response_counts.demonstration_feedback_count
+        + response_counts.comment_feedback_count;
+
+    Ok(FeedbackCounts {
+        feedback_count: feedback_count.to_string(),
+        float_metric_feedback_count: response_counts.float_metric_feedback_count.to_string(),
+        boolean_metric_feedback_count: response_counts.boolean_metric_feedback_count.to_string(),
+        comment_feedback_count: response_counts.comment_feedback_count.to_string(),
+        demonstration_feedback_count: response_counts.demonstration_feedback_count.to_string(),
+    })
 }
 
 #[derive(Debug, Serialize)]
