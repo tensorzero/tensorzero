@@ -259,7 +259,7 @@ describe("countRowsForDataset", () => {
 
 describe("getDatasetCounts", () => {
   test("returns the correct counts for all datasets", async () => {
-    const counts = await getDatasetCounts();
+    const counts = await getDatasetCounts({});
     expect(counts).toEqual(
       // We only assert that the result contains the expected datasets
       // Because other tests insert into the table, there could be additional datasets
@@ -273,6 +273,19 @@ describe("getDatasetCounts", () => {
           count: 6,
           dataset_name: "bar",
           last_updated: "2025-03-14T17:38:09Z",
+        },
+      ]),
+    );
+  });
+
+  test("returns the correct counts for a specific function", async () => {
+    const counts = await getDatasetCounts({ function_name: "write_haiku" });
+    expect(counts).toEqual(
+      expect.arrayContaining([
+        {
+          count: 77,
+          dataset_name: "foo",
+          last_updated: "2025-03-23T20:03:59Z",
         },
       ]),
     );

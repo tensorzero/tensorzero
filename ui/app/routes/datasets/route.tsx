@@ -22,7 +22,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
-  const counts = await getDatasetCounts(pageSize, offset);
+  const counts = await getDatasetCounts({
+    page_size: pageSize,
+    offset,
+  });
   const numberOfDatasets = await getNumberOfDatasets();
   return { counts, pageSize, offset, numberOfDatasets };
 }

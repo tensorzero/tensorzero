@@ -51,7 +51,6 @@
     "@react-router/node": "^7.6.3",
     "@react-router/serve": "^7.6.3",
     "@tailwindcss/vite": "^4.1.11",
-    "@tanstack/react-query": "^5.81.5",
     "@tanstack/react-table": "^8.21.3",
     "@uiw/codemirror-theme-github": "^4.24.0",
     "@uiw/react-codemirror": "^4.24.0",

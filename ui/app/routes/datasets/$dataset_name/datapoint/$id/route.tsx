@@ -93,7 +93,7 @@ export async function action({ request }: ActionFunctionArgs) {
       parsedFormData.id,
       functionType,
     );
-    const datasetCounts = await getDatasetCounts();
+    const datasetCounts = await getDatasetCounts({});
     const datasetCount = datasetCounts.find(
       (count) => count.dataset_name === parsedFormData.dataset_name,
     );
