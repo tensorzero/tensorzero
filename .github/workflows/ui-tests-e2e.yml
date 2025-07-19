@@ -109,7 +109,8 @@ jobs:
         run: exit 1
 
   ui-tests-e2e:
-    runs-on: namespace-profile-tensorzero-8x16
+    # We're only using namespace here so that we can download the container artifacts
+    runs-on: namespace-profile-tensorzero-2x8
 
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
