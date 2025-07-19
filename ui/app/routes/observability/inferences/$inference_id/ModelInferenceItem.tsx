@@ -15,7 +15,7 @@ import {
 } from "~/components/layout/PageLayout";
 import {
   Timer,
-  Input,
+  InputIcon,
   Output,
   Calendar,
   Cached,
@@ -27,7 +27,7 @@ import {
   SnippetContent,
 } from "~/components/layout/SnippetLayout";
 import { CodeEditor } from "~/components/ui/code-editor";
-import NewOutput from "~/components/inference/NewOutput";
+import ModelInferenceOutput from "~/components/inference/ModelInferenceOutput";
 
 interface ModelInferenceItemProps {
   inference: ParsedModelInferenceRow;
@@ -68,7 +68,7 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
             <BasicInfoItemContent>
               <div className="flex flex-row gap-1">
                 <Chip
-                  icon={<Input className="text-fg-tertiary" />}
+                  icon={<InputIcon className="text-fg-tertiary" />}
                   label={`${inference.input_tokens} tok`}
                   tooltip="Input Tokens"
                 />
@@ -130,7 +130,7 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
 
         <SectionLayout>
           <SectionHeader heading="Output" />
-          <NewOutput output={inference.output} />
+          <ModelInferenceOutput output={inference.output} />
         </SectionLayout>
 
         <SectionLayout>

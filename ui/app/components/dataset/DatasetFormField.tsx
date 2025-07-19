@@ -1,6 +1,6 @@
 import type { Control, FieldPath, FieldValues } from "react-hook-form";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
-import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import DatasetSelector from "~/components/dataset/DatasetSelector";
 
 interface DatasetFormFieldProps<T extends FieldValues> {
   control: Control<T>;

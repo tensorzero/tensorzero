@@ -53,7 +53,7 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "OpenRouter";
-const PROVIDER_TYPE: &str = "openrouter";
+pub const PROVIDER_TYPE: &str = "openrouter";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -998,11 +998,12 @@ impl<'a> OpenRouterRequest<'a> {
     ) -> Result<OpenRouterRequest<'a>, Error> {
         let response_format =
             OpenRouterResponseFormat::new(&request.json_mode, request.output_schema, model);
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
         let mut messages = prepare_openrouter_messages(request)?;
 

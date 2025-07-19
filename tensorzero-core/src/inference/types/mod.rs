@@ -317,6 +317,14 @@ pub struct Thought {
     /// and is ignored by other providers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+    /// When set, this 'Thought' block will only be used for providers
+    /// matching this type (e.g. `anthropic`). Other providers will emit
+    /// a warning and discard the block.
+    #[serde(
+        rename = "_internal_provider_type",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub provider_type: Option<String>,
 }
 
 /// Core representation of the types of content that could go into a model provider
@@ -739,6 +747,12 @@ pub struct ThoughtChunk {
     pub id: String,
     pub text: Option<String>,
     pub signature: Option<String>,
+    /// See `Thought.provider_type`
+    #[serde(
+        rename = "_internal_provider_type",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub provider_type: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1592,6 +1606,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                         ContentBlockOutput::Thought(Thought {
                                             text: Some(text),
                                             signature: None,
+                                            provider_type: thought.provider_type.clone(),
                                         })
                                     },
                                     |block, text| {
@@ -1612,6 +1627,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                         ContentBlockOutput::Thought(Thought {
                                             text: None,
                                             signature: Some(signature),
+                                            provider_type: thought.provider_type,
                                         })
                                     },
                                     |block, signature| {
@@ -1701,6 +1717,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                 ContentBlockOutput::Thought(Thought {
                                     text: Some(thought),
                                     signature: None,
+                                    provider_type: None,
                                 }),
                             );
                         }
@@ -2906,6 +2923,7 @@ mod tests {
                         ContentBlockChatOutput::Thought(Thought {
                             text: Some("Thought 2".to_string()),
                             signature: None,
+                            provider_type: None,
                         }),
                     ]
                 );
@@ -3178,11 +3196,13 @@ mod tests {
                         text: Some("Some thou".to_string()),
                         id: "0".to_string(),
                         signature: None,
+                        provider_type: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         text: Some("My other interleaved thought".to_string()),
                         id: "1".to_string(),
                         signature: None,
+                        provider_type: None,
                     }),
                 ],
                 created,
@@ -3210,6 +3230,7 @@ mod tests {
                     text: Some("ght".to_string()),
                     id: "0".to_string(),
                     signature: None,
+                    provider_type: None,
                 })],
                 created,
                 usage: None,
@@ -3269,10 +3290,12 @@ mod tests {
             ContentBlockChatOutput::Thought(Thought {
                 text: Some("Some thought".to_string()),
                 signature: None,
+                provider_type: None,
             }),
             ContentBlockChatOutput::Thought(Thought {
                 text: Some("My other interleaved thought".to_string()),
                 signature: None,
+                provider_type: None,
             }),
         ];
         assert_eq!(chat_result.content, expected_content);
@@ -3995,6 +4018,7 @@ mod tests {
                 id: "123".to_string(),
                 text: Some("thinking...".to_string()),
                 signature: None,
+                provider_type: None,
             })],
             created: 1234567890,
             usage: None,
@@ -4023,6 +4047,7 @@ mod tests {
                     id: "789".to_string(),
                     text: Some("final thought".to_string()),
                     signature: None,
+                    provider_type: None,
                 }),
             ],
             created: 1234567890,
@@ -4145,6 +4170,7 @@ mod tests {
                 ContentBlockOutput::Thought(Thought {
                     text: Some(text),
                     signature: None,
+                    provider_type: None,
                 })
             },
             |block, text| {
@@ -4159,7 +4185,11 @@ mod tests {
             .get(&(ContentBlockOutputType::Thought, "3".to_string()))
             .unwrap()
         {
-            ContentBlockOutput::Thought(Thought { text, signature: _ }) => {
+            ContentBlockOutput::Thought(Thought {
+                text,
+                signature: _,
+                provider_type: _,
+            }) => {
                 assert_eq!(text, &Some("Thinking...".to_string()))
             }
             _ => panic!("Expected thought block"),

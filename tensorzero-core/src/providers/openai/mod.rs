@@ -171,6 +171,10 @@ impl OpenAICredentials {
 }
 
 impl WrappedProvider for OpenAIProvider {
+    fn thought_block_provider_type_suffix(&self) -> Cow<'static, str> {
+        Cow::Borrowed("openai")
+    }
+
     fn make_body<'a>(
         &'a self,
         ModelProviderRequest {
@@ -1667,11 +1671,12 @@ impl<'a> OpenAIRequest<'a> {
     ) -> Result<OpenAIRequest<'a>, Error> {
         let response_format =
             OpenAIResponseFormat::new(&request.json_mode, request.output_schema, model);
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
         let mut messages = prepare_openai_messages(
             request.system.as_deref(),

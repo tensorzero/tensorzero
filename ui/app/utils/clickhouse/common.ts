@@ -344,6 +344,15 @@ export const contentBlockOutputSchema = z.discriminatedUnion("type", [
 
 export type ContentBlockOutput = z.infer<typeof contentBlockOutputSchema>;
 
+export const modelInferenceOutputContentBlockSchema = z.discriminatedUnion(
+  "type",
+  [textContentSchema, toolCallContentSchema],
+);
+
+export type ModelInferenceOutputContentBlock = z.infer<
+  typeof modelInferenceOutputContentBlockSchema
+>;
+
 export const InferenceTableName = {
   CHAT: "ChatInference",
   JSON: "JsonInference",
