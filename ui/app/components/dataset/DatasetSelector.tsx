@@ -41,7 +41,7 @@ interface DatasetSelectorProps {
 
 // TODO Create new datasets within this component
 
-export function DatasetSelector({
+export default function DatasetSelector({
   selected,
   onSelect,
   functionName,

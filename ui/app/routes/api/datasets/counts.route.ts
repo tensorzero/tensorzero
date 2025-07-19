@@ -11,9 +11,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
       function_name: functionName,
     });
     const datasets = datasetCounts.map((d) => ({
-      name: d.dataset_name,
+      dataset_name: d.dataset_name,
       count: d.count,
-      lastUpdated: d.last_updated,
+      last_updated: d.last_updated,
     }));
     return data({ datasets });
   } catch (error) {
@@ -37,11 +37,11 @@ export function useDatasetCountFetcher(functionName: string | undefined): {
   const countFetcher = useFetcher();
 
   useEffect(() => {
+    const searchParams = new URLSearchParams();
     if (functionName) {
-      const searchParams = new URLSearchParams();
       searchParams.set("function", functionName);
-      countFetcher.load(`/api/datasets/count_inserts?${searchParams}`);
     }
+    countFetcher.load(`/api/datasets/counts?${searchParams}`);
     // TODO: Fix and stop ignoring lint rule
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [functionName]);
