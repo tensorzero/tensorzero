@@ -2093,6 +2093,7 @@ pub fn tensorzero_to_gcp_vertex_gemini_content<'a>(
     Ok(message)
 }
 
+#[expect(clippy::unnecessary_wraps)]
 pub(crate) fn process_output_schema(output_schema: &Value) -> Result<Value, Error> {
     let mut schema = output_schema.clone();
 
