@@ -514,10 +514,10 @@ async fn get_latest_batch_inference(
         .collect::<Vec<_>>()
         .join(" AND ");
 
-    let tag_filter = if !tags.is_empty() {
-        format!("AND bmi.{tag_conditions}")
-    } else {
+    let tag_filter = if tags.is_empty() {
         String::new()
+    } else {
+        format!("AND bmi.{tag_conditions}")
     };
 
     let query = format!(

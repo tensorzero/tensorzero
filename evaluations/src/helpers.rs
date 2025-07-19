@@ -28,10 +28,10 @@ pub async fn get_tool_params_args(
             let mut additional_tools = Vec::new();
             let mut allowed_tools = Vec::new();
             for tool in tool_params.tools_available.iter() {
-                if !function_config.tools.contains(&tool.name) {
-                    additional_tools.push(tool.clone());
-                } else {
+                if function_config.tools.contains(&tool.name) {
                     allowed_tools.push(tool.name.clone());
+                } else {
+                    additional_tools.push(tool.clone());
                 }
             }
             DynamicToolParams {
