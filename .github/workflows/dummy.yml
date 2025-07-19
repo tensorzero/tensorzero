@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "This is a dummy job to satisfy branch protection checks"
+
   check-all-live-tests-passed:
     runs-on: ubuntu-latest
     timeout-minutes: 5
