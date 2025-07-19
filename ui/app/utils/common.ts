@@ -74,6 +74,32 @@ export function abortableTimeout(request: Request, ms: number) {
   });
 }
 
+export function safeParseInt(
+  value: string | number | null | undefined,
+  defaultValue: number,
+): number;
+
+export function safeParseInt(
+  value: string | number | null | undefined,
+  defaultValue?: number,
+): number | null;
+
+export function safeParseInt(
+  value: string | number | null | undefined,
+  defaultValue?: number,
+) {
+  if (value === null || value === undefined) {
+    return defaultValue ?? null;
+  }
+
+  const integer = Number.parseInt(value.toString(), 10);
+  if (Number.isNaN(integer)) {
+    return defaultValue ?? null;
+  }
+
+  return Number.isNaN(integer) ? (defaultValue ?? null) : integer;
+}
+
 interface ErrorLike {
   message: string;
   name: string;

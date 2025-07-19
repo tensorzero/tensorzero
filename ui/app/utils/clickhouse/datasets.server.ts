@@ -264,10 +264,18 @@ Get name and count for all datasets.
 This function should sum the counts of chat and json inferences for each dataset.
 The groups should be ordered by last_updated in descending order.
 */
-export async function getDatasetCounts(
-  page_size?: number,
-  offset: number = 0,
-): Promise<DatasetCountInfo[]> {
+export async function getDatasetCounts({
+  function_name,
+  page_size,
+  offset,
+}: {
+  function_name?: string;
+  page_size?: number;
+  offset?: number;
+}): Promise<DatasetCountInfo[]> {
+  const functionWhereClause = function_name
+    ? `AND function_name = {function_name:String}`
+    : "";
   const resultSet = await getClickhouseClient().query({
     query: `
       SELECT
@@ -282,6 +290,7 @@ export async function getDatasetCounts(
         FROM ChatInferenceDatapoint
         FINAL
         WHERE staled_at IS NULL
+        ${functionWhereClause}
         GROUP BY dataset_name
         UNION ALL
         SELECT
@@ -291,6 +300,7 @@ export async function getDatasetCounts(
         FROM JsonInferenceDatapoint
         FINAL
         WHERE staled_at IS NULL
+        ${functionWhereClause}
         GROUP BY dataset_name
       )
       GROUP BY dataset_name
@@ -302,6 +312,7 @@ export async function getDatasetCounts(
     query_params: {
       page_size,
       offset,
+      function_name: function_name || null,
     },
   });
   const rows = await resultSet.json<DatasetCountInfo[]>();

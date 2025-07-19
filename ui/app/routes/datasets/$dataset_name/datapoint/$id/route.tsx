@@ -93,7 +93,7 @@ export async function action({ request }: ActionFunctionArgs) {
       parsedFormData.id,
       functionType,
     );
-    const datasetCounts = await getDatasetCounts();
+    const datasetCounts = await getDatasetCounts({});
     const datasetCount = datasetCounts.find(
       (count) => count.dataset_name === parsedFormData.dataset_name,
     );
@@ -137,10 +137,10 @@ export async function action({ request }: ActionFunctionArgs) {
             }
           : {}),
         source_inference_id: parsedFormData.source_inference_id,
+        id: uuid(), // We generate a new ID here because we want old evaluation runs to be able to point to the correct data.
       };
       const { id } = await getTensorZeroClient().updateDatapoint(
         parsedFormData.dataset_name,
-        uuid(),
         datapoint,
       );
       await staleDatapoint(

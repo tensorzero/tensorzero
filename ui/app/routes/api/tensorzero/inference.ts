@@ -106,6 +106,8 @@ function resolvedInputMessageContentToTensorZeroContent(
     case "raw_text":
     case "tool_call":
     case "tool_result":
+    case "thought":
+    case "unknown":
       return content;
     case "file":
       return resolvedFileContentToTensorZeroFile(content);

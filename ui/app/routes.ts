@@ -84,6 +84,10 @@ export default [
     ),
   ]),
 
+  // Playground
+  route("playground", "routes/playground/route.tsx"),
+
+  // Observability
   ...prefix("observability", [
     route("functions", "routes/observability/functions/layout.tsx", [
       index("routes/observability/functions/route.tsx"),
