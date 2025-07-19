@@ -565,7 +565,7 @@ mod tests {
         assert_eq!(batch_episode_ids[0], episode_id_0);
         assert_eq!(batch_episode_ids[1], episode_id_1);
 
-        let early_uuid = Uuid::new_v7(Timestamp::from_unix_time(946766218, 0, 0, 0));
+        let early_uuid = Uuid::new_v7(Timestamp::from_unix_time(946_766_218, 0, 0, 0));
         let batch_episode_ids_with_size =
             BatchEpisodeIdsWithSize(Some(vec![Some(early_uuid), None, None]), 3);
         let err = BatchEpisodeIds::try_from(batch_episode_ids_with_size).unwrap_err();

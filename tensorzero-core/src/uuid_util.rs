@@ -8,7 +8,7 @@ use crate::{
 
 /// Timestamp when Scaling Laws for Neural Language Models was published.
 /// No way anyone could use TensorZero prior to this.
-const EARLIEST_TIMESTAMP: u64 = 1579751960;
+const EARLIEST_TIMESTAMP: u64 = 1_579_751_960;
 
 pub fn validate_tensorzero_uuid(uuid: Uuid, kind: &str) -> Result<(), Error> {
     let version = uuid.get_version_num();
@@ -137,6 +137,7 @@ pub fn compare_timestamps(early: Timestamp, late: Timestamp) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::JAN_1_2000;
     use uuid::timestamp::context::NoContext;
     use uuid::uuid;
 
@@ -151,7 +152,7 @@ mod tests {
         let episode_id = uuid!("00000000-0000-0000-0000-000000000000");
         assert!(validate_tensorzero_uuid(episode_id, "Episode").is_err());
 
-        let early_timestamp = 946684800; // 2000-01-01:00:00:00 UTC
+        let early_timestamp = JAN_1_2000;
         let early_uuid = Uuid::new_v7(Timestamp::from_unix(NoContext, early_timestamp, 0));
         assert!(validate_tensorzero_uuid(early_uuid, "Episode").is_err());
 
