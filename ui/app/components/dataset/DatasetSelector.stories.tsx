@@ -1,48 +1,39 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import DatasetSelector from "./DatasetSelector";
+import { DatasetSelector } from "./DatasetSelector";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useArgs } from "storybook/preview-api";
-import {
-  createHookMockDecorator,
-  createDatasetCountFetcherMock,
-} from "../../../.storybook/mock-utils";
-
-// Create a mock module object to avoid importing server-side code
-const DatasetCountsModule = {
-  useDatasetCountFetcher: () => ({ datasets: null, isLoading: false }),
-};
 
 // Ordered incorrectly to test sorting
 const mockDatasets = [
   {
-    dataset_name: "test_dataset",
+    name: "test_dataset",
     count: 3250,
-    last_updated: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
+    lastUpdated: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
   },
   {
-    dataset_name: "evaluation_set",
+    name: "evaluation_set",
     count: 850,
-    last_updated: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // 1 day ago
+    lastUpdated: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // 1 day ago
   },
   {
-    dataset_name: "training_data_v2",
+    name: "training_data_v2",
     count: 42100,
-    last_updated: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(), // 3 days ago
+    lastUpdated: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(), // 3 days ago
   },
   {
-    dataset_name: "validation_set",
+    name: "validation_set",
     count: 1200,
-    last_updated: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString(), // 1 week ago
+    lastUpdated: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString(), // 1 week ago
   },
   {
-    dataset_name: "production_data",
+    name: "production_data",
     count: 15420,
-    last_updated: new Date(Date.now() - 1000 * 60 * 5).toISOString(), // 5 minutes ago
+    lastUpdated: new Date(Date.now() - 1000 * 60 * 5).toISOString(), // 5 minutes ago
   },
   {
-    dataset_name:
-      "long_dataset_name_that_should_still_be_displayed_gracefully_somehow",
+    name: "long_dataset_name_that_should_still_be_displayed_gracefully_somehow",
     count: 1,
-    last_updated: new Date(Date.now()).toISOString(), // now
+    lastUpdated: new Date(Date.now()).toISOString(), // now
   },
 ];
 
@@ -79,25 +70,22 @@ export const Default: Story = {
     allowCreation: true,
     placeholder: "Select a dataset",
   },
-  decorators: [
-    createHookMockDecorator({
-      module: DatasetCountsModule,
-      hookName: "useDatasetCountFetcher",
-      mockImplementation: createDatasetCountFetcherMock(mockDatasets),
-    }),
-  ],
   render: function Render(args) {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["DATASETS_COUNT"], mockDatasets);
 
     return (
-      <DatasetSelector
-        {...args}
-        selected={selected}
-        onSelect={(dataset, isNew) => {
-          updateArgs({ selected: dataset });
-          console.log(`Selected: ${dataset}, isNew: ${isNew}`);
-        }}
-      />
+      <QueryClientProvider client={queryClient}>
+        <DatasetSelector
+          {...args}
+          selected={selected}
+          onSelect={(dataset, isNew) => {
+            updateArgs({ selected: dataset });
+            console.log(`Selected: ${dataset}, isNew: ${isNew}`);
+          }}
+        />
+      </QueryClientProvider>
     );
   },
 };
@@ -107,25 +95,22 @@ export const EmptyDatasets: Story = {
     allowCreation: true,
     placeholder: "Select a dataset",
   },
-  decorators: [
-    createHookMockDecorator({
-      module: DatasetCountsModule,
-      hookName: "useDatasetCountFetcher",
-      mockImplementation: createDatasetCountFetcherMock([]),
-    }),
-  ],
   render: function Render(args) {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["DATASETS_COUNT"], []);
 
     return (
-      <DatasetSelector
-        {...args}
-        selected={selected}
-        onSelect={(dataset, isNew) => {
-          updateArgs({ selected: dataset });
-          console.log(`Selected: ${dataset}, isNew: ${isNew}`);
-        }}
-      />
+      <QueryClientProvider client={queryClient}>
+        <DatasetSelector
+          {...args}
+          selected={selected}
+          onSelect={(dataset, isNew) => {
+            updateArgs({ selected: dataset });
+            console.log(`Selected: ${dataset}, isNew: ${isNew}`);
+          }}
+        />
+      </QueryClientProvider>
     );
   },
 };
@@ -135,25 +120,22 @@ export const DisallowCreation: Story = {
     allowCreation: false,
     placeholder: "Select a dataset",
   },
-  decorators: [
-    createHookMockDecorator({
-      module: DatasetCountsModule,
-      hookName: "useDatasetCountFetcher",
-      mockImplementation: createDatasetCountFetcherMock(mockDatasets),
-    }),
-  ],
   render: function Render(args) {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["DATASETS_COUNT"], mockDatasets);
 
     return (
-      <DatasetSelector
-        {...args}
-        selected={selected}
-        onSelect={(dataset, isNew) => {
-          updateArgs({ selected: dataset });
-          console.log(`Selected: ${dataset}, isNew: ${isNew}`);
-        }}
-      />
+      <QueryClientProvider client={queryClient}>
+        <DatasetSelector
+          {...args}
+          selected={selected}
+          onSelect={(dataset, isNew) => {
+            updateArgs({ selected: dataset });
+            console.log(`Selected: ${dataset}, isNew: ${isNew}`);
+          }}
+        />
+      </QueryClientProvider>
     );
   },
 };
@@ -164,33 +146,29 @@ export const ManyDatasets: Story = {
     allowCreation: true,
     placeholder: "Select a dataset",
   },
-  decorators: [
-    createHookMockDecorator({
-      module: DatasetCountsModule,
-      hookName: "useDatasetCountFetcher",
-      mockImplementation: createDatasetCountFetcherMock(
-        Array.from({ length: 100 }, (_, i) => ({
-          dataset_name: `test_dataset_${i + 1}`,
-          count: i + 1,
-          last_updated: new Date(
-            Date.now() - 1000 * 60 * 60 * (i + 1),
-          ).toISOString(),
-        })),
-      ),
-    }),
-  ],
   render: function Render(args) {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
+    const queryClient = new QueryClient();
+    const repeatedMockDatasets = Array.from({ length: 100 }, (_, i) => ({
+      name: `test_dataset_${i + 1}`,
+      count: i + 1,
+      lastUpdated: new Date(
+        Date.now() - 1000 * 60 * 60 * (i + 1),
+      ).toISOString(),
+    }));
+    queryClient.setQueryData(["DATASETS_COUNT"], repeatedMockDatasets);
 
     return (
-      <DatasetSelector
-        {...args}
-        selected={selected}
-        onSelect={(dataset, isNew) => {
-          updateArgs({ selected: dataset });
-          console.log(`Selected: ${dataset}, isNew: ${isNew}`);
-        }}
-      />
+      <QueryClientProvider client={queryClient}>
+        <DatasetSelector
+          {...args}
+          selected={selected}
+          onSelect={(dataset, isNew) => {
+            updateArgs({ selected: dataset });
+            console.log(`Selected: ${dataset}, isNew: ${isNew}`);
+          }}
+        />
+      </QueryClientProvider>
     );
   },
 };
