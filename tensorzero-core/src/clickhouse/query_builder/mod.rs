@@ -74,6 +74,37 @@ impl FloatComparisonOperator {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, ts(export))]
+pub enum TimeComparisonOperator {
+    #[serde(rename = "<")]
+    LessThan,
+    #[serde(rename = "<=")]
+    LessThanOrEqual,
+    #[serde(rename = "=")]
+    Equal,
+    #[serde(rename = ">")]
+    GreaterThan,
+    #[serde(rename = ">=")]
+    GreaterThanOrEqual,
+    #[serde(rename = "!=")]
+    NotEqual,
+}
+
+impl TimeComparisonOperator {
+    pub fn to_clickhouse_operator(&self) -> &str {
+        match self {
+            TimeComparisonOperator::LessThan => "<",
+            TimeComparisonOperator::LessThanOrEqual => "<=",
+            TimeComparisonOperator::Equal => "=",
+            TimeComparisonOperator::GreaterThan => ">",
+            TimeComparisonOperator::GreaterThanOrEqual => ">=",
+            TimeComparisonOperator::NotEqual => "!=",
+        }
+    }
+}
+
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
 pub enum TagComparisonOperator {
     #[serde(rename = "=")]
     Equal,
@@ -211,6 +242,14 @@ pub struct TagNode {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, ts(export))]
+pub struct TimeNode {
+    pub time: u64, // Unix timestamp in seconds
+    pub comparison_operator: TimeComparisonOperator,
+}
+
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -218,6 +257,7 @@ pub enum InferenceFilterTreeNode {
     FloatMetric(FloatMetricNode),
     BooleanMetric(BooleanMetricNode),
     Tag(TagNode),
+    Time(TimeNode),
     And {
         children: Vec<InferenceFilterTreeNode>,
     },
@@ -312,12 +352,11 @@ impl InferenceFilterTreeNode {
                 // We handle this farther up the recursive tree
                 Ok(format!("{join_alias}.value = {value_placeholder}"))
             }
-            InferenceFilterTreeNode::Tag(tag_node) => {
-                let TagNode {
-                    key,
-                    value,
-                    comparison_operator,
-                } = tag_node;
+            InferenceFilterTreeNode::Tag(TagNode {
+                key,
+                value,
+                comparison_operator,
+            }) => {
                 let key_placeholder =
                     add_parameter(key, ClickhouseType::String, params_map, param_idx_counter);
                 let value_placeholder =
@@ -325,6 +364,21 @@ impl InferenceFilterTreeNode {
                 let comparison_operator = comparison_operator.to_clickhouse_operator();
                 Ok(format!(
                     "i.tags[{key_placeholder}] {comparison_operator} {value_placeholder}"
+                ))
+            }
+            InferenceFilterTreeNode::Time(TimeNode {
+                time,
+                comparison_operator,
+            }) => {
+                let time_placeholder = add_parameter(
+                    time.to_string(),
+                    ClickhouseType::UInt64,
+                    params_map,
+                    param_idx_counter,
+                );
+                let comparison_operator = comparison_operator.to_clickhouse_operator();
+                Ok(format!(
+                    "i.timestamp {comparison_operator} toDateTime(toUnixTimestamp({time_placeholder}))"
                 ))
             }
             InferenceFilterTreeNode::And { children } => {
