@@ -550,6 +550,21 @@ class BooleanMetricNode(BooleanMetricFilter):
 
 
 @dataclass
+class TagFilter(InferenceFilterTreeNode):
+    key: str
+    value: str
+    comparison_operator: Literal["=", "!="]
+    type: str = "tag"
+
+
+@dataclass
+class TimeFilter(InferenceFilterTreeNode):
+    time: int
+    comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
+    type: str = "time"
+
+
+@dataclass
 class AndFilter(InferenceFilterTreeNode):
     children: List[InferenceFilterTreeNode]
     type: str = "and"
