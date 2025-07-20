@@ -117,16 +117,19 @@ pub async fn get_howdy_report<'a>(
     deployment_id: &'a str,
 ) -> Result<HowdyReportBody<'a>, String> {
     let dryrun = cfg!(any(test, feature = "e2e_tests"));
-    let (inference_counts, feedback_counts) =
-        try_join!(count_inferences(clickhouse), count_feedbacks(clickhouse))?;
+    let (inference_counts, feedback_counts, token_totals) = try_join!(
+        count_inferences(clickhouse),
+        count_feedbacks(clickhouse),
+        get_token_totals(clickhouse)
+    )?;
     Ok(HowdyReportBody {
         deployment_id,
         inference_count: inference_counts.inference_count,
         feedback_count: feedback_counts.feedback_count,
         gateway_version: crate::endpoints::status::TENSORZERO_VERSION,
         commit_hash: crate::built_info::GIT_COMMIT_HASH_SHORT,
-        input_token_total: None,  // TODO: implement token counting
-        output_token_total: None, // TODO: implement token counting
+        input_token_total: Some(token_totals.input_token_total.to_string()),
+        output_token_total: Some(token_totals.output_token_total.to_string()),
         chat_inference_count: Some(inference_counts.chat_inference_count),
         json_inference_count: Some(inference_counts.json_inference_count),
         float_feedback_count: Some(feedback_counts.float_metric_feedback_count),
@@ -191,6 +194,33 @@ async fn count_inferences(
         chat_inference_count: response_counts.chat_inference_count.to_string(),
         json_inference_count: response_counts.json_inference_count.to_string(),
     })
+}
+
+#[derive(Debug, Deserialize)]
+struct TokenTotals {
+    #[serde(deserialize_with = "deserialize_u64")]
+    input_token_total: u64,
+    #[serde(deserialize_with = "deserialize_u64")]
+    output_token_total: u64,
+}
+
+async fn get_token_totals(clickhouse: &ClickHouseConnectionInfo) -> Result<TokenTotals, String> {
+    let Ok(response) = clickhouse
+        .run_query_synchronous_no_params(
+            r#"
+            SELECT
+                (SELECT count FROM TokenTotal WHERE type = 'input') as input_token_total,
+                (SELECT count FROM TokenTotal WHERE type = 'output') as output_token_total
+            Format JSONEachRow
+            "#
+            .to_string(),
+        )
+        .await
+    else {
+        return Err("Failed to query ClickHouse for inference count".to_string());
+    };
+    serde_json::from_str(&response.response)
+        .map_err(|e| format!("Failed to deserialize ClickHouseInferenceCounts: {e}"))
 }
 
 #[derive(Debug)]
