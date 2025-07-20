@@ -8,8 +8,10 @@ from tensorzero import (
     FloatMetricFilter,
     NotFilter,
     OrFilter,
+    TagFilter,
     TensorZeroGateway,
     Text,
+    TimeFilter,
     ToolCall,
     ToolResult,
 )
@@ -308,6 +310,75 @@ def test_not_filter(embedded_sync_client: TensorZeroGateway):
     assert len(inferences) == 0
 
 
+def test_simple_time_filter(embedded_sync_client: TensorZeroGateway):
+    filters = TimeFilter(
+        time=1672531200,  # 2023-01-01 00:00:00 UTC
+        comparison_operator=">",
+    )
+    inferences = embedded_sync_client.experimental_list_inferences(
+        function_name="extract_entities",
+        variant_name=None,
+        filters=filters,
+        output_source="inference",
+        limit=2,
+        offset=None,
+    )
+    assert len(inferences) == 2
+    for inference in inferences:
+        assert inference.function_name == "extract_entities"
+
+
+def test_simple_tag_filter(embedded_sync_client: TensorZeroGateway):
+    filters = TagFilter(
+        key="tensorzero::evaluation_name",
+        value="entity_extraction",
+        comparison_operator="=",
+    )
+    inferences = embedded_sync_client.experimental_list_inferences(
+        function_name="extract_entities",
+        variant_name=None,
+        filters=filters,
+        output_source="inference",
+        limit=None,
+        offset=None,
+    )
+    assert len(inferences) == 204
+    for inference in inferences:
+        assert inference.function_name == "extract_entities"
+        assert len(inference.tags) == 4
+        assert inference.tags["tensorzero::evaluation_name"] == "entity_extraction"
+
+
+def test_combined_time_and_tag_filter(embedded_sync_client: TensorZeroGateway):
+    filters = AndFilter(
+        children=[
+            TimeFilter(
+                # 2025-04-14 23:30:00 UTC (should exclude some of these elements)
+                time=1744673400,
+                comparison_operator=">=",
+            ),
+            TagFilter(
+                key="tensorzero::evaluation_name",
+                value="haiku",
+                comparison_operator="=",
+            ),
+        ]
+    )
+    inferences = embedded_sync_client.experimental_list_inferences(
+        function_name="write_haiku",
+        variant_name=None,
+        filters=filters,
+        output_source="inference",
+        limit=None,
+        offset=None,
+    )
+    assert len(inferences) == 78
+    for inference in inferences:
+        assert inference.function_name == "write_haiku"
+        assert len(inference.tags) == 4
+        assert inference.tags["tensorzero::evaluation_name"] == "haiku"
+
+
 def test_list_render_json_inferences(embedded_sync_client: TensorZeroGateway):
     stored_inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
@@ -567,6 +638,84 @@ async def test_not_filter_async(embedded_async_client: AsyncTensorZeroGateway):
         offset=None,
     )
     assert len(inferences) == 0
+
+
+@pytest.mark.asyncio
+async def test_simple_time_filter_async(
+    embedded_async_client: AsyncTensorZeroGateway,
+):
+    filters = TimeFilter(
+        time=1672531200,  # 2023-01-01 00:00:00 UTC
+        comparison_operator=">",
+    )
+    inferences = await embedded_async_client.experimental_list_inferences(
+        function_name="extract_entities",
+        variant_name=None,
+        filters=filters,
+        output_source="inference",
+        limit=2,
+        offset=None,
+    )
+    assert len(inferences) == 2
+    for inference in inferences:
+        assert inference.function_name == "extract_entities"
+
+
+@pytest.mark.asyncio
+async def test_simple_tag_filter_async(
+    embedded_async_client: AsyncTensorZeroGateway,
+):
+    filters = TagFilter(
+        key="tensorzero::evaluation_name",
+        value="entity_extraction",
+        comparison_operator="=",
+    )
+    inferences = await embedded_async_client.experimental_list_inferences(
+        function_name="extract_entities",
+        variant_name=None,
+        filters=filters,
+        output_source="inference",
+        limit=None,
+        offset=None,
+    )
+    assert len(inferences) == 204
+    for inference in inferences:
+        assert inference.function_name == "extract_entities"
+        assert len(inference.tags) == 4
+        assert inference.tags["tensorzero::evaluation_name"] == "entity_extraction"
+
+
+@pytest.mark.asyncio
+async def test_combined_time_and_tag_filter_async(
+    embedded_async_client: AsyncTensorZeroGateway,
+):
+    filters = AndFilter(
+        children=[
+            TimeFilter(
+                # 2025-04-14 23:30:00 UTC (should exclude some of these elements)
+                time=1744673400,
+                comparison_operator=">=",
+            ),
+            TagFilter(
+                key="tensorzero::evaluation_name",
+                value="haiku",
+                comparison_operator="=",
+            ),
+        ]
+    )
+    inferences = await embedded_async_client.experimental_list_inferences(
+        function_name="write_haiku",
+        variant_name=None,
+        filters=filters,
+        output_source="inference",
+        limit=None,
+        offset=None,
+    )
+    assert len(inferences) == 78
+    for inference in inferences:
+        assert inference.function_name == "write_haiku"
+        assert len(inference.tags) == 4
+        assert inference.tags["tensorzero::evaluation_name"] == "haiku"
 
 
 @pytest.mark.asyncio

@@ -66,6 +66,7 @@ class StoredInference:
         dispreferred_outputs: Union[
             List[ChatInferenceOutput], List[JsonInferenceOutput]
         ] = [],
+        tags: Dict[str, str] = {},
     ) -> None: ...
     def __repr__(self) -> str: ...
     @property
@@ -90,6 +91,8 @@ class StoredInference:
     def dispreferred_outputs(
         self,
     ) -> Union[List[ChatInferenceOutput], List[JsonInferenceOutput]]: ...
+    @property
+    def tags(self) -> Dict[str, str]: ...
 
 @final
 class RenderedSample:
@@ -101,6 +104,7 @@ class RenderedSample:
     tool_params: Optional[ToolCallConfigDatabaseInsert]
     output_schema: Optional[Dict[str, Any]]
     dispreferred_outputs: List[ChatInferenceOutput] = []
+    tags: Dict[str, str]
 
 @final
 class OptimizationJobHandle:
