@@ -1594,6 +1594,256 @@ FORMAT JSONEachRow"#,
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn test_simple_tag_filter_equal() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilterTreeNode::Tag(TagNode {
+            key: "environment".to_string(),
+            value: "production".to_string(),
+            comparison_operator: TagComparisonOperator::Equal,
+        });
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: Some(&filter_node),
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+            format: ClickhouseFormat::JsonEachRow,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r#"
+SELECT
+    'json' as type,
+    i.episode_id as episode_id,
+    i.id as inference_id,
+    i.input as input,
+    i.output as output,
+    i.output_schema as output_schema,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name,
+    {p0:String} as function_name
+FROM
+    JsonInference AS i
+WHERE
+    i.function_name = {p0:String} AND tags[{p1:String}] = {p2:String}
+FORMAT JSONEachRow"#;
+        assert_eq!(sql, expected_sql);
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "environment".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "production".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_tag_filter_not_equal() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilterTreeNode::Tag(TagNode {
+            key: "version".to_string(),
+            value: "v1.0".to_string(),
+            comparison_operator: TagComparisonOperator::NotEqual,
+        });
+        let opts = ListInferencesParams {
+            function_name: "write_haiku",
+            variant_name: None,
+            filters: Some(&filter_node),
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+            format: ClickhouseFormat::JsonEachRow,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r#"
+SELECT
+    'chat' as type,
+    i.episode_id as episode_id,
+    i.id as inference_id,
+    i.input as input,
+    i.output as output,
+    i.timestamp as timestamp,
+    i.tool_params as tool_params,
+    i.variant_name as variant_name,
+    {p0:String} as function_name
+FROM
+    ChatInference AS i
+WHERE
+    i.function_name = {p0:String} AND tags[{p1:String}] != {p2:String}
+FORMAT JSONEachRow"#;
+        assert_eq!(sql, expected_sql);
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "write_haiku".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "version".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "v1.0".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_tag_filters_in_and_condition() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilterTreeNode::And {
+            children: vec![
+                InferenceFilterTreeNode::Tag(TagNode {
+                    key: "environment".to_string(),
+                    value: "production".to_string(),
+                    comparison_operator: TagComparisonOperator::Equal,
+                }),
+                InferenceFilterTreeNode::Tag(TagNode {
+                    key: "region".to_string(),
+                    value: "us-west".to_string(),
+                    comparison_operator: TagComparisonOperator::Equal,
+                }),
+            ],
+        };
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: Some(&filter_node),
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+            format: ClickhouseFormat::JsonEachRow,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r#"
+SELECT
+    'json' as type,
+    i.episode_id as episode_id,
+    i.id as inference_id,
+    i.input as input,
+    i.output as output,
+    i.output_schema as output_schema,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name,
+    {p0:String} as function_name
+FROM
+    JsonInference AS i
+WHERE
+    i.function_name = {p0:String} AND (COALESCE(tags[{p1:String}] = {p2:String}, 0) AND COALESCE(tags[{p3:String}] = {p4:String}, 0))
+FORMAT JSONEachRow"#;
+        assert_eq!(sql, expected_sql);
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "environment".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "production".to_string(),
+            },
+            QueryParameter {
+                name: "p3".to_string(),
+                value: "region".to_string(),
+            },
+            QueryParameter {
+                name: "p4".to_string(),
+                value: "us-west".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_tag_and_metric_filters_combined() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilterTreeNode::And {
+            children: vec![
+                InferenceFilterTreeNode::Tag(TagNode {
+                    key: "experiment".to_string(),
+                    value: "A".to_string(),
+                    comparison_operator: TagComparisonOperator::Equal,
+                }),
+                InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                    metric_name: "jaccard_similarity".to_string(),
+                    value: 0.7,
+                    comparison_operator: FloatComparisonOperator::GreaterThan,
+                }),
+            ],
+        };
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: Some(&filter_node),
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+            format: ClickhouseFormat::JsonEachRow,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r#"
+SELECT
+    'json' as type,
+    i.episode_id as episode_id,
+    i.id as inference_id,
+    i.input as input,
+    i.output as output,
+    i.output_schema as output_schema,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name,
+    {p0:String} as function_name
+FROM
+    JsonInference AS i
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM FloatMetricFeedback
+    WHERE metric_name = {p3:String}
+    GROUP BY target_id
+) AS j0 ON i.id = j0.target_id
+WHERE
+    i.function_name = {p0:String} AND (COALESCE(tags[{p1:String}] = {p2:String}, 0) AND COALESCE(j0.value > {p4:Float64}, 0))
+FORMAT JSONEachRow"#;
+        assert_eq!(sql, expected_sql);
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "experiment".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "A".to_string(),
+            },
+            QueryParameter {
+                name: "p3".to_string(),
+                value: "jaccard_similarity".to_string(),
+            },
+            QueryParameter {
+                name: "p4".to_string(),
+                value: "0.7".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_combined_variant_filter_and_metrics() {
         let config = get_e2e_config().await;
         let filter_node = InferenceFilterTreeNode::And {
