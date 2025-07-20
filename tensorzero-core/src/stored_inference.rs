@@ -70,8 +70,8 @@ impl std::fmt::Display for StoredInference {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl StoredInference {
-    #[new]
     #[expect(clippy::too_many_arguments)]
+    #[new]
     pub fn new<'py>(
         py: Python<'py>,
         r#type: String,

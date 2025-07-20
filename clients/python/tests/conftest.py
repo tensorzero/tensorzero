@@ -129,6 +129,7 @@ def mixed_rendered_samples(
         ),
         output_schema=None,
         dispreferred_outputs=[],
+        tags={"test_key": "test_value"},
     )
     json_inference = StoredInference(
         type="json",
@@ -154,6 +155,7 @@ def mixed_rendered_samples(
         },
         tool_params=None,
         dispreferred_outputs=[],
+        tags={"test_key": "test_value"},
     )
     sample_list = [chat_inference] * 10 + [json_inference] * 10
     return embedded_sync_client.experimental_render_samples(
