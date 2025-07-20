@@ -71,6 +71,25 @@ impl FloatComparisonOperator {
     }
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
+pub enum TagComparisonOperator {
+    #[serde(rename = "=")]
+    Equal,
+    #[serde(rename = "!=")]
+    NotEqual,
+}
+
+impl TagComparisonOperator {
+    pub fn to_clickhouse_operator(&self) -> &str {
+        match self {
+            TagComparisonOperator::Equal => "=",
+            TagComparisonOperator::NotEqual => "!=",
+        }
+    }
+}
+
 #[derive(Hash, Eq, PartialEq, Debug)]
 enum FeedbackTable {
     Float,
@@ -183,12 +202,22 @@ pub struct BooleanMetricNode {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, ts(export))]
+pub struct TagNode {
+    pub key: String,
+    pub value: String,
+    pub comparison_operator: TagComparisonOperator,
+}
+
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InferenceFilterTreeNode {
     FloatMetric(FloatMetricNode),
     BooleanMetric(BooleanMetricNode),
+    Tag(TagNode),
     And {
         children: Vec<InferenceFilterTreeNode>,
     },
@@ -211,7 +240,7 @@ impl InferenceFilterTreeNode {
     ///
     /// NOTE: This is not efficient at all yet. We are doing a lot of JOINs and GROUP BYs.
     /// We may be able to do this more efficiently by using subqueries and CTEs.
-    /// We're also doing a join per filter. In principle if there is a subtree of the tree that uses the same joined table,
+    /// We're also doing a join per filter on metric. In principle if there is a subtree of the tree that uses the same joined table,
     /// we could push the condition down into the query before the join
     fn to_clickhouse_sql(
         &self,
@@ -282,6 +311,21 @@ impl InferenceFilterTreeNode {
                 // NOTE: if the join_alias is NULL, the filter condition will be NULL also
                 // We handle this farther up the recursive tree
                 Ok(format!("{join_alias}.value = {value_placeholder}"))
+            }
+            InferenceFilterTreeNode::Tag(tag_node) => {
+                let TagNode {
+                    key,
+                    value,
+                    comparison_operator,
+                } = tag_node;
+                let key_placeholder =
+                    add_parameter(key, ClickhouseType::String, params_map, param_idx_counter);
+                let value_placeholder =
+                    add_parameter(value, ClickhouseType::String, params_map, param_idx_counter);
+                let comparison_operator = comparison_operator.to_clickhouse_operator();
+                Ok(format!(
+                    "tags[{key_placeholder}] {comparison_operator} {value_placeholder}"
+                ))
             }
             InferenceFilterTreeNode::And { children } => {
                 let child_sqls: Vec<String> = children
