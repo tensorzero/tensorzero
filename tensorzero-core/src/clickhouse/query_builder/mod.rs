@@ -641,6 +641,7 @@ fn get_select_clauses(
         "i.episode_id as episode_id".to_string(),
         "i.id as inference_id".to_string(),
         "i.timestamp as timestamp".to_string(),
+        "i.tags as tags".to_string(),
         // We don't select output here because it's handled separately based on the output_source
     ]);
     match function_config {
@@ -670,6 +671,7 @@ pub(super) struct ClickHouseStoredChatInference {
     pub dispreferred_outputs: Vec<String>,
     #[serde(deserialize_with = "deserialize_defaulted_string")]
     pub tool_params: ToolCallConfigDatabaseInsert,
+    pub tags: HashMap<String, String>,
 }
 
 impl TryFrom<ClickHouseStoredChatInference> for StoredChatInference {
@@ -697,6 +699,7 @@ impl TryFrom<ClickHouseStoredChatInference> for StoredChatInference {
             episode_id: value.episode_id,
             inference_id: value.inference_id,
             tool_params: value.tool_params,
+            tags: value.tags,
         })
     }
 }
@@ -715,6 +718,7 @@ pub(super) struct ClickHouseStoredJsonInference {
     pub dispreferred_outputs: Vec<String>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output_schema: Value,
+    pub tags: HashMap<String, String>,
 }
 
 impl TryFrom<ClickHouseStoredJsonInference> for StoredJsonInference {
@@ -741,6 +745,7 @@ impl TryFrom<ClickHouseStoredJsonInference> for StoredJsonInference {
             episode_id: value.episode_id,
             inference_id: value.inference_id,
             output_schema: value.output_schema,
+            tags: value.tags,
         })
     }
 }

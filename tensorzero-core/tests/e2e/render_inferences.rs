@@ -56,6 +56,7 @@ pub async fn test_render_samples_no_function() {
         inference_id: Uuid::now_v7(),
         tool_params: ToolCallConfigDatabaseInsert::default(),
         dispreferred_outputs: vec![],
+        tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
     })];
 
     let rendered_inferences = client
@@ -90,6 +91,7 @@ pub async fn test_render_samples_no_variant() {
         inference_id: Uuid::now_v7(),
         tool_params: ToolCallConfigDatabaseInsert::default(),
         dispreferred_outputs: vec![],
+        tags: HashMap::new(),
     })];
 
     let error = client
@@ -132,6 +134,7 @@ pub async fn test_render_samples_missing_variable() {
         inference_id: Uuid::now_v7(),
         tool_params: ToolCallConfigDatabaseInsert::default(),
         dispreferred_outputs: vec![],
+        tags: HashMap::new(),
     })];
 
     let rendered_inferences = client
@@ -169,6 +172,7 @@ pub async fn test_render_samples_normal() {
             inference_id: Uuid::now_v7(),
             tool_params: ToolCallConfigDatabaseInsert::default(),
             dispreferred_outputs: vec![],
+            tags: HashMap::new(),
         }),
         StoredInference::Json(StoredJsonInference {
             function_name: "json_success".to_string(),
@@ -193,6 +197,7 @@ pub async fn test_render_samples_normal() {
                 parsed: Some(json!({})),
                 raw: Some("{}".to_string()), // This should not be validated
             }],
+            tags: HashMap::new(),
         }),
         StoredInference::Chat(StoredChatInference {
             function_name: "weather_helper".to_string(),
@@ -228,6 +233,7 @@ pub async fn test_render_samples_normal() {
             dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
                 text: "Hello, world!".to_string(),
             })]],
+            tags: HashMap::new(),
         }),
         StoredInference::Chat(StoredChatInference {
             function_name: "basic_test".to_string(),
@@ -265,6 +271,7 @@ pub async fn test_render_samples_normal() {
             inference_id: Uuid::now_v7(),
             tool_params: ToolCallConfigDatabaseInsert::default(),
             dispreferred_outputs: vec![],
+            tags: HashMap::new(),
         }),
     ];
 
@@ -464,6 +471,7 @@ pub async fn test_render_samples_template_no_schema() {
         inference_id: Uuid::now_v7(),
         tool_params: ToolCallConfigDatabaseInsert::default(),
         dispreferred_outputs: vec![],
+        tags: HashMap::new(),
     })];
 
     let rendered_inferences = client

@@ -1,6 +1,7 @@
 use tensorzero::{
     BooleanMetricNode, FloatComparisonOperator, FloatMetricNode, InferenceFilterTreeNode,
-    InferenceOutputSource, ListInferencesParams, StoredInference,
+    InferenceOutputSource, ListInferencesParams, StoredInference, TagComparisonOperator, TagNode,
+    TimeComparisonOperator, TimeNode,
 };
 use tensorzero_core::clickhouse::ClickhouseFormat;
 
@@ -237,4 +238,101 @@ async fn test_not_filter() {
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_simple_time_filter() {
+    let client = make_embedded_gateway().await;
+    let filter_node = InferenceFilterTreeNode::Time(TimeNode {
+        time: 1672531200, // 2023-01-01 00:00:00 UTC
+        comparison_operator: TimeComparisonOperator::GreaterThan,
+    });
+    let opts = ListInferencesParams {
+        function_name: "extract_entities",
+        variant_name: None,
+        filters: Some(&filter_node),
+        output_source: InferenceOutputSource::Inference,
+        limit: Some(2),
+        offset: None,
+        format: ClickhouseFormat::JsonEachRow,
+    };
+    let res = client.experimental_list_inferences(opts).await.unwrap();
+    assert_eq!(res.len(), 2);
+    for inference in res {
+        let StoredInference::Json(json_inference) = inference else {
+            panic!("Expected a JSON inference");
+        };
+        assert_eq!(json_inference.function_name, "extract_entities");
+        // Add assertions about the timestamp if needed
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_simple_tag_filter() {
+    let client = make_embedded_gateway().await;
+    let filter_node = InferenceFilterTreeNode::Tag(TagNode {
+        key: "tensorzero::evaluation_name".to_string(),
+        value: "entity_extraction".to_string(),
+        comparison_operator: TagComparisonOperator::Equal,
+    });
+    let opts = ListInferencesParams {
+        function_name: "extract_entities",
+        variant_name: None,
+        filters: Some(&filter_node),
+        output_source: InferenceOutputSource::Inference,
+        limit: None,
+        offset: None,
+        format: ClickhouseFormat::JsonEachRow,
+    };
+    let res = client.experimental_list_inferences(opts).await.unwrap();
+    assert_eq!(res.len(), 204);
+    for inference in res {
+        let StoredInference::Json(json_inference) = inference else {
+            panic!("Expected a JSON inference");
+        };
+        assert_eq!(json_inference.function_name, "extract_entities");
+        assert_eq!(json_inference.tags.len(), 4);
+        assert_eq!(
+            json_inference.tags["tensorzero::evaluation_name"],
+            "entity_extraction"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_combined_time_and_tag_filter() {
+    let client = make_embedded_gateway().await;
+    let filter_node = InferenceFilterTreeNode::And {
+        children: vec![
+            InferenceFilterTreeNode::Time(TimeNode {
+                // 2025-04-14 23:30:00 UTC (should exclude some of these elements)
+                time: 1744673400,
+                comparison_operator: TimeComparisonOperator::GreaterThanOrEqual,
+            }),
+            InferenceFilterTreeNode::Tag(TagNode {
+                key: "tensorzero::evaluation_name".to_string(),
+                value: "haiku".to_string(),
+                comparison_operator: TagComparisonOperator::Equal,
+            }),
+        ],
+    };
+    let opts = ListInferencesParams {
+        function_name: "write_haiku",
+        variant_name: None,
+        filters: Some(&filter_node),
+        output_source: InferenceOutputSource::Inference,
+        limit: None,
+        offset: None,
+        format: ClickhouseFormat::JsonEachRow,
+    };
+    let res = client.experimental_list_inferences(opts).await.unwrap();
+    assert_eq!(res.len(), 78);
+    for inference in res {
+        let StoredInference::Chat(chat_inference) = inference else {
+            panic!("Expected a Chat inference");
+        };
+        assert_eq!(chat_inference.function_name, "write_haiku");
+        assert_eq!(chat_inference.tags.len(), 4);
+        assert_eq!(chat_inference.tags["tensorzero::evaluation_name"], "haiku");
+    }
 }
