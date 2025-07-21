@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -272,7 +273,8 @@ pub struct TagNode {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 pub struct TimeNode {
-    pub time: u64, // Unix timestamp in seconds
+    #[cfg_attr(test, ts(type = "Date"))]
+    pub time: DateTime<Utc>,
     pub comparison_operator: TimeComparisonOperator,
 }
 
@@ -399,13 +401,13 @@ impl InferenceFilterTreeNode {
             }) => {
                 let time_placeholder = add_parameter(
                     time.to_string(),
-                    ClickhouseType::UInt64,
+                    ClickhouseType::String,
                     params_map,
                     param_idx_counter,
                 );
                 let comparison_operator = comparison_operator.to_clickhouse_operator();
                 Ok(format!(
-                    "i.timestamp {comparison_operator} toDateTime(toUnixTimestamp({time_placeholder}))"
+                    "i.timestamp {comparison_operator} parseDateTimeBestEffort({time_placeholder})"
                 ))
             }
             InferenceFilterTreeNode::And { children } => {
@@ -542,7 +544,6 @@ pub struct QueryParameter {
 ///
 /// TODOs:
 /// - handle selecting the feedback values
-/// - handle ORDER BY
 pub fn generate_list_inferences_sql(
     config: &Config,
     opts: &ListInferencesParams<'_>,
@@ -1593,13 +1594,13 @@ FORMAT JSONEachRow"#;
         let filter_node = InferenceFilterTreeNode::And {
             children: vec![
                 InferenceFilterTreeNode::Time(TimeNode {
-                    time: 1609459200, // 2021-01-01 00:00:00 UTC
+                    time: DateTime::from_timestamp(1609459200, 0).unwrap(), // 2021-01-01 00:00:00 UTC
                     comparison_operator: TimeComparisonOperator::GreaterThan,
                 }),
                 InferenceFilterTreeNode::Or {
                     children: vec![
                         InferenceFilterTreeNode::Time(TimeNode {
-                            time: 1672531200, // 2023-01-01 00:00:00 UTC
+                            time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
                             comparison_operator: TimeComparisonOperator::LessThan,
                         }),
                         InferenceFilterTreeNode::And {
@@ -1655,7 +1656,7 @@ LEFT JOIN (
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p0:String} AND (COALESCE(i.timestamp > toDateTime(toUnixTimestamp({p1:UInt64})), 0) AND COALESCE((COALESCE(i.timestamp < toDateTime(toUnixTimestamp({p2:UInt64})), 0) OR COALESCE((COALESCE(j0.value >= {p4:Float64}, 0) AND COALESCE(i.tags[{p5:String}] = {p6:String}, 0)), 0)), 0))
+    i.function_name = {p0:String} AND (COALESCE(i.timestamp > parseDateTimeBestEffort({p1:String}), 0) AND COALESCE((COALESCE(i.timestamp < parseDateTimeBestEffort({p2:String}), 0) OR COALESCE((COALESCE(j0.value >= {p4:Float64}, 0) AND COALESCE(i.tags[{p5:String}] = {p6:String}, 0)), 0)), 0))
 FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         assert_eq!(params.len(), 7); // p0 (function) + 6 filter-related params
@@ -2199,7 +2200,7 @@ FORMAT JSONEachRow"#;
     async fn test_simple_time_filter() {
         let config = get_e2e_config().await;
         let filter_node = InferenceFilterTreeNode::Time(TimeNode {
-            time: 1672531200, // 2023-01-01 00:00:00 UTC
+            time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
             comparison_operator: TimeComparisonOperator::GreaterThan,
         });
         let opts = ListInferencesParams {
@@ -2228,7 +2229,7 @@ SELECT
 FROM
     JsonInference AS i
 WHERE
-    i.function_name = {p0:String} AND i.timestamp > toDateTime(toUnixTimestamp({p1:UInt64}))
+    i.function_name = {p0:String} AND i.timestamp > parseDateTimeBestEffort({p1:String})
 FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
@@ -2238,7 +2239,7 @@ FORMAT JSONEachRow"#;
             },
             QueryParameter {
                 name: "p1".to_string(),
-                value: "1672531200".to_string(),
+                value: "2023-01-01 00:00:00 UTC".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -2258,7 +2259,7 @@ FORMAT JSONEachRow"#;
 
         for (op, expected_op_str) in operators {
             let filter_node = InferenceFilterTreeNode::Time(TimeNode {
-                time: 1672531200, // 2023-01-01 00:00:00 UTC
+                time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
                 comparison_operator: op,
             });
             let opts = ListInferencesParams {
@@ -2288,7 +2289,7 @@ SELECT
 FROM
     ChatInference AS i
 WHERE
-    i.function_name = {{p0:String}} AND i.timestamp {expected_op_str} toDateTime(toUnixTimestamp({{p1:UInt64}}))
+    i.function_name = {{p0:String}} AND i.timestamp {expected_op_str} parseDateTimeBestEffort({{p1:String}})
 FORMAT JSONEachRow"#,
             );
             assert_eq!(sql, expected_sql);
@@ -2299,7 +2300,7 @@ FORMAT JSONEachRow"#,
                 },
                 QueryParameter {
                     name: "p1".to_string(),
-                    value: "1672531200".to_string(),
+                    value: "2023-01-01 00:00:00 UTC".to_string(),
                 },
             ];
             assert_eq!(params, expected_params);
@@ -2312,7 +2313,7 @@ FORMAT JSONEachRow"#,
         let filter_node = InferenceFilterTreeNode::And {
             children: vec![
                 InferenceFilterTreeNode::Time(TimeNode {
-                    time: 1672531200, // 2023-01-01 00:00:00 UTC
+                    time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
                     comparison_operator: TimeComparisonOperator::GreaterThanOrEqual,
                 }),
                 InferenceFilterTreeNode::Tag(TagNode {
@@ -2361,7 +2362,7 @@ LEFT JOIN (
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p0:String} AND (COALESCE(i.timestamp >= toDateTime(toUnixTimestamp({p1:UInt64})), 0) AND COALESCE(i.tags[{p2:String}] = {p3:String}, 0) AND COALESCE(j0.value > {p5:Float64}, 0))
+    i.function_name = {p0:String} AND (COALESCE(i.timestamp >= parseDateTimeBestEffort({p1:String}), 0) AND COALESCE(i.tags[{p2:String}] = {p3:String}, 0) AND COALESCE(j0.value > {p5:Float64}, 0))
 LIMIT {p6:UInt64}
 FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
@@ -2372,7 +2373,7 @@ FORMAT JSONEachRow"#;
             },
             QueryParameter {
                 name: "p1".to_string(),
-                value: "1672531200".to_string(),
+                value: "2023-01-01 00:00:00 UTC".to_string(),
             },
             QueryParameter {
                 name: "p2".to_string(),

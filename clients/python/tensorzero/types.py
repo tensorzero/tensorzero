@@ -559,7 +559,7 @@ class TagFilter(InferenceFilterTreeNode):
 
 @dataclass
 class TimeFilter(InferenceFilterTreeNode):
-    time: int
+    time: str  # RFC 3339 timestamp
     comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
     type: str = "time"
 

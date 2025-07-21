@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
@@ -337,7 +338,9 @@ def test_not_filter(embedded_sync_client: TensorZeroGateway):
 
 def test_simple_time_filter(embedded_sync_client: TensorZeroGateway):
     filters = TimeFilter(
-        time=1672531200,  # 2023-01-01 00:00:00 UTC
+        time=datetime.fromtimestamp(
+            1672531200, tz=timezone.utc
+        ).isoformat(),  # 2023-01-01 00:00:00 UTC
         comparison_operator=">",
     )
     order_by = [
@@ -392,7 +395,7 @@ def test_combined_time_and_tag_filter(embedded_sync_client: TensorZeroGateway):
         children=[
             TimeFilter(
                 # 2025-04-14 23:30:00 UTC (should exclude some of these elements)
-                time=1744673400,
+                time=datetime.fromtimestamp(1744673400, tz=timezone.utc).isoformat(),
                 comparison_operator=">=",
             ),
             TagFilter(
@@ -707,7 +710,9 @@ async def test_simple_time_filter_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
     filters = TimeFilter(
-        time=1672531200,  # 2023-01-01 00:00:00 UTC
+        time=datetime.fromtimestamp(
+            1672531200, tz=timezone.utc
+        ).isoformat(),  # 2023-01-01 00:00:00 UTC
         comparison_operator=">",
     )
     order_by = [
@@ -768,7 +773,7 @@ async def test_combined_time_and_tag_filter_async(
         children=[
             TimeFilter(
                 # 2025-04-14 23:30:00 UTC (should exclude some of these elements)
-                time=1744673400,
+                time=datetime.fromtimestamp(1744673400, tz=timezone.utc).isoformat(),
                 comparison_operator=">=",
             ),
             TagFilter(

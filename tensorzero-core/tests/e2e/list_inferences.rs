@@ -1,3 +1,4 @@
+use chrono::DateTime;
 use tensorzero::{
     BooleanMetricNode, FloatComparisonOperator, FloatMetricNode, InferenceFilterTreeNode,
     InferenceOutputSource, ListInferencesParams, StoredInference, TagComparisonOperator, TagNode,
@@ -277,7 +278,7 @@ async fn test_not_filter() {
 async fn test_simple_time_filter() {
     let client = make_embedded_gateway().await;
     let filter_node = InferenceFilterTreeNode::Time(TimeNode {
-        time: 1672531200, // 2023-01-01 00:00:00 UTC
+        time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
         comparison_operator: TimeComparisonOperator::GreaterThan,
     });
     let order_by = vec![
@@ -354,7 +355,7 @@ async fn test_combined_time_and_tag_filter() {
         children: vec![
             InferenceFilterTreeNode::Time(TimeNode {
                 // 2025-04-14 23:30:00 UTC (should exclude some of these elements)
-                time: 1744673400,
+                time: DateTime::from_timestamp(1744673400, 0).unwrap(),
                 comparison_operator: TimeComparisonOperator::GreaterThanOrEqual,
             }),
             InferenceFilterTreeNode::Tag(TagNode {
