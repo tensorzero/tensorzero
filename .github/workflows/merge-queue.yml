@@ -4,6 +4,7 @@ run-name: Merge Queue Checks for ${{ github.ref }}
 on:
   workflow_dispatch:
   merge_group:
+  push:
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 

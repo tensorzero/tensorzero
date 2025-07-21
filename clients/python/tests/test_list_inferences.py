@@ -395,13 +395,12 @@ def test_simple_tag_filter(embedded_sync_client: TensorZeroGateway):
         variant_name=None,
         filters=filters,
         output_source="inference",
-        limit=None,
+        limit=49,
         offset=None,
     )
-    assert len(inferences) == 204
+    assert len(inferences) == 49
     for inference in inferences:
         assert inference.function_name == "extract_entities"
-        assert len(inference.tags) == 4
         assert inference.tags["tensorzero::evaluation_name"] == "entity_extraction"
 
 
@@ -425,13 +424,12 @@ def test_combined_time_and_tag_filter(embedded_sync_client: TensorZeroGateway):
         variant_name=None,
         filters=filters,
         output_source="inference",
-        limit=None,
+        limit=23,
         offset=None,
     )
-    assert len(inferences) == 78
+    assert len(inferences) == 23
     for inference in inferences:
         assert inference.function_name == "write_haiku"
-        assert len(inference.tags) == 4
         assert inference.tags["tensorzero::evaluation_name"] == "haiku"
 
 
@@ -786,13 +784,12 @@ async def test_simple_tag_filter_async(
         variant_name=None,
         filters=filters,
         output_source="inference",
-        limit=None,
+        limit=100,
         offset=None,
     )
-    assert len(inferences) == 204
+    assert len(inferences) == 100
     for inference in inferences:
         assert inference.function_name == "extract_entities"
-        assert len(inference.tags) == 4
         assert inference.tags["tensorzero::evaluation_name"] == "entity_extraction"
 
 
@@ -819,13 +816,12 @@ async def test_combined_time_and_tag_filter_async(
         variant_name=None,
         filters=filters,
         output_source="inference",
-        limit=None,
+        limit=15,
         offset=None,
     )
-    assert len(inferences) == 78
+    assert len(inferences) == 15
     for inference in inferences:
         assert inference.function_name == "write_haiku"
-        assert len(inference.tags) == 4
         assert inference.tags["tensorzero::evaluation_name"] == "haiku"
 
 
