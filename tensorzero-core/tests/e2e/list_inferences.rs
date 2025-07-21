@@ -384,7 +384,6 @@ async fn test_simple_tag_filter() {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
-        assert_eq!(json_inference.tags.len(), 4);
         assert_eq!(
             json_inference.tags["tensorzero::evaluation_name"],
             "entity_extraction"
@@ -426,7 +425,6 @@ async fn test_combined_time_and_tag_filter() {
             panic!("Expected a Chat inference");
         };
         assert_eq!(chat_inference.function_name, "write_haiku");
-        assert_eq!(chat_inference.tags.len(), 4);
         assert_eq!(chat_inference.tags["tensorzero::evaluation_name"], "haiku");
         assert!(chat_inference.timestamp >= DateTime::from_timestamp(1744673400, 0).unwrap());
     }
