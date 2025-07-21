@@ -17,7 +17,19 @@ import {
 } from "~/components/ui/command";
 import clsx from "clsx";
 import { z } from "zod";
-import { useDatasetCountFetcher } from "~/routes/api/datasets/counts.route";
+import { useQuery } from "@tanstack/react-query";
+
+const useDatasetCounts = () => {
+  return useQuery({
+    queryKey: ["DATASETS_COUNT"],
+    queryFn: async ({ signal }) => {
+      const response = await fetch("/api/datasets/counts", { signal });
+      const data = await response.json();
+      const parsedData = DatasetCountResponse.parse(data);
+      return parsedData.datasets;
+    },
+  });
+};
 
 export const DatasetCountResponse = z.object({
   datasets: z.array(
@@ -51,15 +63,14 @@ export function DatasetSelector({
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  const { datasets, isLoading } = useDatasetCountFetcher(functionName);
+  const { data: datasets = [], isLoading } = useDatasetCounts();
 
   // Datasets sorted by last updated date for initial display
   const recentlyUpdatedDatasets = useMemo(
     () =>
-      [...(datasets ?? [])].sort((a, b) => {
+      [...datasets].sort((a, b) => {
         return (
-          new Date(b.last_updated).getTime() -
-          new Date(a.last_updated).getTime()
+          new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
         );
       }),
     [datasets],
@@ -67,7 +78,7 @@ export function DatasetSelector({
 
   // Selected dataset, if an existing one was selected
   const existingSelectedDataset = useMemo(
-    () => datasets?.find((dataset) => dataset.dataset_name === selected),
+    () => datasets?.find((dataset) => dataset.name === selected),
     [datasets, selected],
   );
 
@@ -93,7 +104,7 @@ export function DatasetSelector({
                   <TablePlus className="h-4 w-4 shrink-0 text-blue-600" />
                 )}
                 <span className="truncate font-mono text-sm">
-                  {existingSelectedDataset?.dataset_name ?? selected}
+                  {existingSelectedDataset?.name ?? selected}
                 </span>
               </div>
             ) : (
@@ -147,17 +158,17 @@ export function DatasetSelector({
                   <CommandGroup>
                     {recentlyUpdatedDatasets.map((dataset) => (
                       <CommandItem
-                        key={dataset.dataset_name}
-                        value={dataset.dataset_name}
+                        key={dataset.name}
+                        value={dataset.name}
                         onSelect={() => {
-                          onSelect(dataset.dataset_name, false);
+                          onSelect(dataset.name, false);
                           setInputValue("");
                           setOpen(false);
                         }}
                         className="group flex w-full items-center gap-2"
                       >
                         <div className="flex min-w-0 flex-1 items-center gap-2">
-                          {selected === dataset.dataset_name ? (
+                          {selected === dataset.name ? (
                             <TableCheck size={16} className="text-green-700" />
                           ) : (
                             <Table size={16} className="text-fg-muted" />
@@ -165,18 +176,18 @@ export function DatasetSelector({
                           <span
                             className={clsx(
                               "group-hover:text-fg-primary truncate font-mono",
-                              selected === dataset.dataset_name
+                              selected === dataset.name
                                 ? "font-medium"
                                 : "font-normal",
                             )}
                           >
-                            {dataset.dataset_name}
+                            {dataset.name}
                           </span>
                         </div>
                         <span
                           className={clsx(
                             "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
-                            selected === dataset.dataset_name
+                            selected === dataset.name
                               ? "text-fg-secondary font-medium"
                               : "text-fg-tertiary font-normal",
                           )}
@@ -198,7 +209,7 @@ export function DatasetSelector({
                 // ...and the dataset doesn't exist in the list of recently updated datasets...
                 !recentlyUpdatedDatasets.some(
                   (dataset) =>
-                    dataset.dataset_name.toLowerCase() ===
+                    dataset.name.toLowerCase() ===
                     inputValue.trim().toLowerCase(),
                 ) && (
                   // ...then show the "New dataset" group
