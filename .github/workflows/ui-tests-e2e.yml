@@ -183,7 +183,7 @@ jobs:
       - name: Start UI Docker container
         working-directory: ui
         run: |
-          docker compose -f fixtures/docker-compose.ui.yml up --no-build -d
+          docker compose -f fixtures/docker-compose.ui.yml up --no-build -d --wait
 
       - name: Run UI E2E tests
         id: e2e_tests
