@@ -1460,8 +1460,12 @@ async fn test_invalid_toml() {
         .to_string();
 
     assert!(
-        err.contains("duplicate key `my-model` in table `models`"),
-        "Unexpected error: {err:?}"
+        err.contains("duplicate key"),
+        "Message is missing 'duplicate key': {err}"
+    );
+    assert!(
+        err.contains("models.my-model"),
+        "Message is missing 'models.my-model': {err}"
     );
 }
 
