@@ -708,12 +708,12 @@ mod tests {
     use crate::variant::VariantConfig;
 
     use super::*;
+    use crate::config_parser::path::TomlRelativePath;
     use serde_json::json;
     use std::time::Duration;
     use std::time::Instant;
     use std::{io::Write, path::PathBuf};
     use tempfile::NamedTempFile;
-    use crate::config_parser::path::TomlRelativePath;
     use tracing_test::traced_test;
 
     fn create_test_schema() -> StaticJSONSchema {
@@ -735,7 +735,7 @@ mod tests {
             TomlRelativePath::new_for_tests(temp_file.path().to_owned()),
             PathBuf::new(),
         )
-            .expect("Failed to create schema")
+        .expect("Failed to create schema")
     }
 
     #[test]

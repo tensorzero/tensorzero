@@ -948,7 +948,9 @@ mod tests {
     #[test]
     fn test_read_system_instructions() {
         let system_instructions = read_system_instructions(
-            &TomlRelativePath::new_for_tests(PathBuf::from("evaluations/evaluation1/llm_judge_bool/system_instructions.txt")),
+            &TomlRelativePath::new_for_tests(PathBuf::from(
+                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+            )),
             &PathBuf::from("fixtures/config"),
         )
         .unwrap();
@@ -959,7 +961,9 @@ mod tests {
 
         // Nonexistent file
         let result = read_system_instructions(
-            &TomlRelativePath::new_for_tests(PathBuf::from("evaluations/evaluation1/llm_judge_bool/nonexistent.txt")),
+            &TomlRelativePath::new_for_tests(PathBuf::from(
+                "evaluations/evaluation1/llm_judge_bool/nonexistent.txt",
+            )),
             &PathBuf::from("fixtures/config"),
         );
         assert_eq!(*result.unwrap_err().get_details(), ErrorDetails::FileRead {
@@ -1042,7 +1046,9 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
                             model: Arc::from("gpt-3.5-turbo"),
-                            system_instructions: "evaluations/evaluation1/llm_judge_bool/system_instructions.txt".into(),
+                            system_instructions:
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+                                    .into(),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
@@ -1165,7 +1171,9 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
                             model: Arc::from("gpt-3.5-turbo"),
-                            system_instructions: "evaluations/evaluation1/llm_judge_bool/system_instructions.txt".into(),
+                            system_instructions:
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+                                    .into(),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
@@ -1316,7 +1324,9 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
                             model: Arc::from("gpt-3.5-turbo"),
-                            system_instructions: "evaluations/evaluation1/llm_judge_bool/system_instructions.txt".into(),
+                            system_instructions:
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+                                    .into(),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
@@ -1342,9 +1352,9 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
                             model: Arc::from("gpt-4"),
-                            system_instructions: TomlRelativePath::new_for_tests(
-                                PathBuf::from("evaluations/evaluation1/llm_judge_bool/system_instructions.txt"),
-                            ),
+                            system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            )),
                             temperature: Some(0.5),
                             top_p: None,
                             max_tokens: Some(200),
@@ -1458,9 +1468,9 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
                             model: Arc::from("gpt-3.5-turbo"),
-                            system_instructions: TomlRelativePath::new_for_tests(
-                                PathBuf::from("evaluations/evaluation1/llm_judge_bool/system_instructions.txt"),
-                            ),
+                            system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            )),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
@@ -1529,9 +1539,9 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: None, // No 'active' field specified
                             model: Arc::from("gpt-3.5-turbo"),
-                            system_instructions: TomlRelativePath::new_for_tests(
-                                PathBuf::from("evaluations/evaluation1/llm_judge_bool/system_instructions.txt"),
-                            ),
+                            system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            )),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
@@ -1602,9 +1612,9 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(false), // Explicitly inactive
                             model: Arc::from("gpt-3.5-turbo"),
-                            system_instructions: TomlRelativePath::new_for_tests(
-                                PathBuf::from("evaluations/evaluation1/llm_judge_bool/system_instructions.txt"),
-                            ),
+                            system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            )),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
