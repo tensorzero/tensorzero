@@ -613,3 +613,10 @@ class NotNode(NotFilter):
             stacklevel=2,
         )
         super().__init__(*args, **kwargs)
+
+
+@dataclass
+class OrderBy:
+    by: Literal["timestamp", "metric"]
+    name: Optional[str] = None
+    direction: Literal["ASC", "DESC"] = "DESC"

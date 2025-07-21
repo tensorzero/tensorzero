@@ -61,6 +61,7 @@ from .types import (
     Message,
     NotFilter,
     NotNode,  # DEPRECATED
+    OrderBy,
     OrFilter,
     OrNode,  # DEPRECATED
     RawText,
@@ -141,6 +142,7 @@ __all__ = [
     "Message",
     "NotFilter",
     "NotNode",  # DEPRECATED
+    "OrderBy",
     "OrFilter",
     "OrNode",  # DEPRECATED
     "OptimizationJobHandle",
