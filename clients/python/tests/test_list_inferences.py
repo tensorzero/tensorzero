@@ -89,8 +89,7 @@ def test_simple_query_with_float_filter(embedded_sync_client: TensorZeroGateway)
         assert inference.function_name == "extract_entities"
         assert len(inference.dispreferred_outputs) == 0
 
-    # ORDER BY metric jaccard_similarity DESC is applied with filter > 0.5
-    # This ensures results are ordered by the metric value in descending order
+    # Since we aren't yet grabbing metric values from the DB we can't verify ordering by metric
 
 
 def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
@@ -410,7 +409,7 @@ def test_combined_time_and_tag_filter(embedded_sync_client: TensorZeroGateway):
     filters = AndFilter(
         children=[
             TimeFilter(
-                # 2025-04-14 23:30:00 UTC (should exclude some of these elements)
+                # 2025-04-14 23:30:00 UTC
                 time=datetime.fromtimestamp(1744673400, tz=timezone.utc).isoformat(),
                 comparison_operator=">=",
             ),
@@ -804,7 +803,7 @@ async def test_combined_time_and_tag_filter_async(
     filters = AndFilter(
         children=[
             TimeFilter(
-                # 2025-04-14 23:30:00 UTC (should exclude some of these elements)
+                # 2025-04-14 23:30:00 UTC
                 time=datetime.fromtimestamp(1744673400, tz=timezone.utc).isoformat(),
                 comparison_operator=">=",
             ),
