@@ -6,7 +6,7 @@ import {
   type ShouldRevalidateFunctionArgs,
   isRouteErrorResponse,
 } from "react-router";
-import DatasetSelector from "~/components/dataset/DatasetSelector";
+import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import { useConfig } from "~/context/config";
