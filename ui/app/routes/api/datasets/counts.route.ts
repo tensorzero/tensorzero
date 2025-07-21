@@ -4,6 +4,8 @@ import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 export async function loader({ request }: LoaderFunctionArgs) {
   try {
     const url = new URL(request.url);
+    console.log("datasets/counts");
+    console.log(url.toString());
     const functionName = url.searchParams.get("function") ?? undefined;
     const datasetCounts = await getDatasetCounts({
       function_name: functionName,
@@ -11,7 +13,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const datasets = datasetCounts.map((d) => ({
       name: d.dataset_name,
       count: d.count,
-      last_updated: d.last_updated,
+      lastUpdated: d.last_updated,
     }));
     return data({ datasets });
   } catch (error) {
