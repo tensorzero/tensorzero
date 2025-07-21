@@ -179,6 +179,7 @@ async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
     val_fraction: data.validationSplitPercent / 100,
     format: "JsonEachRow",
     optimizer_config: optimizerConfig,
+    order_by: null,
   });
   return NativeSFTJob.from_job_handle_with_form_data(job, data);
 }
