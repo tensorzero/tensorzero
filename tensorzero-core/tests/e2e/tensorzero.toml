@@ -9,7 +9,7 @@
 [gateway]
 bind_address = "0.0.0.0:3000"
 debug = true
-enable_template_filesystem_access = true
+template_filesystem_access.enabled = true
 export.otlp.traces.enabled = true
 unstable_error_json = true
 

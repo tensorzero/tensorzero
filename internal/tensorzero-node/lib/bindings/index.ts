@@ -109,6 +109,7 @@ export * from "./StreamingTimeouts";
 export * from "./TGIProvider";
 export * from "./TagComparisonOperator";
 export * from "./TagNode";
+export * from "./TemplateFilesystemAccess";
 export * from "./Text";
 export * from "./Thought";
 export * from "./TimeComparisonOperator";
