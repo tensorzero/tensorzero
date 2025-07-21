@@ -473,14 +473,12 @@ with tempfile.NamedTemporaryFile(delete=False, suffix=".jsonl") as f:
     # Upload dataset
     upload_file_url = f"{api_base}/accounts/{account_id}/datasets/{dataset_id}:upload"
 
-    files2 = {
-        "file": open(f.name, "r"),
-    }
-    upload_file_result = requests.post(
-        upload_file_url, headers=base_headers, files=files2
-    )
-
-    print(upload_file_result)
+    with open(f.name, "r") as file:
+        dataset = {"file": file}
+        upload_file_result = requests.post(
+            upload_file_url, headers=base_headers, files=dataset
+        )
+        print(upload_file_result)
 
 # %%
 check_state_url = f"{api_base}/accounts/{account_id}/datasets/{dataset_id}"
@@ -493,13 +491,13 @@ print(json.dumps(result.json(), indent=2))
 
 # %%
 create_sft_url = f"{api_base}/accounts/{account_id}/supervisedFineTuningJobs"
-jsonToSend = {
+json_to_send = {
     "dataset": f"accounts/{account_id}/datasets/{dataset_id}",
     "base_model": MODEL_NAME,
 }
 if NUM_EPOCHS is not None:
-    jsonToSend["epochs"] = NUM_EPOCHS
-result = requests.post(url=create_sft_url, headers=json_headers, json=jsonToSend)
+    json_to_send["epochs"] = NUM_EPOCHS
+result = requests.post(url=create_sft_url, headers=json_headers, json=json_to_send)
 if result.status_code != 200:
     print(json.dumps(result.json(), indent=2))
 else:
