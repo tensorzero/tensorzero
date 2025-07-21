@@ -6,23 +6,30 @@
 #
 # This recipe allows TensorZero users to fine-tune open-source LLMs using their own data.
 # Since TensorZero automatically logs all inferences and feedback, it is straightforward to fine-tune a model using your own data and any prompt you want.
-# We follow the Fireworks [docs](https://docs.fireworks.ai/fine-tuning/fine-tuning-models) on fine-tuning a model.
+# We follow the Fireworks [docs](https://docs.fireworks.ai/fine-tuning/fine-tuning-via-api) on fine-tuning a model.
 #
 
 # %% [markdown]
 # To get started:
 #
-# - Set the `TENSORZERO_CLICKHOUSE_URL` environment variable. For example: `TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero"`
-# - You'll also need to [install](https://docs.fireworks.ai/tools-sdks/firectl/firectl) the CLI tool `firectl` on your machine and sign in with `firectl signin`. You can test that this all worked with `firectl whoami`.
+# - Set the `TENSORZERO_CLICKHOUSE_URL`, `FIREWORKS_API_KEY`, and `FIREWORKS_ACCOUNT_ID` environment variable. See the `.env.example` file.
 # - Update the following parameters:
 #
 
 # %%
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 CLICKHOUSE_URL = os.getenv("TENSORZERO_CLICKHOUSE_URL")
+FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY")
+account_id = os.getenv("FIREWORKS_ACCOUNT_ID")
 
 assert CLICKHOUSE_URL is not None, "TENSORZERO_CLICKHOUSE_URL is not set"
+assert FIREWORKS_API_KEY is not None, "FIREWORKS_API_KEY is not set"
+assert account_id is not None, "FIREWORKS_ACCOUNT_ID is not set"
 
 # %%
 CONFIG_PATH = "../../../../examples/data-extraction-ner/config/tensorzero.toml"
@@ -53,14 +60,13 @@ DROP_INVALID_MESSAGES = True
 
 # %%
 import json
-import os
-import subprocess
 import tempfile
 import warnings
 from pathlib import Path
 from time import sleep
 from typing import Any, Dict, List, Optional
 
+import requests
 import toml
 from clickhouse_connect import get_client
 from IPython.display import clear_output
@@ -435,128 +441,118 @@ df = df[df["conversational_messages"].notna()]
 df.head()
 
 # %% [markdown]
-# We'll write the conversational messages to a temporary file for the Fireworks CLI
+# We'll write the conversational messages to a temporary file for the Fireworks API
 #
 
 # %%
 dataset_id = f"t0-{uuid7()}"
+api_base = "https://api.fireworks.ai/v1"
+base_headers = {"Authorization": f"Bearer {FIREWORKS_API_KEY}"}
+json_headers = base_headers.copy()
+json_headers.update({"Content-Type": "application/json"})
 
 with tempfile.NamedTemporaryFile(delete=False, suffix=".jsonl") as f:
     for _, row in df.iterrows():
         f.write((json.dumps(row["conversational_messages"]) + "\n").encode("utf-8"))
+    create_record_url = f"{api_base}/accounts/{account_id}/datasets/"
 
-    dataset_path = f.name
-    result = subprocess.run(
-        ["firectl", "create", "dataset", dataset_id, dataset_path], capture_output=True
+    # Create dataset
+    create_record_result = requests.post(
+        create_record_url,
+        json={
+            "datasetId": dataset_id,
+            "dataset": {
+                "displayName": dataset_id,
+                "format": "CHAT",
+                "exampleCount": len(df),
+            },
+        },
+        headers=json_headers,
     )
-print(result.stdout)
+    print(create_record_result)
+    # Upload dataset
+    upload_file_url = f"{api_base}/accounts/{account_id}/datasets/{dataset_id}:upload"
+
+    files2 = {
+        "file": open(f.name, "r"),
+    }
+    upload_file_result = requests.post(
+        upload_file_url, headers=base_headers, files=files2
+    )
+
+    print(upload_file_result)
 
 # %%
-result = subprocess.run(["firectl", "get", "dataset", dataset_id], capture_output=True)
-print(result.stdout.decode("utf-8"))
-
-
-# %%
-def get_job_id(stdout: str) -> str:
-    for line in stdout.splitlines():
-        if line.strip().startswith("Name:"):
-            return line.split("/")[-1].strip()
-    raise ValueError("Job ID not found in output")
-
+check_state_url = f"{api_base}/accounts/{account_id}/datasets/{dataset_id}"
+result = requests.get(check_state_url, headers=base_headers)
+print(json.dumps(result.json(), indent=2))
 
 # %% [markdown]
 # Now we start the fine-tuning job. This cell will block until the job is done.
 #
 
 # %%
-command = [
-    "firectl",
-    "create",
-    "sftj",
-    "--display-name",
-    f"tensorzero-ft-job-{dataset_id}",
-    "--dataset",
-    dataset_id,
-    "--base-model",
-    MODEL_NAME,
-]
-
+create_sft_url = f"{api_base}/accounts/{account_id}/supervisedFineTuningJobs"
+jsonToSend = {
+    "dataset": f"accounts/{account_id}/datasets/{dataset_id}",
+    "base_model": MODEL_NAME,
+}
 if NUM_EPOCHS is not None:
-    command.append("--epochs")
-    command.append(str(NUM_EPOCHS))
-
-print("Command: ", " ".join(command))
-
-result = subprocess.run(command, capture_output=True)
-
-if result.returncode != 0:
-    print(result.stderr.decode("utf-8"))
+    jsonToSend["epochs"] = NUM_EPOCHS
+result = requests.post(url=create_sft_url, headers=json_headers, json=jsonToSend)
+if result.status_code != 200:
+    print(json.dumps(result.json(), indent=2))
 else:
-    stdout = result.stdout.decode("utf-8")
-    print(stdout)
-    job_id = get_job_id(stdout)
+    response = result.json()
+    print(json.dumps(response, indent=2))
+    job_id = response["name"]
     print(f"job_id: {job_id}")
 
 # %%
+get_job_status_url = f"{api_base}/{job_id}"
 while True:
     clear_output(wait=True)
 
     try:
-        command = ["firectl", "get", "sftj", job_id]
-        result = subprocess.run(command, capture_output=True)
-        stdout = result.stdout.decode("utf-8")
-        print(stdout)
+        result = requests.get(
+            url=get_job_status_url,
+            headers=base_headers,
+        )
+        response = result.json()
+        print(json.dumps(result.json(), indent=2))
     except Exception as e:
         print(f"Error: {e}")
 
-    if "State: JOB_STATE_FAILED" in stdout:
+    if response["state"] == "JOB_STATE_FAILED":
         raise ValueError("Fine-tuning job failed")
 
-    if "State: JOB_STATE_COMPLETED" in stdout:
+    if response["state"] == "JOB_STATE_COMPLETED":
         break
 
     sleep(5)
-
-
-# %%
-def get_model_id(stdout: str) -> str:
-    for line in stdout.splitlines():
-        if line.strip().startswith("Output Model:"):
-            return line.split(":")[1].strip()
-    raise ValueError("Model ID not found in output")
-
-
-model_id = get_model_id(stdout)
-
-model_id
 
 # %% [markdown]
 # Now that the model is done training, we need to [deploy](https://docs.fireworks.ai/fine-tuning/fine-tuning-models#deploying-and-using-a-model) it to Fireworks serverless inference. If you need high or guaranteed throughput you can also deploy the model to [reserved capacity](https://docs.fireworks.ai/deployments/reservations) or an on-demand [deployment](https://docs.fireworks.ai/guides/ondemand-deployments).
 #
 
 # %%
-command = ["firectl", "deploy", model_id]
-print(" ".join(command))
-result = subprocess.run(command, capture_output=True)
-if result.returncode != 0:
-    print(result.stderr.decode("utf-8"))
-else:
-    stdout = result.stdout.decode("utf-8")
-    print(stdout)
-
+model_id = response["outputModel"]
+deploy_model_url = f"{api_base}/accounts/{account_id}/deployedModels"
+result = requests.post(
+    url=deploy_model_url,
+    headers=json_headers,
+    json={
+        "model": model_id,
+        "default": True,
+        "serverless": True,
+        "public": False,
+    },
+)
 
 # %%
-def get_model_identifier(model_id: str) -> str:
-    command = ["firectl", "get", "model", model_id]
-    result = subprocess.run(command, capture_output=True)
-    stdout = result.stdout.decode("utf-8")
-    for line in stdout.splitlines():
-        if line.strip().startswith("Name:"):
-            return line.split(":")[1].strip()
-    raise ValueError("Model identifier not found in output")
+model_identifier = model_id
 
-
-model_identifier = get_model_identifier(model_id)
+assert model_identifier
 
 model_identifier
 
