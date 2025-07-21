@@ -25,7 +25,7 @@ const useDatasetCounts = (functionName?: string) => {
     queryFn: async ({ signal }) => {
       const url = new URL("/api/datasets/counts", window.location.origin);
       if (functionName) {
-        url.searchParams.append("functionName", functionName);
+        url.searchParams.append("function", functionName);
       }
       const response = await fetch(url.toString(), { signal });
       const data = await response.json();
@@ -70,7 +70,6 @@ export function DatasetSelector({
   const [inputValue, setInputValue] = useState("");
 
   const { data: datasets = [], isLoading } = useDatasetCounts(functionName);
-  console.log(datasets);
 
   // Datasets sorted by last updated date for initial display
   const recentlyUpdatedDatasets = useMemo(
