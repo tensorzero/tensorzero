@@ -64,7 +64,7 @@ function renderJsonInferenceOutput(
     });
   }
 
-  // Set default tab to Parsed if it has content, otherwise Raw
+  // Set default tab to "Parsed" if it's available, otherwise "Raw"
   const defaultTab = output.parsed ? "parsed" : "raw";
 
   return (

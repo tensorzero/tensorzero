@@ -51,7 +51,6 @@ interface DatasetSelectorProps {
   functionName?: string;
   placeholder?: string;
   className?: string;
-  disabled?: boolean;
   allowCreation?: boolean;
   buttonProps?: React.ComponentProps<typeof Button>;
 }
@@ -65,7 +64,6 @@ export function DatasetSelector({
   allowCreation = true,
   className,
   buttonProps,
-  disabled,
 }: DatasetSelectorProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
