@@ -140,6 +140,7 @@ pub async fn run_workflow_test_case_with_tensorzero_client(
         query_variant_name: None,
         filters: None,
         output_source: InferenceOutputSource::Inference,
+        order_by: None,
         limit: Some(10),
         offset: None,
         val_fraction: None,

@@ -183,6 +183,12 @@ impl JoinRegistry {
         &self.clauses
     }
 
+    /// Add a new join clause to the registry if the join
+    /// for a particular key has not been added yet.
+    /// If this is the first time we're adding a join for a particular key,
+    /// we will also add the join clause to the registry.
+    ///
+    /// Returns the alias for the joined table.
     fn get_or_insert(
         &mut self,
         key: JoinKey,
@@ -619,6 +625,15 @@ FROM
         select_clauses = select_clauses.iter().join(",\n    "),
         inference_table_name = inference_table_name,
     );
+    // We generate the order by SQL before we add the joins so that the join registry is up to date with everything it needs.
+    // We don't actually add the order by SQL to the query until after we've added the joins.
+    let order_by_sql = generate_order_by_sql(
+        opts.order_by,
+        config,
+        &mut params_map,
+        &mut param_idx_counter,
+        &mut joins,
+    )?;
 
     if !joins.get_clauses().is_empty() {
         sql.push_str(&joins.get_clauses().join("\n"));
@@ -628,13 +643,6 @@ FROM
         sql.push_str("\nWHERE\n    ");
         sql.push_str(&where_clauses.join(" AND "));
     }
-    let order_by_sql = generate_order_by_sql(
-        opts.order_by,
-        config,
-        &mut params_map,
-        &mut param_idx_counter,
-        &mut joins,
-    )?;
     sql.push_str(order_by_sql.as_str());
 
     if let Some(l) = opts.limit {
@@ -872,6 +880,7 @@ mod tests {
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -883,6 +892,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -909,6 +919,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -919,6 +930,7 @@ SELECT
     i.id as inference_id,
     i.input as input,
     i.output as output,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.tool_params as tool_params,
     i.variant_name as variant_name,
@@ -951,6 +963,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -962,6 +975,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -1006,6 +1020,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let result = generate_list_inferences_sql(&config, &opts);
@@ -1031,6 +1046,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let result = generate_list_inferences_sql(&config, &opts);
@@ -1051,6 +1067,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Demonstration,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1063,6 +1080,7 @@ SELECT
     i.id as inference_id,
     i.input as input,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -1094,6 +1112,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1105,6 +1124,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -1153,6 +1173,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1164,6 +1185,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -1228,6 +1250,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1239,6 +1262,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -1322,6 +1346,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1333,6 +1358,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -1425,6 +1451,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1436,6 +1463,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -1508,6 +1536,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1519,6 +1548,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -1598,6 +1628,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1609,6 +1640,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -1639,6 +1671,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1650,6 +1683,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -1682,6 +1716,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: Some(50),
             offset: Some(100),
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1693,6 +1728,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -1746,6 +1782,7 @@ FORMAT JSONEachRow"#;
                 output_source: InferenceOutputSource::Inference,
                 limit: None,
                 offset: None,
+                order_by: None,
                 format: ClickhouseFormat::JsonEachRow,
             };
             let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1758,6 +1795,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {{p0:String}} as function_name
@@ -1809,6 +1847,7 @@ FORMAT JSONEachRow"#,
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1820,6 +1859,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -1861,6 +1901,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1871,6 +1912,7 @@ SELECT
     i.id as inference_id,
     i.input as input,
     i.output as output,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.tool_params as tool_params,
     i.variant_name as variant_name,
@@ -1922,6 +1964,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1933,6 +1976,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -1991,6 +2035,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -2002,6 +2047,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -2067,6 +2113,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Demonstration,
             limit: Some(25),
             offset: Some(50),
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -2079,6 +2126,7 @@ SELECT
     i.id as inference_id,
     i.input as input,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -2161,6 +2209,7 @@ FORMAT JSONEachRow"#;
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -2172,6 +2221,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -2218,6 +2268,7 @@ FORMAT JSONEachRow"#;
                 output_source: InferenceOutputSource::Inference,
                 limit: None,
                 offset: None,
+                order_by: None,
                 format: ClickhouseFormat::JsonEachRow,
             };
             let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -2229,6 +2280,7 @@ SELECT
     i.id as inference_id,
     i.input as input,
     i.output as output,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.tool_params as tool_params,
     i.variant_name as variant_name,
@@ -2282,6 +2334,7 @@ FORMAT JSONEachRow"#,
             output_source: InferenceOutputSource::Inference,
             limit: Some(10),
             offset: None,
+            order_by: None,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -2293,6 +2346,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
+    i.tags as tags,
     i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -2356,6 +2410,7 @@ FORMAT JSONEachRow"#;
                 "output": "[{\"type\": \"text\", \"text\": \"Hello! How can I help you today?\"}]",
                 "episode_id": "123e4567-e89b-12d3-a456-426614174000",
                 "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+                "tags": {},
                 "tool_params": "{\"tools_available\": [], \"tool_choice\": \"none\", \"parallel_tool_calls\": false}"
             }
         "#;
@@ -2396,6 +2451,7 @@ FORMAT JSONEachRow"#;
             "output": [{"type": "text", "text": "Hello! How can I help you today?"}],
             "episode_id": "123e4567-e89b-12d3-a456-426614174000",
             "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+            "tags": {},
             "tool_params": {"tools_available": [], "tool_choice": "none", "parallel_tool_calls": false}
         }
     "#;
@@ -2439,6 +2495,7 @@ FORMAT JSONEachRow"#;
                 "output": "[{\"type\": \"text\", \"text\": \"Hello! How can I help you today?\"}]",
                 "episode_id": "123e4567-e89b-12d3-a456-426614174000",
                 "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+                "tags": {},
                 "tool_params": "",
                 "dispreferred_outputs": ["[{\"type\": \"text\", \"text\": \"Goodbye!\"}]"]
             }
@@ -2468,6 +2525,7 @@ FORMAT JSONEachRow"#;
             "output": [{"type": "text", "text": "Hello! How can I help you today?"}],
             "episode_id": "123e4567-e89b-12d3-a456-426614174000",
             "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+            "tags": {},
             "dispreferred_outputs": [
                 [{"type": "text", "text": "Goodbye!"}]
             ]
@@ -2497,6 +2555,7 @@ FORMAT JSONEachRow"#;
                 "output": "{\"raw\":\"{\\\"answer\\\":\\\"Goodbye\\\"}\",\"parsed\":{\"answer\":\"Goodbye\"}}",
                 "episode_id": "123e4567-e89b-12d3-a456-426614174000",
                 "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+                "tags": {},
                 "output_schema": "{\"type\": \"object\", \"properties\": {\"output\": {\"type\": \"string\"}}}"
             }
         "#;
@@ -2544,6 +2603,7 @@ FORMAT JSONEachRow"#;
              "output": {"raw":"{\"answer\":\"Goodbye\"}","parsed":{"answer":"Goodbye"}},
              "episode_id": "123e4567-e89b-12d3-a456-426614174000",
              "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+             "tags": {},
              "output_schema": {"type": "object", "properties": {"output": {"type": "string"}}}
          }
      "#;
@@ -2595,6 +2655,7 @@ FORMAT JSONEachRow"#;
                 "output": "{\"raw\":\"{\\\"answer\\\":\\\"Goodbye\\\"}\",\"parsed\":{\"answer\":\"Goodbye\"}}",
                 "episode_id": "123e4567-e89b-12d3-a456-426614174000",
                 "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+                "tags": {},
                 "output_schema": "{\"type\": \"object\", \"properties\": {\"output\": {\"type\": \"string\"}}}"
             }
         "#;
@@ -2623,6 +2684,7 @@ FORMAT JSONEachRow"#;
              "output": {"raw":"{\"answer\":\"Goodbye\"}","parsed":{"answer":"Goodbye"}},
              "episode_id": "123e4567-e89b-12d3-a456-426614174000",
              "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+             "tags": {},
              "output_schema": {"type": "object", "properties": {"output": {"type": "string"}}}
          }
      "#;
@@ -2638,5 +2700,181 @@ FORMAT JSONEachRow"#;
                 parsed: Some(json!({"answer":"Goodbye"})),
             }]
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_order_by_timestamp() {
+        let config = get_e2e_config().await;
+        let order_by = vec![OrderBy {
+            term: OrderByTerm::Timestamp,
+            direction: OrderDirection::Desc,
+        }];
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: None,
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+            order_by: Some(&order_by),
+            format: ClickhouseFormat::JsonEachRow,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+
+        let expected_sql = r#"
+SELECT
+    'json' as type,
+    i.episode_id as episode_id,
+    i.id as inference_id,
+    i.input as input,
+    i.output as output,
+    i.output_schema as output_schema,
+    i.tags as tags,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name,
+    {p0:String} as function_name
+FROM
+    JsonInference AS i
+WHERE
+    i.function_name = {p0:String}
+ORDER BY i.timestamp DESC NULLS LAST
+FORMAT JSONEachRow"#;
+        assert_eq!(sql, expected_sql);
+
+        let expected_params = vec![QueryParameter {
+            name: "p0".to_string(),
+            value: "extract_entities".to_string(),
+        }];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_order_by_metric() {
+        let config = get_e2e_config().await;
+        let order_by = vec![OrderBy {
+            term: OrderByTerm::Metric {
+                name: "jaccard_similarity".to_string(),
+            },
+            direction: OrderDirection::Asc,
+        }];
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: None,
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+            order_by: Some(&order_by),
+            format: ClickhouseFormat::JsonEachRow,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        // NOTE: This test case enforces that the joins account for metrics that are only used in the order by clause.
+        let expected_sql = r#"
+SELECT
+    'json' as type,
+    i.episode_id as episode_id,
+    i.id as inference_id,
+    i.input as input,
+    i.output as output,
+    i.output_schema as output_schema,
+    i.tags as tags,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name,
+    {p0:String} as function_name
+FROM
+    JsonInference AS i
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM FloatMetricFeedback
+    WHERE metric_name = {p1:String}
+    GROUP BY target_id
+) AS j0 ON i.id = j0.target_id
+WHERE
+    i.function_name = {p0:String}
+ORDER BY j0.value ASC NULLS LAST
+FORMAT JSONEachRow"#;
+        assert_eq!(sql, expected_sql);
+
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "jaccard_similarity".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_multiple_order_by() {
+        let config = get_e2e_config().await;
+        let order_by = vec![
+            OrderBy {
+                term: OrderByTerm::Metric {
+                    name: "jaccard_similarity".to_string(),
+                },
+                direction: OrderDirection::Desc,
+            },
+            OrderBy {
+                term: OrderByTerm::Timestamp,
+                direction: OrderDirection::Asc,
+            },
+        ];
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: None,
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+            order_by: Some(&order_by),
+            format: ClickhouseFormat::JsonEachRow,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+
+        let expected_sql = r#"
+SELECT
+    'json' as type,
+    i.episode_id as episode_id,
+    i.id as inference_id,
+    i.input as input,
+    i.output as output,
+    i.output_schema as output_schema,
+    i.tags as tags,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name,
+    {p0:String} as function_name
+FROM
+    JsonInference AS i
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM FloatMetricFeedback
+    WHERE metric_name = {p1:String}
+    GROUP BY target_id
+) AS j0 ON i.id = j0.target_id
+WHERE
+    i.function_name = {p0:String}
+ORDER BY j0.value DESC NULLS LAST, i.timestamp ASC NULLS LAST
+FORMAT JSONEachRow"#;
+        assert_eq!(sql, expected_sql);
+
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "jaccard_similarity".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
     }
 }
