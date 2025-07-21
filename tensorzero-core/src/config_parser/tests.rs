@@ -1853,7 +1853,7 @@ async fn test_deprecated_enable_template_filesystem_access() {
         .template_filesystem_access
         .base_path
         .is_none());
-    assert!(logs_contain("Deprecation warning: `gateway.enable_template_filesystem_access` is deprecated. Please use `[gateway.template_filesystem_access]` instead"));
+    assert!(logs_contain("Deprecation Warning: `gateway.enable_template_filesystem_access` is deprecated. Please use `[gateway.template_filesystem_access.enabled]` instead."));
 }
 
 #[traced_test]

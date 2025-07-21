@@ -37,7 +37,7 @@ pub struct UninitializedGatewayConfig {
 impl UninitializedGatewayConfig {
     pub fn load(self) -> Result<GatewayConfig, Error> {
         if self.enable_template_filesystem_access.is_some() {
-            tracing::warn!("Deprecation warning: `gateway.enable_template_filesystem_access` is deprecated. Please use `[gateway.template_filesystem_access]` instead");
+            tracing::warn!("Deprecation Warning: `gateway.enable_template_filesystem_access` is deprecated. Please use `[gateway.template_filesystem_access.enabled]` instead.");
         }
         let template_filesystem_access = match (
             self.enable_template_filesystem_access,
