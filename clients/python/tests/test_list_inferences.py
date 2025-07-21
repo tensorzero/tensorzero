@@ -59,7 +59,12 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
         assert output_schema is not None
         assert len(inference.dispreferred_outputs) == 0
 
-    # ORDER BY timestamp DESC is applied - results should be in consistent order
+    # ORDER BY timestamp DESC is applied - verify timestamps are in descending order
+    timestamps = [inference.timestamp for inference in inferences]
+    for i in range(len(timestamps) - 1):
+        assert timestamps[i] >= timestamps[i + 1], (
+            f"Timestamps not in descending order: {timestamps[i]} < {timestamps[i + 1]}"
+        )
 
 
 def test_simple_query_with_float_filter(embedded_sync_client: TensorZeroGateway):
@@ -132,7 +137,12 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         assert tool_params.parallel_tool_calls is None
         assert len(inference.dispreferred_outputs) == 0
 
-    # ORDER BY timestamp ASC is applied - results should be in consistent order
+    # ORDER BY timestamp ASC is applied - verify timestamps are in ascending order
+    timestamps = [inference.timestamp for inference in inferences]
+    for i in range(len(timestamps) - 1):
+        assert timestamps[i] <= timestamps[i + 1], (
+            f"Timestamps not in ascending order: {timestamps[i]} > {timestamps[i + 1]}"
+        )
 
 
 def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroGateway):
@@ -367,6 +377,12 @@ def test_simple_time_filter(embedded_sync_client: TensorZeroGateway):
 
     # ORDER BY metric exact_match DESC, timestamp ASC is applied
     # Multiple ORDER BY clauses ensure deterministic ordering
+    # Verify timestamps are in ascending order (secondary sort)
+    timestamps = [inference.timestamp for inference in inferences]
+    for i in range(len(timestamps) - 1):
+        assert timestamps[i] <= timestamps[i + 1], (
+            f"Timestamps not in ascending order: {timestamps[i]} > {timestamps[i + 1]}"
+        )
 
 
 def test_simple_tag_filter(embedded_sync_client: TensorZeroGateway):
@@ -496,7 +512,12 @@ async def test_simple_list_json_inferences_async(
             hasattr(inference, "output_schema") and inference.output_schema is not None
         )
 
-    # ORDER BY timestamp DESC is applied - results should be in consistent order
+    # ORDER BY timestamp DESC is applied - verify timestamps are in descending order
+    timestamps = [inference.timestamp for inference in inferences]
+    for i in range(len(timestamps) - 1):
+        assert timestamps[i] >= timestamps[i + 1], (
+            f"Timestamps not in descending order: {timestamps[i]} < {timestamps[i + 1]}"
+        )
 
 
 @pytest.mark.asyncio
@@ -571,7 +592,12 @@ async def test_simple_query_chat_function_async(
         assert tp.tools_available == []
         assert tp.parallel_tool_calls is None
 
-    # ORDER BY timestamp ASC is applied - results should be in consistent order
+    # ORDER BY timestamp ASC is applied - verify timestamps are in ascending order
+    timestamps = [inference.timestamp for inference in inferences]
+    for i in range(len(timestamps) - 1):
+        assert timestamps[i] <= timestamps[i + 1], (
+            f"Timestamps not in ascending order: {timestamps[i]} > {timestamps[i + 1]}"
+        )
 
 
 @pytest.mark.asyncio
@@ -739,6 +765,12 @@ async def test_simple_time_filter_async(
 
     # ORDER BY metric exact_match DESC, timestamp ASC is applied
     # Multiple ORDER BY clauses ensure deterministic ordering
+    # Verify timestamps are in ascending order (secondary sort)
+    timestamps = [inference.timestamp for inference in inferences]
+    for i in range(len(timestamps) - 1):
+        assert timestamps[i] <= timestamps[i + 1], (
+            f"Timestamps not in ascending order: {timestamps[i]} > {timestamps[i + 1]}"
+        )
 
 
 @pytest.mark.asyncio

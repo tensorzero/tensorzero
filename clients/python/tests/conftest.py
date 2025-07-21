@@ -1,5 +1,6 @@
 import inspect
 import os
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List
 
@@ -115,6 +116,7 @@ def mixed_rendered_samples(
         output=[Text(text="Hello world")],
         episode_id=uuid7(),
         inference_id=uuid7(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         tool_params=ToolParams(
             tools_available=[
                 Tool(
@@ -149,6 +151,7 @@ def mixed_rendered_samples(
         ),
         episode_id=uuid7(),
         inference_id=uuid7(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         output_schema={
             "type": "object",
             "properties": {"answer": {"type": "string"}},
