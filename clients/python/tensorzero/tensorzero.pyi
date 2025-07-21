@@ -34,6 +34,7 @@ from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
     InferenceFilterTreeNode,
     JsonInferenceOutput,
+    OrderBy,
 )
 
 @final
@@ -517,6 +518,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         variant_name: Optional[str] = None,
         filters: Optional[InferenceFilterTreeNode] = None,
         output_source: str = "inference",
+        order_by: Optional[List[OrderBy]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> List[StoredInference]:
@@ -858,6 +860,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         variant_name: Optional[str] = None,
         filters: Optional[InferenceFilterTreeNode] = None,
         output_source: str = "inference",
+        order_by: Optional[List[OrderBy]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> List[StoredInference]:
