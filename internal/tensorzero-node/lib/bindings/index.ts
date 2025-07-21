@@ -111,6 +111,7 @@ export * from "./StorageKind";
 export * from "./StoragePath";
 export * from "./StreamingTimeouts";
 export * from "./TGIProvider";
+export * from "./TemplateFilesystemAccess";
 export * from "./Text";
 export * from "./Thought";
 export * from "./TimeoutsConfig";

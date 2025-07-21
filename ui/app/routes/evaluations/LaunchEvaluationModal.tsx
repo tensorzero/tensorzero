@@ -20,7 +20,7 @@ import { useConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
-import DatasetSelector from "~/components/dataset/DatasetSelector";
+import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 
 interface LaunchEvaluationModalProps {
   isOpen: boolean;
@@ -128,6 +128,7 @@ function EvaluationForm({
         selected={selectedDatasetName ?? undefined}
         onSelect={setSelectedDatasetName}
         allowCreation={false}
+        disabled={!selectedEvaluationName}
       />
 
       <div className="text-muted-foreground mt-2 mb-1 text-xs">
