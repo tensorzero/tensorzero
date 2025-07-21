@@ -97,6 +97,7 @@ pub async fn launch_optimization_workflow(
                 limit,
                 offset,
                 format,
+                order_by: None, // TODO (Viraj, now): should this be timestamp DESC? or threated thrgouh
             },
         )
         .await?;

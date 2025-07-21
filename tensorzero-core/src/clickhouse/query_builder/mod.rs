@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     clickhouse::ClickhouseFormat,
-    config_parser::Config,
+    config_parser::{Config, MetricConfigType},
     error::{Error, ErrorDetails},
     function::FunctionConfig,
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput},
@@ -121,24 +121,45 @@ impl TagComparisonOperator {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Debug)]
-enum FeedbackTable {
-    Float,
-    Boolean,
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(test, ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum OrderDirection {
+    Asc,
+    Desc,
 }
 
-impl FeedbackTable {
-    fn to_clickhouse_table_name(&self) -> &str {
+impl OrderDirection {
+    pub fn to_clickhouse_direction(&self) -> &str {
         match self {
-            FeedbackTable::Float => "FloatMetricFeedback",
-            FeedbackTable::Boolean => "BooleanMetricFeedback",
+            OrderDirection::Asc => "ASC",
+            OrderDirection::Desc => "DESC",
         }
     }
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(test, ts(export))]
+#[serde(tag = "by", rename_all = "snake_case")]
+pub enum OrderByTerm {
+    Timestamp,
+    Metric { name: String },
+}
+
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(test, ts(export))]
+pub struct OrderBy {
+    #[serde(flatten)]
+    pub term: OrderByTerm,
+    pub direction: OrderDirection,
+}
+
 #[derive(Hash, Eq, PartialEq, Debug)]
 struct JoinKey {
-    table: FeedbackTable,
+    table: MetricConfigType,
     metric_name: String,
     inference_column_name: &'static str,
 }
@@ -304,7 +325,7 @@ impl InferenceFilterTreeNode {
 
                 // 1. Create an alias and register the join clause for the join condition we'll need
                 let key = JoinKey {
-                    table: FeedbackTable::Float,
+                    table: MetricConfigType::Float,
                     metric_name: fm_node.metric_name.clone(),
                     inference_column_name,
                 };
@@ -334,7 +355,7 @@ impl InferenceFilterTreeNode {
                 let inference_column_name = metric_config.level.inference_column_name();
                 // 1. Create an alias and register the join clause for the join condition we'll need
                 let key = JoinKey {
-                    table: FeedbackTable::Boolean,
+                    table: MetricConfigType::Boolean,
                     metric_name: bm_node.metric_name.clone(),
                     inference_column_name,
                 };
@@ -440,6 +461,47 @@ impl InferenceFilterTreeNode {
     }
 }
 
+fn generate_order_by_sql(
+    order_by: Option<&[OrderBy]>,
+    config: &Config,
+    params_map: &mut Vec<QueryParameter>,
+    param_idx_counter: &mut usize,
+    joins: &mut JoinRegistry,
+) -> Result<String, Error> {
+    let Some(order_by) = order_by else {
+        return Ok("".to_string());
+    };
+    if order_by.is_empty() {
+        return Ok("".to_string());
+    }
+    let mut order_by_clauses = Vec::new();
+    for term in order_by {
+        let sql_expr = match &term.term {
+            OrderByTerm::Timestamp => "i.timestamp".to_string(),
+            OrderByTerm::Metric { name } => {
+                let metric_config = config.metrics.get(name).ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidMetricName {
+                        metric_name: name.clone(),
+                    })
+                })?;
+
+                let inference_column_name = metric_config.level.inference_column_name();
+                let key = JoinKey {
+                    table: metric_config.r#type,
+                    metric_name: name.clone(),
+                    inference_column_name,
+                };
+                let join_alias = joins.get_or_insert(key, params_map, param_idx_counter);
+                format!("{join_alias}.value")
+            }
+        };
+        let direction = term.direction.to_clickhouse_direction();
+        order_by_clauses.push(format!("{sql_expr} {direction} NULLS LAST"));
+    }
+    let joined_clauses = order_by_clauses.join(", ");
+    Ok(format!("\nORDER BY {joined_clauses}"))
+}
+
 #[derive(Debug, Clone)]
 pub struct ListInferencesParams<'a> {
     pub function_name: &'a str,
@@ -448,6 +510,7 @@ pub struct ListInferencesParams<'a> {
     pub output_source: InferenceOutputSource,
     pub limit: Option<u64>,
     pub offset: Option<u64>,
+    pub order_by: Option<&'a [OrderBy]>,
     pub format: ClickhouseFormat,
 }
 
@@ -565,7 +628,14 @@ FROM
         sql.push_str("\nWHERE\n    ");
         sql.push_str(&where_clauses.join(" AND "));
     }
-    // TODO: add ORDER BY
+    let order_by_sql = generate_order_by_sql(
+        opts.order_by,
+        config,
+        &mut params_map,
+        &mut param_idx_counter,
+        &mut joins,
+    )?;
+    sql.push_str(order_by_sql.as_str());
 
     if let Some(l) = opts.limit {
         let limit_param_placeholder = add_parameter(
