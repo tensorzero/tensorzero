@@ -36,7 +36,7 @@ import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
 import { safeParseInt } from "~/utils/common";
 
-const DEFAULT_LIMIT = 10;
+const DEFAULT_LIMIT = 5;
 
 export const handle: RouteHandle = {
   crumb: () => ["Playground"],
