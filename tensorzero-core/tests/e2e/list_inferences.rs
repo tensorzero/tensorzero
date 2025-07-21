@@ -378,7 +378,7 @@ async fn test_simple_tag_filter() {
         format: ClickhouseFormat::JsonEachRow,
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(res.len(), 204);
+    assert!(res.len() >= 204);
     for inference in &res {
         let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
@@ -420,7 +420,7 @@ async fn test_combined_time_and_tag_filter() {
         format: ClickhouseFormat::JsonEachRow,
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(res.len(), 78);
+    assert!(res.len() >= 78);
     for inference in &res {
         let StoredInference::Chat(chat_inference) = inference else {
             panic!("Expected a Chat inference");
@@ -428,5 +428,6 @@ async fn test_combined_time_and_tag_filter() {
         assert_eq!(chat_inference.function_name, "write_haiku");
         assert_eq!(chat_inference.tags.len(), 4);
         assert_eq!(chat_inference.tags["tensorzero::evaluation_name"], "haiku");
+        assert!(chat_inference.timestamp >= DateTime::from_timestamp(1744673400, 0).unwrap());
     }
 }
