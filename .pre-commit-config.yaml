@@ -20,7 +20,7 @@ repos:
       - id: detect-private-key
         exclude: |
           (?x)^(
-              tensorzero-core/src/providers/gcp_vertex_gemini\.rs|
+              tensorzero-core/src/providers/gcp_vertex_gemini/mod\.rs|
               ci/dummy-gcp-credentials\.json
           )$
       - id: end-of-file-fixer

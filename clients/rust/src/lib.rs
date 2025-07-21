@@ -13,6 +13,7 @@ pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
+use tensorzero_core::howdy::setup_howdy;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
@@ -286,6 +287,7 @@ impl ClientBuilder {
                                 source: e.into(),
                             })
                         })?;
+                setup_howdy(clickhouse_connection_info.clone());
                 let http_client = if let Some(http_client) = self.http_client {
                     http_client
                 } else {
@@ -312,6 +314,19 @@ impl ClientBuilder {
                 })
             }
         }
+    }
+
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub async fn build_from_state(state: AppStateData) -> Result<Client, ClientBuilderError> {
+        Ok(Client {
+            mode: ClientMode::EmbeddedGateway {
+                gateway: EmbeddedGateway { state },
+                timeout: None,
+            },
+            verbose_errors: false,
+            #[cfg(feature = "e2e_tests")]
+            last_body: Default::default(),
+        })
     }
 
     /// Builds a `Client` in HTTPGateway mode, erroring if the mode is not HTTPGateway
@@ -756,24 +771,29 @@ impl Client {
         &self,
         dataset_name: String,
     ) -> Result<StaleDatasetResponse, TensorZeroError> {
-        let ClientMode::EmbeddedGateway { gateway, timeout } = &self.mode else {
-            return Err(TensorZeroError::Other {
-                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
-                    mode: "Http".to_string(),
-                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::datasets::stale_dataset(
+                        &gateway.state.clickhouse_connection_info,
+                        &dataset_name,
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
-                .into(),
-            });
-        };
-        with_embedded_timeout(*timeout, async {
-            tensorzero_core::endpoints::datasets::stale_dataset(
-                &gateway.state.clickhouse_connection_info,
-                &dataset_name,
-            )
-            .await
-            .map_err(err_to_http)
-        })
-        .await
+                .await
+            }
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join(&format!("datasets/{dataset_name}")).map_err(|e| TensorZeroError::Other {
+                    source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /datasets/{dataset_name} endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.delete(url);
+                self.parse_http_response(builder.send().await).await
+            }
+        }
     }
 
     /// Query the Clickhouse database for inferences.
@@ -1148,7 +1168,7 @@ impl Client {
         let mut version = headers
             .get("x-tensorzero-gateway-version")
             .and_then(|v| v.to_str().ok())
-            .map(|v| v.to_string());
+            .map(str::to_string);
         if cfg!(feature = "e2e_tests") {
             if let Ok(version_override) = env::var("TENSORZERO_E2E_GATEWAY_VERSION_OVERRIDE") {
                 version = Some(version_override);
@@ -1209,7 +1229,7 @@ pub async fn get_config_no_verify_credentials(path: PathBuf) -> Result<Config, T
 fn compare_versions(first: &str, second: &str) -> Result<Ordering, TensorZeroError> {
     let extract_numbers = |s: &str| {
         s.split('.')
-            .map(|x| x.parse::<u32>())
+            .map(str::parse::<u32>)
             .collect::<Result<Vec<_>, _>>()
     };
     let first_components = extract_numbers(first).map_err(|e| TensorZeroError::Other {

@@ -1,3 +1,4 @@
+use futures::future::try_join_all;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
@@ -15,6 +16,7 @@ use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 
+use crate::config_parser::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
 use crate::error::{Error, ErrorDetails};
@@ -37,6 +39,7 @@ use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
 
+pub mod gateway;
 #[cfg(test)]
 mod tests;
 
@@ -109,35 +112,12 @@ pub struct TimeoutsConfig {
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub struct GatewayConfig {
-    #[serde(serialize_with = "serialize_optional_socket_addr")]
-    pub bind_address: Option<std::net::SocketAddr>,
-    #[serde(default)]
-    pub observability: ObservabilityConfig,
-    #[serde(default)]
-    pub debug: bool,
+pub struct TemplateFilesystemAccess {
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
     /// Defaults to `false`
     #[serde(default)]
-    pub enable_template_filesystem_access: bool,
-    #[serde(default)]
-    pub export: ExportConfig,
-    // If set, all of the HTTP endpoints will have this path prepended.
-    // E.g. a base path of `/custom/prefix` will cause the inference endpoint to become `/custom/prefix/inference`.
-    pub base_path: Option<String>,
-}
-
-fn serialize_optional_socket_addr<S>(
-    addr: &Option<std::net::SocketAddr>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    match addr {
-        Some(addr) => serializer.serialize_str(&addr.to_string()),
-        None => serializer.serialize_none(),
-    }
+    enabled: bool,
+    base_path: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -503,14 +483,18 @@ impl Config {
             .collect::<Result<HashMap<_, _>, _>>()?;
 
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
-        let optimizers = uninitialized_config
-            .optimizers
-            .into_iter()
-            .map(|(name, config)| config.load().map(|c| (name, c)))
-            .collect::<Result<HashMap<_, _>, _>>()?;
+        let optimizers = try_join_all(
+            uninitialized_config
+                .optimizers
+                .into_iter()
+                .map(|(name, config)| async { config.load().await.map(|c| (name, c)) }),
+        )
+        .await?
+        .into_iter()
+        .collect::<HashMap<_, _>>();
 
         let mut config = Config {
-            gateway: uninitialized_config.gateway,
+            gateway: uninitialized_config.gateway.load()?,
             models: models.try_into().map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!("Failed to load models: {e}"),
@@ -535,10 +519,14 @@ impl Config {
         let template_paths = config.get_templates();
         config.templates.initialize(
             template_paths,
-            config
-                .gateway
-                .enable_template_filesystem_access
-                .then_some(base_path.clone()),
+            config.gateway.template_filesystem_access.enabled.then_some(
+                config
+                    .gateway
+                    .template_filesystem_access
+                    .base_path
+                    .clone()
+                    .unwrap_or(base_path.clone()),
+            ),
         )?;
 
         // Validate the config
@@ -845,7 +833,7 @@ pub trait LoadableConfig<T> {
 #[serde(deny_unknown_fields)]
 struct UninitializedConfig {
     #[serde(default)]
-    pub gateway: GatewayConfig,
+    pub gateway: UninitializedGatewayConfig,
     #[serde(default)]
     pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
     #[serde(default)]

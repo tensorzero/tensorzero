@@ -18,10 +18,17 @@ name = "e2e"
 path = "tests/e2e/tests.rs"
 required-features = ["e2e_tests"]
 
+# Runs live optimizations tests (which start actual SFT jobs and poll them)
 [[test]]
-name = "optimization"
-path = "tests/optimization/tests.rs"
+name = "optimization-live"
+path = "tests/optimization/live_tests.rs"
 required-features = ["optimization_tests"]
+
+# Runs mock optimizations tests (which use a mock-inference-provider server)
+[[test]]
+name = "optimization-mock"
+path = "tests/optimization/mock_tests.rs"
+required-features = ["e2e_tests"]
 
 [lints]
 workspace = true
@@ -96,7 +103,7 @@ aws-sdk-sagemakerruntime = { version = "1.76.0", features = [
     "rt-tokio",
     "default-https-client",
 ], default-features = false }
-aws-smithy-runtime-api = "1.7.4"
+aws-smithy-runtime-api = "1.8.3"
 eventsource-stream = "0.2.3"
 scoped-tls = "1.0.1"
 opentelemetry_sdk = "0.30.0"
@@ -117,6 +124,7 @@ mime = { workspace = true }
 mime_guess = "2.0.5"
 indexmap = "2.10.0"
 base64 = "0.22.1"
+thiserror = "2.0.12"
 
 
 [dev-dependencies]

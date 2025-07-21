@@ -106,6 +106,8 @@ class RenderedSample:
 class OptimizationJobHandle:
     OpenAISFT: Type["OptimizationJobHandle"]
     FireworksSFT: Type["OptimizationJobHandle"]
+    GCPVertexGeminiSFT: Type["OptimizationJobHandle"]
+    TogetherSFT: Type["OptimizationJobHandle"]
 
 @final
 class OptimizationJobStatus:
@@ -117,6 +119,8 @@ class OptimizationJobStatus:
 class OptimizationJobInfo:
     OpenAISFT: Type["OptimizationJobInfo"]
     FireworksSFT: Type["OptimizationJobInfo"]
+    GCPVertexGeminiSFT: Type["OptimizationJobInfo"]
+    TogetherSFT: Type["OptimizationJobInfo"]
     @property
     def message(self) -> str: ...
     @property
@@ -153,6 +157,28 @@ class FireworksSFTConfig:
     ) -> None: ...
 
 @final
+class GCPVertexGeminiSFTConfig:
+    def __init__(
+        self,
+        *,
+        model: str,
+        bucket_name: str,
+        project_id: str,
+        region: str,
+        learning_rate_multiplier: Optional[float] = None,
+        adapter_size: Optional[int] = None,
+        n_epochs: Optional[int] = None,
+        export_last_checkpoint_only: Optional[bool] = None,
+        credentials: Optional[str] = None,
+        api_base: Optional[str] = None,
+        seed: Optional[int] = None,
+        service_account: Optional[str] = None,
+        kms_key_name: Optional[str] = None,
+        tuned_model_display_name: Optional[str] = None,
+        bucket_path_prefix: Optional[str] = None,
+    ) -> None: ...
+
+@final
 class Datapoint:
     Chat: Type["Datapoint"]
     Json: Type["Datapoint"]
@@ -182,6 +208,8 @@ class ChatCompletionConfig:
     def user_template(self) -> Optional[str]: ...
     @property
     def assistant_template(self) -> Optional[str]: ...
+    @property
+    def model(self) -> str: ...
 
 @final
 class BestOfNSamplingConfig:
@@ -959,6 +987,7 @@ __all__ = [
     "FunctionConfigJson",
     "FunctionsConfig",
     "FireworksSFTConfig",
+    "GCPVertexGeminiSFTConfig",
     "TensorZeroGateway",
     "LocalHttpGateway",
     "MixtureOfNConfig",

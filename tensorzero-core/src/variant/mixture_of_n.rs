@@ -317,8 +317,9 @@ fn make_stream_from_non_stream(
                 ContentBlockChatOutput::Thought(thought) => {
                     let chunk = ContentBlockChunk::Thought(ThoughtChunk {
                         id: id.to_string(),
-                        text: Some(thought.text),
+                        text: thought.text,
                         signature: thought.signature,
+                        provider_type: thought.provider_type,
                     });
                     id += 1;
                     Ok(chunk)
@@ -1579,12 +1580,14 @@ mod tests {
                         raw_arguments: r#"{"my"  :  "first_arg"}"#.to_string(),
                     }),
                     ContentBlockChatOutput::Thought(Thought {
-                        text: "My first thought".into(),
+                        text: Some("My first thought".into()),
                         signature: Some("my_first_signature".into()),
+                        provider_type: Some("my_first_provider_type".into()),
                     }),
                     ContentBlockChatOutput::Thought(Thought {
-                        text: "My second thought".into(),
+                        text: Some("My second thought".into()),
                         signature: Some("my_second_signature".into()),
+                        provider_type: None,
                     }),
                     ContentBlockChatOutput::ToolCall(ToolCallOutput {
                         id: "456".into(),
@@ -1630,11 +1633,13 @@ mod tests {
                         id: "1".into(),
                         text: Some("My first thought".into()),
                         signature: Some("my_first_signature".into()),
+                        provider_type: Some("my_first_provider_type".into()),
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         id: "2".into(),
                         text: Some("My second thought".into()),
                         signature: Some("my_second_signature".into()),
+                        provider_type: None,
                     }),
                     ContentBlockChunk::ToolCall(ToolCallChunk {
                         id: "456".into(),
