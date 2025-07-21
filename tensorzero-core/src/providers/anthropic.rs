@@ -479,6 +479,9 @@ enum AnthropicMessageContent<'a> {
         thinking: Option<&'a str>,
         signature: Option<&'a str>,
     },
+    RedactedThinking {
+        data: &'a str,
+    },
     ToolUse {
         id: &'a str,
         name: &'a str,
@@ -571,12 +574,22 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, AnthropicMessag
                     )))
                 }
             }
-            ContentBlock::Thought(thought) => Ok(Some(FlattenUnknown::Normal(
-                AnthropicMessageContent::Thinking {
-                    thinking: thought.text.as_deref(),
-                    signature: thought.signature.as_deref(),
-                },
-            ))),
+            ContentBlock::Thought(thought) => {
+                if let Some(text) = thought.text.as_deref() {
+                    Ok(Some(FlattenUnknown::Normal(
+                        AnthropicMessageContent::Thinking {
+                            thinking: Some(text),
+                            signature: thought.signature.as_deref(),
+                        },
+                    )))
+                } else if let Some(signature) = thought.signature.as_deref() {
+                    Ok(Some(FlattenUnknown::Normal(
+                        AnthropicMessageContent::RedactedThinking { data: signature },
+                    )))
+                } else {
+                    Ok(None)
+                }
+            }
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
@@ -814,6 +827,9 @@ pub enum AnthropicContentBlock {
         thinking: String,
         signature: String,
     },
+    RedactedThinking {
+        data: String,
+    },
     ToolUse {
         id: String,
         name: String,
@@ -853,6 +869,13 @@ fn convert_to_output(
             signature: Some(signature),
             provider_type: Some(PROVIDER_TYPE.to_string()),
         })),
+        FlattenUnknown::Normal(AnthropicContentBlock::RedactedThinking { data }) => {
+            Ok(ContentBlockOutput::Thought(Thought {
+                text: None,
+                signature: Some(data),
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+            }))
+        }
         FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown {
             data: data.into_owned(),
             model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
@@ -1177,6 +1200,20 @@ fn anthropic_to_tensorzero_stream_message(
                 message_latency,
                 None,
             ))),
+            AnthropicContentBlock::RedactedThinking { data } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: None,
+                        signature: Some(data),
+                        id: index.to_string(),
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
         },
         AnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
         AnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
