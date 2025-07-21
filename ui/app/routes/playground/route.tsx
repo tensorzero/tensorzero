@@ -65,14 +65,8 @@ export function shouldRevalidate(arg: ShouldRevalidateFunctionArgs) {
     DEFAULT_LIMIT,
   );
   const nextLimit = safeParseInt(nextSearchParams.get("limit"), DEFAULT_LIMIT);
-  const currentOffset = safeParseInt(
-    currentSearchParams.get("offset"),
-    DEFAULT_LIMIT,
-  );
-  const nextOffset = safeParseInt(
-    nextSearchParams.get("offset"),
-    DEFAULT_LIMIT,
-  );
+  const currentOffset = safeParseInt(currentSearchParams.get("offset"), 0);
+  const nextOffset = safeParseInt(nextSearchParams.get("offset"), 0);
   if (
     currentFunctionName === nextFunctionName &&
     currentDatasetName === nextDatasetName &&
@@ -89,7 +83,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const searchParams = new URLSearchParams(url.search);
   const functionName = searchParams.get("functionName");
   const limit = safeParseInt(searchParams.get("limit"), DEFAULT_LIMIT);
-  const offset = safeParseInt(searchParams.get("offset"), DEFAULT_LIMIT);
+  const offset = safeParseInt(searchParams.get("offset"), 0);
 
   let config;
   try {

@@ -35,7 +35,7 @@ const DatapointPlaygroundOutput = memo(
       <Button
         variant="ghost"
         size="icon"
-        className="absolute top-1 right-1 z-5 opacity-10 transition-opacity group-hover:opacity-100"
+        className="absolute top-1 right-1 z-5 cursor-pointer opacity-25 transition-opacity hover:opacity-100"
         onClick={() => {
           refreshClientInference(
             setPromise,
@@ -101,7 +101,7 @@ const DatapointPlaygroundOutput = memo(
               return (
                 <>
                   {refreshButton}
-                  <NewOutput output={output} />
+                  <NewOutput output={output} maxHeight={480} />
                 </>
               );
             }}
@@ -129,16 +129,14 @@ function InferenceError() {
   const isInferenceError = error instanceof Error;
 
   return (
-    <div className="flex min-h-[8rem] items-center justify-center">
-      <div className="max-h-[16rem] max-w-md overflow-y-auto px-4 text-center text-red-600">
-        <p className="font-semibold">Error</p>
-        <p className="mt-1 text-sm">
-          {isInferenceError ? (
-            <CodeEditor value={error.message} readOnly />
-          ) : (
-            "Failed to load inference"
-          )}
-        </p>
+    <div className="max-h-[16rem] max-w-md overflow-y-auto px-4 text-red-600">
+      <h3 className="text-sm font-medium">Inference Error</h3>
+      <div className="mt-2 text-sm">
+        {isInferenceError ? (
+          <CodeEditor value={error.message} readOnly showLineNumbers={false} />
+        ) : (
+          "Failed to load inference"
+        )}
       </div>
     </div>
   );
