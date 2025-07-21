@@ -19,11 +19,15 @@ import clsx from "clsx";
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
 
-const useDatasetCounts = () => {
+const useDatasetCounts = (functionName?: string) => {
   return useQuery({
-    queryKey: ["DATASETS_COUNT"],
+    queryKey: ["DATASETS_COUNT", functionName],
     queryFn: async ({ signal }) => {
-      const response = await fetch("/api/datasets/counts", { signal });
+      const url = new URL("/api/datasets/counts", window.location.origin);
+      if (functionName) {
+        url.searchParams.append("functionName", functionName);
+      }
+      const response = await fetch(url.toString(), { signal });
       const data = await response.json();
       const parsedData = DatasetCountResponse.parse(data);
       return parsedData.datasets;
@@ -47,6 +51,7 @@ interface DatasetSelectorProps {
   functionName?: string;
   placeholder?: string;
   className?: string;
+  disabled?: boolean;
   allowCreation?: boolean;
   buttonProps?: React.ComponentProps<typeof Button>;
 }
@@ -61,11 +66,13 @@ export default function DatasetSelector({
   allowCreation = true,
   className,
   buttonProps,
+  disabled,
 }: DatasetSelectorProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  const { data: datasets = [], isLoading } = useDatasetCounts();
+  const { data: datasets = [], isLoading } = useDatasetCounts(functionName);
+  console.log(datasets);
 
   // Datasets sorted by last updated date for initial display
   const recentlyUpdatedDatasets = useMemo(
@@ -87,7 +94,7 @@ export default function DatasetSelector({
   return (
     <div className={clsx("flex flex-col space-y-2", className)}>
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
+        <PopoverTrigger asChild disabled={disabled}>
           <Button
             variant="outline"
             role="combobox"
