@@ -1,7 +1,7 @@
 import type {
+  ContentBlockChatOutput,
   JsonInferenceOutput,
-  ContentBlockOutput,
-} from "~/utils/clickhouse/common";
+} from "tensorzero-node";
 import {
   SnippetLayout,
   SnippetContent,
@@ -17,11 +17,11 @@ import {
 import { CodeEditor } from "../ui/code-editor";
 
 /*
-  NOTE: This is the new output component but it is not editable yet so we are rolling
-  it out across the UI incrementally.
-  */
+NOTE: This is the new output component but it is not editable yet so we are rolling
+it out across the UI incrementally.
+*/
 
-export type ChatInferenceOutputRenderingData = ContentBlockOutput[];
+export type ChatInferenceOutputRenderingData = ContentBlockChatOutput[];
 
 export interface JsonInferenceOutputRenderingData extends JsonInferenceOutput {
   schema?: Record<string, unknown>;
@@ -80,7 +80,7 @@ function renderJsonInferenceOutput(output: JsonInferenceOutputRenderingData) {
           ) : activeTab === "raw" ? (
             <CodeEditor
               allowedLanguages={["json"]}
-              value={output.raw}
+              value={output.raw ? output.raw : undefined}
               readOnly
             />
           ) : (
@@ -116,8 +116,9 @@ function renderChatInferenceOutput(output: ChatInferenceOutputRenderingData) {
                     toolName={block.name}
                     toolRawName={block.raw_name}
                     toolArguments={
-                      block.arguments &&
-                      JSON.stringify(block.arguments, null, 2)
+                      block.arguments
+                        ? JSON.stringify(block.arguments, null, 2)
+                        : null
                     }
                     toolRawArguments={block.raw_arguments}
                     toolCallId={block.id}
@@ -133,7 +134,7 @@ function renderChatInferenceOutput(output: ChatInferenceOutputRenderingData) {
   );
 }
 
-export default function Output({ output }: OutputProps) {
+export default function OutputRust({ output }: OutputProps) {
   return (
     <SnippetLayout>
       {isJsonInferenceOutput(output)
