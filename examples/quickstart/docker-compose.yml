@@ -27,10 +27,10 @@ services:
     volumes:
       # Mount our tensorzero.toml file into the container
       - ./config:/app/config:ro
-    command: --config-file /app/config/tensorzero.toml
+    command: --config-file /app/config/tensorzero-docker.toml
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
-      OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+      OPENAI_API_KEY: "dummy-key-for-ollama"  # Set dummy value since we're using Ollama
     ports:
       - "3000:3000"
     extra_hosts:
@@ -58,7 +58,7 @@ services:
       # Mount our tensorzero.toml file into the container
       - ./config:/app/config:ro
     environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+      OPENAI_API_KEY: "dummy-key-for-ollama"  # Set dummy value since we're using Ollama
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000
     ports:

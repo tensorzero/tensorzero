@@ -1,9 +1,19 @@
+# Define a custom model pointing to Ollama
+[models."ollama/llama2"]
+routing = ["ollama_provider"]
+
+[models."ollama/llama2".providers.ollama_provider]
+type = "openai"
+model_name = "llama2"
+api_base = "http://localhost:11434/v1"
+api_key_location = "none"
+
 # A function defines the task we're tackling (e.g. generating a haiku)...
 [functions.generate_haiku]
 type = "chat"
 
-# ... and a variant is one of many implementations we can use to tackle it (a choice of prompt, model, etc.).
-# Since we only have one variant for this function, the gateway will always select it.
-[functions.generate_haiku.variants.gpt_4o_mini]
+# ... and a variant using Ollama
+[functions.generate_haiku.variants.ollama_llama2]
 type = "chat_completion"
-model = "openai::gpt-4o-mini"
+model = "ollama/llama2"
+weight = 1.0

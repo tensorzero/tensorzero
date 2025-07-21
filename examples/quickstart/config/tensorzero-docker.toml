@@ -1,0 +1,50 @@
+# Define a custom model pointing to Ollama
+[models."ollama/llama2"]
+routing = ["ollama_provider"]
+
+[models."ollama/llama2".providers.ollama_provider]
+type = "openai"
+model_name = "llama2"
+api_base = "http://host.docker.internal:11434/v1"
+api_key_location = "none"
+
+# A function defines the task we're tackling (e.g. generating a haiku)...
+[functions.generate_haiku]
+type = "chat"
+
+# Variant A: Standard temperature (50% traffic)
+[functions.generate_haiku.variants.standard]
+type = "chat_completion"
+model = "ollama/llama2"
+weight = 0.5
+
+# Variant B: High temperature (50% traffic)
+[functions.generate_haiku.variants.creative]
+type = "chat_completion"
+model = "ollama/llama2"
+weight = 0.5
+temperature = 0.9
+
+# Add another function for testing
+[functions.summarize]
+type = "chat"
+
+# Variant A: Default settings (33% traffic)
+[functions.summarize.variants.default]
+type = "chat_completion"
+model = "ollama/llama2"
+weight = 0.33
+
+# Variant B: Low temperature for consistency (33% traffic)
+[functions.summarize.variants.consistent]
+type = "chat_completion"
+model = "ollama/llama2"
+weight = 0.33
+temperature = 0.1
+
+# Variant C: Medium temperature (34% traffic)
+[functions.summarize.variants.balanced]
+type = "chat_completion"
+model = "ollama/llama2"
+weight = 0.34
+temperature = 0.5

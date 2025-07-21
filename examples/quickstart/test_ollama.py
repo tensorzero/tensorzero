@@ -1,13 +1,12 @@
 from openai import OpenAI
 
-# Point to Ollama's OpenAI-compatible endpoint
 client = OpenAI(
     base_url="http://localhost:11434/v1",
-    api_key="not-needed"  # Ollama doesn't need an API key
+    api_key="not-needed"
 )
 
 response = client.chat.completions.create(
-    model="llama2",  # Use your local model
+    model="llama2",
     messages=[
         {
             "role": "user",
@@ -16,4 +15,4 @@ response = client.chat.completions.create(
     ],
 )
 
-print(response)
+print(response.choices[0].message.content)
