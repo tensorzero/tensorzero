@@ -372,13 +372,13 @@ async fn test_simple_tag_filter() {
         variant_name: None,
         filters: Some(&filter_node),
         output_source: InferenceOutputSource::Inference,
-        limit: None,
+        limit: Some(200),
         offset: None,
         order_by: None,
         format: ClickhouseFormat::JsonEachRow,
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert!(res.len() >= 204);
+    assert_eq!(res.len(), 200);
     for inference in &res {
         let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
@@ -414,13 +414,13 @@ async fn test_combined_time_and_tag_filter() {
         variant_name: None,
         filters: Some(&filter_node),
         output_source: InferenceOutputSource::Inference,
-        limit: None,
+        limit: Some(50),
         offset: None,
         order_by: None,
         format: ClickhouseFormat::JsonEachRow,
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert!(res.len() >= 78);
+    assert_eq!(res.len(), 50);
     for inference in &res {
         let StoredInference::Chat(chat_inference) = inference else {
             panic!("Expected a Chat inference");
