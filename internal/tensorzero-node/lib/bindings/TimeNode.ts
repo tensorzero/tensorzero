@@ -2,6 +2,6 @@
 import type { TimeComparisonOperator } from "./TimeComparisonOperator";
 
 export type TimeNode = {
-  time: bigint;
+  time: Date;
   comparison_operator: TimeComparisonOperator;
 };
