@@ -71,7 +71,6 @@ WORKDIR /build/internal/tensorzero-node
 
 RUN pnpm install --frozen-lockfile && pnpm run build
 
-
 # ========== evaluations-build-env ==========
 
 FROM chef AS evaluations-build-env
@@ -145,7 +144,9 @@ USER ui
 EXPOSE 4000
 
 ENV HOST=0.0.0.0
-ENV TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
+ENV NODE_ENV=production
+ENV PORT=4000
 ENV RUST_LOG=warn
+ENV TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
 
 ENTRYPOINT ["./entrypoint.sh"]
