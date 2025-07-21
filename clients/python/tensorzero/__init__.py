@@ -170,6 +170,35 @@ __all__ = [
     "Usage",
 ]
 
+# Conditionally import agents functionality if dependencies are available
+try:
+    from .agents import (
+        setup_tensorzero_agents,
+        get_config as get_agents_config,
+        list_templated_functions,
+        list_available_tools,
+        create_agent_from_tensorzero_function,
+        TensorZeroAgentsError,
+        TensorZeroConfigParser,
+    )
+
+    # Add agents exports to __all__
+    __all__.extend(
+        [
+            "setup_tensorzero_agents",
+            "get_agents_config",
+            "list_templated_functions",
+            "list_available_tools",
+            "create_agent_from_tensorzero_function",
+            "TensorZeroAgentsError",
+            "TensorZeroConfigParser",
+        ]
+    )
+
+    _AGENTS_AVAILABLE = True
+except ImportError:
+    _AGENTS_AVAILABLE = False
+
 T = t.TypeVar("T", bound=t.Any)
 
 __version__ = version("tensorzero")

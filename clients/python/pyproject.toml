@@ -59,6 +59,10 @@ dev = [
     "pytest",
     "openai",
 ]
+agents = [
+    "openai-agents>=0.1.0",
+    "toml>=0.10.0",  # For parsing tensorzero.toml configs
+]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
