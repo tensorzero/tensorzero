@@ -13,6 +13,7 @@ use crate::{
     tool::ToolCallConfigDatabaseInsert,
     variant::{chat_completion::prepare_model_input, VariantConfig},
 };
+use chrono::{DateTime, Utc};
 use futures::future::try_join_all;
 #[cfg(feature = "pyo3")]
 use pyo3::types::{PyAny, PyList};
@@ -85,10 +86,12 @@ impl StoredInference {
         tool_params: Option<Bound<'py, PyAny>>,
         output_schema: Option<Bound<'py, PyAny>>,
         tags: Option<Bound<'py, PyAny>>,
+        timestamp: Bound<'py, PyAny>,
     ) -> PyResult<Self> {
         let input: ResolvedInput = deserialize_from_pyobj(py, &input)?;
         let episode_id: Uuid = deserialize_from_pyobj(py, &episode_id)?;
         let inference_id: Uuid = deserialize_from_pyobj(py, &inference_id)?;
+        let timestamp: DateTime<Utc> = deserialize_from_pyobj(py, &timestamp)?;
         let tags: HashMap<String, String> = tags
             .as_ref()
             .map(|x| deserialize_from_pyobj(py, x))
@@ -117,6 +120,7 @@ impl StoredInference {
                     inference_id,
                     tool_params,
                     tags,
+                    timestamp,
                 }))
             }
             "json" => {
@@ -141,6 +145,7 @@ impl StoredInference {
                     inference_id,
                     output_schema,
                     tags,
+                    timestamp,
                 }))
             }
             _ => Err(PyValueError::new_err(format!("Invalid type: {type}"))),
@@ -262,6 +267,14 @@ impl StoredInference {
             StoredInference::Json(example) => example.tags.clone(),
         }
     }
+
+    #[getter]
+    pub fn get_timestamp(&self) -> String {
+        match self {
+            StoredInference::Chat(example) => example.timestamp.to_rfc3339(),
+            StoredInference::Json(example) => example.timestamp.to_rfc3339(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -273,6 +286,7 @@ pub struct StoredChatInference {
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
+    pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
     #[serde(default)]
@@ -305,6 +319,7 @@ pub struct StoredJsonInference {
     pub output: JsonInferenceOutput,
     #[serde(default)]
     pub dispreferred_outputs: Vec<JsonInferenceOutput>,
+    pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
     pub output_schema: Value,

@@ -719,7 +719,7 @@ fn get_select_clauses(
         "i.variant_name as variant_name".to_string(),
         "i.episode_id as episode_id".to_string(),
         "i.id as inference_id".to_string(),
-        "i.timestamp as timestamp".to_string(),
+        "formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp".to_string(),
         "i.tags as tags".to_string(),
         // We don't select output here because it's handled separately based on the output_source
     ]);
@@ -742,6 +742,7 @@ pub(super) struct ClickHouseStoredChatInference {
     pub variant_name: String,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
+    pub timestamp: DateTime<Utc>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
     #[serde(deserialize_with = "deserialize_json_string")]
@@ -779,6 +780,7 @@ impl TryFrom<ClickHouseStoredChatInference> for StoredChatInference {
             inference_id: value.inference_id,
             tool_params: value.tool_params,
             tags: value.tags,
+            timestamp: value.timestamp,
         })
     }
 }
@@ -789,6 +791,7 @@ pub(super) struct ClickHouseStoredJsonInference {
     pub variant_name: String,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
+    pub timestamp: DateTime<Utc>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
     #[serde(deserialize_with = "deserialize_json_string")]
@@ -825,6 +828,7 @@ impl TryFrom<ClickHouseStoredJsonInference> for StoredJsonInference {
             inference_id: value.inference_id,
             output_schema: value.output_schema,
             tags: value.tags,
+            timestamp: value.timestamp,
         })
     }
 }
@@ -888,13 +892,13 @@ mod tests {
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -927,12 +931,12 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'chat' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.tool_params as tool_params,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -971,13 +975,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -1077,12 +1081,12 @@ SELECT
     'json' as type,
     [i.output] as dispreferred_outputs,
     demo_f.value AS output,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -1120,13 +1124,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -1181,13 +1185,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -1258,13 +1262,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -1354,13 +1358,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -1459,13 +1463,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -1544,13 +1548,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -1636,13 +1640,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -1679,13 +1683,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -1724,13 +1728,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -1791,13 +1795,13 @@ FORMAT JSONEachRow"#;
                 r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {{p0:String}} as function_name
 FROM
@@ -1855,13 +1859,13 @@ FORMAT JSONEachRow"#,
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -1909,12 +1913,12 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'chat' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.tool_params as tool_params,
     i.variant_name as variant_name,
     {p0:String} as function_name
@@ -1972,13 +1976,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -2043,13 +2047,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -2123,12 +2127,12 @@ SELECT
     'json' as type,
     [i.output] as dispreferred_outputs,
     demo_f.value AS output,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -2217,13 +2221,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -2277,12 +2281,12 @@ FORMAT JSONEachRow"#;
                 r#"
 SELECT
     'chat' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.tool_params as tool_params,
     i.variant_name as variant_name,
     {{p0:String}} as function_name
@@ -2342,13 +2346,13 @@ FORMAT JSONEachRow"#,
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -2412,7 +2416,8 @@ FORMAT JSONEachRow"#;
                 "episode_id": "123e4567-e89b-12d3-a456-426614174000",
                 "inference_id": "123e4567-e89b-12d3-a456-426614174000",
                 "tags": {},
-                "tool_params": "{\"tools_available\": [], \"tool_choice\": \"none\", \"parallel_tool_calls\": false}"
+                "tool_params": "{\"tools_available\": [], \"tool_choice\": \"none\", \"parallel_tool_calls\": false}",
+                "timestamp": "2023-01-01T00:00:00Z"
             }
         "#;
         let inference: ClickHouseStoredInference = serde_json::from_str(json).unwrap();
@@ -2453,7 +2458,8 @@ FORMAT JSONEachRow"#;
             "episode_id": "123e4567-e89b-12d3-a456-426614174000",
             "inference_id": "123e4567-e89b-12d3-a456-426614174000",
             "tags": {},
-            "tool_params": {"tools_available": [], "tool_choice": "none", "parallel_tool_calls": false}
+            "tool_params": {"tools_available": [], "tool_choice": "none", "parallel_tool_calls": false},
+            "timestamp": "2023-01-01T00:00:00Z"
         }
     "#;
         let inference: StoredInference = serde_json::from_str(json).unwrap();
@@ -2498,7 +2504,8 @@ FORMAT JSONEachRow"#;
                 "inference_id": "123e4567-e89b-12d3-a456-426614174000",
                 "tags": {},
                 "tool_params": "",
-                "dispreferred_outputs": ["[{\"type\": \"text\", \"text\": \"Goodbye!\"}]"]
+                "dispreferred_outputs": ["[{\"type\": \"text\", \"text\": \"Goodbye!\"}]"],
+                "timestamp": "2023-01-01T00:00:00Z"
             }
         "#;
         let inference: ClickHouseStoredInference = serde_json::from_str(json).unwrap();
@@ -2529,7 +2536,8 @@ FORMAT JSONEachRow"#;
             "tags": {},
             "dispreferred_outputs": [
                 [{"type": "text", "text": "Goodbye!"}]
-            ]
+            ],
+            "timestamp": "2023-01-01T00:00:00Z"
         }
     "#;
         let inference: StoredInference = serde_json::from_str(json).unwrap();
@@ -2557,7 +2565,8 @@ FORMAT JSONEachRow"#;
                 "episode_id": "123e4567-e89b-12d3-a456-426614174000",
                 "inference_id": "123e4567-e89b-12d3-a456-426614174000",
                 "tags": {},
-                "output_schema": "{\"type\": \"object\", \"properties\": {\"output\": {\"type\": \"string\"}}}"
+                "output_schema": "{\"type\": \"object\", \"properties\": {\"output\": {\"type\": \"string\"}}}",
+                "timestamp": "2023-01-01T00:00:00Z"
             }
         "#;
         let inference: ClickHouseStoredInference = serde_json::from_str(json).unwrap();
@@ -2605,7 +2614,8 @@ FORMAT JSONEachRow"#;
              "episode_id": "123e4567-e89b-12d3-a456-426614174000",
              "inference_id": "123e4567-e89b-12d3-a456-426614174000",
              "tags": {},
-             "output_schema": {"type": "object", "properties": {"output": {"type": "string"}}}
+             "output_schema": {"type": "object", "properties": {"output": {"type": "string"}}},
+             "timestamp": "2023-01-01T00:00:00Z"
          }
      "#;
         let inference: StoredInference = serde_json::from_str(json).unwrap();
@@ -2657,7 +2667,8 @@ FORMAT JSONEachRow"#;
                 "episode_id": "123e4567-e89b-12d3-a456-426614174000",
                 "inference_id": "123e4567-e89b-12d3-a456-426614174000",
                 "tags": {},
-                "output_schema": "{\"type\": \"object\", \"properties\": {\"output\": {\"type\": \"string\"}}}"
+                "output_schema": "{\"type\": \"object\", \"properties\": {\"output\": {\"type\": \"string\"}}}",
+                "timestamp": "2023-01-01T00:00:00Z"
             }
         "#;
         let inference: ClickHouseStoredInference = serde_json::from_str(json).unwrap();
@@ -2686,7 +2697,8 @@ FORMAT JSONEachRow"#;
              "episode_id": "123e4567-e89b-12d3-a456-426614174000",
              "inference_id": "123e4567-e89b-12d3-a456-426614174000",
              "tags": {},
-             "output_schema": {"type": "object", "properties": {"output": {"type": "string"}}}
+             "output_schema": {"type": "object", "properties": {"output": {"type": "string"}}},
+             "timestamp": "2023-01-01T00:00:00Z"
          }
      "#;
         let inference: StoredInference = serde_json::from_str(json).unwrap();
@@ -2725,13 +2737,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -2773,13 +2785,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
@@ -2841,13 +2853,13 @@ FORMAT JSONEachRow"#;
         let expected_sql = r#"
 SELECT
     'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
     i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
-    i.timestamp as timestamp,
     i.variant_name as variant_name,
     {p0:String} as function_name
 FROM
