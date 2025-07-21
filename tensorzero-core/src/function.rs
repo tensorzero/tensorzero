@@ -713,6 +713,7 @@ mod tests {
     use std::time::Instant;
     use std::{io::Write, path::PathBuf};
     use tempfile::NamedTempFile;
+    use crate::config_parser::path::TomlRelativePath;
     use tracing_test::traced_test;
 
     fn create_test_schema() -> StaticJSONSchema {
@@ -730,7 +731,10 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        StaticJSONSchema::from_path(temp_file.path().to_owned(), PathBuf::new())
+        StaticJSONSchema::from_path(
+            TomlRelativePath::new_for_tests(temp_file.path().to_owned()),
+            PathBuf::new(),
+        )
             .expect("Failed to create schema")
     }
 
