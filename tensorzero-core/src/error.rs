@@ -93,7 +93,8 @@ impl<T: Debug + Display> Display for DisplayOrDebugGateway<T> {
     }
 }
 
-#[derive(Debug, Error, PartialEq, Serialize)]
+#[derive(Debug, Error, Serialize)]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
 #[error(transparent)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
 // We box `ErrorDetails` per the `clippy::result_large_err` lint
@@ -153,7 +154,8 @@ impl From<ErrorDetails> for Error {
     }
 }
 
-#[derive(Debug, Error, PartialEq, Serialize)]
+#[derive(Debug, Error, Serialize)]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
 pub enum ErrorDetails {
     AllVariantsFailed {
         errors: HashMap<String, Error>,
