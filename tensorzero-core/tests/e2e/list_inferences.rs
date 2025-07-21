@@ -31,7 +31,7 @@ pub async fn test_simple_query_json_function() {
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 2);
 
-    for inference in res {
+    for inference in &res {
         let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
@@ -39,8 +39,22 @@ pub async fn test_simple_query_json_function() {
         assert!(json_inference.dispreferred_outputs.is_empty());
     }
 
-    // ORDER BY timestamp DESC is applied - we can't easily verify the order
-    // without direct access to timestamps, but the query succeeds
+    // Verify ORDER BY timestamp DESC - check that timestamps are in descending order
+    let mut prev_timestamp = None;
+    for inference in &res {
+        let StoredInference::Json(json_inference) = inference else {
+            panic!("Expected a JSON inference");
+        };
+        if let Some(prev) = prev_timestamp {
+            assert!(
+                json_inference.timestamp <= prev,
+                "Timestamps should be in descending order. Got: {} <= {}",
+                json_inference.timestamp,
+                prev
+            );
+        }
+        prev_timestamp = Some(json_inference.timestamp);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -63,7 +77,7 @@ pub async fn test_simple_query_chat_function() {
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 3);
 
-    for inference in res {
+    for inference in &res {
         let StoredInference::Chat(chat_inference) = inference else {
             panic!("Expected a Chat inference");
         };
@@ -71,8 +85,22 @@ pub async fn test_simple_query_chat_function() {
         assert_eq!(chat_inference.dispreferred_outputs.len(), 1);
     }
 
-    // ORDER BY timestamp ASC is applied - we can't easily verify the order
-    // without direct access to timestamps, but the query succeeds
+    // Verify ORDER BY timestamp ASC - check that timestamps are in ascending order
+    let mut prev_timestamp = None;
+    for inference in &res {
+        let StoredInference::Chat(chat_inference) = inference else {
+            panic!("Expected a Chat inference");
+        };
+        if let Some(prev) = prev_timestamp {
+            assert!(
+                chat_inference.timestamp >= prev,
+                "Timestamps should be in ascending order. Got: {} >= {}",
+                chat_inference.timestamp,
+                prev
+            );
+        }
+        prev_timestamp = Some(chat_inference.timestamp);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -101,7 +129,7 @@ pub async fn test_simple_query_with_float_filter() {
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 3);
-    for inference in res {
+    for inference in &res {
         let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
@@ -126,7 +154,7 @@ pub async fn test_demonstration_output_source() {
 
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 5);
-    for inference in res {
+    for inference in &res {
         let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
@@ -154,7 +182,7 @@ pub async fn test_boolean_metric_filter() {
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 5);
-    for inference in res {
+    for inference in &res {
         let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
@@ -192,7 +220,7 @@ pub async fn test_and_filter_multiple_float_metrics() {
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 1);
-    for inference in res {
+    for inference in &res {
         let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
@@ -234,7 +262,7 @@ async fn test_or_filter_mixed_metrics() {
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 1);
-    for inference in res {
+    for inference in &res {
         let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
@@ -306,12 +334,28 @@ async fn test_simple_time_filter() {
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 5);
 
-    for inference in res {
+    for inference in &res {
         let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
-        // Time filtering and ORDER BY exact_match DESC, timestamp ASC is applied
+    }
+
+    // Verify ORDER BY timestamp ASC (secondary sort) - check that for same metric values, timestamps are ascending
+    let mut prev_timestamp = None;
+    for inference in &res {
+        let StoredInference::Json(json_inference) = inference else {
+            panic!("Expected a JSON inference");
+        };
+        if let Some(prev) = prev_timestamp {
+            assert!(
+                json_inference.timestamp >= prev,
+                "Timestamps should be in ascending order for secondary sort. Got: {} >= {}",
+                json_inference.timestamp,
+                prev
+            );
+        }
+        prev_timestamp = Some(json_inference.timestamp);
     }
 }
 
@@ -335,7 +379,7 @@ async fn test_simple_tag_filter() {
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 204);
-    for inference in res {
+    for inference in &res {
         let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
@@ -377,7 +421,7 @@ async fn test_combined_time_and_tag_filter() {
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 78);
-    for inference in res {
+    for inference in &res {
         let StoredInference::Chat(chat_inference) = inference else {
             panic!("Expected a Chat inference");
         };
