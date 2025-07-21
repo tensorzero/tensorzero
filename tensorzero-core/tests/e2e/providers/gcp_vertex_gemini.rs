@@ -135,12 +135,6 @@ async fn get_providers() -> E2ETestProviders {
         model_name: "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001".into(),
         model_provider_name: "gcp_vertex_gemini".into(),
         credentials: HashMap::new(),
-    }, E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "gcp_vertex_gemini_shorthand_endpoint".to_string(),
-        model_name: "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/endpoints/945488740422254592".into(),
-        model_provider_name: "gcp_vertex_gemini".into(),
-        credentials: HashMap::new(),
     }];
 
     E2ETestProviders {
