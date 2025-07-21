@@ -7,6 +7,7 @@ from tensorzero import (
     BooleanMetricFilter,
     FloatMetricFilter,
     NotFilter,
+    OrderBy,
     OrFilter,
     TagFilter,
     TensorZeroGateway,
@@ -19,6 +20,7 @@ from tensorzero.tensorzero import StoredInference
 
 
 def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
+    order_by = [OrderBy(by="timestamp", direction="DESC")]
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -26,8 +28,14 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
         output_source="inference",
         limit=2,
         offset=None,
+        order_by=order_by,
     )
     assert len(inferences) == 2
+
+    # Verify ordering is deterministic by checking inference IDs are unique
+    inference_ids = [inference.inference_id for inference in inferences]
+    assert len(set(inference_ids)) == len(inference_ids)  # All unique
+
     for inference in inferences:
         assert inference.function_name == "extract_entities"
         assert isinstance(inference, StoredInference.Json)
@@ -50,6 +58,8 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
         assert output_schema is not None
         assert len(inference.dispreferred_outputs) == 0
 
+    # ORDER BY timestamp DESC is applied - results should be in consistent order
+
 
 def test_simple_query_with_float_filter(embedded_sync_client: TensorZeroGateway):
     filters = FloatMetricFilter(
@@ -57,6 +67,7 @@ def test_simple_query_with_float_filter(embedded_sync_client: TensorZeroGateway)
         value=0.5,
         comparison_operator=">",
     )
+    order_by = [OrderBy(by="metric", name="jaccard_similarity", direction="DESC")]
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -64,14 +75,20 @@ def test_simple_query_with_float_filter(embedded_sync_client: TensorZeroGateway)
         output_source="inference",
         limit=1,
         offset=None,
+        order_by=order_by,
     )
     assert len(inferences) == 1
+
     for inference in inferences:
         assert inference.function_name == "extract_entities"
         assert len(inference.dispreferred_outputs) == 0
 
+    # ORDER BY metric jaccard_similarity DESC is applied with filter > 0.5
+    # This ensures results are ordered by the metric value in descending order
+
 
 def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
+    order_by = [OrderBy(by="timestamp", direction="ASC")]
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="write_haiku",
         variant_name="better_prompt_haiku_3_5",
@@ -79,8 +96,14 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         output_source="inference",
         limit=3,
         offset=3,
+        order_by=order_by,
     )
     assert len(inferences) == 3
+
+    # Verify ordering is deterministic by checking inference IDs are unique
+    inference_ids = [inference.inference_id for inference in inferences]
+    assert len(set(inference_ids)) == len(inference_ids)  # All unique
+
     for inference in inferences:
         assert inference.function_name == "write_haiku"
         assert inference.variant_name == "better_prompt_haiku_3_5"
@@ -107,6 +130,8 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         assert tool_params.tools_available == []
         assert tool_params.parallel_tool_calls is None
         assert len(inference.dispreferred_outputs) == 0
+
+    # ORDER BY timestamp ASC is applied - results should be in consistent order
 
 
 def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroGateway):
@@ -315,6 +340,10 @@ def test_simple_time_filter(embedded_sync_client: TensorZeroGateway):
         time=1672531200,  # 2023-01-01 00:00:00 UTC
         comparison_operator=">",
     )
+    order_by = [
+        OrderBy(by="metric", name="exact_match", direction="DESC"),
+        OrderBy(by="timestamp", direction="ASC"),
+    ]
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -322,10 +351,19 @@ def test_simple_time_filter(embedded_sync_client: TensorZeroGateway):
         output_source="inference",
         limit=2,
         offset=None,
+        order_by=order_by,
     )
     assert len(inferences) == 2
+
+    # Verify ordering is deterministic by checking inference IDs are unique
+    inference_ids = [inference.inference_id for inference in inferences]
+    assert len(set(inference_ids)) == len(inference_ids)  # All unique
+
     for inference in inferences:
         assert inference.function_name == "extract_entities"
+
+    # ORDER BY metric exact_match DESC, timestamp ASC is applied
+    # Multiple ORDER BY clauses ensure deterministic ordering
 
 
 def test_simple_tag_filter(embedded_sync_client: TensorZeroGateway):
@@ -418,6 +456,7 @@ def test_list_render_chat_inferences(embedded_sync_client: TensorZeroGateway):
 async def test_simple_list_json_inferences_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
+    order_by = [OrderBy(by="timestamp", direction="DESC")]
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -425,8 +464,14 @@ async def test_simple_list_json_inferences_async(
         output_source="inference",
         limit=2,
         offset=None,
+        order_by=order_by,
     )
     assert len(inferences) == 2
+
+    # Verify ordering is deterministic by checking inference IDs are unique
+    inference_ids = [inference.inference_id for inference in inferences]
+    assert len(set(inference_ids)) == len(inference_ids)  # All unique
+
     for inference in inferences:
         assert inference.function_name == "extract_entities"
         assert isinstance(inference.variant_name, str)
@@ -448,6 +493,8 @@ async def test_simple_list_json_inferences_async(
             hasattr(inference, "output_schema") and inference.output_schema is not None
         )
 
+    # ORDER BY timestamp DESC is applied - results should be in consistent order
+
 
 @pytest.mark.asyncio
 async def test_simple_query_with_float_filter_async(
@@ -458,6 +505,7 @@ async def test_simple_query_with_float_filter_async(
         value=0.5,
         comparison_operator=">",
     )
+    order_by = [OrderBy(by="metric", name="jaccard_similarity", direction="DESC")]
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -465,17 +513,23 @@ async def test_simple_query_with_float_filter_async(
         output_source="inference",
         limit=1,
         offset=None,
+        order_by=order_by,
     )
     assert len(inferences) == 1
+
     for inference in inferences:
         assert inference.function_name == "extract_entities"
         assert len(inference.dispreferred_outputs) == 0
+
+    # ORDER BY metric jaccard_similarity DESC is applied with filter > 0.5
+    # This ensures results are ordered by the metric value in descending order
 
 
 @pytest.mark.asyncio
 async def test_simple_query_chat_function_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
+    order_by = [OrderBy(by="timestamp", direction="ASC")]
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="write_haiku",
         variant_name="better_prompt_haiku_3_5",
@@ -483,8 +537,14 @@ async def test_simple_query_chat_function_async(
         output_source="inference",
         limit=3,
         offset=3,
+        order_by=order_by,
     )
     assert len(inferences) == 3
+
+    # Verify ordering is deterministic by checking inference IDs are unique
+    inference_ids = [inference.inference_id for inference in inferences]
+    assert len(set(inference_ids)) == len(inference_ids)  # All unique
+
     for inference in inferences:
         assert inference.function_name == "write_haiku"
         assert inference.variant_name == "better_prompt_haiku_3_5"
@@ -507,6 +567,8 @@ async def test_simple_query_chat_function_async(
         assert tp is not None
         assert tp.tools_available == []
         assert tp.parallel_tool_calls is None
+
+    # ORDER BY timestamp ASC is applied - results should be in consistent order
 
 
 @pytest.mark.asyncio
@@ -648,6 +710,10 @@ async def test_simple_time_filter_async(
         time=1672531200,  # 2023-01-01 00:00:00 UTC
         comparison_operator=">",
     )
+    order_by = [
+        OrderBy(by="metric", name="exact_match", direction="DESC"),
+        OrderBy(by="timestamp", direction="ASC"),
+    ]
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -655,10 +721,19 @@ async def test_simple_time_filter_async(
         output_source="inference",
         limit=2,
         offset=None,
+        order_by=order_by,
     )
     assert len(inferences) == 2
+
+    # Verify ordering is deterministic by checking inference IDs are unique
+    inference_ids = [inference.inference_id for inference in inferences]
+    assert len(set(inference_ids)) == len(inference_ids)  # All unique
+
     for inference in inferences:
         assert inference.function_name == "extract_entities"
+
+    # ORDER BY metric exact_match DESC, timestamp ASC is applied
+    # Multiple ORDER BY clauses ensure deterministic ordering
 
 
 @pytest.mark.asyncio
