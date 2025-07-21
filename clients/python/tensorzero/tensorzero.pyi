@@ -61,6 +61,7 @@ class StoredInference:
         output: Any,
         episode_id: UUID,
         inference_id: UUID,
+        timestamp: str,
         tool_params: Optional[Any] = None,
         output_schema: Optional[Any] = None,
         # Dispreferred outputs are lists because there may be several of them in the future.
@@ -88,6 +89,8 @@ class StoredInference:
     def output_schema(self) -> Optional[Any]: ...
     @property
     def type(self) -> str: ...
+    @property
+    def timestamp(self) -> str: ...
     @property
     def dispreferred_outputs(
         self,
