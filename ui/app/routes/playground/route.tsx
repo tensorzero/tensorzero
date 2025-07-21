@@ -31,6 +31,7 @@ import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
 import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.server";
 import InputSnippet from "~/components/inference/InputSnippet";
+import OutputRust from "~/components/inference/NewOutputRust";
 import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
 import { safeParseInt } from "~/utils/common";
@@ -274,33 +275,41 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader name="Playground" />
-      <Label>Function</Label>
-      <FunctionSelector
-        selected={functionName}
-        onSelect={(value) =>
-          updateSearchParams({ functionName: value, variant: null })
-        }
-        functions={config.functions}
-      />
-      <Label>Dataset</Label>
-      <DatasetSelector
-        selected={datasetName ?? undefined}
-        onSelect={(value) => updateSearchParams({ datasetName: value })}
-        allowCreation={false}
-      />
-      <Label>Variants</Label>
-      <VariantFilter
-        disabled={!functionName || !datasetName}
-        variants={variantData}
-        selectedValues={selectedVariants}
-        setSelectedValues={(valuesOrUpdater) => {
-          const newValues =
-            typeof valuesOrUpdater === "function"
-              ? valuesOrUpdater(selectedVariants)
-              : valuesOrUpdater;
-          updateSearchParams({ variant: newValues });
-        }}
-      />
+      <div className="flex max-w-180 flex-col gap-2">
+        <Label>Function</Label>
+        <FunctionSelector
+          selected={functionName}
+          onSelect={(value) =>
+            updateSearchParams({ functionName: value, variant: null })
+          }
+          functions={config.functions}
+        />
+      </div>
+      <div className="flex max-w-180 flex-col gap-2">
+        <Label>Dataset</Label>
+        <DatasetSelector
+          functionName={functionName ?? undefined}
+          disabled={!functionName}
+          selected={datasetName ?? undefined}
+          onSelect={(value) => updateSearchParams({ datasetName: value })}
+          allowCreation={false}
+        />
+      </div>
+      <div className="flex max-w-180 flex-col gap-2">
+        <Label>Variants</Label>
+        <VariantFilter
+          disabled={!functionName || !datasetName}
+          variants={variantData}
+          selectedValues={selectedVariants}
+          setSelectedValues={(valuesOrUpdater) => {
+            const newValues =
+              typeof valuesOrUpdater === "function"
+                ? valuesOrUpdater(selectedVariants)
+                : valuesOrUpdater;
+            updateSearchParams({ variant: newValues });
+          }}
+        />
+      </div>
       {selectedVariants.length > 0 &&
         datapoints &&
         datapoints.length > 0 &&
@@ -308,93 +317,103 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
         inputs &&
         functionName && (
           <>
-            <div className="-mx-4 mt-6 md:-mx-8 lg:-mx-16">
-              <div
-                className="overflow-x-auto overflow-y-auto px-4"
-                style={{ maxHeight: "calc(100vh - 200px)" }}
-              >
-                <div className="min-w-fit">
-                  {/* Header row with sticky positioning */}
-                  <div className="bg-background sticky top-0 z-20 grid grid-cols-[400px_1fr] border-b">
-                    <div className="bg-background sticky left-0 z-30 border-r p-4 font-medium">
-                      Datapoint Input
-                    </div>
-                    <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
-                      {selectedVariants.map((variant) => (
-                        <div
-                          key={variant}
-                          className="border-r p-4 font-medium last:border-r-0"
-                        >
-                          <Link
-                            to={`/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variant)}`}
-                            className="text-blue-600 hover:text-blue-800 hover:underline"
-                          >
-                            {variant}
-                          </Link>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              updateSearchParams({
-                                variant: selectedVariants.filter(
-                                  (v) => v !== variant,
-                                ),
-                              });
-                            }}
-                          >
-                            <X />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
+            <div className="overflow-x-auto rounded">
+              <div className="min-w-fit">
+                {/* Header row with sticky positioning */}
+                <div className="bg-background sticky top-0 z-20 grid grid-cols-[400px_1fr] border-b">
+                  <div className="bg-background sticky left-0 z-30 flex items-center border-r p-4 font-medium">
+                    Datapoints
                   </div>
-
-                  {datapoints.map(
-                    (datapoint: TensorZeroDatapoint, index: number) => (
+                  <div className="grid auto-cols-[minmax(480px,1fr)] grid-flow-col">
+                    {selectedVariants.map((variant) => (
                       <div
-                        key={datapoint.id}
-                        className="grid grid-cols-[400px_1fr] border-b"
+                        key={variant}
+                        className="flex items-center justify-between gap-2 border-r p-4 font-mono font-medium last:border-r-0"
                       >
-                        <div className="bg-background sticky left-0 z-10 border-r p-4 font-mono text-sm">
-                          <div className="text-xs text-gray-500">
-                            Datapoint:{" "}
-                            <Link
-                              to={`/datasets/${encodeURIComponent(datasetName)}/datapoint/${datapoint.id}`}
-                              className="text-blue-600 hover:text-blue-800 hover:underline"
-                            >
-                              {datapoint.id}
-                            </Link>
-                          </div>
+                        <Link
+                          to={`/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variant)}`}
+                          className="max-w-full truncate font-mono text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {variant}
+                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            updateSearchParams({
+                              variant: selectedVariants.filter(
+                                (v) => v !== variant,
+                              ),
+                            });
+                          }}
+                        >
+                          <X />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {datapoints.map(
+                  (datapoint: TensorZeroDatapoint, index: number) => (
+                    <div
+                      key={datapoint.id}
+                      className="grid grid-cols-[400px_1fr] border-b"
+                    >
+                      <div className="bg-background sticky left-0 z-10 flex flex-col gap-2 border-r p-4 text-sm">
+                        <div className="text-xs font-medium text-gray-500">
+                          Datapoint:{" "}
+                          <Link
+                            to={`/datasets/${encodeURIComponent(datasetName)}/datapoint/${datapoint.id}`}
+                            className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            {datapoint.id}
+                          </Link>
+                        </div>
+                        <div>
+                          <h3 className="mb-2 text-sm font-medium text-gray-500">
+                            Input
+                          </h3>
                           <InputSnippet
                             messages={inputs[index].messages}
                             system={inputs[index].system}
                           />
                         </div>
-                        <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
-                          {selectedVariants.map((variant) => {
-                            return (
-                              <div
-                                key={`${datapoint.id}-${variant}`}
-                                className="border-r p-4 last:border-r-0"
-                              >
-                                <DatapointPlaygroundOutput
-                                  datapoint={datapoint}
-                                  variantName={variant}
-                                  serverInference={map
-                                    .get(variant)
-                                    ?.get(datapoint.id)}
-                                  setPromise={setPromise}
-                                  input={inputs[index]}
-                                  functionName={functionName}
-                                />
-                              </div>
-                            );
-                          })}
+                        <div>
+                          <h3 className="mb-2 text-sm font-medium text-gray-500">
+                            Reference Output
+                          </h3>
+                          {datapoint.output ? (
+                            <OutputRust output={datapoint.output} />
+                          ) : (
+                            <div className="text-sm text-gray-500">None</div>
+                          )}
                         </div>
                       </div>
-                    ),
-                  )}
-                </div>
+                      <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
+                        {selectedVariants.map((variant) => {
+                          return (
+                            <div
+                              key={`${datapoint.id}-${variant}`}
+                              className="border-r p-4 last:border-r-0"
+                            >
+                              <DatapointPlaygroundOutput
+                                datapoint={datapoint}
+                                variantName={variant}
+                                serverInference={map
+                                  .get(variant)
+                                  ?.get(datapoint.id)}
+                                setPromise={setPromise}
+                                input={inputs[index]}
+                                functionName={functionName}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ),
+                )}
               </div>
             </div>
             <PageButtons

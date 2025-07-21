@@ -7,11 +7,11 @@ import { Button } from "~/components/ui/button";
 import { CodeEditor } from "~/components/ui/code-editor";
 import { refreshClientInference } from "./utils";
 import type { InferenceResponse } from "~/utils/tensorzero";
-import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 import type { DisplayInput } from "~/utils/clickhouse/common";
+import type { Datapoint } from "tensorzero-node";
 
 interface DatapointPlaygroundOutputProps {
-  datapoint: TensorZeroDatapoint;
+  datapoint: Datapoint;
   variantName: string;
   serverInference: Promise<InferenceResponse> | undefined;
   setPromise: (
@@ -31,25 +31,29 @@ const DatapointPlaygroundOutput = memo(
     input,
     functionName,
   }: DatapointPlaygroundOutputProps) {
+    const refreshButton = (
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute top-1 right-1 z-5 opacity-10 transition-opacity group-hover:opacity-100"
+        onClick={() => {
+          refreshClientInference(
+            setPromise,
+            input,
+            datapoint,
+            variantName,
+            functionName,
+          );
+        }}
+      >
+        <Refresh />
+      </Button>
+    );
+
     if (!serverInference) {
       return (
         <div className="flex min-h-[8rem] items-center justify-center">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-1 left-1 z-10 opacity-0 transition-opacity group-hover:opacity-100"
-            onClick={() => {
-              refreshClientInference(
-                setPromise,
-                input,
-                datapoint,
-                variantName,
-                functionName,
-              );
-            }}
-          >
-            <Refresh />
-          </Button>
+          {refreshButton}
           <div className="text-muted-foreground text-sm">
             No inference available
           </div>
@@ -59,22 +63,6 @@ const DatapointPlaygroundOutput = memo(
 
     return (
       <div className="group relative">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute top-1 left-1 z-10 opacity-0 transition-opacity group-hover:opacity-100"
-          onClick={() => {
-            refreshClientInference(
-              setPromise,
-              input,
-              datapoint,
-              variantName,
-              functionName,
-            );
-          }}
-        >
-          <Refresh />
-        </Button>
         <Suspense
           fallback={
             <div className="flex min-h-[8rem] items-center justify-center">
@@ -82,15 +70,26 @@ const DatapointPlaygroundOutput = memo(
             </div>
           }
         >
-          <Await resolve={serverInference} errorElement={<InferenceError />}>
+          <Await
+            resolve={serverInference}
+            errorElement={
+              <>
+                {refreshButton}
+                <InferenceError />
+              </>
+            }
+          >
             {(response) => {
               if (!response) {
                 return (
-                  <div className="flex min-h-[8rem] items-center justify-center">
-                    <div className="text-muted-foreground text-sm">
-                      No response available
+                  <>
+                    {refreshButton}
+                    <div className="flex min-h-[8rem] items-center justify-center">
+                      <div className="text-muted-foreground text-sm">
+                        No response available
+                      </div>
                     </div>
-                  </div>
+                  </>
                 );
               }
               let output;
@@ -99,7 +98,12 @@ const DatapointPlaygroundOutput = memo(
               } else {
                 output = response.output;
               }
-              return <NewOutput output={output} />;
+              return (
+                <>
+                  {refreshButton}
+                  <NewOutput output={output} />
+                </>
+              );
             }}
           </Await>
         </Suspense>

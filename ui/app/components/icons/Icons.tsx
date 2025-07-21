@@ -544,7 +544,7 @@ export const UserFeedback: React.FC = () => <UserPen size={12} />;
 
 export const Refresh: React.FC<IconProps> = (props) => (
   <IconWrapper {...props}>
-    <RefreshCw size={12} />
+    <RefreshCw size={16} />
   </IconWrapper>
 );
 
