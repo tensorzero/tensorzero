@@ -10,7 +10,7 @@
     <listen_host>0.0.0.0</listen_host>
 
     <remote_servers>
-        <cluster_1S_2R>
+        <tensorzero_e2e_tests_cluster>
             <shard>
                 <internal_replication>true</internal_replication>
                 <replica>
@@ -22,7 +22,7 @@
                     <port>9000</port>
                 </replica>
             </shard>
-        </cluster_1S_2R>
+        </tensorzero_e2e_tests_cluster>
     </remote_servers>
 
     <macros>
