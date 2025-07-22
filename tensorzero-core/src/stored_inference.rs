@@ -13,6 +13,7 @@ use crate::{
     tool::ToolCallConfigDatabaseInsert,
     variant::{chat_completion::prepare_model_input, VariantConfig},
 };
+use chrono::{DateTime, Utc};
 use futures::future::try_join_all;
 #[cfg(feature = "pyo3")]
 use pyo3::types::{PyAny, PyList};
@@ -44,6 +45,7 @@ pub struct SimpleStoredSampleInfo {
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
+    pub tags: HashMap<String, String>,
 }
 
 /// Represents an stored inference to be used for optimization.
@@ -69,8 +71,8 @@ impl std::fmt::Display for StoredInference {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl StoredInference {
-    #[new]
     #[expect(clippy::too_many_arguments)]
+    #[new]
     pub fn new<'py>(
         py: Python<'py>,
         r#type: String,
@@ -83,10 +85,18 @@ impl StoredInference {
         dispreferred_outputs: Option<Bound<'py, PyAny>>,
         tool_params: Option<Bound<'py, PyAny>>,
         output_schema: Option<Bound<'py, PyAny>>,
+        tags: Option<Bound<'py, PyAny>>,
+        timestamp: Bound<'py, PyAny>,
     ) -> PyResult<Self> {
         let input: ResolvedInput = deserialize_from_pyobj(py, &input)?;
         let episode_id: Uuid = deserialize_from_pyobj(py, &episode_id)?;
         let inference_id: Uuid = deserialize_from_pyobj(py, &inference_id)?;
+        let timestamp: DateTime<Utc> = deserialize_from_pyobj(py, &timestamp)?;
+        let tags: HashMap<String, String> = tags
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(py, x))
+            .transpose()?
+            .unwrap_or_default();
         match r#type.as_str() {
             "chat" => {
                 let output: Vec<ContentBlockChatOutput> = deserialize_from_pyobj(py, &output)?;
@@ -109,6 +119,8 @@ impl StoredInference {
                     episode_id,
                     inference_id,
                     tool_params,
+                    tags,
+                    timestamp,
                 }))
             }
             "json" => {
@@ -132,6 +144,8 @@ impl StoredInference {
                     episode_id,
                     inference_id,
                     output_schema,
+                    tags,
+                    timestamp,
                 }))
             }
             _ => Err(PyValueError::new_err(format!("Invalid type: {type}"))),
@@ -245,6 +259,22 @@ impl StoredInference {
             StoredInference::Json(_) => "json".to_string(),
         }
     }
+
+    #[getter]
+    pub fn get_tags(&self) -> HashMap<String, String> {
+        match self {
+            StoredInference::Chat(example) => example.tags.clone(),
+            StoredInference::Json(example) => example.tags.clone(),
+        }
+    }
+
+    #[getter]
+    pub fn get_timestamp(&self) -> String {
+        match self {
+            StoredInference::Chat(example) => example.timestamp.to_rfc3339(),
+            StoredInference::Json(example) => example.timestamp.to_rfc3339(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -256,10 +286,13 @@ pub struct StoredChatInference {
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
+    pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
     #[serde(default)]
     pub tool_params: ToolCallConfigDatabaseInsert,
+    #[serde(default)]
+    pub tags: HashMap<String, String>,
 }
 
 impl std::fmt::Display for StoredChatInference {
@@ -286,9 +319,12 @@ pub struct StoredJsonInference {
     pub output: JsonInferenceOutput,
     #[serde(default)]
     pub dispreferred_outputs: Vec<JsonInferenceOutput>,
+    pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
     pub output_schema: Value,
+    #[serde(default)]
+    pub tags: HashMap<String, String>,
 }
 
 impl std::fmt::Display for StoredJsonInference {
@@ -337,6 +373,7 @@ impl StoredSample for StoredInference {
                 dispreferred_outputs: example.dispreferred_outputs,
                 tool_params: Some(example.tool_params),
                 output_schema: None,
+                tags: example.tags,
             },
             StoredInference::Json(example) => {
                 let output = json_output_to_content_block_chat_output(example.output);
@@ -353,6 +390,7 @@ impl StoredSample for StoredInference {
                     dispreferred_outputs,
                     tool_params: None,
                     output_schema: Some(example.output_schema),
+                    tags: example.tags,
                 }
             }
         }
@@ -383,6 +421,7 @@ pub struct RenderedSample {
     pub inference_id: Option<Uuid>,
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
+    pub tags: HashMap<String, String>,
 }
 
 #[cfg(feature = "pyo3")]
@@ -453,6 +492,11 @@ impl RenderedSample {
 
     pub fn __repr__(&self) -> String {
         self.to_string()
+    }
+
+    #[getter]
+    pub fn get_tags(&self) -> HashMap<String, String> {
+        self.tags.clone()
     }
 }
 
@@ -559,6 +603,7 @@ pub fn render_stored_sample<T: StoredSample>(
         output_schema,
         episode_id,
         inference_id,
+        tags,
     } = stored_sample.owned_simple_info();
     Ok(RenderedSample {
         function_name,
@@ -569,6 +614,7 @@ pub fn render_stored_sample<T: StoredSample>(
         dispreferred_outputs,
         tool_params,
         output_schema,
+        tags,
     })
 }
 

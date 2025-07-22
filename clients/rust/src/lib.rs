@@ -47,7 +47,8 @@ pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageConten
 pub use tensorzero_core::cache::CacheParamsOptions;
 pub use tensorzero_core::clickhouse::query_builder::{
     BooleanMetricNode, FloatComparisonOperator, FloatMetricNode, InferenceFilterTreeNode,
-    InferenceOutputSource, ListInferencesParams,
+    InferenceOutputSource, ListInferencesParams, TagComparisonOperator, TagNode,
+    TimeComparisonOperator, TimeNode,
 };
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,

@@ -18,4 +18,5 @@ export type RenderedSample = {
   inference_id: string | null;
   tool_params: ToolCallConfigDatabaseInsert | null;
   output_schema: JsonValue | null;
+  tags: { [key in string]?: string };
 };

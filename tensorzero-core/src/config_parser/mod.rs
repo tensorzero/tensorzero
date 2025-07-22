@@ -347,7 +347,7 @@ pub struct MetricConfig {
     pub level: MetricConfigLevel,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -355,6 +355,15 @@ pub struct MetricConfig {
 pub enum MetricConfigType {
     Boolean,
     Float,
+}
+
+impl MetricConfigType {
+    pub fn to_clickhouse_table_name(&self) -> &'static str {
+        match self {
+            MetricConfigType::Boolean => "BooleanMetricFeedback",
+            MetricConfigType::Float => "FloatMetricFeedback",
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq, Serialize)]

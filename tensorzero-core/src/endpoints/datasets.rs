@@ -1360,6 +1360,7 @@ impl StoredSample for Datapoint {
                 output_schema: None,
                 episode_id: None,
                 inference_id: None,
+                tags: datapoint.tags.unwrap_or_default(),
             },
             Datapoint::Json(datapoint) => {
                 let output = datapoint.output.map(|output| match output.raw {
@@ -1374,6 +1375,7 @@ impl StoredSample for Datapoint {
                     output_schema: Some(datapoint.output_schema),
                     episode_id: None,
                     inference_id: None,
+                    tags: datapoint.tags.unwrap_or_default(),
                 }
             }
         }
