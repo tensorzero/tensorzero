@@ -44,18 +44,21 @@ async def get_instructions(
 
 async def candidate_inference(
     client: AsyncTensorZeroGateway,
-    function_name: str,
     input: InferenceInput,
-    variant_name: str,
+    system_prompt: str,
+    model_name: str,
     semaphore: asyncio.Semaphore,
     dryrun: bool = True,
 ) -> Optional[Union[InferenceResponse, AsyncIterator[InferenceChunk]]]:
+    messages = []
+    for message in input.messages:  # type: ignore
+        messages.append({"role": message.role, "content": message.content})  # type: ignore
+    adjusted_input = {"system": system_prompt, "messages": messages}  # type: ignore
     try:
         async with semaphore:
             return await client.inference(
-                function_name=function_name,
-                input=input,
-                variant_name=variant_name,
+                input=adjusted_input,  # type: ignore
+                model_name=model_name,
                 dryrun=dryrun,
             )
     except Exception as e:
