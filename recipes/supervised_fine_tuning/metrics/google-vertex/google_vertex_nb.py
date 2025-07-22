@@ -108,13 +108,14 @@ metric_node = FloatMetricFilter(
 metric_node
 
 # %% [markdown]
-# Query the inferences and feedback from ClickHouse.
+# Query the inferences from ClickHouse.
 #
 
 # %%
 stored_inferences = tensorzero_client.experimental_list_inferences(
     function_name=FUNCTION_NAME,
     variant_name=None,
+    output_source="inference",  # could also be "demonstration"
     filters=metric_node,
     limit=MAX_SAMPLES,
 )
