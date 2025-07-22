@@ -526,6 +526,66 @@ impl ClickHouseConnectionInfo {
             .collect::<Result<Vec<StoredInference>, Error>>()?;
         Ok(inferences)
     }
+
+    pub fn get_on_cluster_name(&self) -> String {
+        match self {
+            Self::Disabled => String::new(),
+            Self::Mock { .. } => String::new(),
+            Self::Production { cluster_name, .. } => match cluster_name {
+                Some(cluster_name) => format!(" ON CLUSTER {cluster_name} "),
+                None => String::new(),
+            },
+        }
+    }
+
+    pub fn get_maybe_replicated_table_engine_name(
+        &self,
+        table_engine_name: &str,
+        table_name: &str,
+        engine_args: &[&str],
+    ) -> String {
+        match self {
+            Self::Disabled => table_engine_name.to_string(),
+            Self::Mock { .. } => table_engine_name.to_string(),
+            Self::Production {
+                cluster_name,
+                database,
+                ..
+            } => match cluster_name {
+                Some(_) => get_replicated_table_engine_name(
+                    table_engine_name,
+                    table_name,
+                    database,
+                    engine_args,
+                ),
+                None => table_engine_name.to_string(),
+            },
+        }
+    }
+}
+
+/// The ClickHouse documentation says that to create a replicated table,
+/// you should use a Replicated* table engine.
+/// The first 2 arguments are the keeper path and the replica name.
+/// The following arguments must be the arguments that the table engine takes.
+/// See https://clickhouse.com/docs/engines/table-engines/mergetree-family/replication for more details.
+///
+/// Since there may be issues with renaming tables, we don't use the database or table name shortcuts in the path.
+/// This method requires that the macros for {{shard}} and {{replica}} are defined in the ClickHouse configuration.
+/// This method should only be called if a cluster name is provided.
+fn get_replicated_table_engine_name(
+    table_engine_name: &str,
+    table_name: &str,
+    database: &str,
+    engine_args: &[&str],
+) -> String {
+    let keeper_path = format!("'/clickhouse/tables/{{shard}}/{database}/{table_name}'");
+    if engine_args.is_empty() {
+        format!("Replicated{table_engine_name}({keeper_path}, '{{replica}}')")
+    } else {
+        let engine_args_str = engine_args.join(", ");
+        format!("Replicated{table_engine_name}({keeper_path}, '{{replica}}', {engine_args_str})")
+    }
 }
 
 /// ClickHouse uses backslashes to escape quotes and all other special sequences in strings.
@@ -879,6 +939,76 @@ mod tests {
         assert_eq!(
             escape_string_for_clickhouse_literal(r#"\'\'\'"#),
             r#"\\\'\\\'\\\'"#
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_basic() {
+        let result = get_replicated_table_engine_name("MergeTree", "test_table", "test_db", &[]);
+        assert_eq!(
+            result,
+            "ReplicatedMergeTree('/clickhouse/tables/{shard}/test_db/test_table', '{replica}')"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_with_single_arg() {
+        let result =
+            get_replicated_table_engine_name("MergeTree", "users", "analytics", &["ORDER BY id"]);
+        assert_eq!(
+            result,
+            "ReplicatedMergeTree('/clickhouse/tables/{shard}/analytics/users', '{replica}', ORDER BY id)"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_with_multiple_args() {
+        let result = get_replicated_table_engine_name(
+            "ReplacingMergeTree",
+            "events",
+            "production",
+            &["version_column", "ORDER BY (timestamp, user_id)"],
+        );
+        assert_eq!(
+            result,
+            "ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/production/events', '{replica}', version_column, ORDER BY (timestamp, user_id))"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_with_complex_names() {
+        let result = get_replicated_table_engine_name(
+            "CollapsingMergeTree",
+            "user_activity_log",
+            "metrics_database",
+            &["sign_column"],
+        );
+        assert_eq!(
+            result,
+            "ReplicatedCollapsingMergeTree('/clickhouse/tables/{shard}/metrics_database/user_activity_log', '{replica}', sign_column)"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_empty_args() {
+        let result = get_replicated_table_engine_name("Log", "simple_table", "simple_db", &[]);
+        assert_eq!(
+            result,
+            "ReplicatedLog('/clickhouse/tables/{shard}/simple_db/simple_table', '{replica}')"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_special_characters() {
+        let result = get_replicated_table_engine_name(
+            "MergeTree",
+            "table_with_underscores",
+            "db-with-dashes",
+            &["'primary_key'", "PARTITION BY toYYYYMM(date)"],
+        );
+        assert_eq!(
+            result,
+            "ReplicatedMergeTree('/clickhouse/tables/{shard}/db-with-dashes/table_with_underscores', '{replica}', 'primary_key', PARTITION BY toYYYYMM(date))"
         );
     }
 }
