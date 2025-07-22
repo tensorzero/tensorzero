@@ -499,6 +499,7 @@ fn render_model_input(
         .as_ref()
         .map(|x| {
             x.path
+                .path()
                 .to_str()
                 .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
         })
@@ -508,6 +509,7 @@ fn render_model_input(
         .as_ref()
         .map(|x| {
             x.path
+                .path()
                 .to_str()
                 .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
         })
@@ -517,6 +519,7 @@ fn render_model_input(
         .as_ref()
         .map(|x| {
             x.path
+                .path()
                 .to_str()
                 .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
         })

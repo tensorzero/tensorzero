@@ -111,6 +111,7 @@ export * from "./TimeoutsConfig";
 export * from "./TogetherProvider";
 export * from "./TogetherSFTConfig";
 export * from "./TogetherSFTJobHandle";
+export * from "./TomlRelativePath";
 export * from "./Tool";
 export * from "./ToolCall";
 export * from "./ToolCallConfig";
