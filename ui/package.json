@@ -2,7 +2,7 @@
   "name": "tensorzero-ui",
   "private": true,
   "type": "module",
-  "version": "2025.7.0",
+  "version": "2025.7.3",
   "scripts": {
     "build": "NODE_ENV=production react-router build",
     "dev": "react-router dev",
@@ -51,7 +51,7 @@
     "@react-router/node": "^7.6.3",
     "@react-router/serve": "^7.6.3",
     "@tailwindcss/vite": "^4.1.11",
-    "@tanstack/react-query": "^5.81.5",
+    "@tanstack/react-query": "^5.83.0",
     "@tanstack/react-table": "^8.21.3",
     "@uiw/codemirror-theme-github": "^4.24.0",
     "@uiw/react-codemirror": "^4.24.0",
@@ -75,7 +75,6 @@
     "react-hook-form": "^7.60.0",
     "react-router": "^7.6.3",
     "recharts": "^2.15.4",
-    "shiki": "^3.7.0",
     "smol-toml": "^1.4.1",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
@@ -84,7 +83,6 @@
     "type-fest": "^4.41.0",
     "typescript-eslint": "^8.36.0",
     "uuid": "^11.1.0",
-    "vite-plugin-wasm": "^3.4.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -111,6 +109,8 @@
     "tailwindcss": "^4.1.11",
     "typescript": "^5.8.2",
     "vite": "^6.2.7",
+    "vite-plugin-devtools-json": "^0.3.0",
+    "vite-plugin-wasm": "^3.4.1",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.2.4"
   },

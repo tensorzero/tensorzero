@@ -1,3 +1,4 @@
+use futures::future::try_join_all;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
@@ -15,6 +16,8 @@ use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 
+use crate::config_parser::gateway::{GatewayConfig, UninitializedGatewayConfig};
+use crate::config_parser::path::TomlRelativePath;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
 use crate::error::{Error, ErrorDetails};
@@ -37,6 +40,8 @@ use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
 
+pub mod gateway;
+pub mod path;
 #[cfg(test)]
 mod tests;
 
@@ -109,35 +114,12 @@ pub struct TimeoutsConfig {
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub struct GatewayConfig {
-    #[serde(serialize_with = "serialize_optional_socket_addr")]
-    pub bind_address: Option<std::net::SocketAddr>,
-    #[serde(default)]
-    pub observability: ObservabilityConfig,
-    #[serde(default)]
-    pub debug: bool,
+pub struct TemplateFilesystemAccess {
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
     /// Defaults to `false`
     #[serde(default)]
-    pub enable_template_filesystem_access: bool,
-    #[serde(default)]
-    pub export: ExportConfig,
-    // If set, all of the HTTP endpoints will have this path prepended.
-    // E.g. a base path of `/custom/prefix` will cause the inference endpoint to become `/custom/prefix/inference`.
-    pub base_path: Option<String>,
-}
-
-fn serialize_optional_socket_addr<S>(
-    addr: &Option<std::net::SocketAddr>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    match addr {
-        Some(addr) => serializer.serialize_str(&addr.to_string()),
-        None => serializer.serialize_none(),
-    }
+    enabled: bool,
+    base_path: Option<TomlRelativePath>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -189,23 +171,30 @@ impl ObjectStoreInfo {
         };
 
         let object_store: Option<Arc<dyn ObjectStore>> = match &config {
-            StorageKind::Filesystem { path } => Some(Arc::new(
-                LocalFileSystem::new_with_prefix(path).map_err(|e| {
-                    if !std::fs::exists(path).unwrap_or(false) {
-                        Error::new(ErrorDetails::Config {
-                            message: format!(
-                                "Failed to create filesystem object store: path does not exist: {path}"
-                            ),
-                        })
-                    } else {
-                        Error::new(ErrorDetails::Config {
-                            message: format!(
-                                "Failed to create filesystem object store for path: {path}: {e}"
-                            ),
-                        })
+            StorageKind::Filesystem { path } => {
+                Some(Arc::new(match LocalFileSystem::new_with_prefix(path) {
+                    Ok(object_store) => object_store,
+                    Err(e) => {
+                        if !std::fs::exists(path).unwrap_or(false) {
+                            if skip_credential_validation() {
+                                tracing::warn!("Filesystem object store path does not exist: {path}. Treating object store as unconfigured");
+                                return Ok(None);
+                            }
+                            return Err(Error::new(ErrorDetails::Config {
+                                message: format!(
+                                    "Failed to create filesystem object store: path does not exist: {path}"
+                                ),
+                            }));
+                        } else {
+                            return Err(Error::new(ErrorDetails::Config {
+                                message: format!(
+                                    "Failed to create filesystem object store for path: {path}: {e}"
+                                ),
+                            }));
+                        }
                     }
-                })?,
-            )),
+                }))
+            }
             StorageKind::S3Compatible {
                 bucket_name,
                 region,
@@ -358,7 +347,7 @@ pub struct MetricConfig {
     pub level: MetricConfigLevel,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -366,6 +355,15 @@ pub struct MetricConfig {
 pub enum MetricConfigType {
     Boolean,
     Float,
+}
+
+impl MetricConfigType {
+    pub fn to_clickhouse_table_name(&self) -> &'static str {
+        match self {
+            MetricConfigType::Boolean => "BooleanMetricFeedback",
+            MetricConfigType::Float => "FloatMetricFeedback",
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -496,14 +494,18 @@ impl Config {
             .collect::<Result<HashMap<_, _>, _>>()?;
 
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
-        let optimizers = uninitialized_config
-            .optimizers
-            .into_iter()
-            .map(|(name, config)| config.load().map(|c| (name, c)))
-            .collect::<Result<HashMap<_, _>, _>>()?;
+        let optimizers = try_join_all(
+            uninitialized_config
+                .optimizers
+                .into_iter()
+                .map(|(name, config)| async { config.load().await.map(|c| (name, c)) }),
+        )
+        .await?
+        .into_iter()
+        .collect::<HashMap<_, _>>();
 
         let mut config = Config {
-            gateway: uninitialized_config.gateway,
+            gateway: uninitialized_config.gateway.load()?,
             models: models.try_into().map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!("Failed to load models: {e}"),
@@ -528,10 +530,16 @@ impl Config {
         let template_paths = config.get_templates();
         config.templates.initialize(
             template_paths,
-            config
-                .gateway
-                .enable_template_filesystem_access
-                .then_some(base_path.clone()),
+            config.gateway.template_filesystem_access.enabled.then_some(
+                config
+                    .gateway
+                    .template_filesystem_access
+                    .base_path
+                    .clone()
+                    .as_ref()
+                    .map(path::TomlRelativePath::path)
+                    .unwrap_or(&base_path),
+            ),
         )?;
 
         // Validate the config
@@ -558,7 +566,7 @@ impl Config {
                 for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
                         config.templates.add_template(
-                            template.path.to_string_lossy().as_ref(),
+                            template.path.path().to_string_lossy().as_ref(),
                             &template.contents,
                         )?;
                     }
@@ -743,7 +751,7 @@ impl Config {
                 let variant_template_paths = variant.get_all_template_paths();
                 for path in variant_template_paths {
                     templates.insert(
-                        path.path.to_string_lossy().to_string(),
+                        path.path.path().to_string_lossy().to_string(),
                         path.contents.clone(),
                     );
                 }
@@ -838,7 +846,7 @@ pub trait LoadableConfig<T> {
 #[serde(deny_unknown_fields)]
 struct UninitializedConfig {
     #[serde(default)]
-    pub gateway: GatewayConfig,
+    pub gateway: UninitializedGatewayConfig,
     #[serde(default)]
     pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
     #[serde(default)]
@@ -926,9 +934,9 @@ enum UninitializedFunctionConfig {
 #[serde(deny_unknown_fields)]
 struct UninitializedFunctionConfigChat {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    system_schema: Option<PathBuf>,
-    user_schema: Option<PathBuf>,
-    assistant_schema: Option<PathBuf>,
+    system_schema: Option<TomlRelativePath>,
+    user_schema: Option<TomlRelativePath>,
+    assistant_schema: Option<TomlRelativePath>,
     #[serde(default)]
     tools: Vec<String>, // tool names
     #[serde(default)]
@@ -943,10 +951,10 @@ struct UninitializedFunctionConfigChat {
 #[serde(deny_unknown_fields)]
 struct UninitializedFunctionConfigJson {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    system_schema: Option<PathBuf>,
-    user_schema: Option<PathBuf>,
-    assistant_schema: Option<PathBuf>,
-    output_schema: Option<PathBuf>, // schema will default to {} if not specified
+    system_schema: Option<TomlRelativePath>,
+    user_schema: Option<TomlRelativePath>,
+    assistant_schema: Option<TomlRelativePath>,
+    output_schema: Option<TomlRelativePath>, // schema will default to {} if not specified
 }
 
 impl UninitializedFunctionConfig {
@@ -1126,7 +1134,7 @@ impl UninitializedVariantInfo {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedToolConfig {
     pub description: String,
-    pub parameters: PathBuf,
+    pub parameters: TomlRelativePath,
     pub name: Option<String>,
     #[serde(default)]
     pub strict: bool,
@@ -1148,21 +1156,24 @@ impl UninitializedToolConfig {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct PathWithContents {
     #[cfg_attr(test, ts(type = "string"))]
-    pub path: PathBuf,
+    pub path: TomlRelativePath,
     pub contents: String,
 }
 
 impl PathWithContents {
-    pub fn from_path<P: AsRef<Path>>(path: PathBuf, base_path: Option<P>) -> Result<Self, Error> {
+    pub fn from_path<P: AsRef<Path>>(
+        path: TomlRelativePath,
+        base_path: Option<P>,
+    ) -> Result<Self, Error> {
         let full_path = if let Some(base_path) = base_path.as_ref() {
-            &base_path.as_ref().join(&path)
+            &base_path.as_ref().join(path.path())
         } else {
-            &path
+            path.path()
         };
         let contents = std::fs::read_to_string(full_path).map_err(|e| {
             Error::new(ErrorDetails::Config {
@@ -1173,6 +1184,9 @@ impl PathWithContents {
                 ),
             })
         })?;
-        Ok(Self { path, contents })
+        Ok(Self {
+            path: path.to_owned(),
+            contents,
+        })
     }
 }

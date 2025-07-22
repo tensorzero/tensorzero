@@ -37,7 +37,7 @@ use crate::{
 use super::chat_completion::UninitializedChatCompletionConfig;
 use super::{InferenceConfig, JsonMode, ModelUsedInfo, Variant};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct BestOfNSamplingConfig {
@@ -62,7 +62,7 @@ fn default_timeout() -> f64 {
     300.0
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct BestOfNEvaluatorConfig {

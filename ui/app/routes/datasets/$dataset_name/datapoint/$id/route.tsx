@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ActionFunctionArgs, RouteHandle } from "react-router";
 import {
   data,
@@ -8,24 +10,9 @@ import {
   useParams,
 } from "react-router";
 import { v7 as uuid } from "uuid";
-import BasicInfo from "./DatapointBasicInfo";
-import Input from "~/components/inference/Input";
+import InputSnippet from "~/components/inference/InputSnippet";
 import Output from "~/components/inference/Output";
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
-import { useConfig } from "~/context/config";
-import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
-import type { Route } from "./+types/route";
-import {
-  ParsedDatasetRowSchema,
-  type ParsedDatasetRow,
-} from "~/utils/clickhouse/datasets";
-import {
-  staleDatapoint,
-  getDatasetCounts,
-} from "~/utils/clickhouse/datasets.server";
-import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import {
   PageHeader,
   PageLayout,
@@ -33,15 +20,29 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
-import { DatapointActions } from "./DatapointActions";
-import type { DisplayInputMessage } from "~/utils/clickhouse/common";
-import { getConfig } from "~/utils/config/index.server";
+import { Badge } from "~/components/ui/badge";
+import { useConfig } from "~/context/config";
 import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
 import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
 } from "~/routes/api/tensorzero/inference.utils";
+import type { DisplayInputMessage } from "~/utils/clickhouse/common";
+import {
+  ParsedDatasetRowSchema,
+  type ParsedDatasetRow,
+} from "~/utils/clickhouse/datasets";
+import {
+  getDatapoint,
+  getDatasetCounts,
+  staleDatapoint,
+} from "~/utils/clickhouse/datasets.server";
+import { getConfig } from "~/utils/config/index.server";
 import { logger } from "~/utils/logger";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import type { Route } from "./+types/route";
+import { DatapointActions } from "./DatapointActions";
+import DatapointBasicInfo from "./DatapointBasicInfo";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -67,6 +68,7 @@ export async function action({ request }: ActionFunctionArgs) {
     updated_at: formData.get("updated_at"),
     staled_at: null,
     source_inference_id: formData.get("source_inference_id"),
+    is_custom: true,
   };
 
   const cleanedData = Object.fromEntries(
@@ -91,7 +93,7 @@ export async function action({ request }: ActionFunctionArgs) {
       parsedFormData.id,
       functionType,
     );
-    const datasetCounts = await getDatasetCounts();
+    const datasetCounts = await getDatasetCounts({});
     const datasetCount = datasetCounts.find(
       (count) => count.dataset_name === parsedFormData.dataset_name,
     );
@@ -121,6 +123,7 @@ export async function action({ request }: ActionFunctionArgs) {
         output: transformedOutput,
         tags: parsedFormData.tags || {},
         auxiliary: parsedFormData.auxiliary,
+        is_custom: true, // we're saving it after an edit, so it's custom
         ...(functionType === "json"
           ? {
               output_schema:
@@ -139,7 +142,6 @@ export async function action({ request }: ActionFunctionArgs) {
         parsedFormData.dataset_name,
         uuid(),
         datapoint,
-        formData.get("inputChanged") === "true",
       );
       await staleDatapoint(
         parsedFormData.dataset_name,
@@ -198,21 +200,15 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   );
   const config = useConfig();
   const [isEditing, setIsEditing] = useState(false);
-  const [resetKey, setResetKey] = useState(0);
-  const [canSave, setCanSave] = useState(false);
-  const [inputChanged, setInputChanged] = useState(false);
-  const [outputChanged, setOutputChanged] = useState(false);
 
-  useEffect(() => {
+  const canSave = useMemo(() => {
     // Use JSON.stringify to compare object values rather than references
     const hasInputChanged =
       JSON.stringify(input) !== JSON.stringify(originalInput);
     const hasOutputChanged =
       JSON.stringify(output) !== JSON.stringify(originalOutput);
 
-    setInputChanged(hasInputChanged);
-    setOutputChanged(hasOutputChanged);
-    setCanSave(isEditing && (hasInputChanged || hasOutputChanged));
+    return isEditing && (hasInputChanged || hasOutputChanged);
   }, [isEditing, input, output, originalInput, originalOutput]);
 
   const toggleEditing = () => setIsEditing(!isEditing);
@@ -220,28 +216,13 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const handleReset = () => {
     setInput(datapoint.input);
     setOutput(datapoint.output);
-    setResetKey((prev) => prev + 1);
   };
 
-  const handleSystemChange = (system: string | object) => {
+  const handleSystemChange = (system: string | object) =>
     setInput({ ...input, system });
-  };
 
   const handleMessagesChange = (messages: DisplayInputMessage[]) => {
     setInput({ ...input, messages });
-  };
-
-  const handleOutputChange = (newOutput: typeof datapoint.output | null) => {
-    if (newOutput === null) {
-      setCanSave(false);
-    } else {
-      const hasOutputChanged =
-        JSON.stringify(newOutput) !== JSON.stringify(originalOutput);
-      const hasInputChanged =
-        JSON.stringify(input) !== JSON.stringify(originalInput);
-      setOutput(newOutput);
-      setCanSave(isEditing && (hasOutputChanged || hasInputChanged));
-    }
   };
 
   const fetcher = useFetcher();
@@ -265,8 +246,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     });
 
     formData.append("action", action);
-    formData.append("inputChanged", String(inputChanged));
-    formData.append("outputChanged", String(outputChanged));
 
     // Submit to the local action by targeting the current route (".")
     fetcher.submit(formData, { method: "post", action: "." });
@@ -312,7 +291,12 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader label="Datapoint" name={datapoint.id} />
+      <PageHeader
+        label="Datapoint"
+        name={datapoint.id}
+        tag={datapoint.is_custom && <Badge className="ml-2">Custom</Badge>}
+      />
+
       {saveError && (
         <div className="mt-2 rounded-md bg-red-100 px-4 py-3 text-red-800">
           <p className="font-medium">Error saving datapoint</p>
@@ -322,7 +306,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
       <SectionsGroup>
         <SectionLayout>
-          <BasicInfo datapoint={datapoint} />
+          <DatapointBasicInfo datapoint={datapoint} />
         </SectionLayout>
 
         <SectionLayout>
@@ -345,9 +329,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <Input
-            key={`input-${resetKey}`}
-            input={input}
+          <InputSnippet
+            system={input.system}
+            messages={input.messages}
             isEditing={isEditing}
             onSystemChange={handleSystemChange}
             onMessagesChange={handleMessagesChange}
@@ -358,10 +342,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           <SectionLayout>
             <SectionHeader heading="Output" />
             <Output
-              key={`output-${resetKey}`}
               output={output}
               isEditing={isEditing}
-              onOutputChange={handleOutputChange}
+              onOutputChange={(output) => setOutput(output ?? undefined)}
             />
           </SectionLayout>
         )}

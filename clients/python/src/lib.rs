@@ -25,7 +25,7 @@ use python_helpers::{
     python_uuid_to_uuid,
 };
 use tensorzero_core::{
-    clickhouse::ClickhouseFormat,
+    clickhouse::{query_builder::OrderBy, ClickhouseFormat},
     config_parser::{ConfigPyClass, FunctionsConfigPyClass},
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
@@ -38,8 +38,10 @@ use tensorzero_core::{
         ResolvedInput, ResolvedInputMessage,
     },
     optimization::{
-        fireworks_sft::UninitializedFireworksSFTConfig, openai_sft::UninitializedOpenAISFTConfig,
-        OptimizationJobInfoPyClass, OptimizationJobStatus, UninitializedOptimizerInfo,
+        fireworks_sft::UninitializedFireworksSFTConfig,
+        gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig,
+        openai_sft::UninitializedOpenAISFTConfig, OptimizationJobInfoPyClass,
+        OptimizationJobStatus, UninitializedOptimizerInfo,
     },
     variant::{
         BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
@@ -90,6 +92,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<StoredInference>()?;
     m.add_class::<UninitializedOpenAISFTConfig>()?;
     m.add_class::<UninitializedFireworksSFTConfig>()?;
+    m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
     m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
@@ -872,7 +875,7 @@ impl TensorZeroGateway {
             .iter()
             .map(|x| uuid.call(this.py(), (x.to_string(),), None))
             .collect::<Result<Vec<_>, _>>()?;
-        PyList::new(this.py(), uuids).map(|x| x.unbind())
+        PyList::new(this.py(), uuids).map(Bound::unbind)
     }
 
     /// Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
@@ -956,19 +959,22 @@ impl TensorZeroGateway {
                         variant_name=None,
                         filters=None,
                         output_source="inference".to_string(),
+                        order_by=None,
                         limit=None,
                         offset=None
     ),
-    text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', limit=None, offset=None)"
+    text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', order_by=None, limit=None, offset=None)"
     )]
     // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
     // is written as an ellipsis object.
+    #[expect(clippy::too_many_arguments)]
     fn experimental_list_inferences(
         this: PyRef<'_, Self>,
         function_name: String,
         variant_name: Option<String>,
         filters: Option<Bound<'_, PyAny>>,
         output_source: String,
+        order_by: Option<Bound<'_, PyAny>>,
         limit: Option<u64>,
         offset: Option<u64>,
     ) -> PyResult<Vec<StoredInference>> {
@@ -984,11 +990,16 @@ impl TensorZeroGateway {
                 .map_err(|e: tensorzero_core::error::Error| {
                     convert_error(this.py(), TensorZeroError::Other { source: e.into() })
                 })?;
+        let order_by: Option<Vec<OrderBy>> = order_by
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .transpose()?;
         let params = ListInferencesParams {
             function_name: &function_name,
             variant_name: variant_name.as_deref(),
             filters: filters.as_ref(),
             output_source,
+            order_by: order_by.as_deref(),
             limit,
             offset,
             format: ClickhouseFormat::JsonEachRow,
@@ -1101,7 +1112,7 @@ impl TensorZeroGateway {
         job_handle: OptimizationJobHandle,
     ) -> PyResult<OptimizationJobInfoPyClass> {
         let client = this.as_super().client.clone();
-        let fut = client.experimental_poll_optimization(job_handle);
+        let fut = client.experimental_poll_optimization(&job_handle);
         match tokio_block_on_without_gil(this.py(), fut) {
             Ok(status) => Ok(OptimizationJobInfoPyClass::new(status)),
             Err(e) => Err(convert_error(this.py(), e)),
@@ -1630,24 +1641,31 @@ impl AsyncTensorZeroGateway {
         variant_name=None,
         filters=None,
         output_source="inference".to_string(),
+        order_by=None,
         limit=None,
         offset=None
     ),
-    text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', limit=None, offset=None)"
+    text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', order_by=None, limit=None, offset=None)"
     )]
     // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
     // is written as an ellipsis object.
+    #[expect(clippy::too_many_arguments)]
     fn experimental_list_inferences<'a>(
         this: PyRef<'a, Self>,
         function_name: String,
         variant_name: Option<String>,
         filters: Option<Bound<'a, PyAny>>,
         output_source: String,
+        order_by: Option<Bound<'a, PyAny>>,
         limit: Option<u64>,
         offset: Option<u64>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
         let filters = filters
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .transpose()?;
+        let order_by: Option<Vec<OrderBy>> = order_by
             .as_ref()
             .map(|x| deserialize_from_pyobj(this.py(), x))
             .transpose()?;
@@ -1664,6 +1682,7 @@ impl AsyncTensorZeroGateway {
                 variant_name: variant_name.as_deref(),
                 filters: filters.as_ref(),
                 output_source,
+                order_by: order_by.as_deref(),
                 limit,
                 offset,
                 format: ClickhouseFormat::JsonEachRow,
@@ -1815,7 +1834,7 @@ impl AsyncTensorZeroGateway {
     ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.experimental_poll_optimization(job_handle).await;
+            let res = client.experimental_poll_optimization(&job_handle).await;
             match res {
                 Ok(status) => Ok(OptimizationJobInfoPyClass::new(status)),
                 Err(e) => Python::with_gil(|py| Err(convert_error(py, e))),

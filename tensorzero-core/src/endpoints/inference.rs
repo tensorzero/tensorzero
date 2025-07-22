@@ -143,6 +143,7 @@ pub async fn inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        ..
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
@@ -570,7 +571,7 @@ fn create_stream(
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
-        let mut extra_usage = Some(metadata.previous_model_inference_results.iter().map(|m| m.usage_considering_cached()).sum());
+        let mut extra_usage = Some(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).sum());
         if extra_usage == Some(Usage { input_tokens: 0, output_tokens: 0 }) {
             extra_usage = None;
         }

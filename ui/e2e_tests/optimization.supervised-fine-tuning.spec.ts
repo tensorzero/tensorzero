@@ -22,7 +22,7 @@ test.describe("Custom user agent", () => {
       .getByRole("combobox")
       .filter({ hasText: "Select a function" })
       .click();
-    await page.getByRole("option", { name: "extract_entities JSON" }).click();
+    await page.getByRole("option", { name: "extract_entities" }).click();
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a metric" })
@@ -79,7 +79,7 @@ model_name = "mock-inference-finetune-1234"
       .getByRole("combobox")
       .filter({ hasText: "Select a function" })
       .click();
-    await page.getByRole("option", { name: "extract_entities JSON" }).click();
+    await page.getByRole("option", { name: "extract_entities" }).click();
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a metric" })
@@ -136,7 +136,7 @@ model_name = "mock-inference-finetune-1234"
       .getByRole("combobox")
       .filter({ hasText: "Select a function" })
       .click();
-    await page.getByRole("option", { name: "image_judger Chat" }).click();
+    await page.getByRole("option", { name: "image_judger" }).click();
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a metric" })
@@ -191,7 +191,7 @@ model_name = "mock-inference-finetune-1234"
       .getByRole("combobox")
       .filter({ hasText: "Select a function" })
       .click();
-    await page.getByRole("option", { name: "extract_entities JSON" }).click();
+    await page.getByRole("option", { name: "extract_entities" }).click();
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a metric" })
@@ -234,5 +234,47 @@ type = "fireworks"
 model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
 `),
     ).toBeVisible();
+  });
+});
+
+test.describe("Error handling", () => {
+  test("should show an error when the model is an error model", async ({
+    page,
+  }) => {
+    await page.goto("/optimization/supervised-fine-tuning");
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Select a function" })
+      .click();
+    await page.getByRole("option", { name: "extract_entities" }).click();
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Select a metric" })
+      .click();
+    await page.getByText("exact_match", { exact: true }).click();
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Select a variant name" })
+      .click();
+    await page
+      .getByLabel("gpt4o_mini_initial_prompt")
+      .getByText("gpt4o_mini_initial_prompt")
+      .click();
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Select a model..." })
+      .click();
+    // Fill in the input of the popover with "error"
+    await page.getByPlaceholder("Search models...").fill("error");
+    // Wait for the options to load
+    await page.getByRole("option", { name: "error OpenAI" }).waitFor();
+    // Click on the option that has text "error" and provider "OpenAI"
+    await page.getByRole("option", { name: "error OpenAI" }).click();
+    // Click on the Start Fine-tuning Job button
+    await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
+
+    await page
+      .getByText("failed because the model is an error model")
+      .waitFor({ timeout: 3000 });
   });
 });

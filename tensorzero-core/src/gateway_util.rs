@@ -19,10 +19,16 @@ use crate::error::{Error, ErrorDetails};
 
 /// State for the API
 #[derive(Clone)]
+// `#[non_exhaustive]` only affects downstream crates, so we can't use it here
+#[expect(clippy::manual_non_exhaustive)]
 pub struct AppStateData {
     pub config: Arc<Config>,
     pub http_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
+    // Prevent `AppStateData` from being directly constructed outside of this module
+    // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
+    // which can ensure that we update global state.
+    _private: (),
 }
 pub type AppState = axum::extract::State<AppStateData>;
 
@@ -49,7 +55,33 @@ impl AppStateData {
             config,
             http_client,
             clickhouse_connection_info,
+            _private: (),
         })
+    }
+
+    pub fn new_with_clickhouse_and_http_client(
+        config: Arc<Config>,
+        clickhouse_connection_info: ClickHouseConnectionInfo,
+        http_client: Client,
+    ) -> Self {
+        Self {
+            config,
+            http_client,
+            clickhouse_connection_info,
+            _private: (),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn new_unit_test_data(config: Arc<Config>, clickhouse_healthy: bool) -> Self {
+        let http_client = reqwest::Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_mock(clickhouse_healthy);
+        AppStateData {
+            config,
+            http_client,
+            clickhouse_connection_info,
+            _private: (),
+        }
     }
 }
 
@@ -229,7 +261,7 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
-    use crate::config_parser::{GatewayConfig, ObservabilityConfig};
+    use crate::config_parser::{gateway::GatewayConfig, ObservabilityConfig};
 
     #[tokio::test]
     #[traced_test]
@@ -242,9 +274,10 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
+            unstable_error_json: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -267,6 +300,7 @@ mod tests {
                 enabled: None,
                 async_writes: false,
             },
+            unstable_error_json: false,
             ..Default::default()
         };
         let config = Box::leak(Box::new(Config {
@@ -294,9 +328,10 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
+            unstable_error_json: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -317,9 +352,10 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
+            unstable_error_json: false,
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -342,9 +378,10 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
+            unstable_error_json: false,
         };
         let config = Config {
             gateway: gateway_config,
