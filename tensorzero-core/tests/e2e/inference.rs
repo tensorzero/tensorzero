@@ -1,4 +1,6 @@
 #![expect(clippy::print_stdout)]
+use std::collections::HashMap;
+
 use crate::{
     otel::{
         attrs_to_map, build_span_map, install_capturing_otel_exporter, CapturingOtelExporter,
@@ -2924,12 +2926,22 @@ async fn test_dummy_only_replicated_clickhouse() {
         let result = select_chat_inference_clickhouse(&clickhouse_replica, response.inference_id())
             .await
             .unwrap();
-        let id = result.get("id").unwrap().as_str().unwrap();
-        let id = Uuid::parse_str(id).unwrap();
+        let id_str = result.get("id").unwrap().as_str().unwrap();
+        let id = Uuid::parse_str(id_str).unwrap();
         assert_eq!(id, response.inference_id());
+        let episode_id_str = result.get("episode_id").unwrap().as_str().unwrap();
 
         let function_name = result.get("function_name").unwrap().as_str().unwrap();
         assert_eq!(function_name, "tensorzero::default");
+
+        // Let's also check that the data is in InferenceById to make sure that the data is replicated to materialize views too
+        let result = clickhouse_replica.run_query_synchronous(
+            "SELECT * FROM InferenceById WHERE id_uint = toUInt128({id:UUID}) FORMAT JSONEachRow".to_string(),
+            &HashMap::from([("id", id_str)]),
+        ).await.unwrap();
+        let result: Value = serde_json::from_str(result.response.trim()).unwrap();
+        let episode_id_str_mv = result.get("episode_id").unwrap().as_str().unwrap();
+        assert_eq!(episode_id_str_mv, episode_id_str);
     }
     // It's not necessary to check ModelInference table given how many other places we do that
 }
