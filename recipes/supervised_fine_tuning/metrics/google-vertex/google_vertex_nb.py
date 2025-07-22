@@ -50,7 +50,6 @@ import os
 import tempfile
 import time
 import warnings
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -61,8 +60,7 @@ from google.cloud import storage
 from google.cloud.aiplatform_v1.types import JobState
 from IPython.display import clear_output
 from tensorzero import (
-    BooleanMetricNode,
-    FloatMetricNode,
+    FloatMetricFilter,
     RawText,
     TensorZeroGateway,
     Text,
@@ -75,12 +73,14 @@ from vertexai.tuning import sft
 
 # %% [markdown]
 # Initialize Vertex AI
+#
 
 # %%
 vertexai.init(project=PROJECT_ID, location=LOCATION)
 
 # %% [markdown]
 # Initialize the TensorZero client
+#
 
 # %%
 tensorzero_client = TensorZeroGateway.build_embedded(
@@ -90,73 +90,26 @@ tensorzero_client = TensorZeroGateway.build_embedded(
 )
 
 # %% [markdown]
-# Load the TensorZero configuration file.
+# Set the metric filter
 #
 
 # %%
-config_path = Path(CONFIG_PATH)
-
-assert config_path.exists(), f"{CONFIG_PATH} does not exist"
-assert config_path.is_file(), f"{CONFIG_PATH} is not a file"
-
-with config_path.open("r") as f:
-    config = toml.load(f)
-
-# %% [markdown]
-# Valudate config
-
-# %%
-assert "functions" in config, "No `[functions]` section found in config"
-assert FUNCTION_NAME in config["functions"], (
-    f"No function named `{FUNCTION_NAME}` found in config"
+comparison_operator = ">="
+metric_node = FloatMetricFilter(
+    metric_name=METRIC_NAME,
+    value=FLOAT_METRIC_THRESHOLD,
+    comparison_operator=comparison_operator,
 )
-assert "variants" in config["functions"][FUNCTION_NAME], (
-    f"No variants section found for function `{FUNCTION_NAME}`"
-)
-assert TEMPLATE_VARIANT_NAME in config["functions"][FUNCTION_NAME]["variants"], (
-    f"No variant named `{TEMPLATE_VARIANT_NAME}` found in function `{FUNCTION_NAME}`"
-)
-
-variant = config["functions"][FUNCTION_NAME]["variants"][TEMPLATE_VARIANT_NAME]
-
-variant
-
-# %% [markdown]
-# Retrieve the metric configuration.
-
-# %%
-assert "metrics" in config, "No `[metrics]` section found in config"
-assert METRIC_NAME in config["metrics"], (
-    f"No metric named `{METRIC_NAME}` found in config"
-)
-
-metric = config["metrics"][METRIC_NAME]
-
-metric
-
-# %% [markdown]
-# Set the metric filter
-
-# %%
-assert "optimize" in metric, "Metric is missing the `optimize` field"
-
-if metric.get("type") == "float":
-    comparison_operator = ">=" if metric["optimize"] == "max" else "<="
-    metric_node = FloatMetricNode(
-        metric_name=METRIC_NAME,
-        value=FLOAT_METRIC_THRESHOLD,
-        comparison_operator=comparison_operator,
-    )
-elif metric.get("type") == "boolean":
-    metric_node = BooleanMetricNode(
-        metric_name=METRIC_NAME,
-        value=True if metric["optimize"] == "max" else False,
-    )
+# metric_node = BooleanMetricFilter(
+#     metric_name=METRIC_NAME,
+#     value=True  # or False
+# )
 
 metric_node
 
 # %% [markdown]
 # Query the inferences and feedback from ClickHouse.
+#
 
 # %%
 stored_inferences = tensorzero_client.experimental_list_inferences(
@@ -168,6 +121,7 @@ stored_inferences = tensorzero_client.experimental_list_inferences(
 
 # %% [markdown]
 # Render the stored inferences
+#
 
 # %%
 rendered_inferences = tensorzero_client.experimental_render_inferences(
@@ -177,6 +131,7 @@ rendered_inferences = tensorzero_client.experimental_render_inferences(
 
 # %% [markdown]
 # Convert inferences to vertex format
+#
 
 # %%
 role_map = {
@@ -356,6 +311,7 @@ print(f"Actual validation fraction: {len(val_df) / len(df):.2f}")
 
 # %% [markdown]
 # Upload the training and validation datasets to GCP
+#
 
 
 # %%
@@ -397,6 +353,7 @@ upload_dataset_to_gcp(val_df, val_file_name, gcp_client)
 
 # %% [markdown]
 # Launch the fine-tuning job.
+#
 
 # %%
 sft_tuning_job = sft.train(
@@ -409,6 +366,7 @@ sft_tuning_job = sft.train(
 # Wait for the fine-tuning job to complete.
 #
 # This cell will take a while to run.
+#
 
 # %%
 response = sft.SupervisedTuningJob(sft_tuning_job.resource_name)
@@ -456,30 +414,6 @@ print(toml.dumps(model_config))
 # %% [markdown]
 # Finally, add a new variant to your function to use the fine-tuned model.
 #
-
-# %%
-variant_config = {
-    "type": "chat_completion",
-    "model": fine_tuned_model,
-}
-
-system_template = variant.get("system_template")
-if system_template:
-    variant_config["system_template"] = system_template
-
-user_template = variant.get("user_template")
-if user_template:
-    variant_config["user_template"] = user_template
-
-assistant_template = variant.get("assistant_template")
-if assistant_template:
-    variant_config["assistant_template"] = assistant_template
-
-full_variant_config = {
-    "functions": {FUNCTION_NAME: {"variants": {fine_tuned_model: variant_config}}}
-}
-
-print(toml.dumps(full_variant_config))
 
 # %% [markdown]
 # You're all set!
