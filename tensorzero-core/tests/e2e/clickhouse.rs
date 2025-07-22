@@ -81,6 +81,7 @@ pub fn get_clean_clickhouse(allow_db_missing: bool) -> (ClickHouseConnectionInfo
     let clickhouse = ClickHouseConnectionInfo::Production {
         database_url: SecretString::from(clickhouse_url.to_string()),
         database: database.clone(),
+        cluster_name: None,
         client: make_clickhouse_http_client().unwrap(),
     };
     (
@@ -166,6 +167,7 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     let ClickHouseConnectionInfo::Production {
         database_url,
         database,
+        cluster_name: _,
         client: _,
     } = clickhouse
     else {

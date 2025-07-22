@@ -32,6 +32,7 @@ pub enum ClickHouseConnectionInfo {
     },
     Production {
         database_url: SecretString,
+        cluster_name: Option<String>,
         database: String,
         client: Client,
     },
@@ -89,8 +90,21 @@ impl ClickHouseConnectionInfo {
         // Store the original URL as a SecretString
         let database_url = SecretString::from(database_url.to_string());
 
+        // Get the cluster name from the `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` environment variable
+        let cluster_name = match std::env::var("TENSORZERO_CLICKHOUSE_CLUSTER_NAME") {
+            Ok(cluster_name) => {
+                tracing::info!("Using ClickHouse cluster name: {cluster_name}");
+                Some(cluster_name)
+            }
+            Err(_) => {
+                tracing::info!("No ClickHouse cluster name provided");
+                None
+            }
+        };
+
         let connection_info = Self::Production {
             database_url,
+            cluster_name,
             database,
             client: make_clickhouse_http_client()?,
         };
