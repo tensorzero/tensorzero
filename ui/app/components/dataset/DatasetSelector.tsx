@@ -70,7 +70,11 @@ export function DatasetSelector({
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  const { data: datasets = [], isLoading } = useDatasetCounts(functionName);
+  const {
+    data: datasets = [],
+    isLoading,
+    isError,
+  } = useDatasetCounts(functionName);
 
   // Datasets sorted by last updated date for initial display
   const recentlyUpdatedDatasets = useMemo(
@@ -154,6 +158,10 @@ export function DatasetSelector({
             {isLoading ? (
               <div className="text-fg-muted flex items-center justify-center py-4 text-sm">
                 Loading datasets...
+              </div>
+            ) : isError ? (
+              <div className="text-fg-muted flex items-center justify-center py-4 text-sm">
+                There was an error loading datasets.
               </div>
             ) : (
               <CommandList>
