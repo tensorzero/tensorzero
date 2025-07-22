@@ -71,12 +71,12 @@ export function DatasetSelector({
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  const { data: datasets = [], isLoading } = useDatasetCounts(functionName);
+  const { data: datasets, isLoading } = useDatasetCounts(functionName);
 
   // Datasets sorted by last updated date for initial display
   const recentlyUpdatedDatasets = useMemo(
     () =>
-      [...datasets].sort((a, b) => {
+      [...(datasets ?? [])].sort((a, b) => {
         return (
           new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
         );
