@@ -8,6 +8,7 @@ target-rust-analyzer
 **/node_modules
 **/.env*
 **/.vscode
+**/.claude
 /recipes
 /examples
 !/examples/integrations/cursor/feedback

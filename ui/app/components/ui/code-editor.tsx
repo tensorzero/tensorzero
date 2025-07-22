@@ -22,8 +22,40 @@ import {
   CheckCheckIcon,
   ClipboardIcon,
 } from "lucide-react";
+import type { JsonValue } from "tensorzero-node";
 
 export type Language = "json" | "markdown" | "jinja2" | "text";
+
+/** Try to format the given string/object if it's JSON. Passthrough gracefully if it's not JSON. */
+export function useFormattedJson(initialValue: string | JsonValue): string {
+  return useMemo(() => {
+    // If it's already a string
+    if (typeof initialValue === "string") {
+      try {
+        // Only attempt to parse/format if it looks like JSON
+        const trimmed = initialValue.trim();
+        if (
+          (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+          (trimmed.startsWith("[") && trimmed.endsWith("]"))
+        ) {
+          const parsed = JSON.parse(trimmed);
+          return JSON.stringify(parsed, null, 2);
+        }
+      } catch {
+        // Not valid JSON, return as-is
+      }
+      return initialValue;
+    }
+
+    // If it's an object/array/other JSON value, format it
+    try {
+      return JSON.stringify(initialValue, null, 2);
+    } catch {
+      // Fallback for circular references or other stringify errors
+      return String(initialValue);
+    }
+  }, [initialValue]);
+}
 
 export interface CodeEditorProps {
   value?: string;
@@ -131,6 +163,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       "&.cm-focused": {
         outline: "none !important",
       },
+      ".cm-gutters": {
+        fontFamily: "var(--font-mono) !important",
+      },
     });
 
     const exts: Extension[] = [...LANGUAGE_EXTENSIONS[language], customTheme];
@@ -149,7 +184,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   }, [language, wordWrap, readOnly]);
 
   return (
-    <div className={cn("group relative", className)}>
+    // `min-width: 0` If within a grid parent, prevent editor from overflowing its grid cell and force horizontal scrolling
+    <div className={cn("group relative min-w-0 rounded-sm", className)}>
       <div className="absolute top-1 right-1 z-10 flex gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
         {isCopyAvailable && (
           <Button
@@ -235,7 +271,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             highlightActiveLine: !readOnly,
             highlightActiveLineGutter: !readOnly,
           }}
-          className="min-h-8"
+          className="min-h-8 overflow-auto"
         />
       </div>
     </div>

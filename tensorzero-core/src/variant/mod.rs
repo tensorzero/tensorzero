@@ -60,7 +60,7 @@ pub struct VariantInfo {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum VariantConfig {
@@ -333,7 +333,7 @@ impl Variant for VariantInfo {
                 // so that it can be handled by the `match response` block below
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
-                        variant_name: inference_config.variant_name.map(|v| v.to_string()),
+                        variant_name: inference_config.variant_name.map(str::to_string),
                         timeout,
                         streaming: false,
                     }))
@@ -429,7 +429,7 @@ impl Variant for VariantInfo {
                 .await
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
-                        variant_name: inference_config.variant_name.map(|v| v.to_string()),
+                        variant_name: inference_config.variant_name.map(str::to_string),
                         timeout,
                         streaming: true,
                     }))
@@ -813,6 +813,12 @@ impl ChatCompletionConfigPyClass {
             .assistant_template
             .as_ref()
             .map(|t| t.contents.clone()))
+    }
+
+    #[getter]
+    fn get_model(&self) -> PyResult<String> {
+        let config = Self::extract_chat_completion_config(&self.inner)?;
+        Ok(config.model.to_string())
     }
 }
 

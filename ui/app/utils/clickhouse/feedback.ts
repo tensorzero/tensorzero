@@ -174,7 +174,7 @@ export async function countBooleanMetricFeedbackByTargetId(
 
     return parsedRows[0].count;
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error counting boolean metric feedback", { status: 500 });
   }
 }
@@ -342,7 +342,7 @@ export async function countCommentFeedbackByTargetId(
 
     return parsedRows[0].count;
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error counting comment feedback", { status: 500 });
   }
 }
@@ -509,7 +509,7 @@ export async function countDemonstrationFeedbackByInferenceId(
 
     return parsedRows[0].count;
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error counting demonstration feedback", { status: 500 });
   }
 }
@@ -681,7 +681,7 @@ export async function countFloatMetricFeedbackByTargetId(
 
     return parsedRows[0].count;
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error counting float metric feedback", { status: 500 });
   }
 }
@@ -1054,7 +1054,7 @@ export async function queryLatestFeedbackIdByMetric(params: {
       latestFeedbackByMetric.map((item) => [item.metric_name, item.latest_id]),
     );
   } catch (error) {
-    console.error("ERROR", error);
+    logger.error("ERROR", error);
     throw data("Error querying latest feedback by metric", { status: 500 });
   }
 }

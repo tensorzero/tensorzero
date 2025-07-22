@@ -2,6 +2,7 @@ import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, loadEnv } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
+import devtoolsJson from "vite-plugin-devtools-json";
 import wasm from "vite-plugin-wasm";
 import react from "@vitejs/plugin-react";
 
@@ -12,6 +13,7 @@ const shouldLoadReactRouter =
 
 export default defineConfig(({ mode }) => ({
   plugins: [
+    devtoolsJson(),
     wasm(),
     tailwindcss(),
     shouldLoadReactRouter ? reactRouter() : react(),

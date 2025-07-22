@@ -324,6 +324,15 @@ export const contentBlockOutputSchema = z.discriminatedUnion("type", [
 
 export type ContentBlockOutput = z.infer<typeof contentBlockOutputSchema>;
 
+export const modelInferenceOutputContentBlockSchema = z.discriminatedUnion(
+  "type",
+  [textContentSchema, toolCallContentSchema],
+);
+
+export type ModelInferenceOutputContentBlock = z.infer<
+  typeof modelInferenceOutputContentBlockSchema
+>;
+
 export const InferenceTableName = {
   CHAT: "ChatInference",
   JSON: "JsonInference",
@@ -354,6 +363,11 @@ export const TableBoundsSchema = z.object({
   last_id: z.string().uuid().nullable(), // UUIDv7 string
 });
 export type TableBounds = z.infer<typeof TableBoundsSchema>;
+
+export const TableBoundsWithCountSchema = TableBoundsSchema.extend({
+  count: z.number(),
+});
+export type TableBoundsWithCount = z.infer<typeof TableBoundsWithCountSchema>;
 
 export const FeedbackBoundsSchema = TableBoundsSchema.extend({
   by_type: z.object({
