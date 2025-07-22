@@ -1,0 +1,45 @@
+services:
+  clickhouse-01:
+    image: clickhouse/clickhouse-server:latest
+    hostname: clickhouse-01
+    container_name: clickhouse-01
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - ./replicated_clickhouse_config/ch1:/etc/clickhouse-server/config.d
+      - ./replicated_clickhouse_config/common:/etc/clickhouse-server/users.d
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  clickhouse-02:
+    image: clickhouse/clickhouse-server:latest
+    hostname: clickhouse-02
+    container_name: clickhouse-02
+    ports:
+      - "8124:8123" # Host port 8124 -> Container port 8123
+      - "9001:9000" # Host port 9001 -> Container port 9000
+    volumes:
+      - ./replicated_clickhouse_config/ch2:/etc/clickhouse-server/config.d
+      - ./replicated_clickhouse_config/common:/etc/clickhouse-server/users.d
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  clickhouse-03:
+    image: clickhouse/clickhouse-server:latest
+    hostname: clickhouse-03
+    container_name: clickhouse-03
+    ports:
+      - "8125:8123"
+      - "9002:9000"
+    volumes:
+      - ./replicated_clickhouse_config/ch3:/etc/clickhouse-server/config.d
+      - ./replicated_clickhouse_config/common:/etc/clickhouse-server/users.d
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
