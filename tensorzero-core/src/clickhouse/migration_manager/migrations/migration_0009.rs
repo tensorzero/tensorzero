@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 
 use super::check_table_exists;
@@ -71,9 +71,11 @@ impl Migration for Migration0009<'_> {
             .as_secs();
 
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "BooleanMetricFeedbackByTargetId",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "BooleanMetricFeedbackByTargetId",
+                engine_args: &[],
+            },
         );
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         // Create the `BooleanMetricFeedbackByTargetId` table
@@ -123,9 +125,11 @@ impl Migration for Migration0009<'_> {
 
         // Create the `CommentFeedbackByTargetId` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "CommentFeedbackByTargetId",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "CommentFeedbackByTargetId",
+                engine_args: &[],
+            },
         );
         let query = format!(
             r#"
@@ -169,9 +173,11 @@ impl Migration for Migration0009<'_> {
 
         // Create the `DemonstrationFeedbackByInferenceId` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "DemonstrationFeedbackByInferenceId",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "DemonstrationFeedbackByInferenceId",
+                engine_args: &[],
+            },
         );
         let query = format!(
             r#"
@@ -213,9 +219,11 @@ impl Migration for Migration0009<'_> {
 
         // Create the `FloatMetricFeedbackByTargetId` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "FloatMetricFeedbackByTargetId",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "FloatMetricFeedbackByTargetId",
+                engine_args: &[],
+            },
         );
         let query = format!(
             r#"

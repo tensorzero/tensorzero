@@ -1,5 +1,5 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::Error;
 use async_trait::async_trait;
 
@@ -46,9 +46,11 @@ impl Migration for Migration0006<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "BatchModelInference",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "BatchModelInference",
+                engine_args: &[],
+            },
         );
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
 
@@ -84,9 +86,11 @@ impl Migration for Migration0006<'_> {
 
         // Create the `BatchRequest` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "BatchRequest",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "BatchRequest",
+                engine_args: &[],
+            },
         );
         let query = format!(
             r#"
@@ -111,9 +115,11 @@ impl Migration for Migration0006<'_> {
 
         // Create the BatchIdByInferenceId table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "BatchIdByInferenceId",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "BatchIdByInferenceId",
+                engine_args: &[],
+            },
         );
         let query = format!(
             r#"

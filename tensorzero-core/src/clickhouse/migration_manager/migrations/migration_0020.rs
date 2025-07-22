@@ -2,7 +2,7 @@ use rand::prelude::*;
 use std::time::Duration;
 
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 
 use super::{check_table_exists, get_table_engine};
@@ -148,9 +148,11 @@ impl Migration for Migration0020<'_> {
         };
         // TODO(Viraj, blocks merge): figure out how to do this operation in a replicated table or confirm that this is OK as is
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            &create_table_name,
-            "ReplacingMergeTree",
-            &["id_uint"],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "ReplacingMergeTree",
+                table_name: &create_table_name,
+                engine_args: &["id_uint"],
+            },
         );
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let query = format!(
@@ -197,9 +199,11 @@ impl Migration for Migration0020<'_> {
             "InferenceByEpisodeId".to_string()
         };
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            &create_table_name,
-            "ReplacingMergeTree",
-            &["id_uint"],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "ReplacingMergeTree",
+                table_name: &create_table_name,
+                engine_args: &["id_uint"],
+            },
         );
         let query = format!(
             r#"

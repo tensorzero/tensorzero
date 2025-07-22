@@ -2,7 +2,6 @@ services:
   clickhouse-01:
     image: clickhouse/clickhouse-server:latest
     hostname: clickhouse-01
-    container_name: clickhouse-01
     ports:
       - "8123:8123"
       - "9000:9000"
@@ -13,14 +12,18 @@ services:
       nofile:
         soft: 262144
         hard: 262144
+    healthcheck:
+      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse-01:8123/ping
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
 
   clickhouse-02:
     image: clickhouse/clickhouse-server:latest
     hostname: clickhouse-02
-    container_name: clickhouse-02
     ports:
       - "8124:8123" # Host port 8124 -> Container port 8123
-      - "9001:9000" # Host port 9001 -> Container port 9000
+      - "9002:9000" # Host port 9001 -> Container port 9000
     volumes:
       - ./replicated_clickhouse_config/ch2:/etc/clickhouse-server/config.d
       - ./replicated_clickhouse_config/common:/etc/clickhouse-server/users.d
@@ -28,14 +31,18 @@ services:
       nofile:
         soft: 262144
         hard: 262144
+    healthcheck:
+      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse-02:8123/ping
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
 
   clickhouse-03:
     image: clickhouse/clickhouse-server:latest
     hostname: clickhouse-03
-    container_name: clickhouse-03
     ports:
       - "8125:8123"
-      - "9002:9000"
+      - "9003:9000"
     volumes:
       - ./replicated_clickhouse_config/ch3:/etc/clickhouse-server/config.d
       - ./replicated_clickhouse_config/common:/etc/clickhouse-server/users.d
@@ -43,6 +50,11 @@ services:
       nofile:
         soft: 262144
         hard: 262144
+    healthcheck:
+      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse-03:8123/ping
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
   mock-inference-provider:
     build:
       context: ../../../
@@ -96,7 +108,7 @@ services:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse-01:8123/tensorzero_e2e_tests
       TENSORZERO_CLICKHOUSE_CLUSTER_NAME: tensorzero_e2e_tests_cluster
     depends_on:
-      clickhouse:
+      clickhouse-01:
         condition: service_healthy
     command: ["--default-config"]
     extra_hosts:
@@ -122,7 +134,7 @@ services:
       - ~/.aws:/root/.aws
     environment:
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_HOST=clickhouse-01
       - CLICKHOUSE_PASSWORD=chpassword
       - CLICKHOUSE_USER=chuser
       - TENSORZERO_SKIP_LARGE_FIXTURES

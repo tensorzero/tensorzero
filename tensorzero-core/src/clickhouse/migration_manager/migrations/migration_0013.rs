@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 
 use super::check_table_exists;
@@ -192,9 +192,11 @@ impl Migration for Migration0013<'_> {
         // Create the new tables with UInt128 primary keys
         // Create the `InferenceById` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "InferenceById",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "InferenceById",
+                engine_args: &[],
+            },
         );
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let query = format!(
@@ -216,9 +218,11 @@ impl Migration for Migration0013<'_> {
             .await?;
         // Create the `InferenceByEpisodeId` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "InferenceByEpisodeId",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "InferenceByEpisodeId",
+                engine_args: &[],
+            },
         );
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let query = format!(

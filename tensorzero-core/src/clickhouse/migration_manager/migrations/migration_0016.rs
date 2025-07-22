@@ -1,5 +1,5 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
@@ -83,9 +83,11 @@ impl Migration for Migration0016<'_> {
 
         // Create the `ChatInferenceDatapoint` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "ChatInferenceDatapoint",
-            "ReplacingMergeTree",
-            &["updated_at", "is_deleted"],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "ReplacingMergeTree",
+                table_name: "ChatInferenceDatapoint",
+                engine_args: &["updated_at", "is_deleted"],
+            },
         );
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let query = format!(
@@ -121,9 +123,11 @@ impl Migration for Migration0016<'_> {
 
         // Create the `JsonInferenceDatapoint` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "JsonInferenceDatapoint",
-            "ReplacingMergeTree",
-            &["updated_at", "is_deleted"],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "ReplacingMergeTree",
+                table_name: "JsonInferenceDatapoint",
+                engine_args: &["updated_at", "is_deleted"],
+            },
         );
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let query = format!(

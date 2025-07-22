@@ -1,5 +1,5 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::Error;
 use async_trait::async_trait;
 
@@ -54,9 +54,11 @@ impl Migration for Migration0000<'_> {
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `BooleanMetricFeedback` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "BooleanMetricFeedback",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "BooleanMetricFeedback",
+                engine_args: &[],
+            },
         );
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let query = format!(
@@ -79,9 +81,11 @@ impl Migration for Migration0000<'_> {
 
         // Create the `CommentFeedback` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "CommentFeedback",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "CommentFeedback",
+                engine_args: &[],
+            },
         );
         let query = format!(
             r#"
@@ -103,9 +107,11 @@ impl Migration for Migration0000<'_> {
 
         // Create the `DemonstrationFeedback` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "DemonstrationFeedback",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "DemonstrationFeedback",
+                engine_args: &[],
+            },
         );
         let query = format!(
             r#"
@@ -126,9 +132,11 @@ impl Migration for Migration0000<'_> {
 
         // Create the `FloatMetricFeedback` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "FloatMetricFeedback",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "FloatMetricFeedback",
+                engine_args: &[],
+            },
         );
         let query = format!(
             r#"
@@ -150,9 +158,11 @@ impl Migration for Migration0000<'_> {
 
         // Create the `ChatInference` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "ChatInference",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "ChatInference",
+                engine_args: &[],
+            },
         );
         let query = format!(
             r#"
@@ -179,9 +189,11 @@ impl Migration for Migration0000<'_> {
 
         // Create the `JsonInference` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "JsonInference",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "JsonInference",
+                engine_args: &[],
+            },
         );
         let query = format!(
             r#"
@@ -208,9 +220,11 @@ impl Migration for Migration0000<'_> {
 
         // Create the `ModelInference` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "ModelInference",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "ModelInference",
+                engine_args: &[],
+            },
         );
         let query = format!(
             r#"

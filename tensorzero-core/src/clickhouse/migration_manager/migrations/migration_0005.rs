@@ -1,5 +1,5 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
@@ -94,9 +94,11 @@ impl Migration for Migration0005<'_> {
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `InferenceTag` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "InferenceTag",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "InferenceTag",
+                engine_args: &[],
+            },
         );
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let query = format!(

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 
 use super::check_table_exists;
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::Error;
 
 /// This migration adds the `DynamicEvaluationRun` and `DynamicEvaluationRunEpisode` tables.
@@ -32,9 +32,11 @@ impl Migration for Migration0025<'_> {
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "DynamicEvaluationRun",
-            "ReplacingMergeTree",
-            &["updated_at", "is_deleted"],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "ReplacingMergeTree",
+                table_name: "DynamicEvaluationRun",
+                engine_args: &["updated_at", "is_deleted"],
+            },
         );
         let query = format!(
             r#"
@@ -57,9 +59,11 @@ impl Migration for Migration0025<'_> {
             .await?;
 
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "DynamicEvaluationRunEpisode",
-            "ReplacingMergeTree",
-            &["updated_at", "is_deleted"],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "ReplacingMergeTree",
+                table_name: "DynamicEvaluationRunEpisode",
+                engine_args: &["updated_at", "is_deleted"],
+            },
         );
         let query = format!(
             r#"

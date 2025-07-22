@@ -541,10 +541,13 @@ impl ClickHouseConnectionInfo {
 
     pub fn get_maybe_replicated_table_engine_name(
         &self,
-        table_engine_name: &str,
-        table_name: &str,
-        engine_args: &[&str],
+        args: GetMaybeReplicatedTableEngineNameArgs<'_>,
     ) -> String {
+        let GetMaybeReplicatedTableEngineNameArgs {
+            table_engine_name,
+            table_name,
+            engine_args,
+        } = args;
         match self {
             Self::Disabled => table_engine_name.to_string(),
             Self::Mock { .. } => table_engine_name.to_string(),
@@ -566,6 +569,12 @@ impl ClickHouseConnectionInfo {
             },
         }
     }
+}
+
+pub struct GetMaybeReplicatedTableEngineNameArgs<'a> {
+    pub table_engine_name: &'a str,
+    pub table_name: &'a str,
+    pub engine_args: &'a [&'a str],
 }
 
 /// The ClickHouse documentation says that to create a replicated table,

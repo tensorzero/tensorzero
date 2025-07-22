@@ -1,7 +1,7 @@
 <clickhouse>
     <users>
         <chuser>
-            <password>clickhouse</password>
+            <password>chpassword</password>
             <networks>
                 <ip>::/0</ip>
             </networks>

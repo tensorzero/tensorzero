@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
@@ -101,9 +101,11 @@ impl Migration for Migration0028<'_> {
         };
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "StaticEvaluationHumanFeedback",
-            "MergeTree",
-            &[],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_name: "StaticEvaluationHumanFeedback",
+                table_engine_name: "MergeTree",
+                engine_args: &[],
+            },
         );
         self.clickhouse
             .run_query_synchronous_no_params(

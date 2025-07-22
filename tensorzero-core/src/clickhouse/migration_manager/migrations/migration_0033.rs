@@ -1,7 +1,7 @@
 use super::check_table_exists;
 use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::migration_manager::migrations::table_is_nonempty;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::Error;
 use async_trait::async_trait;
 use uuid::Uuid;
@@ -37,9 +37,11 @@ impl Migration for Migration0033<'_> {
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "DeploymentID",
-            "ReplacingMergeTree",
-            &["version_number"],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_name: "DeploymentID",
+                table_engine_name: "ReplacingMergeTree",
+                engine_args: &["version_number"],
+            },
         );
         self.clickhouse
             .run_query_synchronous_no_params(

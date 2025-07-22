@@ -1,5 +1,5 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::Error;
 use async_trait::async_trait;
 
@@ -37,9 +37,11 @@ impl Migration for Migration0011<'_> {
         // Create the `ModelInferenceCache` table
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            "ModelInferenceCache",
-            "ReplacingMergeTree",
-            &["timestamp", "is_deleted"],
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "ReplacingMergeTree",
+                table_name: "ModelInferenceCache",
+                engine_args: &["timestamp", "is_deleted"],
+            },
         );
         let query = format!(
             r#"
