@@ -121,6 +121,7 @@ SEED = 0
 # %%
 import asyncio
 import json
+import os
 from random import shuffle
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -153,8 +154,6 @@ MAX_CONCURRENT_REQUESTS = 50
 # %%
 mipro_client = await AsyncTensorZeroGateway.build_embedded(
     config_file="config/tensorzero.toml",
-    # clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"],
-    # clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures",
 )
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
@@ -171,7 +170,7 @@ semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 # %%
 original_client = await AsyncTensorZeroGateway.build_embedded(
     config_file=CONFIG_DIR,
-    clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures",
+    clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"],
 )
 
 # %%
@@ -180,8 +179,7 @@ base_function = config.functions[FUNCTION_NAME]
 base_variant = base_function.variants[TEMPLATE_VARIANT_NAME]
 if not isinstance(base_variant, ChatCompletionConfig):
     raise ValueError("Only chat completion variants are supported")
-# model_name = base_variant.model_name
-model_name = "openai::gpt-4o-mini"
+model_name = base_variant.model_name
 
 # %% [markdown]
 # Query the inferences and demonstration feedback from ClickHouse.
