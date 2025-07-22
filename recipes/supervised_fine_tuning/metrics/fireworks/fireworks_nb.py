@@ -472,13 +472,20 @@ with tempfile.NamedTemporaryFile(delete=False, suffix=".jsonl") as f:
     print(create_record_result)
     # Upload dataset
     upload_file_url = f"{api_base}/accounts/{account_id}/datasets/{dataset_id}:upload"
-
-    with open(f.name, "r") as file:
-        dataset = {"file": file}
-        upload_file_result = requests.post(
-            upload_file_url, headers=base_headers, files=dataset
-        )
-        print(upload_file_result)
+    try:
+        with open(f.name, "r") as file:
+            dataset = {"file": file}
+            upload_file_result = requests.post(
+                upload_file_url, headers=base_headers, files=dataset
+            )
+            upload_file_result.raise_for_status()
+            print(json.dumps(upload_file_result.json(), indent=2))
+    except FileNotFoundError:
+        print("File not found: {f.name}")
+    except requests.RequestException as e:
+        print(f"HTTP request failed: {e}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 # %%
 check_state_url = f"{api_base}/accounts/{account_id}/datasets/{dataset_id}"
