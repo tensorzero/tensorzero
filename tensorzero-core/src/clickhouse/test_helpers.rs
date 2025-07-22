@@ -15,6 +15,7 @@ use uuid::Uuid;
 
 lazy_static::lazy_static! {
     pub static ref CLICKHOUSE_URL: String = std::env::var("TENSORZERO_CLICKHOUSE_URL").expect("Environment variable TENSORZERO_CLICKHOUSE_URL must be set");
+    pub static ref CLICKHOUSE_REPLICA_URL: Option<String> = std::env::var("TENSORZERO_CLICKHOUSE_REPLICA_URL").ok();
 }
 
 pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
@@ -26,6 +27,18 @@ pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
         .expect("Failed to connect to ClickHouse");
     println!("Connected to ClickHouse in {:?}", start.elapsed());
     res
+}
+
+pub async fn get_clickhouse_replica() -> Option<ClickHouseConnectionInfo> {
+    let clickhouse_url = CLICKHOUSE_REPLICA_URL.as_ref()?;
+    let clickhouse_url = url::Url::parse(clickhouse_url).unwrap();
+    let start = std::time::Instant::now();
+    println!("Connecting to ClickHouse");
+    let res = ClickHouseConnectionInfo::new(clickhouse_url.as_ref())
+        .await
+        .expect("Failed to connect to ClickHouse");
+    println!("Connected to ClickHouse in {:?}", start.elapsed());
+    Some(res)
 }
 
 #[cfg(feature = "e2e_tests")]
