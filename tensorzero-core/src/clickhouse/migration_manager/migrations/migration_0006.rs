@@ -45,9 +45,17 @@ impl Migration for Migration0006<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "BatchModelInference",
+            "MergeTree",
+            &[],
+        );
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+
         // Create the `BatchModelInference` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS BatchModelInference
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS BatchModelInference{on_cluster_name}
             (
                 inference_id UUID,
                 batch_id UUID,
@@ -65,17 +73,24 @@ impl Migration for Migration0006<'_> {
                 output_schema Nullable(String),
                 tags Map(String, String) DEFAULT map(),
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(inference_id),
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY (batch_id, inference_id)
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `BatchRequest` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS BatchRequest
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "BatchRequest",
+            "MergeTree",
+            &[],
+        );
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS BatchRequest{on_cluster_name}
             (
                 batch_id UUID,
                 id UUID,
@@ -85,23 +100,31 @@ impl Migration for Migration0006<'_> {
                 status Enum('pending' = 1, 'completed' = 2, 'failed' = 3),
                 errors Map(UUID, String),
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id),
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY (batch_id, id)
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the BatchIdByInferenceId table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS BatchIdByInferenceId
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "BatchIdByInferenceId",
+            "MergeTree",
+            &[],
+        );
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS BatchIdByInferenceId{on_cluster_name}
             (
                 inference_id UUID,
                 batch_id UUID,
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY (inference_id)
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

@@ -93,16 +93,24 @@ impl Migration for Migration0005<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `InferenceTag` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS InferenceTag
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "InferenceTag",
+            "MergeTree",
+            &[],
+        );
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS InferenceTag{on_cluster_name}
             (
                 function_name LowCardinality(String),
                 key String,
                 value String,
                 inference_id UUID, -- must be a UUIDv7
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY (function_name, key, value);
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

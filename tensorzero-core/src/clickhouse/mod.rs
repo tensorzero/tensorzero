@@ -558,7 +558,10 @@ impl ClickHouseConnectionInfo {
                     database,
                     engine_args,
                 ),
-                None => table_engine_name.to_string(),
+                None => {
+                    let engine_args_str = engine_args.join(", ");
+                    format!("{table_engine_name}({engine_args_str})")
+                }
             },
         }
     }

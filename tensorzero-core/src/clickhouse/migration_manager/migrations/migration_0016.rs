@@ -82,8 +82,15 @@ impl Migration for Migration0016<'_> {
             .await?;
 
         // Create the `ChatInferenceDatapoint` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS ChatInferenceDatapoint
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "ChatInferenceDatapoint",
+            "ReplacingMergeTree",
+            &["updated_at", "is_deleted"],
+        );
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS ChatInferenceDatapoint{on_cluster_name}
             (
                 dataset_name LowCardinality(String),
                 function_name LowCardinality(String),
@@ -103,17 +110,25 @@ impl Migration for Migration0016<'_> {
                 auxiliary String, -- a JSON (unstructured, for now)
                 is_deleted Bool DEFAULT false,
                 updated_at DateTime64(6, 'UTC') DEFAULT now()
-            ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
+            ) ENGINE = {table_engine_name}
             ORDER BY (dataset_name, function_name, id)
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `JsonInferenceDatapoint` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS JsonInferenceDatapoint
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "JsonInferenceDatapoint",
+            "ReplacingMergeTree",
+            &["updated_at", "is_deleted"],
+        );
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS JsonInferenceDatapoint{on_cluster_name}
             (
                 dataset_name LowCardinality(String),
                 function_name LowCardinality(String),
@@ -126,9 +141,10 @@ impl Migration for Migration0016<'_> {
                 auxiliary String, -- a JSON (unstructured, for now)
                 is_deleted Bool DEFAULT false,
                 updated_at DateTime64(6, 'UTC') DEFAULT now()
-            ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
+            ) ENGINE = {table_engine_name}
             ORDER BY (dataset_name, function_name, id)
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

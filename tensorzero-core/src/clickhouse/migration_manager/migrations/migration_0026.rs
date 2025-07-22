@@ -72,8 +72,15 @@ impl Migration for Migration0026<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS DynamicEvaluationRunEpisodeByRunId
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "DynamicEvaluationRunEpisodeByRunId",
+            "ReplacingMergeTree",
+            &["updated_at", "is_deleted"],
+        );
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS DynamicEvaluationRunEpisodeByRunId{on_cluster_name}
                 (
                     run_id_uint UInt128, -- UUID encoded as a UInt128
                     episode_id_uint UInt128, -- UUID encoded as a UInt128
@@ -82,9 +89,10 @@ impl Migration for Migration0026<'_> {
                     datapoint_name Nullable(String),
                     is_deleted Bool DEFAULT false,
                     updated_at DateTime64(6, 'UTC') DEFAULT now()
-                ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
+                ) ENGINE = {table_engine_name}
                 ORDER BY (run_id_uint, episode_id_uint);
-        "#;
+        "#
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -102,8 +110,14 @@ impl Migration for Migration0026<'_> {
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS DynamicEvaluationRunByProjectName
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "DynamicEvaluationRunByProjectName",
+            "ReplacingMergeTree",
+            &["updated_at", "is_deleted"],
+        );
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS DynamicEvaluationRunByProjectName{on_cluster_name}
                 (
                     run_id_uint UInt128, -- UUID encoded as a UInt128
                     variant_pins Map(String, String),
@@ -112,9 +126,10 @@ impl Migration for Migration0026<'_> {
                     run_display_name Nullable(String),
                     is_deleted Bool DEFAULT false,
                     updated_at DateTime64(6, 'UTC') DEFAULT now()
-                ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
+                ) ENGINE = {table_engine_name}
                 ORDER BY (project_name, run_id_uint);
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

@@ -35,20 +35,25 @@ impl Migration for Migration0033<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "DeploymentID",
+            "ReplacingMergeTree",
+            &["version_number"],
+        );
         self.clickhouse
             .run_query_synchronous_no_params(
-                r#"CREATE TABLE IF NOT EXISTS DeploymentID (
+                format!(r#"CREATE TABLE IF NOT EXISTS DeploymentID{on_cluster_name} (
                         deployment_id String,
                         dummy UInt32 DEFAULT 0, -- the dummy column is used to enforce a single row in the table
                         created_at DateTime DEFAULT now(),
                         version_number UInt32 DEFAULT 4294967295 - toUInt32(now()) -- So that the oldest version is highest version number
                         -- we hardcode UINT32_MAX
                     )
-                    ENGINE = ReplacingMergeTree(
-                        version_number
-                    )
-                    ORDER BY dummy;"#
-                    .to_string(),
+                    ENGINE = {table_engine_name}
+                    ORDER BY dummy;"#,
+                )
+                .to_string(),
             )
             .await?;
         // Generate a UUIDv7 and compute the blake3 hash

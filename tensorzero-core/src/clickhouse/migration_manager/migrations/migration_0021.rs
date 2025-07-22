@@ -114,9 +114,16 @@ impl Migration for Migration0021<'_> {
             })?
             + view_offset)
             .as_secs();
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "TagInference",
+            "ReplacingMergeTree",
+            &["updated_at", "is_deleted"],
+        );
 
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS TagInference
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS TagInference{on_cluster_name}
                 (
                     key String,
                     value String,
@@ -127,8 +134,9 @@ impl Migration for Migration0021<'_> {
                     function_type Enum8('chat' = 1, 'json' = 2),
                     is_deleted Bool DEFAULT false,
                     updated_at DateTime64(6, 'UTC') DEFAULT now64()
-                ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
-                ORDER BY (key, value, inference_id)"#;
+                ) ENGINE = {table_engine_name}
+                ORDER BY (key, value, inference_id)"#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

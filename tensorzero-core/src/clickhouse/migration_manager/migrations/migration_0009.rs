@@ -70,18 +70,26 @@ impl Migration for Migration0009<'_> {
             + view_offset)
             .as_secs();
 
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "BooleanMetricFeedbackByTargetId",
+            "MergeTree",
+            &[],
+        );
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
         // Create the `BooleanMetricFeedbackByTargetId` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS BooleanMetricFeedbackByTargetId
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS BooleanMetricFeedbackByTargetId{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
                 target_id UUID, -- must be a UUIDv7
                 metric_name LowCardinality(String),
                 value Bool,
                 tags Map(String, String)
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY target_id;
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -114,17 +122,24 @@ impl Migration for Migration0009<'_> {
             .await?;
 
         // Create the `CommentFeedbackByTargetId` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS CommentFeedbackByTargetId
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "CommentFeedbackByTargetId",
+            "MergeTree",
+            &[],
+        );
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS CommentFeedbackByTargetId{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
                 target_id UUID, -- must be a UUIDv7
                 target_type Enum('inference' = 1, 'episode' = 2),
                 value String,
                 tags Map(String, String)
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY target_id;
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -153,16 +168,23 @@ impl Migration for Migration0009<'_> {
             .await?;
 
         // Create the `DemonstrationFeedbackByInferenceId` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS DemonstrationFeedbackByInferenceId
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "DemonstrationFeedbackByInferenceId",
+            "MergeTree",
+            &[],
+        );
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS DemonstrationFeedbackByInferenceId{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
                 inference_id UUID, -- must be a UUIDv7
                 value String,
                 tags Map(String, String)
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY inference_id;
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -190,17 +212,24 @@ impl Migration for Migration0009<'_> {
             .await?;
 
         // Create the `FloatMetricFeedbackByTargetId` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS FloatMetricFeedbackByTargetId
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "FloatMetricFeedbackByTargetId",
+            "MergeTree",
+            &[],
+        );
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS FloatMetricFeedbackByTargetId{on_cluster_name}
            (
                id UUID, -- must be a UUIDv7
                target_id UUID, -- must be a UUIDv7
                metric_name LowCardinality(String),
                value Float32,
                tags Map(String, String)
-           ) ENGINE = MergeTree()
+           ) ENGINE = {table_engine_name}
            ORDER BY target_id;
-       "#;
+       "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

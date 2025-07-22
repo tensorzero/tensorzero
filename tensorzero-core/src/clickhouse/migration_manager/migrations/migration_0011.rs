@@ -35,8 +35,15 @@ impl Migration for Migration0011<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `ModelInferenceCache` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS ModelInferenceCache
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "ModelInferenceCache",
+            "ReplacingMergeTree",
+            &["timestamp", "is_deleted"],
+        );
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS ModelInferenceCache{on_cluster_name}
             (
                 short_cache_key UInt64,
                 long_cache_key FixedString(64), -- for a hex-encoded 256-bit key
@@ -46,12 +53,13 @@ impl Migration for Migration0011<'_> {
                 raw_response String,
                 is_deleted Bool DEFAULT false,
                 INDEX idx_long_cache_key long_cache_key TYPE bloom_filter GRANULARITY 100
-            ) ENGINE = ReplacingMergeTree(timestamp, is_deleted)
+            ) ENGINE = {table_engine_name}
             PARTITION BY toYYYYMM(timestamp)
             ORDER BY (short_cache_key, long_cache_key)
             PRIMARY KEY (short_cache_key)
             SETTINGS index_granularity = 256
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

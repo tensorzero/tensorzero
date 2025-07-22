@@ -191,24 +191,39 @@ impl Migration for Migration0013<'_> {
         // let _ = self.clickhouse.run_query_synchronous(query, None).await?;
         // Create the new tables with UInt128 primary keys
         // Create the `InferenceById` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS InferenceById
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "InferenceById",
+            "MergeTree",
+            &[],
+        );
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS InferenceById{on_cluster_name}
             (
                 id_uint UInt128,
                 function_name LowCardinality(String),
                 variant_name LowCardinality(String),
                 episode_id UUID, -- must be a UUIDv7
                 function_type Enum8('chat' = 1, 'json' = 2)
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY id_uint;
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
         // Create the `InferenceByEpisodeId` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS InferenceByEpisodeId
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "InferenceByEpisodeId",
+            "MergeTree",
+            &[],
+        );
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS InferenceByEpisodeId{on_cluster_name}
             (
                 episode_id_uint UInt128,
                 id_uint UInt128,
@@ -216,20 +231,23 @@ impl Migration for Migration0013<'_> {
                 variant_name LowCardinality(String),
                 function_type Enum8('chat' = 1, 'json' = 2)
             )
-            ENGINE = MergeTree()
+            ENGINE = {table_engine_name}
             ORDER BY (episode_id_uint, id_uint);
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
         // Create the `uint_to_uuid` function
-        let query = r#"CREATE FUNCTION IF NOT EXISTS uint_to_uuid AS (x) -> reinterpretAsUUID(
+        let query = format!(
+            r#"CREATE FUNCTION IF NOT EXISTS uint_to_uuid{on_cluster_name} AS (x) -> reinterpretAsUUID(
             concat(
                 substring(reinterpretAsString(x), 9, 8),
                 substring(reinterpretAsString(x), 1, 8)
             )
-        );"#;
+        );"#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

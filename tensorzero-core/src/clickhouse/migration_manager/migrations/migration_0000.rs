@@ -53,75 +53,110 @@ impl Migration for Migration0000<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `BooleanMetricFeedback` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS BooleanMetricFeedback
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "BooleanMetricFeedback",
+            "MergeTree",
+            &[],
+        );
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS BooleanMetricFeedback{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
                 target_id UUID, -- must be a UUIDv7
                 metric_name LowCardinality(String),
                 value Bool,
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY (metric_name, target_id);
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `CommentFeedback` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS CommentFeedback
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "CommentFeedback",
+            "MergeTree",
+            &[],
+        );
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS CommentFeedback{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
                 target_id UUID, -- must be a UUIDv7
                 target_type Enum('inference' = 1, 'episode' = 2),
                 value String,
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY target_id;
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `DemonstrationFeedback` table
-        let query = r#"
-           CREATE TABLE IF NOT EXISTS DemonstrationFeedback
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "DemonstrationFeedback",
+            "MergeTree",
+            &[],
+        );
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS DemonstrationFeedback{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
                 inference_id UUID, -- must be a UUIDv7
                 value String,
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY inference_id;
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `FloatMetricFeedback` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS FloatMetricFeedback
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "FloatMetricFeedback",
+            "MergeTree",
+            &[],
+        );
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS FloatMetricFeedback{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
                 target_id UUID, -- must be a UUIDv7
                 metric_name LowCardinality(String),
                 value Float32,
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY (metric_name, target_id);
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `ChatInference` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS ChatInference
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "ChatInference",
+            "MergeTree",
+            &[],
+        );
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS ChatInference{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
                 function_name LowCardinality(String),
@@ -133,17 +168,24 @@ impl Migration for Migration0000<'_> {
                 inference_params String,
                 processing_time_ms UInt32,
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY (function_name, variant_name, episode_id);
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `JsonInference` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS JsonInference
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "JsonInference",
+            "MergeTree",
+            &[],
+        );
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS JsonInference{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
                 function_name LowCardinality(String),
@@ -155,17 +197,24 @@ impl Migration for Migration0000<'_> {
                 inference_params String,
                 processing_time_ms UInt32,
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY (function_name, variant_name, episode_id);
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `ModelInference` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS ModelInference
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            "ModelInference",
+            "MergeTree",
+            &[],
+        );
+        let query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS ModelInference{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
                 inference_id UUID, -- must be a UUIDv7
@@ -178,9 +227,10 @@ impl Migration for Migration0000<'_> {
                 response_time_ms UInt32,
                 ttft_ms Nullable(UInt32),
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY inference_id;
-        "#;
+        "#,
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
