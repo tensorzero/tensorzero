@@ -1,4 +1,5 @@
 #![expect(clippy::print_stdout)]
+use std::io::Cursor;
 use std::{collections::HashMap, net::SocketAddr};
 
 use aws_config::Region;
@@ -13,6 +14,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{routing::get, Router};
 use base64::prelude::*;
 use futures::StreamExt;
+use image::{ImageFormat, ImageReader};
 use object_store::path::Path;
 
 use rand::Rng;
@@ -1133,35 +1135,34 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     let client = make_embedded_gateway_with_config(config_toml).await;
     let mut storage_path = None;
 
+    let mut params = ClientInferenceParams {
+        function_name: Some("image_test".to_string()),
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![
+                    ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Describe the contents of the image".to_string(),
+                    }),
+                    ClientInputMessageContent::File(File::Base64 {
+                        mime_type: mime::IMAGE_PNG,
+                        data: image_data.clone(),
+                    }),
+                ],
+            }],
+        },
+        cache_options: CacheParamsOptions {
+            enabled: CacheEnabledMode::On,
+            max_age_s: Some(10),
+        },
+        ..Default::default()
+    };
+
     for should_be_cached in [false, true] {
-        let response = client
-            .inference(ClientInferenceParams {
-                function_name: Some("image_test".to_string()),
-                variant_name: Some(provider.variant_name.clone()),
-                episode_id: Some(episode_id),
-                input: ClientInput {
-                    system: None,
-                    messages: vec![ClientInputMessage {
-                        role: Role::User,
-                        content: vec![
-                            ClientInputMessageContent::Text(TextKind::Text {
-                                text: "Describe the contents of the image".to_string(),
-                            }),
-                            ClientInputMessageContent::File(File::Base64 {
-                                mime_type: mime::IMAGE_PNG,
-                                data: image_data.clone(),
-                            }),
-                        ],
-                    }],
-                },
-                cache_options: CacheParamsOptions {
-                    enabled: CacheEnabledMode::On,
-                    max_age_s: Some(10),
-                },
-                ..Default::default()
-            })
-            .await
-            .unwrap();
+        let response = client.inference(params.clone()).await.unwrap();
 
         let InferenceOutput::NonStreaming(response) = response else {
             panic!("Expected non-streaming inference response");
@@ -1179,6 +1180,52 @@ pub async fn test_base64_image_inference_with_provider_and_store(
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         storage_path = Some(latest_storage_path);
     }
+
+    let mut image_png = ImageReader::new(Cursor::new(FERRIS_PNG))
+        .with_guessed_format()
+        .unwrap()
+        .decode()
+        .unwrap();
+
+    // Get 32 random bytes, and write then to the image. This should force a cache miss
+    let mut rng = rand::rng();
+    let random_bytes: Vec<u8> = (0..32)
+        .map(|_| rng.sample(rand::distr::StandardUniform))
+        .collect();
+    image_png
+        .as_mut_rgba8()
+        .unwrap()
+        .as_flat_samples_mut()
+        .samples[0..(random_bytes.len())]
+        .copy_from_slice(&random_bytes);
+
+    let mut updated_image = Cursor::new(Vec::new());
+    image_png
+        .write_to(&mut updated_image, ImageFormat::Png)
+        .unwrap();
+
+    let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
+
+    params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64 {
+        mime_type: mime::IMAGE_PNG,
+        data: updated_base64,
+    });
+
+    let response = client.inference(params.clone()).await.unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    let inference_id = response.inference_id();
+
+    let clickhouse = get_clickhouse().await;
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    assert_eq!(result["cached"], false);
+    // Should be a cache miss since the image data was changed
     (client, storage_path.unwrap())
 }
 
