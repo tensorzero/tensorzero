@@ -5,6 +5,7 @@ import {
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
   isRouteErrorResponse,
+  useNavigation,
 } from "react-router";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
@@ -22,7 +23,7 @@ import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
 import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   InferenceRequestSchema,
   type InferenceResponse,
@@ -209,7 +210,32 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const navigation = useNavigation();
+  const [currentSearchParams, setSearchParams] = useSearchParams();
+  const { searchParams, loadingVariants } = useMemo(() => {
+    if (navigation.state !== "loading") {
+      return {
+        searchParams: currentSearchParams,
+        loadingVariants: new Set<string>(),
+      };
+    }
+
+    const nextSearchParams = new URLSearchParams(navigation.location?.search);
+    const currentVariants = new Set(currentSearchParams.getAll("variant"));
+    const nextVariants = new Set(nextSearchParams.getAll("variant"));
+    const loadingVariants = new Set<string>();
+    for (const variant of nextVariants) {
+      if (!currentVariants.has(variant)) {
+        loadingVariants.add(variant);
+      }
+    }
+
+    return {
+      isLoading: true,
+      searchParams: nextSearchParams,
+      loadingVariants,
+    };
+  }, [navigation, currentSearchParams]);
   const selectedVariants = searchParams.getAll("variant");
   const config = useConfig();
 
@@ -341,7 +367,8 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                             });
                           }}
                         >
-                          <X />
+                          <span className="sr-only">Remove {variant}</span>
+                          <X aria-hidden />
                         </Button>
                       </div>
                     ))}
@@ -394,6 +421,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                               <DatapointPlaygroundOutput
                                 datapoint={datapoint}
                                 variantName={variant}
+                                isLoading={loadingVariants.has(variant)}
                                 serverInference={map
                                   .get(variant)
                                   ?.get(datapoint.id)}
