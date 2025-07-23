@@ -32,4 +32,18 @@ test("playground should work for a chat function that sets 2 variants", async ({
   await expect(
     page.getByRole("link", { name: "initial_prompt_haiku_3_5" }),
   ).toBeVisible();
+
+  // Verify that there are 2 inputs and 2 reference outputs
+  await expect(page.getByRole("heading", { name: "Input" })).toHaveCount(2);
+  await expect(
+    page.getByRole("heading", { name: "Reference Output" }),
+  ).toHaveCount(2);
+
+  // Verify that there are 4 outputs, one for each variant and each datapoint
+  await expect(page.getByRole("textbox")).toHaveCount(4);
+
+  // Verify that there are no errors
+  await expect(
+    page.getByRole("heading", { name: "Inference Error" }),
+  ).toHaveCount(0);
 });
