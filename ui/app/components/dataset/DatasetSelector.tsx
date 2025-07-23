@@ -49,29 +49,32 @@ interface DatasetSelectorProps {
   selected?: string;
   onSelect: (dataset: string, isNew: boolean) => void;
   functionName?: string;
-  disabled?: boolean;
   placeholder?: string;
   className?: string;
   allowCreation?: boolean;
   buttonProps?: React.ComponentProps<typeof Button>;
+  disabled?: boolean;
 }
 
 // TODO Create new datasets within this component
-
 export function DatasetSelector({
   selected,
   onSelect,
   functionName,
-  disabled,
   placeholder = "Select a dataset",
   allowCreation = true,
   className,
   buttonProps,
+  disabled = false,
 }: DatasetSelectorProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  const { data: datasets = [], isLoading } = useDatasetCounts(functionName);
+  const {
+    data: datasets = [],
+    isLoading,
+    isError,
+  } = useDatasetCounts(functionName);
 
   // Datasets sorted by last updated date for initial display
   const recentlyUpdatedDatasets = useMemo(
@@ -156,6 +159,10 @@ export function DatasetSelector({
             {isLoading ? (
               <div className="text-fg-muted flex items-center justify-center py-4 text-sm">
                 Loading datasets...
+              </div>
+            ) : isError ? (
+              <div className="text-fg-muted flex items-center justify-center py-4 text-sm">
+                There was an error loading datasets.
               </div>
             ) : (
               <CommandList>

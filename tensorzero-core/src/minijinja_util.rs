@@ -2,7 +2,7 @@ use minijinja::{Environment, UndefinedBehavior};
 use serde_json::Value;
 use std::{
     collections::{HashMap, HashSet},
-    path::PathBuf,
+    path::Path,
 };
 
 use crate::error::{Error, ErrorDetails};
@@ -25,7 +25,7 @@ impl TemplateConfig<'_> {
     pub fn initialize(
         &mut self,
         template_paths: HashMap<String, String>,
-        filesystem_path: Option<PathBuf>,
+        filesystem_path: Option<&Path>,
     ) -> Result<(), Error> {
         self.env.set_undefined_behavior(UndefinedBehavior::Strict);
 

@@ -14,6 +14,7 @@ interface DatapointPlaygroundOutputProps {
   datapoint: Datapoint;
   variantName: string;
   serverInference: Promise<InferenceResponse> | undefined;
+  isLoading?: boolean;
   setPromise: (
     variantName: string,
     datapointId: string,
@@ -30,7 +31,13 @@ const DatapointPlaygroundOutput = memo(
     setPromise,
     input,
     functionName,
+    isLoading,
   }: DatapointPlaygroundOutputProps) {
+    const loadingIndicator = (
+      <div className="flex min-h-[8rem] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
+      </div>
+    );
     const refreshButton = (
       <Button
         variant="ghost"
@@ -51,7 +58,9 @@ const DatapointPlaygroundOutput = memo(
     );
 
     if (!serverInference) {
-      return (
+      return isLoading ? (
+        loadingIndicator
+      ) : (
         <div className="flex min-h-[8rem] items-center justify-center">
           {refreshButton}
           <div className="text-muted-foreground text-sm">
@@ -63,13 +72,7 @@ const DatapointPlaygroundOutput = memo(
 
     return (
       <div className="group relative">
-        <Suspense
-          fallback={
-            <div className="flex min-h-[8rem] items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-          }
-        >
+        <Suspense fallback={loadingIndicator}>
           <Await
             resolve={serverInference}
             errorElement={
