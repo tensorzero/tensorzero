@@ -216,7 +216,7 @@ async fn test_create_delete_datapoint_chat() {
     assert!(list_datapoints_response.status().is_success());
     let list_datapoints_json = list_datapoints_response.json::<Vec<Value>>().await.unwrap();
     // Test that the auxiliary field is not returned by the list datapoints API
-    for datapoint in list_datapoints_json.iter() {
+    for datapoint in &list_datapoints_json {
         assert!(datapoint.get("auxiliary").is_none());
     }
     let list_datapoints = list_datapoints_json
@@ -1018,7 +1018,7 @@ async fn test_create_delete_datapoint_json() {
     assert!(list_datapoints_response.status().is_success());
     let list_datapoints = list_datapoints_response.json::<Vec<Value>>().await.unwrap();
     assert_eq!(list_datapoints.len(), 2);
-    for datapoint in list_datapoints.iter() {
+    for datapoint in &list_datapoints {
         // Test that the auxiliary field is not returned by the list datapoints API
         assert!(datapoint.get("auxiliary").is_none());
     }

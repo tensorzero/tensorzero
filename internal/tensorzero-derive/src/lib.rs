@@ -119,9 +119,9 @@ pub fn tensorzero_derive(input: TokenStream) -> TokenStream {
     // other derive macros (e.g. `#[strum]`0. We're not applying any derive macros
     // to our new enum, so we need to avoid copying over other attributes to prevent errors.
     let mut stripped_variants = data.variants.clone();
-    for variant in stripped_variants.iter_mut() {
+    for variant in &mut stripped_variants {
         variant.attrs.retain(|attr| attr.path().is_ident("serde"));
-        for field in variant.fields.iter_mut() {
+        for field in &mut variant.fields {
             field.attrs.retain(|attr| attr.path().is_ident("serde"));
         }
     }

@@ -27,7 +27,7 @@ pub async fn get_tool_params_args(
         FunctionConfig::Chat(function_config) => {
             let mut additional_tools = Vec::new();
             let mut allowed_tools = Vec::new();
-            for tool in tool_params.tools_available.iter() {
+            for tool in &tool_params.tools_available {
                 if !function_config.tools.contains(&tool.name) {
                     additional_tools.push(tool.clone());
                 } else {
