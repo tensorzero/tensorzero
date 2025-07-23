@@ -1133,35 +1133,34 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     let client = make_embedded_gateway_with_config(config_toml).await;
     let mut storage_path = None;
 
+    let mut params = ClientInferenceParams {
+        function_name: Some("image_test".to_string()),
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![
+                    ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Describe the contents of the image".to_string(),
+                    }),
+                    ClientInputMessageContent::File(File::Base64 {
+                        mime_type: mime::IMAGE_PNG,
+                        data: image_data.clone(),
+                    }),
+                ],
+            }],
+        },
+        cache_options: CacheParamsOptions {
+            enabled: CacheEnabledMode::On,
+            max_age_s: Some(10),
+        },
+        ..Default::default()
+    };
+
     for should_be_cached in [false, true] {
-        let response = client
-            .inference(ClientInferenceParams {
-                function_name: Some("image_test".to_string()),
-                variant_name: Some(provider.variant_name.clone()),
-                episode_id: Some(episode_id),
-                input: ClientInput {
-                    system: None,
-                    messages: vec![ClientInputMessage {
-                        role: Role::User,
-                        content: vec![
-                            ClientInputMessageContent::Text(TextKind::Text {
-                                text: "Describe the contents of the image".to_string(),
-                            }),
-                            ClientInputMessageContent::File(File::Base64 {
-                                mime_type: mime::IMAGE_PNG,
-                                data: image_data.clone(),
-                            }),
-                        ],
-                    }],
-                },
-                cache_options: CacheParamsOptions {
-                    enabled: CacheEnabledMode::On,
-                    max_age_s: Some(10),
-                },
-                ..Default::default()
-            })
-            .await
-            .unwrap();
+        let response = client.inference(params.clone()).await.unwrap();
 
         let InferenceOutput::NonStreaming(response) = response else {
             panic!("Expected non-streaming inference response");
@@ -1179,6 +1178,33 @@ pub async fn test_base64_image_inference_with_provider_and_store(
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         storage_path = Some(latest_storage_path);
     }
+
+    // Change the image to something else, and verify that we get a cache miss
+    let mut rng = rand::rng();
+    let random_data: String = (0..16)
+        .map(|_| rng.sample(rand::distr::Alphanumeric) as char)
+        .collect();
+    let random_base64 = BASE64_STANDARD.encode(random_data.as_bytes());
+
+    params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64 {
+        mime_type: mime::IMAGE_PNG,
+        data: random_base64,
+    });
+
+    let response = client.inference(params.clone()).await.unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    let inference_id = response.inference_id;
+
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    assert_eq!(result["cached", false]);
+    // Should be a cache
     (client, storage_path.unwrap())
 }
 
