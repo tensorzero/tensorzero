@@ -12,7 +12,6 @@ export function dump_optimizer_output(optimizerOutput: OptimizerOutput) {
   }
   const modelName = rest.routing[0];
   const providerConfig = rest.providers[modelName];
-  console.log(JSON.stringify(providerConfig, null, 2));
   const fullyQualifiedProviderConfig = {
     models: {
       [modelName]: {

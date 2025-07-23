@@ -9,7 +9,6 @@ import type {
 } from "tensorzero-node";
 import { getConfig } from "~/utils/config/index.server";
 import { getEnv } from "../env.server";
-import { logger } from "../logger";
 
 let _tensorZeroClient: TensorZeroClient | undefined;
 export async function getNativeTensorZeroClient(): Promise<TensorZeroClient> {
@@ -32,7 +31,6 @@ export async function poll_sft_job(
   if (status.status === "pending" && status.estimated_finish) {
     status.estimated_finish = new Date(status.estimated_finish);
   }
-  logger.debug("SFT job status", { status });
   return status;
 }
 
