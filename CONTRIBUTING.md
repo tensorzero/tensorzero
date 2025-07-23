@@ -82,10 +82,6 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 
 ## Technical Guide
 
-### Requirements
-- Memory: 32 GB RAM
-- Storage: ~ 60 GB available space  
-
 ### Setup
 
 - Install Rust (1.80+) [→](https://www.rust-lang.org/tools/install)
@@ -200,7 +196,7 @@ Here are the steps in order to run or test the UI assuming you have the prerequi
 1. Install dependencies: `pnpm install`
 2. Build the WebAssembly module following instructions in `ui/app/utils/minijinja/README.md`.
 3. Build the internal N-API client for TensorZero using `pnpm -r build`. If you have changed your Rust code, you may also have to run `pnpm build-bindings` from `internal/tensorzero-node`.
-4. Create a `ui/fixtures/.env` following the `ui/fixtures/.env.example`. 
+4. Create a `ui/fixtures/.env` following the `ui/fixtures/.env.example`.
 5. Create a `ui/.env` file and set the following environment variables for the server:
 
 ```bash
