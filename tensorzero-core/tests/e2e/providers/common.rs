@@ -1197,13 +1197,14 @@ pub async fn test_base64_image_inference_with_provider_and_store(
         panic!("Expected non-streaming inference response");
     };
 
-    let inference_id = response.inference_id;
+    let inference_id = response.inference_id();
 
+    let clickhouse = get_clickhouse().await;
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    assert_eq!(result["cached", false]);
+    assert_eq!(result["cached"], false);
     // Should be a cache
     (client, storage_path.unwrap())
 }
