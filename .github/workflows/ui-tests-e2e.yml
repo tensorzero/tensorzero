@@ -42,21 +42,14 @@ jobs:
     - name: Start docker containers without external network access
       working-directory: ui
       run: |
-        # We set all of the environment variables for both the gateway and ui containers here
-        # The 'ui-tests-e2e' job tests that the UI container starts without some of these variables set,
-        echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
-        echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
-        echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
-        echo "OPENAI_API_KEY=not_used" >> fixtures/.env
-        echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
-        echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env
-        echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
+        # Environment variables shared by the gateway and ui containers
         echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
-        echo "TENSORZERO_GATEWAY_URL=http://gateway:3000/custom/prefix" >> fixtures/.env
-        echo "TENSORZERO_GATEWAY_CONFIG=/app/config/empty.toml" >> fixtures/.env
-        echo "TENSORZERO_UI_CONFIG_PATH=/app/config/empty.toml" >> fixtures/.env
+        echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
         echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
         echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
+        echo "TENSORZERO_GATEWAY_CONFIG=/app/config/empty.toml" >> fixtures/.env
+        echo "TENSORZERO_UI_CONFIG_PATH=/app/config/empty.toml" >> fixtures/.env
+
         export TENSORZERO_SKIP_LARGE_FIXTURES=1
         docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f ../ci/internal-network.yml up --no-build -d
         docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f ../ci/internal-network.yml wait ui
