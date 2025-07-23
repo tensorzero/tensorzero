@@ -521,10 +521,13 @@ export class TensorZeroClient {
     }
 
     const endpoint = `/internal/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapoint.id)}`;
+    // We need to remove the id field from the datapoint before sending it to the server
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id, ...rest } = datapoint;
 
     const response = await this.fetch(endpoint, {
       method: "PUT",
-      body: JSON.stringify(datapoint),
+      body: JSON.stringify(rest),
     });
 
     if (!response.ok) {
