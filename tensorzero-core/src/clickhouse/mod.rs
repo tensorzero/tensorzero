@@ -481,8 +481,15 @@ impl ClickHouseConnectionInfo {
         // We decided to add this table after we had already created lots of migrations.
         // We create this table immediately after creating the database, so that
         // we can insert rows into it when running migrations
-        self.run_query_synchronous_no_params(
-            r#"CREATE TABLE IF NOT EXISTS TensorZeroMigration (
+        let on_cluster_name = self.get_on_cluster_name();
+        let table_engine_name =
+            self.get_maybe_replicated_table_engine_name(GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "TensorZeroMigration",
+                engine_args: &[],
+            });
+        let query = format!(
+            r#"CREATE TABLE IF NOT EXISTS TensorZeroMigration{on_cluster_name} (
                 migration_id UInt32,
                 migration_name String,
                 gateway_version String,
@@ -491,12 +498,12 @@ impl ClickHouseConnectionInfo {
                 execution_time_ms UInt64,
                 extra_data Nullable(String)
             )
-            ENGINE = MergeTree()
+            ENGINE = {table_engine_name}
             PRIMARY KEY (migration_id)"#
-                .to_string(),
-        )
-        .await
-        .map(|_| ())?;
+        );
+        self.run_query_synchronous_no_params(query)
+            .await
+            .map(|_| ())?;
         Ok(())
     }
 
