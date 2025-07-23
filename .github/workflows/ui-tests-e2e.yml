@@ -197,6 +197,11 @@ jobs:
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs -t
 
+      - name: Print container health checks
+        if: always()
+        working-directory: ui
+        run: docker inspect --format "{{json .State.Health }}" $(docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml ps -q ui) | jq
+
       - name: Make sure the current commit short hash is in the Docker Compose gateway logs
         if: always()
         working-directory: ui
