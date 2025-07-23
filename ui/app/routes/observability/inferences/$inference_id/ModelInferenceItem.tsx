@@ -27,7 +27,7 @@ import {
   SnippetContent,
 } from "~/components/layout/SnippetLayout";
 import { CodeEditor } from "~/components/ui/code-editor";
-import NewOutput from "~/components/inference/NewOutput";
+import ModelInferenceOutput from "~/components/inference/ModelInferenceOutput";
 
 interface ModelInferenceItemProps {
   inference: ParsedModelInferenceRow;
@@ -130,7 +130,7 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
 
         <SectionLayout>
           <SectionHeader heading="Output" />
-          <NewOutput output={inference.output} />
+          <ModelInferenceOutput output={inference.output} />
         </SectionLayout>
 
         <SectionLayout>

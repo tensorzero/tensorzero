@@ -61,16 +61,19 @@ from .types import (
     Message,
     NotFilter,
     NotNode,  # DEPRECATED
+    OrderBy,
     OrFilter,
     OrNode,  # DEPRECATED
     RawText,
     System,
+    TagFilter,
     TensorZeroError,
     TensorZeroInternalError,
     Text,
     TextChunk,
     Thought,
     ThoughtChunk,
+    TimeFilter,
     Tool,
     ToolCall,
     ToolCallChunk,
@@ -139,6 +142,7 @@ __all__ = [
     "Message",
     "NotFilter",
     "NotNode",  # DEPRECATED
+    "OrderBy",
     "OrFilter",
     "OrNode",  # DEPRECATED
     "OptimizationJobHandle",
@@ -153,6 +157,7 @@ __all__ = [
     "RenderedStoredInference",  # DEPRECATED
     "RenderedSample",
     "System",
+    "TagFilter",
     "TensorZeroError",
     "TensorZeroGateway",
     "TensorZeroInternalError",
@@ -160,6 +165,7 @@ __all__ = [
     "TextChunk",
     "Thought",
     "ThoughtChunk",
+    "TimeFilter",
     "Tool",
     "ToolChoice",
     "ToolParams",

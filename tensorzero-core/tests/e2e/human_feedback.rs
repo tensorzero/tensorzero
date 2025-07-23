@@ -273,7 +273,14 @@ async fn e2e_test_demonstration_feedback() {
     let response_json = response.json::<Value>().await.unwrap();
     assert_eq!(
         response_json,
-        json!({"error": "Demonstration contains invalid tool name"})
+        json!({
+            "error": "Demonstration contains invalid tool name",
+            "error_json": {
+                "InvalidRequest": {
+                    "message": "Demonstration contains invalid tool name"
+                }
+            }
+        })
     );
 }
 

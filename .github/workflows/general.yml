@@ -327,6 +327,9 @@ jobs:
       - name: Compile / validate notebooks
         run: ci/compile-check-notebooks.sh
 
+      - name: Lint Helm charts
+        run: find . -name "Chart.yaml" -exec dirname {} \; | xargs -I {} helm lint {}
+
   clickhouse-tests:
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before

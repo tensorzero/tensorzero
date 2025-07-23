@@ -28,3 +28,4 @@ def test_config(
     )
     assert variant.user_template is None
     assert variant.assistant_template is None
+    assert variant.model == "test"
