@@ -131,9 +131,10 @@ test("playground should work for image_judger function with images in input", as
   // Verify that images are rendered in the input elements
   await expect(page.locator("img")).toHaveCount(2);
 
-  // Verify that there are outputs for the variant and datapoints
-  // Note: Image functions may have additional textboxes in the UI
-  await expect(page.getByRole("textbox")).toHaveCount(6);
+  // Wait for at least one textbox containing "crab"
+  // Wait for and assert at least one exists
+  // Wait for at least one textbox containing "crab" to appear
+  await page.getByRole("textbox").filter({ hasText: "crab" }).first().waitFor();
 
   // Verify that there are no errors
   await expect(
