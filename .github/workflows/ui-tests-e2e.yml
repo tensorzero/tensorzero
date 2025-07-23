@@ -60,6 +60,17 @@ jobs:
         export TENSORZERO_SKIP_LARGE_FIXTURES=1
         docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f ../ci/internal-network.yml up --no-build --wait
 
+    - name: Print Docker Compose logs
+      if: always()
+      working-directory: ui
+      run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs -t
+
+    - name: Print container health checks
+      if: always()
+      working-directory: ui
+      run: docker inspect --format "{{json .State.Health }}" $(docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml ps -q ui) | jq
+
+
   ui-tests-gateway-prefix:
     # We're only using namespace here so that we can download the container artifacts
     runs-on: namespace-profile-tensorzero-2x8
