@@ -747,6 +747,40 @@ async fn test_bad_clickhouse_write() {
 async fn test_clean_clickhouse_start() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
     migration_manager::run(&clickhouse).await.unwrap();
+
+    // We also verify here that all tables are either replicated or not replicated as expected
+    let response = clickhouse
+        .run_query_synchronous_no_params("SHOW TABLES".to_string())
+        .await
+        .unwrap();
+    let tables = response.response.split('\n');
+    for table in tables {
+        let table = table.trim();
+        if table.is_empty() {
+            continue;
+        }
+        let create_table_info = clickhouse
+            .run_query_synchronous_no_params(format!("SHOW CREATE TABLE {table}"))
+            .await
+            .unwrap()
+            .response;
+        // We only need to worry about MergeTree tables when checking replication
+        if !create_table_info.contains("MergeTree") {
+            continue;
+        }
+        let engine_is_replicated = create_table_info.contains("Replicated");
+        let created_on_cluster = create_table_info.contains("ON CLUSTER");
+        if clickhouse.is_cluster_configured() {
+            assert!(
+                engine_is_replicated,
+                "Table {table} is not replicated but ClickHouse is configured for replication."
+            );
+            assert!(
+                created_on_cluster,
+                "Table {table} is not created on cluster but ClickHouse is configured for clustering",
+            );
+        }
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
