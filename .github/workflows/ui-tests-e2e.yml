@@ -7,6 +7,12 @@ on:
         required: true
       AWS_SECRET_ACCESS_KEY:
         required: true
+      OPENAI_API_KEY:
+        required: true
+      FIREWORKS_ACCOUNT_ID:
+        required: true
+      FIREWORKS_API_KEY:
+        required: true
 
 jobs:
   ui-tests-gateway-prefix:
