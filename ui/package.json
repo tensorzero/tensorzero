@@ -85,7 +85,6 @@
     "type-fest": "^4.41.0",
     "typescript-eslint": "^8.36.0",
     "uuid": "^11.1.0",
-    "vite-plugin-wasm": "^3.4.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -112,6 +111,8 @@
     "tailwindcss": "^4.1.11",
     "typescript": "^5.8.2",
     "vite": "^6.2.7",
+    "vite-plugin-devtools-json": "^0.3.0",
+    "vite-plugin-wasm": "^3.4.1",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.2.4"
   },
