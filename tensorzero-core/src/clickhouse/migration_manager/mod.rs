@@ -100,6 +100,9 @@ pub fn make_all_migrations<'a>(
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     clickhouse.health().await?;
+
+    // Check if the ClickHouse instance is configured correctly for replication.
+    check_replication_settings(clickhouse).await?;
     // This is a no-op if the database already exists
     clickhouse.create_database().await?;
 
@@ -111,6 +114,80 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     for migration in &migrations[1..] {
         run_migration(clickhouse, &**migration, clean_start).await?;
     }
+    Ok(())
+}
+
+/// Make sure that the ClickHouse instance is configured correctly for replication.
+/// If the instance is configured to replicate, there must be a replicated non-cloud ClickHouse.
+/// If the instance is not configured to replicate, there should be either a cloud ClickHouse,
+/// a non-replicated OSS ClickHouse, or a replicated ClickHouse (this latter requires the
+/// `TENSORZERO_OVERRIDE_NON_REPLICATED_CLICKHOUSE` environment variable to be set to "1").
+async fn check_replication_settings(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
+    // First, let's check if we are using ClickHouse Cloud
+    let cloud_mode_response = clickhouse
+        .run_query_synchronous_no_params("SELECT getSetting('cloud_mode')".to_string())
+        .await?;
+    let cloud_mode: bool = cloud_mode_response.response.trim().parse().map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: format!("Failed to deserialize cloud mode response: {e}"),
+        })
+    })?;
+    tracing::debug!("ClickHouse Cloud mode: {}", cloud_mode);
+    // If we are using ClickHouse Cloud, we do not allow a cluster to be configured
+    if cloud_mode && clickhouse.is_cluster_configured() {
+        return Err(ErrorDetails::ClickHouseConfiguration {
+            message: "Clusters cannot be configured when using ClickHouse Cloud.".to_string(),
+        }
+        .into());
+    }
+
+    // Next, let's check if there are replicated tables in our deployment
+    let max_cluster_count_query = r#"
+        SELECT MAX(node_count) AS max_nodes_per_cluster
+        FROM (
+            SELECT
+                cluster,
+                COUNT() as node_count
+            FROM system.clusters
+            GROUP BY cluster
+        );"#
+    .to_string();
+    let max_cluster_count_response = clickhouse
+        .run_query_synchronous_no_params(max_cluster_count_query)
+        .await?;
+    let max_cluster_count: u32 =
+        max_cluster_count_response
+            .response
+            .trim()
+            .parse()
+            .map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseDeserialization {
+                    message: format!("Failed to deserialize max cluster count response: {e}"),
+                })
+            })?;
+    tracing::debug!("Max cluster count: {}", max_cluster_count);
+    // Let's check if the user has set the override to allow for non-replicated ClickHouse setup
+    // on a ClickHouse deployment with a replicated cluster.
+    let non_replicated_tensorzero_on_replicated_clickhouse_override =
+        std::env::var("TENSORZERO_OVERRIDE_NON_REPLICATED_CLICKHOUSE").unwrap_or_default() == "1";
+    // If the user has not set the override and the ClickHouse deployment is replicated
+    // we fail if the ClickHouse deployment has not been configured to be replicated.
+    if max_cluster_count > 1
+        && !clickhouse.is_cluster_configured()
+        && !non_replicated_tensorzero_on_replicated_clickhouse_override
+    {
+        return Err(Error::new(ErrorDetails::ClickHouseConfiguration {
+            message: "TensorZero is not configured for replication but ClickHouse contains a replicated cluster. Please set the environment variable TENSORZERO_OVERRIDE_NON_REPLICATED_CLICKHOUSE=1 to override if you're sure you'd like a non-replicated ClickHouse setup.".to_string(),
+        }));
+    }
+
+    // If the user has configured a replicated ClickHouse deployment but we don't have a replicated ClickHouse instance, we fail.
+    if max_cluster_count <= 1 && clickhouse.is_cluster_configured() {
+        return Err(Error::new(ErrorDetails::ClickHouseConfiguration {
+            message: "TensorZero is configured for replication but ClickHouse is not configured for replication. Please ensure that ClickHouse is configured for replication.".to_string(),
+        }));
+    };
+
     Ok(())
 }
 

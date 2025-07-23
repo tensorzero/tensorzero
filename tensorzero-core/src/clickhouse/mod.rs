@@ -174,6 +174,14 @@ impl ClickHouseConnectionInfo {
         }
     }
 
+    pub fn is_cluster_configured(&self) -> bool {
+        match self {
+            Self::Disabled => false,
+            Self::Mock { .. } => false,
+            Self::Production { cluster_name, .. } => cluster_name.is_some(),
+        }
+    }
+
     pub async fn health(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
