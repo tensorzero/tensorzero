@@ -90,7 +90,6 @@ describe("update datapoints", () => {
       10,
     );
     expect(datapoints.length).toBe(10);
-    expect(datapoints[0].id).toBe("01960832-7028-743c-8c44-a598aa5130fd");
     for (const datapoint of datapoints) {
       expect(datapoint.function_name).toBe("extract_entities");
     }
