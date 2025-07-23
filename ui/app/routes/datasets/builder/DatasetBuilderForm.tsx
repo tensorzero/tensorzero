@@ -1,12 +1,11 @@
 import { useForm, useWatch } from "react-hook-form";
 import { Form } from "~/components/ui/form";
-import { DatasetSelector } from "./DatasetSelector";
 import {
   DatasetBuilderFormValuesResolver,
   type DatasetBuilderFormValues,
 } from "./types";
-import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
-import { FunctionSelector } from "~/components/function/FunctionSelector";
+import { FunctionFormField } from "~/components/function/FunctionFormField";
+import { DatasetFormField } from "~/components/dataset/DatasetFormField";
 import { useConfig } from "~/context/config";
 import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
@@ -17,11 +16,7 @@ import OutputSourceSelector from "./OutputSourceSelector";
 import { DatasetCountDisplay } from "./DatasetCountDisplay";
 import { logger } from "~/utils/logger";
 
-export function DatasetBuilderForm({
-  dataset_counts,
-}: {
-  dataset_counts: DatasetCountInfo[];
-}) {
+export function DatasetBuilderForm() {
   const config = useConfig();
   const [submissionPhase, setSubmissionPhase] = useState<
     "idle" | "submitting" | "complete"
@@ -125,17 +120,24 @@ export function DatasetBuilderForm({
         className="space-y-6"
       >
         <div className="space-y-6">
-          <DatasetSelector
+          <DatasetFormField
             control={form.control}
-            dataset_counts={dataset_counts}
-            setIsNewDataset={setIsNewDataset}
+            name="dataset"
+            label="Dataset"
+            onSelect={(dataset, isNew) => {
+              setIsNewDataset(isNew);
+            }}
           />
-          <FunctionSelector<DatasetBuilderFormValues>
+
+          <FunctionFormField
             control={form.control}
             name="function"
-            inferenceCount={counts.inferenceCount}
-            config={config}
+            functions={config.functions}
+            onSelect={() => {
+              form.resetField("variant");
+            }}
           />
+
           <CurationMetricSelector<DatasetBuilderFormValues>
             control={form.control}
             name="metric_name"

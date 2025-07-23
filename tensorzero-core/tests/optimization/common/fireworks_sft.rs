@@ -1,13 +1,10 @@
-use crate::{
-    embedded_workflow_test_case, http_workflow_test_case, optimization_test_case,
-    OptimizationTestCase,
-};
+use crate::common::OptimizationTestCase;
 use tensorzero_core::optimization::{
     fireworks_sft::UninitializedFireworksSFTConfig, UninitializedOptimizerConfig,
     UninitializedOptimizerInfo,
 };
 
-struct FireworksSFTTestCase();
+pub struct FireworksSFTTestCase();
 
 impl OptimizationTestCase for FireworksSFTTestCase {
     fn supports_image_data(&self) -> bool {
@@ -33,7 +30,3 @@ impl OptimizationTestCase for FireworksSFTTestCase {
         }
     }
 }
-
-optimization_test_case!(fireworks_sft, FireworksSFTTestCase());
-embedded_workflow_test_case!(fireworks_sft, FireworksSFTTestCase());
-http_workflow_test_case!(fireworks_sft, FireworksSFTTestCase());

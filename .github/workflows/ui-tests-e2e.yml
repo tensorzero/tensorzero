@@ -13,6 +13,8 @@ jobs:
     # We're only using namespace here so that we can download the container artifacts
     runs-on: namespace-profile-tensorzero-2x8
     steps:
+      - name: Set DNS
+        run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
       - uses: namespacelabs/nscloud-checkout-action@953fed31a6113cc2347ca69c9d823743c65bc84b
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -181,7 +183,7 @@ jobs:
       - name: Start UI Docker container
         working-directory: ui
         run: |
-          docker compose -f fixtures/docker-compose.ui.yml up --no-build -d
+          docker compose -f fixtures/docker-compose.ui.yml up --no-build -d --wait
 
       - name: Run UI E2E tests
         id: e2e_tests
@@ -194,6 +196,11 @@ jobs:
         if: always()
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs -t
+
+      - name: Print container health checks
+        if: always()
+        working-directory: ui
+        run: docker inspect --format "{{json .State.Health }}" $(docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml ps -q ui) | jq
 
       - name: Make sure the current commit short hash is in the Docker Compose gateway logs
         if: always()

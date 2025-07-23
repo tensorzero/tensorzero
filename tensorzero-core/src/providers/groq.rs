@@ -37,7 +37,7 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "Groq";
-const PROVIDER_TYPE: &str = "groq";
+pub const PROVIDER_TYPE: &str = "groq";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -917,11 +917,12 @@ impl<'a> GroqRequest<'a> {
             &request.json_mode,
             request.output_schema,
         ));
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
         let mut messages = prepare_groq_messages(request)?;
 
