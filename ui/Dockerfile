@@ -112,7 +112,7 @@ FROM base AS ui
 
 RUN useradd -m -s /bin/sh ui
 
-RUN apt-get update && apt-get install -y curl python3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl wget python3 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -150,3 +150,4 @@ ENV RUST_LOG=warn
 ENV TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
 
 ENTRYPOINT ["./entrypoint.sh"]
+HEALTHCHECK --start-period=1s --start-interval=1s --timeout=1s CMD wget --no-verbose --tries=1 --spider http://localhost:4000/api/tensorzero/status
