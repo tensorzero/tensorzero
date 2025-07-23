@@ -231,7 +231,6 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     }
 
     return {
-      isLoading: true,
       searchParams: nextSearchParams,
       loadingVariants,
     };
