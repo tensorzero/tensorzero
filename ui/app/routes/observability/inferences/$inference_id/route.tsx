@@ -57,8 +57,6 @@ import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { DemonstrationFeedbackButton } from "~/components/feedback/DemonstrationFeedbackButton";
 import { logger } from "~/utils/logger";
-import { JSONParseError } from "~/utils/common";
-import { processJson } from "~/utils/syntax-highlighting.server";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
 
@@ -129,23 +127,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     });
   }
 
-  const [inferenceParams, toolParams] = await Promise.all([
-    processJson(
-      inference.inference_params,
-      `inference params: ${inference_id}`,
-    ).catch(handleJsonProcessingError),
-    inference.function_type === "chat"
-      ? processJson(
-          inference.tool_params,
-          `tool params: ${inference_id}`,
-        ).catch(handleJsonProcessingError)
-      : Promise.resolve(null),
-  ]);
-
   return {
     inference,
-    inferenceParams,
-    toolParams,
     model_inferences,
     feedback,
     feedback_bounds,
@@ -241,8 +224,6 @@ type ModalType = "human-feedback" | "variant-response" | null;
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const {
     inference,
-    inferenceParams,
-    toolParams,
     model_inferences,
     feedback,
     feedback_bounds,
@@ -484,13 +465,19 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Inference Parameters" />
-          <ParameterCard parameters={inferenceParams.raw} />
+          <ParameterCard
+            parameters={JSON.stringify(inference.inference_params, null, 2)}
+          />
         </SectionLayout>
 
         {inference.function_type === "chat" && (
           <SectionLayout>
             <SectionHeader heading="Tool Parameters" />
-            {toolParams && <ParameterCard parameters={toolParams.raw} />}
+            {inference.tool_params && (
+              <ParameterCard
+                parameters={JSON.stringify(inference.tool_params, null, 2)}
+              />
+            )}
           </SectionLayout>
         )}
 
@@ -626,13 +613,4 @@ function prepareDemonstrationFromVariantOutput(
   } else {
     throw new Error("Invalid variant output");
   }
-}
-
-function handleJsonProcessingError(error: unknown): never {
-  if (error instanceof JSONParseError) {
-    throw data(error.message, { status: 400 });
-  }
-  throw data(`Server error while processing JSON. Please contact support.`, {
-    status: 500,
-  });
 }

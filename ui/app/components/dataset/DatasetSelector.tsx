@@ -16,8 +16,24 @@ import {
   CommandList,
 } from "~/components/ui/command";
 import clsx from "clsx";
-import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
+import { useQuery } from "@tanstack/react-query";
+
+const useDatasetCounts = (functionName?: string) => {
+  return useQuery({
+    queryKey: ["DATASETS_COUNT", functionName],
+    queryFn: async ({ signal }) => {
+      const url = new URL("/api/datasets/counts", window.location.origin);
+      if (functionName) {
+        url.searchParams.append("function", functionName);
+      }
+      const response = await fetch(url.toString(), { signal });
+      const data = await response.json();
+      const parsedData = DatasetCountResponse.parse(data);
+      return parsedData.datasets;
+    },
+  });
+};
 
 export const DatasetCountResponse = z.object({
   datasets: z.array(
@@ -29,23 +45,13 @@ export const DatasetCountResponse = z.object({
   ),
 });
 
-const useDatasetCounts = () => {
-  return useQuery({
-    queryKey: ["DATASETS_COUNT"],
-    queryFn: async ({ signal }) => {
-      const response = await fetch("/api/datasets/counts", { signal });
-      const data = await response.json();
-      const parsedData = DatasetCountResponse.parse(data);
-      return parsedData.datasets;
-    },
-  });
-};
-
 interface DatasetSelectorProps {
   selected?: string;
   onSelect: (dataset: string, isNew: boolean) => void;
+  functionName?: string;
   placeholder?: string;
   className?: string;
+  disabled?: boolean;
   allowCreation?: boolean;
   buttonProps?: React.ComponentProps<typeof Button>;
 }
@@ -55,20 +61,22 @@ interface DatasetSelectorProps {
 export function DatasetSelector({
   selected,
   onSelect,
+  functionName,
   placeholder = "Select a dataset",
   allowCreation = true,
   className,
   buttonProps,
+  disabled,
 }: DatasetSelectorProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  const { data: datasets = [], isLoading } = useDatasetCounts();
+  const { data: datasets, isLoading } = useDatasetCounts(functionName);
 
   // Datasets sorted by last updated date for initial display
   const recentlyUpdatedDatasets = useMemo(
     () =>
-      [...datasets].sort((a, b) => {
+      [...(datasets ?? [])].sort((a, b) => {
         return (
           new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
         );
@@ -78,14 +86,14 @@ export function DatasetSelector({
 
   // Selected dataset, if an existing one was selected
   const existingSelectedDataset = useMemo(
-    () => datasets.find((dataset) => dataset.name === selected),
+    () => datasets?.find((dataset) => dataset.name === selected),
     [datasets, selected],
   );
 
   return (
     <div className={clsx("flex flex-col space-y-2", className)}>
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
+        <PopoverTrigger asChild disabled={disabled}>
           <Button
             variant="outline"
             role="combobox"

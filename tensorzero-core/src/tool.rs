@@ -218,13 +218,14 @@ impl ToolCallConfig {
             .parallel_tool_calls
             .or(function_parallel_tool_calls);
 
-        let tool_call_config_option = match tools_available.is_empty() {
-            true => None,
-            false => Some(Self {
+        let tool_call_config_option = if tools_available.is_empty() {
+            None
+        } else {
+            Some(Self {
                 tools_available,
                 tool_choice,
                 parallel_tool_calls,
-            }),
+            })
         };
 
         Ok(tool_call_config_option)

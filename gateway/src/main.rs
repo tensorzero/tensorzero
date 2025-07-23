@@ -196,6 +196,8 @@ async fn main() {
 
     // Set debug mode
     error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");
+    error::set_unstable_error_json(config.gateway.unstable_error_json)
+        .expect_pretty("Failed to set unstable error JSON");
 
     let api_routes = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
@@ -234,6 +236,10 @@ async fn main() {
         .route(
             "/datasets/{dataset_name}/datapoints",
             get(endpoints::datasets::list_datapoints_handler),
+        )
+        .route(
+            "/datasets/{dataset_name}",
+            delete(endpoints::datasets::stale_dataset_handler),
         )
         .route(
             "/datasets/{dataset_name}/datapoints/{datapoint_id}",

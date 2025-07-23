@@ -673,7 +673,12 @@ async fn test_chat_function_json_override_with_mode_implicit_tool() {
     assert_eq!(
         response_json,
         serde_json::json!({
-            "error": "JSON mode `implicit_tool` is not supported for chat functions"
+            "error": "JSON mode `implicit_tool` is not supported for chat functions",
+            "error_json": {
+                "InvalidRequest": {
+                    "message": "JSON mode `implicit_tool` is not supported for chat functions"
+                }
+            }
         })
     );
 }
@@ -1535,7 +1540,7 @@ pub async fn test_image_inference_with_provider_docker_minio() {
 
     let credentials = Credentials::from_keys(&minio_access_key_id, &minio_secret_access_key, None);
 
-    // Our S3-compatible object store checks for these variables, giving them
+    // Our S3-compatible  store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
     std::env::set_var("S3_ACCESS_KEY_ID", minio_access_key_id);
     std::env::set_var("S3_SECRET_ACCESS_KEY", minio_secret_access_key);
