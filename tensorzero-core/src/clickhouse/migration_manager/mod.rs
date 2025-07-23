@@ -101,10 +101,11 @@ pub fn make_all_migrations<'a>(
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     clickhouse.health().await?;
 
-    // Check if the ClickHouse instance is configured correctly for replication.
-    check_replication_settings(clickhouse).await?;
     // This is a no-op if the database already exists
     clickhouse.create_database().await?;
+
+    // Check if the ClickHouse instance is configured correctly for replication.
+    check_replication_settings(clickhouse).await?;
 
     let migrations = make_all_migrations(clickhouse);
 
