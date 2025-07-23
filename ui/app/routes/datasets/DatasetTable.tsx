@@ -102,13 +102,14 @@ export default function DatasetTable({
               deletion). This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
+          <DialogFooter className="flex justify-between gap-2">
             <Button
               variant="outline"
               onClick={() => setDeleteDialogOpen(false)}
             >
               Cancel
             </Button>
+            <div className="flex-1" />
             <Button
               variant="destructive"
               onClick={() => {
