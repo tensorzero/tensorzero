@@ -378,7 +378,7 @@ test("should be able to add a datapoint from the inference page", async ({
   });
 
   // Assert that the page URL starts with /datasets/test_json_dataset/datapoint/
-  await expect(page.url()).toMatch(
+  expect(page.url()).toMatch(
     new RegExp(`/datasets/${datasetName}/datapoint/.*`),
   );
 
@@ -386,12 +386,6 @@ test("should be able to add a datapoint from the inference page", async ({
   await page.goto("/datasets");
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
-
-  // Set up dialog handler before triggering the dialog
-  page.on("dialog", async (dialog) => {
-    // Confirm the deletion
-    await dialog.accept();
-  });
 
   // Find the row containing our dataset
   const datasetRow = page.locator("tr").filter({ hasText: datasetName });
@@ -404,6 +398,13 @@ test("should be able to add a datapoint from the inference page", async ({
     .locator("button")
     .filter({ has: page.locator("svg") });
   await deleteButton.click();
+
+  // Wait for the shadcn dialog to appear and click the Delete button
+  const dialog = page.locator('div[role="dialog"]');
+  await dialog.waitFor({ state: "visible" });
+
+  // Click the destructive "Delete" button in the dialog
+  await dialog.getByRole("button", { name: /Delete/ }).click();
 
   // Wait for the deletion to complete and page to update
   await page.waitForTimeout(1000);
