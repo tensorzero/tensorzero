@@ -52,7 +52,6 @@ jobs:
 
         export TENSORZERO_SKIP_LARGE_FIXTURES=1
         docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f ../ci/internal-network.yml up --no-build -d
-        docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f ../ci/internal-network.yml wait ui
 
     - name: Print Docker Compose logs
       if: always()
