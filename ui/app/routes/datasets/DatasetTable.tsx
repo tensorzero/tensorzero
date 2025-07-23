@@ -13,6 +13,14 @@ import { TableItemTime } from "~/components/ui/TableItems";
 import { Button } from "~/components/ui/button";
 import { Trash } from "lucide-react";
 import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "~/components/ui/dialog";
 
 export default function DatasetTable({
   counts,
@@ -21,6 +29,8 @@ export default function DatasetTable({
 }) {
   const fetcher = useFetcher();
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [datasetToDelete, setDatasetToDelete] = useState<string | null>(null);
   return (
     <div>
       <Table>
@@ -64,16 +74,8 @@ export default function DatasetTable({
                       hoveredRow === count.dataset_name ? "" : "invisible"
                     }
                     onClick={() => {
-                      if (
-                        window.confirm(
-                          `Are you sure you want to delete the dataset "${count.dataset_name}"?`,
-                        )
-                      ) {
-                        fetcher.submit(
-                          { action: "delete", datasetName: count.dataset_name },
-                          { method: "post" },
-                        );
-                      }
+                      setDatasetToDelete(count.dataset_name);
+                      setDeleteDialogOpen(true);
                     }}
                   >
                     <Trash />
@@ -84,6 +86,48 @@ export default function DatasetTable({
           )}
         </TableBody>
       </Table>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Are you sure you want to delete the dataset{" "}
+              <span className="font-mono text-lg font-bold text-red-500">
+                {datasetToDelete}
+              </span>
+              ?
+            </DialogTitle>
+            <DialogDescription>
+              The datapoints will be marked as stale in the database (soft
+              deletion). This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (datasetToDelete) {
+                  fetcher.submit(
+                    { action: "delete", datasetName: datasetToDelete },
+                    { method: "post" },
+                  );
+                }
+                setDeleteDialogOpen(false);
+                setDatasetToDelete(null);
+              }}
+            >
+              <Trash className="inline h-4 w-4" />
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
