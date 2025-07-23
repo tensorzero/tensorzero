@@ -20,6 +20,7 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
+    "@ariakit/react": "^0.4.17",
     "@clickhouse/client": "^1.11.2",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-markdown": "^6.3.3",
@@ -67,6 +68,7 @@
     "isbot": "^5.1.25",
     "jotai": "^2.12.5",
     "lucide-react": "^0.487.0",
+    "match-sorter": "^8.0.3",
     "motion": "^12.23.0",
     "nuqs": "^2.4.3",
     "openai": "^4.104.0",

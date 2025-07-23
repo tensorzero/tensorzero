@@ -22,7 +22,8 @@ describe("transformVariantPerformances", () => {
         ci_error: 0.06774213240851094,
       },
     ];
-    const { data, variantNames } = transformVariantPerformances(input);
+    const { data, variants } = transformVariantPerformances(input);
+    const variantNames = variants.map((variant) => variant.name);
     expect(data).toEqual([
       {
         date: "2024-12-16",
@@ -51,7 +52,8 @@ describe("transformVariantPerformances", () => {
         ci_error: 0.08521739130434784,
       },
     ];
-    const { data, variantNames } = transformVariantPerformances(input);
+    const { data, variants } = transformVariantPerformances(input);
+    const variantNames = variants.map((variant) => variant.name);
     expect(data).toEqual([
       {
         date: "2024-12-23",
@@ -75,7 +77,8 @@ describe("transformVariantPerformances", () => {
       },
     ];
 
-    const { data, variantNames } = transformVariantPerformances(input);
+    const { data, variants } = transformVariantPerformances(input);
+    const variantNames = variants.map((variant) => variant.name);
     expect(data).toEqual([
       {
         date: "2024-12-30",
@@ -123,7 +126,8 @@ describe("transformVariantPerformances", () => {
       },
     ];
 
-    const { data, variantNames } = transformVariantPerformances(input);
+    const { data, variants } = transformVariantPerformances(input);
+    const variantNames = variants.map((variant) => variant.name);
     expect(data).toEqual([
       {
         date: "2024-12-16",

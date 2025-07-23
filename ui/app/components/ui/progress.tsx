@@ -24,8 +24,6 @@ export function Progress({
     >
       <ProgressPrimitive.Indicator
         style={{
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-expect-error
           "--_scale": `${value || 0}%`,
           "--_duration": `${updateInterval}ms`,
         }}
