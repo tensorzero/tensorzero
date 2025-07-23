@@ -112,7 +112,7 @@ FROM base AS ui
 
 RUN useradd -m -s /bin/sh ui
 
-RUN apt-get update && apt-get install -y curl python3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl wget python3 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
