@@ -1205,7 +1205,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
         .unwrap();
 
     assert_eq!(result["cached"], false);
-    // Should be a cache
+    // Should be a cache miss since the image data was changed
     (client, storage_path.unwrap())
 }
 
