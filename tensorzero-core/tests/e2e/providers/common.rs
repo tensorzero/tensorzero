@@ -1,4 +1,5 @@
 #![expect(clippy::print_stdout)]
+use std::io::Cursor;
 use std::{collections::HashMap, net::SocketAddr};
 
 use aws_config::Region;
@@ -13,6 +14,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{routing::get, Router};
 use base64::prelude::*;
 use futures::StreamExt;
+use image::{ImageFormat, ImageReader};
 use object_store::path::Path;
 
 use rand::Rng;
@@ -1179,16 +1181,34 @@ pub async fn test_base64_image_inference_with_provider_and_store(
         storage_path = Some(latest_storage_path);
     }
 
-    // Change the image to something else, and verify that we get a cache miss
+    let mut image_png = ImageReader::new(Cursor::new(FERRIS_PNG))
+        .with_guessed_format()
+        .unwrap()
+        .decode()
+        .unwrap();
+
+    // Get 32 random bytes, and write then to the image. This should force a cache miss
     let mut rng = rand::rng();
-    let random_data: String = (0..16)
-        .map(|_| rng.sample(rand::distr::Alphanumeric) as char)
+    let random_bytes: Vec<u8> = (0..32)
+        .map(|_| rng.sample(rand::distr::StandardUniform))
         .collect();
-    let random_base64 = BASE64_STANDARD.encode(random_data.as_bytes());
+    image_png
+        .as_mut_rgba8()
+        .unwrap()
+        .as_flat_samples_mut()
+        .samples[0..(random_bytes.len())]
+        .copy_from_slice(&random_bytes);
+
+    let mut updated_image = Cursor::new(Vec::new());
+    image_png
+        .write_to(&mut updated_image, ImageFormat::Png)
+        .unwrap();
+
+    let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
 
     params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64 {
         mime_type: mime::IMAGE_PNG,
-        data: random_base64,
+        data: updated_base64,
     });
 
     let response = client.inference(params.clone()).await.unwrap();
