@@ -77,11 +77,12 @@ pub fn get_clean_clickhouse(allow_db_missing: bool) -> (ClickHouseConnectionInfo
     let mut clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
     clickhouse_url.set_path("");
     clickhouse_url.set_query(Some(format!("database={database}").as_str()));
+    let cluster_name = std::env::var("TENSORZERO_CLICKHOUSE_CLUSTER_NAME").ok();
 
     let clickhouse = ClickHouseConnectionInfo::Production {
         database_url: SecretString::from(clickhouse_url.to_string()),
         database: database.clone(),
-        cluster_name: None,
+        cluster_name,
         client: make_clickhouse_http_client().unwrap(),
     };
     (
