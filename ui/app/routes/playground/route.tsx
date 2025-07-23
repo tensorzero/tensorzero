@@ -336,7 +336,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
         inputs &&
         functionName && (
           <>
-            <div className="overflow-x-auto rounded">
+            <div className="overflow-x-auto rounded border">
               <div className="min-w-fit">
                 {/* Header row with sticky positioning */}
                 <div className="bg-background sticky top-0 z-20 grid grid-cols-[400px_1fr] border-b">
@@ -378,7 +378,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                   (datapoint: TensorZeroDatapoint, index: number) => (
                     <div
                       key={datapoint.id}
-                      className="grid grid-cols-[400px_1fr] border-b"
+                      className="grid grid-cols-[400px_1fr] border-b last:border-b-0"
                     >
                       <div className="bg-background sticky left-0 z-10 flex flex-col gap-2 border-r p-4 text-sm">
                         <div className="text-xs font-medium text-gray-500">

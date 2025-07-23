@@ -185,7 +185,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
   return (
     // `min-width: 0` If within a grid parent, prevent editor from overflowing its grid cell and force horizontal scrolling
-    <div className={cn("group relative min-w-0 rounded-sm", className)}>
+    <div className={cn("group relative isolate min-w-0 rounded-sm", className)}>
       <div className="absolute top-1 right-1 z-10 flex gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
         {isCopyAvailable && (
           <Button
