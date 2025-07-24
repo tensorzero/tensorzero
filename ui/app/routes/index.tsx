@@ -107,6 +107,7 @@ export async function loader() {
     countDynamicEvaluationProjects(),
   ]);
   const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
+  // eslint-disable-next-line no-restricted-syntax
   const numFunctions = Object.keys(config.functions).length;
   const numDatasets = datasetCounts.length;
 

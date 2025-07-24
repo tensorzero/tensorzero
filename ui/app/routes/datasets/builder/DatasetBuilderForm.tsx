@@ -6,7 +6,7 @@ import {
 } from "./types";
 import { FunctionFormField } from "~/components/function/FunctionFormField";
 import { DatasetFormField } from "~/components/dataset/DatasetFormField";
-import { useConfig } from "~/context/config";
+import { useConfig, useFunctionConfig } from "~/context/config";
 import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 import { useFetcher } from "react-router";
@@ -54,14 +54,16 @@ export function DatasetBuilderForm() {
     metricName: metricName ?? undefined,
     threshold: threshold ?? undefined,
   });
+  const functionConfig = useFunctionConfig(functionName ?? "");
+
   useEffect(() => {
     const metricConfig = config.metrics[metricName ?? ""];
     form.setValue("metric_config", metricConfig ? metricConfig : undefined);
-    const functionType = config.functions[functionName ?? ""]?.type;
+    const functionType = functionConfig?.type;
     if (functionType) {
       form.setValue("type", functionType);
     }
-  }, [metricName, functionName, config, form]);
+  }, [metricName, functionName, config, form, functionConfig]);
 
   // Handle form submission response
   useEffect(() => {
@@ -132,6 +134,7 @@ export function DatasetBuilderForm() {
           <FunctionFormField
             control={form.control}
             name="function"
+            // eslint-disable-next-line no-restricted-syntax
             functions={config.functions}
             onSelect={() => {
               form.resetField("variant");

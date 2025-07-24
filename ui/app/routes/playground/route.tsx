@@ -10,8 +10,8 @@ import {
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
-import { useConfig } from "~/context/config";
-import { getConfig } from "~/utils/config/index.server";
+import { useConfig, useFunctionConfig } from "~/context/config";
+import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
 import { getTensorZeroClient, listDatapoints } from "~/utils/tensorzero.server";
 import { VariantFilter } from "~/components/function/variant/variant-filter";
@@ -94,7 +94,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   const functionConfig = functionName
-    ? (config.functions[functionName] ?? null)
+    ? await getFunctionConfig(functionName, config)
     : null;
   if (functionName && !functionConfig) {
     throw data(`Function config not found for function ${functionName}`, {
@@ -256,7 +256,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     serverInferences,
   );
 
-  const functionConfig = functionName ? config.functions[functionName] : null;
+  const functionConfig = useFunctionConfig(functionName);
   if (functionName && !functionConfig) {
     throw data(`Function config not found for function ${functionName}`, {
       status: 404,
@@ -301,6 +301,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
           onSelect={(value) =>
             updateSearchParams({ functionName: value, variant: null })
           }
+          // eslint-disable-next-line no-restricted-syntax
           functions={config.functions}
         />
       </div>

@@ -21,6 +21,20 @@ export function useConfig() {
   return config;
 }
 
+/**
+ * Hook to get a specific function configuration by name
+ * @param functionName - The name of the function to retrieve
+ * @returns The function configuration object or null if not found
+ */
+export function useFunctionConfig(functionName: string | null) {
+  const config = useConfig();
+  if (!functionName) {
+    return null;
+  }
+  // eslint-disable-next-line no-restricted-syntax
+  return config.functions[functionName] || null;
+}
+
 export function ConfigProvider({
   children,
   value,
