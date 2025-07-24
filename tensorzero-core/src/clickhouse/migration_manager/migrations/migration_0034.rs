@@ -1,0 +1,198 @@
+use super::check_table_exists;
+use crate::clickhouse::migration_manager::migration_trait::Migration;
+use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::error::{Error, ErrorDetails};
+use crate::serde_util::deserialize_u64;
+use async_trait::async_trait;
+use serde::Deserialize;
+use std::time::Duration;
+
+/// This migration adds a `CumulativeUsage` table and `CumulativeUsageView` materialized view
+/// This will allow the sum of tokens in the ModelInference table to be amortized and
+/// looked up as needed.
+pub struct Migration0034<'a> {
+    pub clickhouse: &'a ClickHouseConnectionInfo,
+}
+
+const MIGRATION_ID: &str = "0034";
+
+#[async_trait]
+impl Migration for Migration0034<'_> {
+    async fn can_apply(&self) -> Result<(), Error> {
+        if !check_table_exists(self.clickhouse, "ModelInference", MIGRATION_ID).await? {
+            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                id: MIGRATION_ID.to_string(),
+                message: "ModelInference table does not exist".to_string(),
+            }));
+        }
+        Ok(())
+    }
+
+    async fn should_apply(&self) -> Result<bool, Error> {
+        // If either the CumulativeUsage table or CumulativeUsageView view doesn't exist, we need to create it
+        if !check_table_exists(self.clickhouse, "CumulativeUsage", MIGRATION_ID).await? {
+            return Ok(true);
+        }
+        if !check_table_exists(self.clickhouse, "CumulativeUsageView", MIGRATION_ID).await? {
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
+        let view_offset = Duration::from_secs(15);
+        let view_timestamp = (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseMigration {
+                    id: MIGRATION_ID.to_string(),
+                    message: e.to_string(),
+                })
+            })?
+            + view_offset)
+            .as_secs();
+        match self
+            .clickhouse
+            .run_query_synchronous_no_params(
+                r#"CREATE TABLE CumulativeUsage (
+                        type LowCardinality(String),
+                        count UInt64,
+                    )
+                    ENGINE = SummingMergeTree
+                    ORDER BY type;"#
+                    .to_string(),
+            )
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                if e.to_string().contains("TABLE_ALREADY_EXISTS") {
+                    Err(ErrorDetails::ClickHouseMigration {
+                        id: MIGRATION_ID.to_string(),
+                        message: "A concurrent migration has already created the CumulativeUsage table. Please restart after the migration has completed.".to_string(),
+                    }.into())
+                } else {
+                    Err(e)
+                }
+            }
+        }?;
+
+        // Create the materialized view for the CumulativeUsage table from ModelInference
+        // If we are not doing a clean start, we need to add a where clause ot the view to only include rows that have been created
+        // after the view_timestamp
+        let view_where_clause = if clean_start {
+            String::new()
+        } else {
+            format!("AND UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
+        };
+        let query = format!(
+            r#"
+            CREATE MATERIALIZED VIEW CumulativeUsageView
+            TO CumulativeUsage
+            AS
+                    SELECT
+                        'input_tokens' as type,
+                        input_tokens as count
+                    FROM ModelInference
+                    WHERE input_tokens IS NOT NULL
+                    {view_where_clause}
+                UNION ALL
+                    SELECT
+                        'output_tokens' as type,
+                        output_tokens as count
+                    FROM ModelInference
+                    WHERE output_tokens IS NOT NULL
+                    {view_where_clause}
+                UNION ALL
+                    SELECT
+                        'model_inferences' as type,
+                        1 as count
+                    FROM ModelInference
+                    WHERE input_tokens IS NOT NULL
+                    {view_where_clause}
+            "#
+        );
+        match self.clickhouse.run_query_synchronous_no_params(query).await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                if e.to_string().contains("TABLE_ALREADY_EXISTS") {
+                    Err(ErrorDetails::ClickHouseMigration {
+                            id: MIGRATION_ID.to_string(),
+                            message: "A concurrent migration has already created the CumulativeUsage table. Please restart after the migration has completed.".to_string(),
+                        }.into())
+                } else {
+                    Err(e)
+                }
+            }
+        }?;
+
+        // If we are not clean starting, we must backfill this table
+        if !clean_start {
+            tokio::time::sleep(view_offset).await;
+
+            let query = format!(
+                r#"
+                SELECT
+                    sum(ifNull(input_tokens, 0)) as total_input_tokens,
+                    sum(ifNull(output_tokens, 0)) as total_output_tokens,
+                    COUNT(input_tokens) as total_count
+                FROM ModelInference
+                WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}))
+                FORMAT JsonEachRow;
+                "#
+            );
+            let response = self
+                .clickhouse
+                .run_query_synchronous_no_params(query)
+                .await?;
+            let trimmed_response = response.response.trim();
+            let parsed_response =
+                serde_json::from_str::<CountResponse>(trimmed_response).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: format!("Failed to deserialize count query: {e}"),
+                    })
+                })?;
+            let CountResponse {
+                total_input_tokens,
+                total_output_tokens,
+                total_count,
+            } = parsed_response;
+
+            let write_query = format!(
+                r#"
+                INSERT INTO CumulativeUsage (type, count) VALUES
+                ('input_tokens', {total_input_tokens}),
+                ('output_tokens', {total_output_tokens}),
+                ('model_inferences', {total_count})
+                "#
+            );
+            self.clickhouse
+                .run_query_synchronous_no_params(write_query)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    fn rollback_instructions(&self) -> String {
+        r#"
+        DROP TABLE CumulativeUsageView;
+        DROP TABLE CumulativeUsage;"#
+            .to_string()
+    }
+
+    async fn has_succeeded(&self) -> Result<bool, Error> {
+        let should_apply = self.should_apply().await?;
+        Ok(!should_apply)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct CountResponse {
+    #[serde(deserialize_with = "deserialize_u64")]
+    total_input_tokens: u64,
+    #[serde(deserialize_with = "deserialize_u64")]
+    total_output_tokens: u64,
+    #[serde(deserialize_with = "deserialize_u64")]
+    total_count: u64,
+}

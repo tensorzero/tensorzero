@@ -701,6 +701,7 @@ pub struct ExternalDataInfo {
     pub data: String,      // Must be valid ClickHouse data in the given format
 }
 
+#[derive(Debug)]
 pub struct ClickHouseResponse {
     pub response: String,
     pub metadata: ClickHouseResponseMetadata,
