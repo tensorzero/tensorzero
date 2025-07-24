@@ -10,9 +10,6 @@ test("should show the evaluation result page", async ({ page }) => {
 
 // This test depends on model inference cache hits (within ClickHouse)
 // If it starts failing, you may need to regenerate the model inference cache
-// See the 'IMPORTANT' comment in the image evaluation test below for a note
-// about 'concurrency-limit' race conditions. If we ever add duplicate datapoints
-// to this test, we'll need to set concurrency to 1 here as well.
 test("push the new run button, launch an evaluation", async ({ page }) => {
   await page.goto("/evaluations");
   await page.waitForTimeout(500);
@@ -29,6 +26,7 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
   await page.getByText("Select a variant").click();
   await page.waitForTimeout(500);
   await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
+  await page.getByTestId("concurrency-limit").fill("1");
   await page.getByRole("button", { name: "Launch" }).click();
   await page.waitForTimeout(10000);
 
