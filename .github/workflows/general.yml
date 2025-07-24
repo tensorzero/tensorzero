@@ -21,6 +21,36 @@ jobs:
       - name: Check version consistency
         run: ./ci/check-version-consistency.sh
 
+  # Like 'check-docker-compose', but loads the freshly build 'gateway' and 'ui' container images first
+  # This checks that all of our docker-compose files work with the changes in the PR
+  check-latest-docker-compose:
+    needs: [build-gateway-container, build-ui-container]
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Download container images
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        with:
+          pattern: build-*-container
+          merge-multiple: true
+
+      - name: Load `gateway` and `ui` containers
+        run: |
+          docker load < gateway-container.tar
+          docker load < ui-container.tar
+
+      - name: Check latest docker-compose
+        run: ./ci/check-latest-docker-compose.sh
+
+  # Checks our docker-compose files against the most recent published 'gateway' and 'ui' container images
+  # (not the ones built for this PR)
   check-docker-compose:
     permissions:
       # Permission to checkout the repository
@@ -496,6 +526,7 @@ jobs:
       [
         check-version-consistency,
         check-docker-compose,
+        check-latest-docker-compose,
         check-python-client-build,
         check-node-bindings,
         build-windows,
