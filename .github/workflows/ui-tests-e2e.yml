@@ -15,6 +15,61 @@ on:
         required: true
 
 jobs:
+
+  ui-tests-no-network:
+    # We're only using namespace here so that we can download the container artifacts
+    runs-on: namespace-profile-tensorzero-2x8
+    steps:
+    - name: Set DNS
+      run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
+    - uses: namespacelabs/nscloud-checkout-action@953fed31a6113cc2347ca69c9d823743c65bc84b
+    - name: Setup Node
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: "22.9.0"
+
+    - name: Download container images
+      uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
+      with:
+        pattern: build-*-container
+        merge-multiple: true
+
+    - name: Load `gateway` and `ui` containers
+      run: |
+        docker load < gateway-container.tar
+        docker load < ui-container.tar
+
+    # This allows us to use 'no-build' on subsequent steps
+    - name: Build needed docker images
+      working-directory: ui
+      run: |
+        docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml build fixtures mock-inference-provider
+
+    - name: Start docker containers without external network access
+      working-directory: ui
+      run: |
+        # Environment variables shared by the gateway and ui containers
+        echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
+        echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
+        echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
+        echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
+        echo "TENSORZERO_GATEWAY_CONFIG=/app/config/empty.toml" >> fixtures/.env
+        echo "TENSORZERO_UI_CONFIG_PATH=/app/config/empty.toml" >> fixtures/.env
+
+        export TENSORZERO_SKIP_LARGE_FIXTURES=1
+        docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f ../ci/internal-network.yml up --no-build -d
+
+    - name: Print Docker Compose logs
+      if: always()
+      working-directory: ui
+      run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs -t
+
+    - name: Print container health checks
+      if: always()
+      working-directory: ui
+      run: docker inspect --format "{{json .State.Health }}" $(docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml ps -q ui) | jq
+
+
   ui-tests-gateway-prefix:
     # We're only using namespace here so that we can download the container artifacts
     runs-on: namespace-profile-tensorzero-2x8
