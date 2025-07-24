@@ -1,7 +1,7 @@
 import type {
+  ContentBlockChatOutput,
   JsonInferenceOutput,
-  ContentBlockOutput,
-} from "~/utils/clickhouse/common";
+} from "tensorzero-node";
 import {
   SnippetLayout,
   SnippetContent,
@@ -16,14 +16,12 @@ import {
 } from "~/components/layout/SnippetContent";
 import { CodeEditor } from "../ui/code-editor";
 
-// IMPORTANT: THIS VERSION HAS `maxHeight` IN THE PROPS WHICH THE OTHER VERSIONS DO NOT HAVE
-
 /*
-  NOTE: This is the new output component but it is not editable yet so we are rolling
-  it out across the UI incrementally.
+NOTE: This is the new output component but it is not editable yet so we are rolling
+it out across the UI incrementally.
 */
 
-export type ChatInferenceOutputRenderingData = ContentBlockOutput[];
+export type ChatInferenceOutputRenderingData = ContentBlockChatOutput[];
 
 export interface JsonInferenceOutputRenderingData extends JsonInferenceOutput {
   schema?: Record<string, unknown>;
@@ -31,7 +29,6 @@ export interface JsonInferenceOutputRenderingData extends JsonInferenceOutput {
 
 interface OutputProps {
   output: ChatInferenceOutputRenderingData | JsonInferenceOutputRenderingData;
-  maxHeight?: number;
 }
 
 function isJsonInferenceOutput(
@@ -40,10 +37,7 @@ function isJsonInferenceOutput(
   return "raw" in output;
 }
 
-function renderJsonInferenceOutput(
-  output: JsonInferenceOutputRenderingData,
-  maxHeight?: number,
-) {
+function renderJsonInferenceOutput(output: JsonInferenceOutputRenderingData) {
   const tabs: SnippetTab[] = [
     {
       id: "parsed",
@@ -64,13 +58,13 @@ function renderJsonInferenceOutput(
     });
   }
 
-  // Set default tab to "Parsed" if it's available, otherwise "Raw"
+  // Set default tab to Parsed if it has content, otherwise Raw
   const defaultTab = output.parsed ? "parsed" : "raw";
 
   return (
     <SnippetTabs tabs={tabs} defaultTab={defaultTab}>
       {(activeTab) => (
-        <SnippetContent maxHeight={maxHeight}>
+        <>
           {activeTab === "parsed" ? (
             <>
               {output.parsed ? (
@@ -86,7 +80,7 @@ function renderJsonInferenceOutput(
           ) : activeTab === "raw" ? (
             <CodeEditor
               allowedLanguages={["json"]}
-              value={output.raw}
+              value={output.raw ? output.raw : undefined}
               readOnly
             />
           ) : (
@@ -96,18 +90,15 @@ function renderJsonInferenceOutput(
               readOnly
             />
           )}
-        </SnippetContent>
+        </>
       )}
     </SnippetTabs>
   );
 }
 
-function renderChatInferenceOutput(
-  output: ChatInferenceOutputRenderingData,
-  maxHeight?: number,
-) {
+function renderChatInferenceOutput(output: ChatInferenceOutputRenderingData) {
   return (
-    <SnippetContent maxHeight={maxHeight}>
+    <SnippetContent>
       {output.length === 0 ? (
         <EmptyMessage message="The output was empty" />
       ) : (
@@ -125,8 +116,9 @@ function renderChatInferenceOutput(
                     toolName={block.name}
                     toolRawName={block.raw_name}
                     toolArguments={
-                      block.arguments &&
-                      JSON.stringify(block.arguments, null, 2)
+                      block.arguments
+                        ? JSON.stringify(block.arguments, null, 2)
+                        : null
                     }
                     toolRawArguments={block.raw_arguments}
                     toolCallId={block.id}
@@ -142,12 +134,12 @@ function renderChatInferenceOutput(
   );
 }
 
-export default function Output({ output, maxHeight }: OutputProps) {
+export default function OutputRust({ output }: OutputProps) {
   return (
     <SnippetLayout>
       {isJsonInferenceOutput(output)
-        ? renderJsonInferenceOutput(output, maxHeight)
-        : renderChatInferenceOutput(output, maxHeight)}
+        ? renderJsonInferenceOutput(output)
+        : renderChatInferenceOutput(output)}
     </SnippetLayout>
   );
 }
