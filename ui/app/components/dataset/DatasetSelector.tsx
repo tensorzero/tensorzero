@@ -51,13 +51,12 @@ interface DatasetSelectorProps {
   functionName?: string;
   placeholder?: string;
   className?: string;
-  disabled?: boolean;
   allowCreation?: boolean;
   buttonProps?: React.ComponentProps<typeof Button>;
+  disabled?: boolean;
 }
 
 // TODO Create new datasets within this component
-
 export function DatasetSelector({
   selected,
   onSelect,
@@ -66,12 +65,16 @@ export function DatasetSelector({
   allowCreation = true,
   className,
   buttonProps,
-  disabled,
+  disabled = false,
 }: DatasetSelectorProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  const { data: datasets, isLoading } = useDatasetCounts(functionName);
+  const {
+    data: datasets = [],
+    isLoading,
+    isError,
+  } = useDatasetCounts(functionName);
 
   // Datasets sorted by last updated date for initial display
   const recentlyUpdatedDatasets = useMemo(
@@ -99,6 +102,7 @@ export function DatasetSelector({
             role="combobox"
             aria-expanded={open}
             className="group w-full justify-between border font-normal"
+            disabled={disabled}
             {...buttonProps}
           >
             {selected ? (
@@ -155,6 +159,10 @@ export function DatasetSelector({
             {isLoading ? (
               <div className="text-fg-muted flex items-center justify-center py-4 text-sm">
                 Loading datasets...
+              </div>
+            ) : isError ? (
+              <div className="text-fg-muted flex items-center justify-center py-4 text-sm">
+                There was an error loading datasets.
               </div>
             ) : (
               <CommandList>
