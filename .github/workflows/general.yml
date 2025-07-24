@@ -28,7 +28,7 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - name: Set DNS
@@ -293,7 +293,7 @@ jobs:
           uv run pyright
 
       - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+        run: npm install -g wasm-pack
 
       - name: Build minijinja WASM bindings
         working-directory: ui/app/utils/minijinja
@@ -485,6 +485,9 @@ jobs:
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+      FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
