@@ -106,6 +106,10 @@ pub struct Params {
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    /// If `true`, add a `resolved_messages` field to the response, containing the actual messages sent to the LLM.
+    /// This is useful for clients to maintain context for multi-turn conversations.
+    #[serde(default)]
+    pub include_resolved_messages: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -487,7 +491,23 @@ pub async fn inference(
                 result.set_original_response(None);
             }
 
-            let response = InferenceResponse::new(result, episode_id, variant_name.to_string());
+            // Extract resolved messages if requested
+            let resolved_messages = if params.include_resolved_messages {
+                // Get input messages from the first model inference result
+                result
+                    .model_inference_results()
+                    .first()
+                    .map(|r| r.input_messages.clone())
+            } else {
+                None
+            };
+
+            let response = InferenceResponse::new(
+                result,
+                episode_id,
+                variant_name.to_string(),
+                resolved_messages,
+            );
 
             return Ok(InferenceOutput::NonStreaming(response));
         }
@@ -898,6 +918,8 @@ pub struct ChatInferenceResponse {
     pub content: Vec<ContentBlockChatOutput>,
     pub usage: Usage,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_messages: Option<Vec<RequestMessage>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
@@ -911,13 +933,20 @@ pub struct JsonInferenceResponse {
     pub output: JsonInferenceOutput,
     pub usage: Usage,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_messages: Option<Vec<RequestMessage>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
 }
 
 impl InferenceResponse {
-    pub fn new(inference_result: InferenceResult, episode_id: Uuid, variant_name: String) -> Self {
+    pub fn new(
+        inference_result: InferenceResult,
+        episode_id: Uuid,
+        variant_name: String,
+        resolved_messages: Option<Vec<RequestMessage>>,
+    ) -> Self {
         let usage = inference_result.usage_considering_cached();
         match inference_result {
             InferenceResult::Chat(result) => InferenceResponse::Chat(ChatInferenceResponse {
@@ -926,6 +955,7 @@ impl InferenceResponse {
                 variant_name,
                 content: result.content,
                 usage,
+                resolved_messages: resolved_messages.clone(),
                 original_response: result.original_response,
                 finish_reason: result.finish_reason,
             }),
@@ -938,6 +968,7 @@ impl InferenceResponse {
                     variant_name,
                     output,
                     usage,
+                    resolved_messages,
                     original_response: result.original_response,
                     finish_reason: result.finish_reason,
                 })
@@ -1214,7 +1245,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::inference::types::{
-        ChatInferenceResultChunk, ContentBlockChunk, File, InputMessageContent,
+        ChatInferenceResultChunk, ContentBlock, ContentBlockChunk, File, InputMessageContent,
         JsonInferenceResultChunk, Role, TextChunk,
     };
 
@@ -1476,5 +1507,155 @@ mod tests {
                 data: "fake_base64_data".to_string(),
             })
         );
+    }
+
+    #[test]
+    fn test_inference_response_with_resolved_messages() {
+        use crate::inference::types::{
+            ChatInferenceResult, ContentBlock, ContentBlockChatOutput, ContentBlockOutput, Latency,
+            ModelInferenceResponseWithMetadata,
+        };
+
+        // Create mock request messages
+        let resolved_messages = vec![
+            RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text(crate::inference::types::Text {
+                    text: "Hello, how are you?".to_string(),
+                })],
+            },
+            RequestMessage {
+                role: Role::Assistant,
+                content: vec![ContentBlock::Text(crate::inference::types::Text {
+                    text: "I'm doing well, thank you!".to_string(),
+                })],
+            },
+        ];
+
+        // Create mock model inference response with input messages
+        let model_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: 1234567890,
+            output: vec![ContentBlockOutput::Text(crate::inference::types::Text {
+                text: "Hello! I'm doing well.".to_string(),
+            })],
+            system: None,
+            input_messages: resolved_messages.clone(),
+            raw_request: "raw request".to_string(),
+            raw_response: "raw response".to_string(),
+            usage: Usage {
+                input_tokens: 10,
+                output_tokens: 8,
+            },
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(500),
+            },
+            model_provider_name: "test_provider".into(),
+            model_name: "test_model".into(),
+            cached: false,
+            finish_reason: Some(FinishReason::Stop),
+        };
+
+        // Create chat inference result
+        let chat_result = ChatInferenceResult {
+            inference_id: Uuid::now_v7(),
+            created: 1234567890,
+            content: vec![ContentBlockChatOutput::Text(
+                crate::inference::types::Text {
+                    text: "Hello! I'm doing well.".to_string(),
+                },
+            )],
+            model_inference_results: vec![model_response],
+            inference_params: InferenceParams::default(),
+            original_response: Some("original response".to_string()),
+            finish_reason: Some(FinishReason::Stop),
+        };
+
+        let inference_result = InferenceResult::Chat(chat_result);
+        let episode_id = Uuid::now_v7();
+        let variant_name = "test_variant".to_string();
+
+        // Test with resolved_messages = Some
+        let response_with_messages = InferenceResponse::new(
+            inference_result.clone(),
+            episode_id,
+            variant_name.clone(),
+            Some(resolved_messages.clone()),
+        );
+
+        match response_with_messages {
+            InferenceResponse::Chat(chat_response) => {
+                assert_eq!(chat_response.episode_id, episode_id);
+                assert_eq!(chat_response.variant_name, variant_name);
+                assert!(chat_response.resolved_messages.is_some());
+                let response_messages = chat_response.resolved_messages.unwrap();
+                assert_eq!(response_messages.len(), 2);
+                assert_eq!(response_messages[0].role, Role::User);
+                assert_eq!(response_messages[1].role, Role::Assistant);
+            }
+            InferenceResponse::Json(_) => panic!("Expected Chat response"),
+        }
+
+        // Test with resolved_messages = None
+        let response_without_messages =
+            InferenceResponse::new(inference_result, episode_id, variant_name, None);
+
+        match response_without_messages {
+            InferenceResponse::Chat(chat_response) => {
+                assert!(chat_response.resolved_messages.is_none());
+            }
+            InferenceResponse::Json(_) => panic!("Expected Chat response"),
+        }
+    }
+
+    #[test]
+    fn test_include_resolved_messages_integration() {
+        // Test ChatInferenceResponse with resolved_messages
+        let request_messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec![ContentBlock::Text(crate::inference::types::Text {
+                text: "Test message".to_string(),
+            })],
+        }];
+
+        let chat_response = ChatInferenceResponse {
+            inference_id: Uuid::now_v7(),
+            episode_id: Uuid::now_v7(),
+            variant_name: "test_variant".to_string(),
+            content: vec![ContentBlockChatOutput::Text(
+                crate::inference::types::Text {
+                    text: "Response message".to_string(),
+                },
+            )],
+            usage: Usage {
+                input_tokens: 10,
+                output_tokens: 5,
+            },
+            resolved_messages: Some(request_messages.clone()),
+            original_response: None,
+            finish_reason: None,
+        };
+
+        // Test serialization of response with resolved_messages
+        let response_serialized = serde_json::to_value(&chat_response).unwrap();
+        assert!(response_serialized.get("resolved_messages").is_some());
+        assert_eq!(
+            response_serialized["resolved_messages"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+
+        // Test that resolved_messages is omitted when None
+        let chat_response_no_messages = ChatInferenceResponse {
+            resolved_messages: None,
+            ..chat_response
+        };
+        let response_no_messages_serialized =
+            serde_json::to_value(&chat_response_no_messages).unwrap();
+        assert!(response_no_messages_serialized
+            .get("resolved_messages")
+            .is_none());
     }
 }

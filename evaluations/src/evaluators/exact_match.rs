@@ -120,6 +120,7 @@ mod tests {
                 input_tokens: 10,
                 output_tokens: 10,
             },
+            resolved_messages: None,
             original_response: None,
             finish_reason: None,
         });
@@ -138,6 +139,7 @@ mod tests {
                 input_tokens: 10,
                 output_tokens: 10,
             },
+            resolved_messages: None,
             original_response: None,
             finish_reason: None,
         });
@@ -220,6 +222,7 @@ mod tests {
                 input_tokens: 10,
                 output_tokens: 10,
             },
+            resolved_messages: None,
             original_response: None,
             finish_reason: None,
         });
@@ -239,6 +242,7 @@ mod tests {
                 input_tokens: 10,
                 output_tokens: 10,
             },
+            resolved_messages: None,
             original_response: None,
             finish_reason: None,
         });

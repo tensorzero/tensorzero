@@ -110,6 +110,7 @@ impl TryFrom<ClientInferenceParams> for Params {
                 .collect(),
             cache_options: this.cache_options,
             include_original_response: this.include_original_response,
+            include_resolved_messages: false, // Client doesn't support this yet
             extra_body: this.extra_body,
             extra_headers: this.extra_headers,
         })
@@ -156,6 +157,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         credentials: credentials.into_iter().map(|(k, v)| (k, v.0)).collect(),
         cache_options,
         include_original_response,
+        include_resolved_messages: false, // Client doesn't support this yet
         extra_body,
         extra_headers,
     };
