@@ -1,19 +1,14 @@
 from openai import OpenAI
 
-# Point to Ollama's OpenAI-compatible endpoint
-client = OpenAI(
-    base_url="http://localhost:11434/v1",
-    api_key="not-needed"  # Ollama doesn't need an API key
-)
-
-response = client.chat.completions.create(
-    model="llama2",  # Use your local model
-    messages=[
-        {
-            "role": "user",
-            "content": "Write a haiku about artificial intelligence.",
-        }
-    ],
-)
+with OpenAI() as client:
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "user",
+                "content": "Write a haiku about artificial intelligence.",
+            }
+        ],
+    )
 
 print(response)
