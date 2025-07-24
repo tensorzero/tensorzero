@@ -575,6 +575,10 @@ async fn test_clickhouse_migration_manager() {
                     !logs_contain(&format!("Migration succeeded: {name}")),
                     "Migration {name} should not have succeeded (because it wasn't applied)"
                 );
+                assert!(
+                    !logs_contain("Materialized view `TokenTotalView` was not written because it was recently created"),
+                    "TokenTotalView backfilling failed"
+                );
             }
 
             let run_migration = || async {
