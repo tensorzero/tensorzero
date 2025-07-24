@@ -90,6 +90,8 @@ async function resolveContent(
     case "tool_call":
     case "tool_result":
     case "raw_text":
+    case "thought":
+    case "unknown":
       return content;
     case "text":
       return prepareDisplayText(content, role, functionConfig);
@@ -145,6 +147,8 @@ async function resolveModelInferenceContent(
     case "tool_call":
     case "tool_result":
     case "raw_text":
+    case "thought":
+    case "unknown":
       return content;
     // Convert legacy 'image' content block to 'file' when resolving input
     case "image":

@@ -143,8 +143,10 @@ async fn test_config_from_toml_table_valid() {
                             PathWithContents {
                                 // We don't use a real path for programmatically generated templates
                                 // Instead we use this handle and then the same in minijinja
-                                path: PathBuf::from(
-                                    "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
+                                path: TomlRelativePath::new_for_tests(
+                                    PathBuf::from(
+                                        "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
+                                    )
                                 ),
                                 contents:
                                     "Return True if there is NSFW content in this generation.\n\n"
@@ -1460,8 +1462,12 @@ async fn test_invalid_toml() {
         .to_string();
 
     assert!(
-        err.contains("duplicate key `my-model` in table `models`"),
-        "Unexpected error: {err:?}"
+        err.contains("duplicate key"),
+        "Message is missing 'duplicate key': {err}"
+    );
+    assert!(
+        err.contains("models.my-model"),
+        "Message is missing 'models.my-model': {err}"
     );
 }
 
@@ -1829,6 +1835,27 @@ async fn test_config_s3_allow_http_env_var() {
         "Missing dns error in error: {err}"
     );
     assert!(!logs_contain("HTTPS"));
+}
+
+#[traced_test]
+#[tokio::test]
+async fn test_deprecated_enable_template_filesystem_access() {
+    let config_str = r#"
+        [gateway]
+        enable_template_filesystem_access = true
+        "#;
+    let config_toml = toml::from_str(config_str).expect("Failed to parse sample config");
+    let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let config = Config::load_from_toml(config_toml, base_path.clone())
+        .await
+        .unwrap();
+    assert!(config.gateway.template_filesystem_access.enabled);
+    assert!(config
+        .gateway
+        .template_filesystem_access
+        .base_path
+        .is_none());
+    assert!(logs_contain("Deprecation Warning: `gateway.enable_template_filesystem_access` is deprecated. Please use `[gateway.template_filesystem_access.enabled]` instead."));
 }
 
 #[traced_test]

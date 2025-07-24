@@ -11,6 +11,7 @@ fi
 if [[ "$1" == *ui/fixtures/docker-compose.yml || \
       "$1" == *ui/fixtures/docker-compose.e2e.yml || \
       "$1" == *tensorzero-core/tests/e2e/docker-compose.yml || \
+      "$1" == *ui/docker-compose.yml || \
       "$1" == *ci/internal-network.yml ]]; then
   exit 0
 fi

@@ -15,7 +15,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.7.3"
+version = "2025.7.4"
 rust-version = "1.85.0"
 license = "Apache-2.0"
 
@@ -32,7 +32,7 @@ uuid = { version = "1.17.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.134", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
 tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
-toml = "0.8.23"
+toml = "0.9.2"
 reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
 http = "1.3.1"
@@ -74,6 +74,8 @@ unsafe_code = "forbid"
 allow_attributes = "deny"
 dbg_macro = "deny"
 expect_used = "deny"
+manual_string_new = "deny"
+if_not_else = "deny"
 match_bool = "deny"
 panic = "deny"
 print_stderr = "deny"
