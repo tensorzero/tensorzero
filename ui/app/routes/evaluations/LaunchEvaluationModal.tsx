@@ -201,6 +201,7 @@ function EvaluationForm({
           type="number"
           id="concurrency_limit"
           name="concurrency_limit"
+          data-testid="concurrency-limit"
           min="1"
           value={concurrencyLimit}
           onChange={(e) => setConcurrencyLimit(e.target.value)}

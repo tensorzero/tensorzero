@@ -10,6 +10,9 @@ test("should show the evaluation result page", async ({ page }) => {
 
 // This test depends on model inference cache hits (within ClickHouse)
 // If it starts failing, you may need to regenerate the model inference cache
+// See the 'IMPORTANT' comment in the image evaluation test below for a note
+// about 'concurrency-limit' race conditions. If we ever add duplicate datapoints
+// to this test, we'll need to set concurrency to 1 here as well.
 test("push the new run button, launch an evaluation", async ({ page }) => {
   await page.goto("/evaluations");
   await page.waitForTimeout(500);
@@ -59,6 +62,10 @@ test("push the new run button, launch an image evaluation", async ({
   await page.getByText("Select a variant").click();
   await page.waitForTimeout(500);
   await page.getByRole("option", { name: "honest_answer" }).click();
+  // IMPORTANT - we need to set concurrency to 1 in order to prevent a race condition
+  // when regenerating fixtures, as we intentionally have multiple datapoints with
+  // identical inputs. See https://www.notion.so/tensorzerodotcom/Evaluations-cache-non-determinism-23a7520bbad3801f80fceaa7e859ce06
+  await page.getByTestId("concurrency-limit").fill("1");
   await page.getByRole("button", { name: "Launch" }).click();
   await page.waitForTimeout(5000);
 
