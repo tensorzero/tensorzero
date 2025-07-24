@@ -47,7 +47,7 @@ jobs:
           docker load < ui-container.tar
 
       - name: Check latest docker-compose
-        run: ./ci/check-latest-docker-compose.sh
+        run: ./ci/check-all-docker-compose.sh
 
   # Checks our docker-compose files against the most recent published 'gateway' and 'ui' container images
   # (not the ones built for this PR)
