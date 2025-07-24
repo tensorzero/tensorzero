@@ -78,7 +78,7 @@ routing = ["groq"]
 
 [models."mixtral-groq".providers.groq]
 type = "groq"
-model_name = "mistral-saba-24b"
+model_name = "qwen/qwen3-32b"
 
 
 [models."mixtral-groq-dynamic"]
@@ -86,7 +86,7 @@ routing = ["groq"]
 
 [models."mixtral-groq-dynamic".providers.groq]
 type = "groq"
-model_name = "mistral-saba-24b"
+model_name = "qwen/qwen3-32b"
 api_key_location = "dynamic::groq_api_key"
 
 
