@@ -55,9 +55,9 @@ use crate::providers::{
     anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
     deepseek::DeepSeekProvider, fireworks::FireworksProvider,
     gcp_vertex_anthropic::GCPVertexAnthropicProvider, gcp_vertex_gemini::GCPVertexGeminiProvider,
-    groq::GroqProvider, mistral::MistralProvider, nvidia_nim::NvidiaNimProvider, openai::OpenAIProvider,
-    openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
-    xai::XAIProvider,
+    groq::GroqProvider, mistral::MistralProvider, nvidia_nim::NvidiaNimProvider,
+    openai::OpenAIProvider, openrouter::OpenRouterProvider, together::TogetherProvider,
+    vllm::VLLMProvider, xai::XAIProvider,
 };
 
 #[derive(Debug, Serialize)]
@@ -828,7 +828,9 @@ impl ProviderConfig {
                 Cow::Borrowed(crate::providers::hyperbolic::PROVIDER_TYPE)
             }
             ProviderConfig::Mistral(_) => Cow::Borrowed(crate::providers::mistral::PROVIDER_TYPE),
-            ProviderConfig::NvidiaNim(_) => Cow::Borrowed(crate::providers::nvidia_nim::PROVIDER_TYPE),
+            ProviderConfig::NvidiaNim(_) => {
+                Cow::Borrowed(crate::providers::nvidia_nim::PROVIDER_TYPE)
+            }
             ProviderConfig::OpenAI(_) => Cow::Borrowed(crate::providers::openai::PROVIDER_TYPE),
             ProviderConfig::OpenRouter(_) => {
                 Cow::Borrowed(crate::providers::openrouter::PROVIDER_TYPE)
@@ -948,10 +950,10 @@ pub enum UninitializedProviderConfig {
     #[strum(serialize = "nvidia_nim")]
     #[serde(rename = "nvidia_nim")]
     NvidiaNim {
-    model_name: Option<String>,
-    api_base: Option<String>,
-    #[cfg_attr(test, ts(type = "string | null"))]
-    api_key_location: Option<CredentialLocation>,
+        model_name: Option<String>,
+        api_base: Option<String>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        api_key_location: Option<CredentialLocation>,
     },
     OpenAI {
         model_name: String,
@@ -1141,13 +1143,13 @@ impl UninitializedProviderConfig {
                 api_key_location,
             } => ProviderConfig::Mistral(MistralProvider::new(model_name, api_key_location)?),
             UninitializedProviderConfig::NvidiaNim {
-            model_name,
-            api_base,
-            api_key_location,
+                model_name,
+                api_base,
+                api_key_location,
             } => ProviderConfig::NvidiaNim(NvidiaNimProvider::new(
-            model_name.unwrap_or_default(),
-            api_key_location,
-            api_base,
+                model_name.unwrap_or_default(),
+                api_key_location,
+                api_base,
             )?),
             UninitializedProviderConfig::OpenAI {
                 model_name,

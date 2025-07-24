@@ -1,6 +1,6 @@
-use std::sync::OnceLock;
 use secrecy::SecretString;
 use serde::Serialize;
+use std::sync::OnceLock;
 use url::Url;
 
 use crate::{
@@ -9,8 +9,8 @@ use crate::{
     error::{Error, ErrorDetails},
     inference::{
         types::{
-            ModelInferenceRequest,
-            PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+            ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+            ProviderInferenceResponse,
         },
         InferenceProvider,
     },
@@ -52,27 +52,27 @@ impl NvidiaNimProvider {
             &DEFAULT_CREDENTIALS,
         )?;
 
-let api_base = match api_base {
-    Some(base) => {
-        let mut url = Url::parse(&base).map_err(|e| {
-            Error::new(ErrorDetails::Config {
-                message: format!("Invalid api_base URL: {e}"),
-            })
-        })?;
+        let api_base = match api_base {
+            Some(base) => {
+                let mut url = Url::parse(&base).map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Invalid api_base URL: {e}"),
+                    })
+                })?;
 
-        // Ensure URL ends with a slash
-        if !url.path().ends_with('/') {
-            url.set_path(&format!("{}/", url.path()));
-        }
+                // Ensure URL ends with a slash
+                if !url.path().ends_with('/') {
+                    url.set_path(&format!("{}/", url.path()));
+                }
 
-        url
-    },
-    None => Url::parse(DEFAULT_NIM_API_BASE).map_err(|e| {
-        Error::new(ErrorDetails::Config {
-            message: format!("Failed to parse default API base URL: {e}"),
-        })
-    })?,
-};
+                url
+            }
+            None => Url::parse(DEFAULT_NIM_API_BASE).map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("Failed to parse default API base URL: {e}"),
+                })
+            })?,
+        };
 
         Ok(NvidiaNimProvider {
             model_name,
@@ -80,7 +80,6 @@ let api_base = match api_base {
             credentials,
         })
     }
-
 
     pub fn model_name(&self) -> &str {
         &self.model_name
@@ -152,7 +151,9 @@ impl InferenceProvider for NvidiaNimProvider {
             self.credentials.to_credential_location(),
         )?;
 
-        openai_provider.infer(request, http_client, dynamic_api_keys, model_provider).await
+        openai_provider
+            .infer(request, http_client, dynamic_api_keys, model_provider)
+            .await
     }
 
     async fn infer_stream<'a>(
@@ -168,7 +169,9 @@ impl InferenceProvider for NvidiaNimProvider {
             self.credentials.to_credential_location(),
         )?;
 
-        openai_provider.infer_stream(request, http_client, dynamic_api_keys, model_provider).await
+        openai_provider
+            .infer_stream(request, http_client, dynamic_api_keys, model_provider)
+            .await
     }
 
     async fn start_batch_inference<'a>(
@@ -213,7 +216,10 @@ mod tests {
         assert!(provider.is_ok());
         let provider = provider.unwrap();
         assert_eq!(provider.model_name(), "meta/llama-3.1-8b-instruct");
-        assert_eq!(provider.api_base.as_str(), "https://integrate.api.nvidia.com/v1/");
+        assert_eq!(
+            provider.api_base.as_str(),
+            "https://integrate.api.nvidia.com/v1/"
+        );
 
         // Test with custom API base
         let provider = NvidiaNimProvider::new(
@@ -313,7 +319,10 @@ mod tests {
 
         // Verify the provider is configured correctly
         assert_eq!(provider.model_name(), "meta/llama-3.1-8b-instruct");
-        assert_eq!(provider.api_base.as_str(), "https://integrate.api.nvidia.com/v1/");
+        assert_eq!(
+            provider.api_base.as_str(),
+            "https://integrate.api.nvidia.com/v1/"
+        );
     }
 
     #[test]
@@ -326,7 +335,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(cloud_provider.api_base.as_str(), "https://integrate.api.nvidia.com/v1/");
+        assert_eq!(
+            cloud_provider.api_base.as_str(),
+            "https://integrate.api.nvidia.com/v1/"
+        );
 
         // Scenario 2: Self-hosted deployment
         let self_hosted_provider = NvidiaNimProvider::new(
@@ -336,7 +348,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(self_hosted_provider.api_base.as_str(), "http://192.168.1.100:8000/v1/");
+        assert_eq!(
+            self_hosted_provider.api_base.as_str(),
+            "http://192.168.1.100:8000/v1/"
+        );
     }
 
     #[test]
@@ -355,31 +370,34 @@ mod tests {
         );
 
         assert!(invalid_url.is_err());
-        assert!(invalid_url.unwrap_err().to_string().contains("Invalid api_base URL"));
+        assert!(invalid_url
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid api_base URL"));
 
         // Test invalid credential location
-        let no_creds = NvidiaNimProvider::new(
-            "model".to_string(),
+        let no_creds =
+            NvidiaNimProvider::new("model".to_string(), Some(CredentialLocation::None), None);
+        assert!(no_creds.is_err());
+        assert!(no_creds
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid api_key_location"));
+    }
+
+    #[test]
+    fn test_credential_validation() {
+        // Test that CredentialLocation::None is rejected (invalid configuration)
+        let result = NvidiaNimProvider::new(
+            "meta/llama-3.1-8b-instruct".to_string(),
             Some(CredentialLocation::None),
             None,
         );
-        assert!(no_creds.is_err());
-        assert!(no_creds.unwrap_err().to_string().contains("Invalid api_key_location"));
-    }
 
-#[test]
-fn test_credential_validation() {
-    // Test that CredentialLocation::None is rejected (invalid configuration)
-    let result = NvidiaNimProvider::new(
-        "meta/llama-3.1-8b-instruct".to_string(),
-        Some(CredentialLocation::None),
-        None,
-    );
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("Invalid api_key_location"));
 
-    assert!(result.is_err());
-    let error = result.unwrap_err();
-    assert!(error.to_string().contains("Invalid api_key_location"));
-
-    // The important part is testing that CredentialLocation::None is rejected
+        // The important part is testing that CredentialLocation::None is rejected
     }
 }
