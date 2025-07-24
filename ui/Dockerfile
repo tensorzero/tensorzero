@@ -56,6 +56,7 @@ FROM rust:latest AS minijinja-build-env
 COPY . /build
 
 WORKDIR /build/ui/app/utils/minijinja
+RUN apt-get update && apt-get install -y nodejs npm
 RUN npm install -g wasm-pack
 RUN wasm-pack build --features console_error_panic_hook
 
