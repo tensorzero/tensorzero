@@ -28,7 +28,7 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - name: Set DNS
