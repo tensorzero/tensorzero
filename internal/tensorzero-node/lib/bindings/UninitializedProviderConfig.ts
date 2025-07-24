@@ -58,6 +58,12 @@ export type UninitializedProviderConfig =
       api_base: string | null;
       api_key_location: string | null;
     }
+  | {
+      type: "nvidia_nim";
+      model_name: string | null;
+      api_base: string | null;
+      api_key_location: string | null;
+    }
   | { type: "openrouter"; model_name: string; api_key_location: string | null }
   | {
       type: "together";
