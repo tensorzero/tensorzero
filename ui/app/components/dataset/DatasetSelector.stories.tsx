@@ -73,7 +73,7 @@ export const Default: Story = {
   render: function Render(args) {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
     const queryClient = new QueryClient();
-    queryClient.setQueryData(["DATASETS_COUNT"], mockDatasets);
+    queryClient.setQueryData(["DATASETS_COUNT", undefined], mockDatasets);
 
     return (
       <QueryClientProvider client={queryClient}>
@@ -98,7 +98,7 @@ export const EmptyDatasets: Story = {
   render: function Render(args) {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
     const queryClient = new QueryClient();
-    queryClient.setQueryData(["DATASETS_COUNT"], []);
+    queryClient.setQueryData(["DATASETS_COUNT", undefined], []);
 
     return (
       <QueryClientProvider client={queryClient}>
@@ -123,7 +123,7 @@ export const DisallowCreation: Story = {
   render: function Render(args) {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
     const queryClient = new QueryClient();
-    queryClient.setQueryData(["DATASETS_COUNT"], mockDatasets);
+    queryClient.setQueryData(["DATASETS_COUNT", undefined], mockDatasets);
 
     return (
       <QueryClientProvider client={queryClient}>
@@ -156,7 +156,10 @@ export const ManyDatasets: Story = {
         Date.now() - 1000 * 60 * 60 * (i + 1),
       ).toISOString(),
     }));
-    queryClient.setQueryData(["DATASETS_COUNT"], repeatedMockDatasets);
+    queryClient.setQueryData(
+      ["DATASETS_COUNT", undefined],
+      repeatedMockDatasets,
+    );
 
     return (
       <QueryClientProvider client={queryClient}>

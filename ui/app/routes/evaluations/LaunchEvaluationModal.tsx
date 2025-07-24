@@ -124,9 +124,11 @@ function EvaluationForm({
       />
 
       <DatasetSelector
+        functionName={function_name ?? undefined}
         selected={selectedDatasetName ?? undefined}
         onSelect={setSelectedDatasetName}
         allowCreation={false}
+        disabled={!selectedEvaluationName}
       />
 
       <div className="text-muted-foreground mt-2 mb-1 text-xs">

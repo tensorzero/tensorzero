@@ -118,7 +118,7 @@ impl DummyProvider {
                     created,
                     content: vec![chunk],
                     usage: None,
-                    raw_response: "".to_string(),
+                    raw_response: String::new(),
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                     finish_reason: None,
                 })
@@ -128,7 +128,7 @@ impl DummyProvider {
                 content: vec![],
                 usage: Some(self.get_model_usage(total_tokens)),
                 finish_reason: Some(FinishReason::Stop),
-                raw_response: "".to_string(),
+                raw_response: String::new(),
                 latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
             })))
             .throttle(std::time::Duration::from_millis(10));
@@ -693,7 +693,7 @@ impl InferenceProvider for DummyProvider {
                     content: vec![],
                     usage: Some(self.get_model_usage(content_chunk_len as u32)),
                     finish_reason,
-                    raw_response: "".to_string(),
+                    raw_response: String::new(),
                     latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
                 })))
                 .throttle(std::time::Duration::from_millis(10)),
