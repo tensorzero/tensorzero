@@ -333,10 +333,10 @@ async fn main() {
     tracing::info!("TensorZero Gateway is listening on {actual_bind_address}");
 
     // Print the base path if set
-    if !base_path.is_empty() {
-        tracing::info!("├ API Base Path: {base_path}");
-    } else {
+    if base_path.is_empty() {
         tracing::info!("├ API Base Path: /");
+    } else {
+        tracing::info!("├ API Base Path: {base_path}");
     }
 
     // Print the configuration being used

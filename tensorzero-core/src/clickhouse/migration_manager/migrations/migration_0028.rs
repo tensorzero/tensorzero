@@ -94,10 +94,10 @@ impl Migration for Migration0028<'_> {
             })?
             + view_offset)
             .as_secs();
-        let view_timestamp_where_clause = if !clean_start {
-            format!("AND UUIDv7ToDateTime(feedback_id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
-        } else {
+        let view_timestamp_where_clause = if clean_start {
             String::new()
+        } else {
+            format!("AND UUIDv7ToDateTime(feedback_id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         };
         self.clickhouse
             .run_query_synchronous_no_params(

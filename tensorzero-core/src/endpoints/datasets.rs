@@ -936,14 +936,14 @@ impl TryFrom<BatchDatapointOutputWithSize> for Vec<Option<Value>> {
         let size = value.size;
         if let Some(output) = value.output {
             let output_len = output.len();
-            if output_len != value.size {
+            if output_len == value.size {
+                Ok(output)
+            } else {
                 Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
                         "Output size ({output_len}) does not match number of datapoints ({size})",
                     ),
                 }))
-            } else {
-                Ok(output)
             }
         } else {
             let mut output = Vec::with_capacity(size);
@@ -1360,6 +1360,7 @@ impl StoredSample for Datapoint {
                 output_schema: None,
                 episode_id: None,
                 inference_id: None,
+                tags: datapoint.tags.unwrap_or_default(),
             },
             Datapoint::Json(datapoint) => {
                 let output = datapoint.output.map(|output| match output.raw {
@@ -1374,6 +1375,7 @@ impl StoredSample for Datapoint {
                     output_schema: Some(datapoint.output_schema),
                     episode_id: None,
                     inference_id: None,
+                    tags: datapoint.tags.unwrap_or_default(),
                 }
             }
         }

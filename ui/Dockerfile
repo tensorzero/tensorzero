@@ -71,7 +71,6 @@ WORKDIR /build/internal/tensorzero-node
 
 RUN pnpm install --frozen-lockfile && pnpm run build
 
-
 # ========== evaluations-build-env ==========
 
 FROM chef AS evaluations-build-env
@@ -113,7 +112,7 @@ FROM base AS ui
 
 RUN useradd -m -s /bin/sh ui
 
-RUN apt-get update && apt-get install -y curl python3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl wget python3 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -145,7 +144,10 @@ USER ui
 EXPOSE 4000
 
 ENV HOST=0.0.0.0
-ENV TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
+ENV NODE_ENV=production
+ENV PORT=4000
 ENV RUST_LOG=warn
+ENV TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
 
 ENTRYPOINT ["./entrypoint.sh"]
+HEALTHCHECK --start-period=1s --start-interval=1s --timeout=1s CMD wget --no-verbose --tries=1 --spider http://localhost:4000/api/tensorzero/status

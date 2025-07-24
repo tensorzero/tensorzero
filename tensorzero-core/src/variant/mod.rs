@@ -814,6 +814,12 @@ impl ChatCompletionConfigPyClass {
             .as_ref()
             .map(|t| t.contents.clone()))
     }
+
+    #[getter]
+    fn get_model(&self) -> PyResult<String> {
+        let config = Self::extract_chat_completion_config(&self.inner)?;
+        Ok(config.model.to_string())
+    }
 }
 
 #[cfg(test)]
