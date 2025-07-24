@@ -294,8 +294,7 @@ mod tests {
             assert_eq!(
                 provider.api_base.as_str(),
                 expected,
-                "API base normalization failed for input: {}",
-                input
+                "API base normalization failed for input: {input}",
             );
         }
     }
