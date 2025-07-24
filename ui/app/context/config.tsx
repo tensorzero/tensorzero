@@ -34,6 +34,15 @@ export function useFunctionConfig(functionName: string | null) {
   // eslint-disable-next-line no-restricted-syntax
   return config.functions[functionName] || null;
 }
+/**
+ * Hook to get all function configs
+ * @returns The function configuration object or null if not found
+ */
+export function useAllFunctionConfigs() {
+  const config = useConfig();
+  // eslint-disable-next-line no-restricted-syntax
+  return config.functions;
+}
 
 export function ConfigProvider({
   children,

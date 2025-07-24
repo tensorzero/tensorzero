@@ -10,7 +10,7 @@ import {
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
-import { useConfig, useFunctionConfig } from "~/context/config";
+import { useFunctionConfig, useAllFunctionConfigs } from "~/context/config";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
 import { getTensorZeroClient, listDatapoints } from "~/utils/tensorzero.server";
@@ -236,7 +236,6 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     };
   }, [navigation, currentSearchParams]);
   const selectedVariants = searchParams.getAll("variant");
-  const config = useConfig();
 
   const {
     functionName,
@@ -301,8 +300,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
           onSelect={(value) =>
             updateSearchParams({ functionName: value, variant: null })
           }
-          // eslint-disable-next-line no-restricted-syntax
-          functions={config.functions}
+          functions={useAllFunctionConfigs()}
         />
       </div>
       <div className="flex max-w-180 flex-col gap-2">

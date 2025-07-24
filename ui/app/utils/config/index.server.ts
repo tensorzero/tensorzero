@@ -66,3 +66,14 @@ export async function getFunctionConfig(functionName: string, config?: Config) {
   // eslint-disable-next-line no-restricted-syntax
   return cfg.functions[functionName] || null;
 }
+
+/**
+ * Helper function to get all function configurations (server-side only)
+ * @param config - The config object (optional, will fetch if not provided)
+ * @returns The function configuration object or null if not found
+ */
+export async function getAllFunctionConfigs(config?: Config) {
+  const cfg = config || (await getConfig());
+
+  return cfg.functions;
+}

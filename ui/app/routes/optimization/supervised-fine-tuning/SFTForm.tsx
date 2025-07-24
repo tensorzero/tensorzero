@@ -15,7 +15,7 @@ import type { Config } from "tensorzero-node";
 import { models } from "./model_options";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 import { logger } from "~/utils/logger";
-import { useFunctionConfig } from "~/context/config";
+import { useAllFunctionConfigs, useFunctionConfig } from "~/context/config";
 
 export function SFTForm({
   config,
@@ -146,8 +146,7 @@ export function SFTForm({
               <FunctionFormField
                 control={form.control}
                 name="function"
-                // eslint-disable-next-line no-restricted-syntax
-                functions={config.functions}
+                functions={useAllFunctionConfigs()}
                 hideDefaultFunction={true}
               />
 
