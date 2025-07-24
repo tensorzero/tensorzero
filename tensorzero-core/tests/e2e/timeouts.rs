@@ -22,6 +22,7 @@ use uuid::Uuid;
 
 use crate::{common::get_gateway_endpoint, providers::common::make_embedded_gateway_with_config};
 
+pub const HALF_SEC_IN_NANOS: u64 = 500_000_000;
 // Variant timeout tests
 
 #[tokio::test]
@@ -60,7 +61,7 @@ async fn test_variant_timeout_non_streaming() {
                                 "variant_name": "slow_timeout",
                                 "timeout": {
                                     "secs": 0,
-                                    "nanos": 400000000
+                                    "nanos": 400_000_000
                                 },
                                 "streaming": false
                             }
@@ -110,7 +111,7 @@ async fn test_variant_timeout_streaming() {
                                 "variant_name": "slow_timeout",
                                 "timeout": {
                                     "secs": 0,
-                                    "nanos": 500000000
+                                    "nanos": HALF_SEC_IN_NANOS,
                                 },
                                 "streaming": true
                             }
@@ -302,7 +303,7 @@ async fn test_model_provider_timeout_non_streaming() {
                                             "provider_name": "slow",
                                             "timeout": {
                                                 "secs": 0,
-                                                "nanos": 400000000
+                                                "nanos": 400_000_000
                                             },
                                             "streaming": false
                                         }
@@ -358,7 +359,7 @@ async fn test_model_provider_timeout_streaming() {
                                             "provider_name": "slow",
                                             "timeout": {
                                                 "secs": 0,
-                                                "nanos": 500000000
+                                                "nanos":HALF_SEC_IN_NANOS,
                                             },
                                             "streaming": true
                                         }
@@ -691,7 +692,7 @@ async fn test_model_timeout_non_streaming() {
                                 "model_name": "slow_model_timeout",
                                 "timeout": {
                                     "secs": 0,
-                                    "nanos": 400000000
+                                    "nanos":400_000_000
                                 },
                                 "streaming": false
                             }
@@ -741,7 +742,7 @@ async fn test_model_timeout_streaming() {
                                 "model_name": "slow_model_timeout",
                                 "timeout": {
                                     "secs": 0,
-                                    "nanos": 500000000
+                                    "nanos":HALF_SEC_IN_NANOS
                                 },
                                 "streaming": true
                             }

@@ -85,6 +85,7 @@ todo = "deny"
 unimplemented = "deny"
 uninlined_format_args = "deny"
 unreachable = "deny"
+unreadable_literal = "deny"
 unwrap_used = "deny"
 
 [profile.performance]

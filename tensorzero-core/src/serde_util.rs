@@ -385,6 +385,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::ALL_DIGITS;
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Deserialize, Serialize, PartialEq, Default)]
@@ -603,20 +604,20 @@ mod tests {
 
     #[test]
     fn test_deserialize_option_u64_string() {
-        let json = r#"{"inner": "1234567890"}"#;
-        let result: TestOptionU64Outer = serde_json::from_str(json).unwrap();
+        let json = serde_json::json!({ "inner": ALL_DIGITS.to_string() });
+        let result: TestOptionU64Outer = serde_json::from_value(json).unwrap();
         assert!(result.inner.is_some());
         let inner = result.inner.unwrap();
-        assert_eq!(inner, 1234567890);
+        assert_eq!(inner, ALL_DIGITS);
     }
 
     #[test]
     fn test_deserialize_option_u64_number() {
-        let json = r#"{"inner": 1234567890}"#;
-        let result: TestOptionU64Outer = serde_json::from_str(json).unwrap();
+        let json = serde_json::json!({ "inner": ALL_DIGITS.to_string() });
+        let result: TestOptionU64Outer = serde_json::from_value(json).unwrap();
         assert!(result.inner.is_some());
         let inner = result.inner.unwrap();
-        assert_eq!(inner, 1234567890);
+        assert_eq!(inner, ALL_DIGITS);
     }
 
     #[test]
@@ -628,16 +629,16 @@ mod tests {
 
     #[test]
     fn test_deserialize_u64_string() {
-        let json = r#"{"inner": "1234567890"}"#;
-        let result: TestU64Outer = serde_json::from_str(json).unwrap();
-        assert_eq!(result.inner, 1234567890);
+        let json = serde_json::json!({ "inner": ALL_DIGITS.to_string() });
+        let result: TestU64Outer = serde_json::from_value(json).unwrap();
+        assert_eq!(result.inner, ALL_DIGITS);
     }
 
     #[test]
     fn test_deserialize_u64_number() {
-        let json = r#"{"inner": 1234567890}"#;
-        let result: TestU64Outer = serde_json::from_str(json).unwrap();
-        assert_eq!(result.inner, 1234567890);
+        let json = serde_json::json!({ "inner": ALL_DIGITS.to_string() });
+        let result: TestU64Outer = serde_json::from_value(json).unwrap();
+        assert_eq!(result.inner, ALL_DIGITS);
     }
 
     #[test]
