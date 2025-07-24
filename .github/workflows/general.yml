@@ -28,7 +28,7 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - name: Set DNS
@@ -293,7 +293,7 @@ jobs:
           uv run pyright
 
       - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+        run: npm install -g wasm-pack
 
       - name: Build minijinja WASM bindings
         working-directory: ui/app/utils/minijinja
