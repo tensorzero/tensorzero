@@ -209,15 +209,15 @@ async fn get_token_totals(clickhouse: &ClickHouseConnectionInfo) -> Result<Token
         .run_query_synchronous_no_params(
             r#"
             SELECT
-                (SELECT count FROM TokenTotal WHERE type = 'input') as input_token_total,
-                (SELECT count FROM TokenTotal WHERE type = 'output') as output_token_total
+                (SELECT count FROM TokenTotal FINAL WHERE type = 'input') as input_token_total,
+                (SELECT count FROM TokenTotal FINAL WHERE type = 'output') as output_token_total
             Format JSONEachRow
             "#
             .to_string(),
         )
         .await
     else {
-        return Err("Failed to query ClickHouse for inference count".to_string());
+        return Err("Failed to query ClickHouse for token total count".to_string());
     };
     serde_json::from_str(&response.response)
         .map_err(|e| format!("Failed to deserialize ClickHouseInferenceCounts: {e}"))
