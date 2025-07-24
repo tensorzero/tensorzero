@@ -3292,11 +3292,11 @@ pub async fn check_inference_params_response(
         .unwrap();
     assert_eq!(frequency_penalty, 0.2);
 
-    if !is_batch {
+    if is_batch {
+        assert!(result.get("processing_time_ms").unwrap().is_null());
+    } else {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
         assert!(processing_time_ms > 0);
-    } else {
-        assert!(result.get("processing_time_ms").unwrap().is_null());
     }
 
     // Check the ModelInference Table
@@ -3333,12 +3333,12 @@ pub async fn check_inference_params_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -4423,11 +4423,11 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
         location["description"],
         "The location to get the temperature for (e.g. \"New York\")"
     );
-    if !is_batch {
+    if is_batch {
+        assert!(result.get("processing_time_ms").unwrap().is_null());
+    } else {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
         assert!(processing_time_ms > 0);
-    } else {
-        assert!(result.get("processing_time_ms").unwrap().is_null());
     }
 
     let units = properties["units"].as_object().unwrap();
@@ -4469,12 +4469,12 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
 
@@ -4485,12 +4485,12 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
 
@@ -5068,12 +5068,12 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
 
