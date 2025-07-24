@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
@@ -99,9 +99,17 @@ impl Migration for Migration0028<'_> {
         } else {
             format!("AND UUIDv7ToDateTime(feedback_id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         };
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_name: "StaticEvaluationHumanFeedback",
+                table_engine_name: "MergeTree",
+                engine_args: &[],
+            },
+        );
         self.clickhouse
             .run_query_synchronous_no_params(
-                r#"CREATE TABLE IF NOT EXISTS StaticEvaluationHumanFeedback (
+                format!(r#"CREATE TABLE IF NOT EXISTS StaticEvaluationHumanFeedback{on_cluster_name} (
                     metric_name LowCardinality(String),
                     datapoint_id UUID,
                     output String,
@@ -109,11 +117,11 @@ impl Migration for Migration0028<'_> {
                     feedback_id UUID,
                     evaluator_inference_id UUID,
                     timestamp DateTime MATERIALIZED UUIDv7ToDateTime(feedback_id)
-                ) ENGINE = MergeTree()
+                ) ENGINE = {table_engine_name}
                 ORDER BY (metric_name, datapoint_id, output)
                 SETTINGS index_granularity = 256 -- We use a small index granularity to improve lookup performance
-            "#.to_string(),
-            )
+            "#,
+        ))
             .await?;
 
         // Since there cannot have been any StaticEvaluationHumanFeedback rows before this migration runs,

@@ -32,6 +32,7 @@ pub enum ClickHouseConnectionInfo {
     },
     Production {
         database_url: SecretString,
+        cluster_name: Option<String>,
         database: String,
         client: Client,
     },
@@ -89,8 +90,21 @@ impl ClickHouseConnectionInfo {
         // Store the original URL as a SecretString
         let database_url = SecretString::from(database_url.to_string());
 
+        // Get the cluster name from the `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` environment variable
+        let cluster_name = match std::env::var("TENSORZERO_CLICKHOUSE_CLUSTER_NAME") {
+            Ok(cluster_name) => {
+                tracing::info!("Using ClickHouse cluster name: {cluster_name}");
+                Some(cluster_name)
+            }
+            Err(_) => {
+                tracing::info!("No ClickHouse cluster name provided");
+                None
+            }
+        };
+
         let connection_info = Self::Production {
             database_url,
+            cluster_name,
             database,
             client: make_clickhouse_http_client()?,
         };
@@ -157,6 +171,14 @@ impl ClickHouseConnectionInfo {
             Self::Production { .. } => {
                 panic!("Production ClickHouse client can't be used for reading data in tests")
             }
+        }
+    }
+
+    pub fn is_cluster_configured(&self) -> bool {
+        match self {
+            Self::Disabled => false,
+            Self::Mock { .. } => false,
+            Self::Production { cluster_name, .. } => cluster_name.is_some(),
         }
     }
 
@@ -420,7 +442,8 @@ impl ClickHouseConnectionInfo {
                         message: "Invalid ClickHouse database URL".to_string(),
                     })
                 })?;
-                let query = format!("CREATE DATABASE IF NOT EXISTS {database}");
+                let on_cluster_name = self.get_on_cluster_name();
+                let query = format!("CREATE DATABASE IF NOT EXISTS {database}{on_cluster_name}");
                 // In order to create the database, we need to remove the database query parameter from the URL
                 // Otherwise, ClickHouse will throw an error
                 let mut base_url = database_url.clone();
@@ -466,8 +489,15 @@ impl ClickHouseConnectionInfo {
         // We decided to add this table after we had already created lots of migrations.
         // We create this table immediately after creating the database, so that
         // we can insert rows into it when running migrations
-        self.run_query_synchronous_no_params(
-            r#"CREATE TABLE IF NOT EXISTS TensorZeroMigration (
+        let on_cluster_name = self.get_on_cluster_name();
+        let table_engine_name =
+            self.get_maybe_replicated_table_engine_name(GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "TensorZeroMigration",
+                engine_args: &[],
+            });
+        let query = format!(
+            r#"CREATE TABLE IF NOT EXISTS TensorZeroMigration{on_cluster_name} (
                 migration_id UInt32,
                 migration_name String,
                 gateway_version String,
@@ -476,12 +506,12 @@ impl ClickHouseConnectionInfo {
                 execution_time_ms UInt64,
                 extra_data Nullable(String)
             )
-            ENGINE = MergeTree()
+            ENGINE = {table_engine_name}
             PRIMARY KEY (migration_id)"#
-                .to_string(),
-        )
-        .await
-        .map(|_| ())?;
+        );
+        self.run_query_synchronous_no_params(query)
+            .await
+            .map(|_| ())?;
         Ok(())
     }
 
@@ -511,6 +541,78 @@ impl ClickHouseConnectionInfo {
             })
             .collect::<Result<Vec<StoredInference>, Error>>()?;
         Ok(inferences)
+    }
+
+    pub fn get_on_cluster_name(&self) -> String {
+        match self {
+            Self::Disabled => String::new(),
+            Self::Mock { .. } => String::new(),
+            Self::Production { cluster_name, .. } => match cluster_name {
+                Some(cluster_name) => format!(" ON CLUSTER {cluster_name} "),
+                None => String::new(),
+            },
+        }
+    }
+
+    pub fn get_maybe_replicated_table_engine_name(
+        &self,
+        args: GetMaybeReplicatedTableEngineNameArgs<'_>,
+    ) -> String {
+        let GetMaybeReplicatedTableEngineNameArgs {
+            table_engine_name,
+            table_name,
+            engine_args,
+        } = args;
+        match self {
+            Self::Disabled => table_engine_name.to_string(),
+            Self::Mock { .. } => table_engine_name.to_string(),
+            Self::Production {
+                cluster_name,
+                database,
+                ..
+            } => match cluster_name {
+                Some(_) => get_replicated_table_engine_name(
+                    table_engine_name,
+                    table_name,
+                    database,
+                    engine_args,
+                ),
+                None => {
+                    let engine_args_str = engine_args.join(", ");
+                    format!("{table_engine_name}({engine_args_str})")
+                }
+            },
+        }
+    }
+}
+
+pub struct GetMaybeReplicatedTableEngineNameArgs<'a> {
+    pub table_engine_name: &'a str,
+    pub table_name: &'a str,
+    pub engine_args: &'a [&'a str],
+}
+
+/// The ClickHouse documentation says that to create a replicated table,
+/// you should use a Replicated* table engine.
+/// The first 2 arguments are the keeper path and the replica name.
+/// The following arguments must be the arguments that the table engine takes.
+/// See https://clickhouse.com/docs/engines/table-engines/mergetree-family/replication for more details.
+///
+/// Since there may be issues with renaming tables, we don't use the database or table name shortcuts in the path.
+/// This method requires that the macros for {{shard}} and {{replica}} are defined in the ClickHouse configuration.
+/// This method should only be called if a cluster name is provided.
+fn get_replicated_table_engine_name(
+    table_engine_name: &str,
+    table_name: &str,
+    database: &str,
+    engine_args: &[&str],
+) -> String {
+    let keeper_path = format!("'/clickhouse/tables/{{shard}}/{database}/{table_name}'");
+    if engine_args.is_empty() {
+        format!("Replicated{table_engine_name}({keeper_path}, '{{replica}}')")
+    } else {
+        let engine_args_str = engine_args.join(", ");
+        format!("Replicated{table_engine_name}({keeper_path}, '{{replica}}', {engine_args_str})")
     }
 }
 
@@ -865,6 +967,76 @@ mod tests {
         assert_eq!(
             escape_string_for_clickhouse_literal(r#"\'\'\'"#),
             r#"\\\'\\\'\\\'"#
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_basic() {
+        let result = get_replicated_table_engine_name("MergeTree", "test_table", "test_db", &[]);
+        assert_eq!(
+            result,
+            "ReplicatedMergeTree('/clickhouse/tables/{shard}/test_db/test_table', '{replica}')"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_with_single_arg() {
+        let result =
+            get_replicated_table_engine_name("MergeTree", "users", "analytics", &["ORDER BY id"]);
+        assert_eq!(
+            result,
+            "ReplicatedMergeTree('/clickhouse/tables/{shard}/analytics/users', '{replica}', ORDER BY id)"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_with_multiple_args() {
+        let result = get_replicated_table_engine_name(
+            "ReplacingMergeTree",
+            "events",
+            "production",
+            &["version_column", "ORDER BY (timestamp, user_id)"],
+        );
+        assert_eq!(
+            result,
+            "ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/production/events', '{replica}', version_column, ORDER BY (timestamp, user_id))"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_with_complex_names() {
+        let result = get_replicated_table_engine_name(
+            "CollapsingMergeTree",
+            "user_activity_log",
+            "metrics_database",
+            &["sign_column"],
+        );
+        assert_eq!(
+            result,
+            "ReplicatedCollapsingMergeTree('/clickhouse/tables/{shard}/metrics_database/user_activity_log', '{replica}', sign_column)"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_empty_args() {
+        let result = get_replicated_table_engine_name("Log", "simple_table", "simple_db", &[]);
+        assert_eq!(
+            result,
+            "ReplicatedLog('/clickhouse/tables/{shard}/simple_db/simple_table', '{replica}')"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_special_characters() {
+        let result = get_replicated_table_engine_name(
+            "MergeTree",
+            "table_with_underscores",
+            "db-with-dashes",
+            &["'primary_key'", "PARTITION BY toYYYYMM(date)"],
+        );
+        assert_eq!(
+            result,
+            "ReplicatedMergeTree('/clickhouse/tables/{shard}/db-with-dashes/table_with_underscores', '{replica}', 'primary_key', PARTITION BY toYYYYMM(date))"
         );
     }
 }

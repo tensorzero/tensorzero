@@ -14,6 +14,9 @@ target-rust-analyzer/
 # VScode settings
 .vscode/
 
+# Zed settings
+.zed/
+
 .DS_Store
 .credentials/
 
