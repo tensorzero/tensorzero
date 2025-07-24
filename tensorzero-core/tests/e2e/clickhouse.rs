@@ -576,8 +576,8 @@ async fn test_clickhouse_migration_manager() {
                     "Migration {name} should not have succeeded (because it wasn't applied)"
                 );
                 assert!(
-                    !logs_contain("Materialized view `TokenTotalView` was not written because it was recently created"),
-                    "TokenTotalView backfilling failed"
+                    !logs_contain("Materialized view `CumulativeUsageView` was not written because it was recently created"),
+                    "CumulativeUsage backfilling failed"
                 );
             }
 
@@ -709,7 +709,7 @@ async fn test_clickhouse_migration_manager() {
 
     let response = clickhouse
         .run_query_synchronous_no_params(
-            "SELECT count FROM TokenTotal FINAL WHERE type='input'".to_string(),
+            "SELECT count FROM CumulativeUsage FINAL WHERE type='input'".to_string(),
         )
         .await
         .unwrap();
@@ -717,7 +717,7 @@ async fn test_clickhouse_migration_manager() {
     assert_eq!(input_token_total, 200000000);
     let response = clickhouse
         .run_query_synchronous_no_params(
-            "SELECT count FROM TokenTotal FINAL WHERE type='output'".to_string(),
+            "SELECT count FROM CumulativeUsage FINAL WHERE type='output'".to_string(),
         )
         .await
         .unwrap();

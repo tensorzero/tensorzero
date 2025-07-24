@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use std::time::Duration;
 
-/// This migration adds a `TokenTotal` table and `TokenTotalView` materialized view
+/// This migration adds a `CumulativeUsage` table and `CumulativeUsageView` materialized view
 /// This will allow the sum of tokens in the ModelInference table to be amortized and
 /// looked up as needed.
 pub struct Migration0034<'a> {
@@ -29,11 +29,11 @@ impl Migration for Migration0034<'_> {
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
-        // If either the TokenTotal table or TokenTotalView view doesn't exist, we need to create it
-        if !check_table_exists(self.clickhouse, "TokenTotal", MIGRATION_ID).await? {
+        // If either the CumulativeUsage table or CumulativeUsageView view doesn't exist, we need to create it
+        if !check_table_exists(self.clickhouse, "CumulativeUsage", MIGRATION_ID).await? {
             return Ok(true);
         }
-        if !check_table_exists(self.clickhouse, "TokenTotalView", MIGRATION_ID).await? {
+        if !check_table_exists(self.clickhouse, "CumulativeUsageView", MIGRATION_ID).await? {
             return Ok(true);
         }
         Ok(false)
@@ -53,7 +53,7 @@ impl Migration for Migration0034<'_> {
             .as_nanos();
         self.clickhouse
             .run_query_synchronous_no_params(
-                r#"CREATE TABLE IF NOT EXISTS TokenTotal (
+                r#"CREATE TABLE IF NOT EXISTS CumulativeUsage (
                         type LowCardinality(String),
                         count UInt64,
                     )
@@ -63,7 +63,7 @@ impl Migration for Migration0034<'_> {
             )
             .await?;
 
-        // Create the materialized view for the TokenTotal table from ModelInference
+        // Create the materialized view for the CumulativeUsage table from ModelInference
         // If we are not doing a clean start, we need to add a where clause ot the view to only include rows that have been created
         // after the view_timestamp
         let view_where_clause = if !clean_start {
@@ -73,25 +73,25 @@ impl Migration for Migration0034<'_> {
         };
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS TokenTotalView
-            TO TokenTotal
+            CREATE MATERIALIZED VIEW CumulativeUsageView
+            TO CumulativeUsage
             AS
                     SELECT
-                        'input' as type,
+                        'input_tokens' as type,
                         input_tokens as count
                     FROM ModelInference
                     WHERE input_tokens IS NOT NULL
                     {view_where_clause}
                 UNION ALL
                     SELECT
-                        'output' as type,
+                        'output_tokens' as type,
                         output_tokens as count
                     FROM ModelInference
                     WHERE output_tokens IS NOT NULL
                     {view_where_clause}
                 UNION ALL
                     SELECT
-                        'row' as type,
+                        'model_inferences' as type,
                         1 as count
                     FROM ModelInference
                     WHERE input_tokens IS NOT NULL
@@ -112,12 +112,14 @@ impl Migration for Migration0034<'_> {
             // and conclude the migration.
             let create_table = self
                 .clickhouse
-                .run_query_synchronous_no_params("SHOW CREATE TABLE TokenTotalView".to_string())
+                .run_query_synchronous_no_params(
+                    "SHOW CREATE TABLE CumulativeUsageView".to_string(),
+                )
                 .await?
                 .response;
             let view_timestamp_nanos_string = view_timestamp_nanos.to_string();
             if !create_table.contains(&view_timestamp_nanos_string) {
-                tracing::warn!("Materialized view `TokenTotalView` was not written because it was recently created. This is likely due a concurrent migration.");
+                tracing::warn!("Materialized view `CumulativeUsageView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
                 return Ok(());
             }
 
@@ -151,10 +153,10 @@ impl Migration for Migration0034<'_> {
 
             let write_query = format!(
                 r#"
-                INSERT INTO TokenTotal (type, count) VALUES
-                ('input', {total_input_tokens}),
-                ('output', {total_output_tokens}),
-                ('row', {total_count})
+                INSERT INTO CumulativeUsage (type, count) VALUES
+                ('input_tokens', {total_input_tokens}),
+                ('output_tokens', {total_output_tokens}),
+                ('model_inferences', {total_count})
                 "#
             );
             self.clickhouse
@@ -167,8 +169,8 @@ impl Migration for Migration0034<'_> {
 
     fn rollback_instructions(&self) -> String {
         r#"
-        DROP TABLE TokenTotalView;
-        DROP TABLE TokenTotal;"#
+        DROP TABLE CumulativeUsageView;
+        DROP TABLE CumulativeUsage;"#
             .to_string()
     }
 
