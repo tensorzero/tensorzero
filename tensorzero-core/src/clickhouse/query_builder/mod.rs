@@ -477,10 +477,10 @@ fn generate_order_by_sql(
     joins: &mut JoinRegistry,
 ) -> Result<String, Error> {
     let Some(order_by) = order_by else {
-        return Ok("".to_string());
+        return Ok(String::new());
     };
     if order_by.is_empty() {
-        return Ok("".to_string());
+        return Ok(String::new());
     }
     let mut order_by_clauses = Vec::new();
     for term in order_by {
