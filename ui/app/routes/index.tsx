@@ -101,7 +101,7 @@ export async function loader() {
     countInferencesByFunction(),
     getConfig(),
     countEpisodes(),
-    getDatasetCounts(),
+    getDatasetCounts({}),
     countTotalEvaluationRuns(),
     countDynamicEvaluationRuns(),
     countDynamicEvaluationProjects(),

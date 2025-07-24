@@ -3,10 +3,8 @@
 use std::cell::Cell;
 use std::future::Future;
 use std::sync::Arc;
-use std::time::Duration;
 
 use paste::paste;
-use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::json;
 use tensorzero_core::clickhouse::migration_manager::migration_trait::Migration;
@@ -30,7 +28,7 @@ use tensorzero_core::clickhouse::migration_manager::{
     self, make_all_migrations, MigrationRecordDatabaseInsert,
 };
 use tensorzero_core::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
-use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::clickhouse::{make_clickhouse_http_client, ClickHouseConnectionInfo};
 
 pub struct DeleteDbOnDrop {
     database: String,
@@ -83,15 +81,7 @@ pub fn get_clean_clickhouse(allow_db_missing: bool) -> (ClickHouseConnectionInfo
     let clickhouse = ClickHouseConnectionInfo::Production {
         database_url: SecretString::from(clickhouse_url.to_string()),
         database: database.clone(),
-        // This is a hack to work around an issue with ClickHouse Cloud where long-lived connections
-        // are abruptly closed by the server.
-        // If it occurs again, re-enable this line.
-        // client: Client::builder().pool_max_idle_per_host(0).build().unwrap(),
-        // See https://github.com/ClickHouse/clickhouse-rs/blob/abf7448e54261c586be849c48291b9321f506b2f/src/http_client.rs#L45
-        client: Client::builder()
-            .pool_idle_timeout(Duration::from_secs(3))
-            .build()
-            .unwrap(),
+        client: make_clickhouse_http_client().unwrap(),
     };
     (
         clickhouse.clone(),

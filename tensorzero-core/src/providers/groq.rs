@@ -917,11 +917,12 @@ impl<'a> GroqRequest<'a> {
             &request.json_mode,
             request.output_schema,
         ));
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
         let mut messages = prepare_groq_messages(request)?;
 

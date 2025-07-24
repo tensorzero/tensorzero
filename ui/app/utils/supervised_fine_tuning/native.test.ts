@@ -43,6 +43,7 @@ describe("native sft", () => {
         seed: null,
         suffix: null,
       },
+      order_by: null,
     });
 
     let status = await client.experimentalPollOptimization(job);

@@ -1386,6 +1386,12 @@ async fn test_datapoint_insert_synthetic_bad_uuid() {
         resp_json,
         json!({
             "error": "Invalid Datapoint ID: Version must be 7, got 4",
+            "error_json": {
+                "InvalidTensorzeroUuid": {
+                    "kind": "Datapoint",
+                    "message": "Version must be 7, got 4",
+                }
+            }
         })
     );
 }
@@ -1414,6 +1420,11 @@ async fn test_datapoint_insert_synthetic_bad_params() {
         resp_json,
         json!({
             "error": "Failed to deserialize chat datapoint: missing field `input`",
+            "error_json": {
+                "InvalidRequest": {
+                    "message": "Failed to deserialize chat datapoint: missing field `input`"
+                }
+            }
         })
     );
 }
@@ -2793,9 +2804,16 @@ async fn test_stale_dataset_already_staled() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     println!("staling dataset again");
-    // Try to stale it again - should return 0 since datapoints are already staled
-    let stale_result2 = client.stale_dataset(dataset_name.clone()).await.unwrap();
-    assert_eq!(stale_result2.num_staled_datapoints, 0);
+    // Try to stale it again - should return 0 since datapoints are already staled (use HTTP for this)
+    let resp = http_client
+        .delete(get_gateway_endpoint(&format!("/datasets/{dataset_name}",)))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    let resp_json: Value = resp.json().await.unwrap();
+    let num_staled_datapoints = resp_json["num_staled_datapoints"].as_u64().unwrap();
+    assert_eq!(num_staled_datapoints, 0);
 
     // Verify the datapoint is still staled
     let datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
@@ -2807,7 +2825,6 @@ async fn test_stale_dataset_already_staled() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_stale_dataset_mixed_staled_fresh() {
-    let client = make_embedded_gateway().await;
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-mixed-stale-{}", Uuid::now_v7());
@@ -2862,9 +2879,16 @@ async fn test_stale_dataset_mixed_staled_fresh() {
         .unwrap();
     assert!(resp.status().is_success());
 
-    // Now stale the entire dataset - should only stale the fresh datapoint
-    let stale_result = client.stale_dataset(dataset_name.clone()).await.unwrap();
-    assert_eq!(stale_result.num_staled_datapoints, 1);
+    // Now stale the entire dataset - should only stale the fresh datapoint (use HTTP for this)
+    let resp = http_client
+        .delete(get_gateway_endpoint(&format!("/datasets/{dataset_name}",)))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    let resp_json: Value = resp.json().await.unwrap();
+    let num_staled_datapoints = resp_json["num_staled_datapoints"].as_u64().unwrap();
+    assert_eq!(num_staled_datapoints, 1);
 
     // Verify both datapoints are staled
     let datapoint2 = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id2)
