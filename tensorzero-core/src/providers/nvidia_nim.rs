@@ -1,5 +1,4 @@
 use std::sync::OnceLock;
-use lazy_static::lazy_static;
 use secrecy::SecretString;
 use serde::Serialize;
 use url::Url;
@@ -18,12 +17,7 @@ use crate::{
     model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
 };
 
-lazy_static! {
-    static ref DEFAULT_NIM_API_BASE: Url = {
-        Url::parse("https://integrate.api.nvidia.com/v1/")
-            .expect("Failed to parse DEFAULT_NIM_API_BASE")
-    };
-}
+const DEFAULT_NIM_API_BASE: &str = "https://integrate.api.nvidia.com/v1/";
 
 fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("NVIDIA_API_KEY".to_string())
@@ -58,23 +52,27 @@ impl NvidiaNimProvider {
             &DEFAULT_CREDENTIALS,
         )?;
 
-        let api_base = match api_base {
-            Some(base) => {
-                let mut url = Url::parse(&base).map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!("Invalid api_base URL: {}", e),
-                    })
-                })?;
+let api_base = match api_base {
+    Some(base) => {
+        let mut url = Url::parse(&base).map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Invalid api_base URL: {e}"),
+            })
+        })?;
 
-                // Ensure URL ends with a slash
-                if !url.path().ends_with('/') {
-                    url.set_path(&format!("{}/", url.path()));
-                }
+        // Ensure URL ends with a slash
+        if !url.path().ends_with('/') {
+            url.set_path(&format!("{}/", url.path()));
+        }
 
-                url
-            },
-            None => DEFAULT_NIM_API_BASE.clone(),
-        };
+        url
+    },
+    None => Url::parse(DEFAULT_NIM_API_BASE).map_err(|e| {
+        Error::new(ErrorDetails::Config {
+            message: format!("Failed to parse default API base URL: {e}"),
+        })
+    })?,
+};
 
         Ok(NvidiaNimProvider {
             model_name,
