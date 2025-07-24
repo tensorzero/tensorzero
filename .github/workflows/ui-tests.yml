@@ -12,6 +12,9 @@ jobs:
         clickhouse_version: ["24.12-alpine", "25.2-alpine", "latest-alpine"]
 
     steps:
+      - name: Set DNS
+        run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
+
       - uses: namespacelabs/nscloud-checkout-action@953fed31a6113cc2347ca69c9d823743c65bc84b
 
       - uses: dtolnay/rust-toolchain@stable

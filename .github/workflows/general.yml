@@ -9,8 +9,18 @@ on:
 env:
   FORCE_COLOR: 1
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
 jobs:
+  check-version-consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Check version consistency
+        run: ./ci/check-version-consistency.sh
+
   check-docker-compose:
     permissions:
       # Permission to checkout the repository
@@ -21,6 +31,8 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      - name: Set DNS
+        run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
@@ -315,6 +327,9 @@ jobs:
       - name: Compile / validate notebooks
         run: ci/compile-check-notebooks.sh
 
+      - name: Lint Helm charts
+        run: find . -name "Chart.yaml" -exec dirname {} \; | xargs -I {} helm lint {}
+
   clickhouse-tests:
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
@@ -413,6 +428,9 @@ jobs:
       FIREWORKS_ACCOUNT_ID: not_used
       TENSORZERO_USE_MOCK_INFERENCE_PROVIDER: 1
       TENSORZERO_SKIP_LARGE_FIXTURES: 1
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -449,7 +467,7 @@ jobs:
           done
 
       - name: Test (Rust)
-        run: cargo test-optimization -- --skip gcp --skip together
+        run: cargo test-optimization-mock
 
   build-gateway-container:
     uses: ./.github/workflows/build-gateway-container.yml
@@ -467,12 +485,16 @@ jobs:
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+      FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     if: always()
     needs:
       [
+        check-version-consistency,
         check-docker-compose,
         check-python-client-build,
         check-node-bindings,

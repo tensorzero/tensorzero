@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{BufReader, Read},
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
 };
 
@@ -11,8 +11,8 @@ use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::{
     config_parser::{
-        MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType, PathWithContents,
-        TimeoutsConfig,
+        path::TomlRelativePath, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
+        MetricConfigType, PathWithContents, TimeoutsConfig,
     },
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
@@ -464,7 +464,7 @@ struct UninitializedLLMJudgeChatCompletionVariantConfig {
     #[serde(default)]
     active: Option<bool>,
     model: Arc<str>,
-    system_instructions: PathBuf,
+    system_instructions: TomlRelativePath,
     temperature: Option<f32>,
     top_p: Option<f32>,
     max_tokens: Option<u32>,
@@ -492,7 +492,7 @@ fn convert_chat_completion_judge_to_variant<P: AsRef<Path>>(
     input_format: &LLMJudgeInputFormat,
     params: UninitializedLLMJudgeChatCompletionVariantConfig,
 ) -> Result<ChatCompletionConfig, Error> {
-    let system_instructions = read_system_instructions(params.system_instructions, base_path)?;
+    let system_instructions = read_system_instructions(&params.system_instructions, base_path)?;
     let templated_system_instructions = format!(
         include_str!("llm_judge_system_instructions.txt"),
         system_instructions = system_instructions,
@@ -566,7 +566,7 @@ struct UninitializedLLMJudgeDiclVariantConfig {
     embedding_model: String,
     k: u32, // k as in k-nearest neighbors
     model: String,
-    system_instructions: Option<PathBuf>,
+    system_instructions: Option<TomlRelativePath>,
     temperature: Option<f32>,
     top_p: Option<f32>,
     presence_penalty: Option<f32>,
@@ -594,8 +594,8 @@ fn get_template_path(
     evaluator_name: &str,
     variant_name: &str,
     template_name: &str,
-) -> PathBuf {
-    PathBuf::from(format!(
+) -> TomlRelativePath {
+    TomlRelativePath::new_fake_path(format!(
         "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::{variant_name}::{template_name}"
     ))
 }
@@ -635,7 +635,7 @@ impl UninitializedLLMJudgeVariantInfo {
             }
             UninitializedLLMJudgeVariantConfig::BestOfNSampling(params) => {
                 let evaluator_system_instructions =
-                    read_system_instructions(params.evaluator.system_instructions, base_path)?;
+                    read_system_instructions(&params.evaluator.system_instructions, base_path)?;
                 let templated_evaluator_system_instructions = format!(
                     include_str!("llm_judge_system_instructions.txt"),
                     system_instructions = evaluator_system_instructions,
@@ -689,7 +689,7 @@ impl UninitializedLLMJudgeVariantInfo {
             }
             UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(params) => {
                 let fuser_system_instructions =
-                    read_system_instructions(params.fuser.system_instructions, base_path)?;
+                    read_system_instructions(&params.fuser.system_instructions, base_path)?;
                 let templated_fuser_system_instructions = format!(
                     include_str!("llm_judge_system_instructions.txt"),
                     system_instructions = fuser_system_instructions,
@@ -744,7 +744,7 @@ impl UninitializedLLMJudgeVariantInfo {
             UninitializedLLMJudgeVariantConfig::Dicl(params) => {
                 let dicl_system_instructions = params
                     .system_instructions
-                    .map(|si| read_system_instructions(si, base_path))
+                    .map(|si| read_system_instructions(&si, base_path))
                     .transpose()?
                     .map(|si| {
                         format!(
@@ -792,11 +792,11 @@ impl UninitializedLLMJudgeVariantInfo {
     }
 }
 
-fn read_system_instructions<P1: AsRef<Path>, P2: AsRef<Path>>(
-    path: P1,
-    base_path: &P2,
+fn read_system_instructions<P: AsRef<Path>>(
+    path: &TomlRelativePath,
+    base_path: &P,
 ) -> Result<String, Error> {
-    let path = base_path.as_ref().join(path);
+    let path = base_path.as_ref().join(path.path());
     let file = File::open(&path).map_err(|e| {
         Error::new(ErrorDetails::FileRead {
             message: format!("Failed to open system instructions file: {e}"),
@@ -828,7 +828,7 @@ fn check_convert_variant_to_llm_judge_variant(
                 UninitializedLLMJudgeChatCompletionVariantConfig {
                     active: Some(false),
                     model: variant.model,
-                    system_instructions: PathBuf::from(""),
+                    system_instructions: TomlRelativePath::new_fake_path("".to_string()),
                     temperature: variant.temperature,
                     top_p: variant.top_p,
                     max_tokens: variant.max_tokens,
@@ -852,7 +852,7 @@ fn check_convert_variant_to_llm_judge_variant(
                     evaluator: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
                         model: variant.evaluator.inner.model,
-                        system_instructions: PathBuf::from(""),
+                        system_instructions: TomlRelativePath::new_fake_path("".to_string()),
                         temperature: variant.evaluator.inner.temperature,
                         top_p: variant.evaluator.inner.top_p,
                         max_tokens: variant.evaluator.inner.max_tokens,
@@ -877,7 +877,7 @@ fn check_convert_variant_to_llm_judge_variant(
                     fuser: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
                         model: variant.fuser.inner.model,
-                        system_instructions: PathBuf::from(""),
+                        system_instructions: TomlRelativePath::new_fake_path("".to_string()),
                         temperature: variant.fuser.inner.temperature,
                         top_p: variant.fuser.inner.top_p,
                         max_tokens: variant.fuser.inner.max_tokens,
@@ -919,7 +919,7 @@ fn check_convert_variant_to_llm_judge_variant(
                     inner: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
                         model: variant.inner.model,
-                        system_instructions: PathBuf::from(""),
+                        system_instructions: TomlRelativePath::new_fake_path("".to_string()),
                         temperature: variant.inner.temperature,
                         top_p: variant.inner.top_p,
                         max_tokens: variant.inner.max_tokens,
@@ -942,12 +942,15 @@ fn check_convert_variant_to_llm_judge_variant(
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    use std::path::PathBuf;
     use std::sync::Arc;
 
     #[test]
     fn test_read_system_instructions() {
         let system_instructions = read_system_instructions(
-            PathBuf::from("evaluations/evaluation1/llm_judge_bool/system_instructions.txt"),
+            &TomlRelativePath::new_for_tests(PathBuf::from(
+                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+            )),
             &PathBuf::from("fixtures/config"),
         )
         .unwrap();
@@ -958,7 +961,9 @@ mod tests {
 
         // Nonexistent file
         let result = read_system_instructions(
-            PathBuf::from("evaluations/evaluation1/llm_judge_bool/nonexistent.txt"),
+            &TomlRelativePath::new_for_tests(PathBuf::from(
+                "evaluations/evaluation1/llm_judge_bool/nonexistent.txt",
+            )),
             &PathBuf::from("fixtures/config"),
         );
         assert_eq!(*result.unwrap_err().get_details(), ErrorDetails::FileRead {
@@ -1041,9 +1046,9 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
                             model: Arc::from("gpt-3.5-turbo"),
-                            system_instructions: PathBuf::from(
-                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                            ),
+                            system_instructions:
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+                                    .into(),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
@@ -1166,9 +1171,9 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
                             model: Arc::from("gpt-3.5-turbo"),
-                            system_instructions: PathBuf::from(
-                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                            ),
+                            system_instructions:
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+                                    .into(),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
@@ -1319,9 +1324,9 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
                             model: Arc::from("gpt-3.5-turbo"),
-                            system_instructions: PathBuf::from(
-                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                            ),
+                            system_instructions:
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+                                    .into(),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
@@ -1347,9 +1352,9 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
                             model: Arc::from("gpt-4"),
-                            system_instructions: PathBuf::from(
+                            system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
                                 "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                            ),
+                            )),
                             temperature: Some(0.5),
                             top_p: None,
                             max_tokens: Some(200),
@@ -1463,9 +1468,9 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
                             model: Arc::from("gpt-3.5-turbo"),
-                            system_instructions: PathBuf::from(
+                            system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
                                 "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                            ),
+                            )),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
@@ -1534,9 +1539,9 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: None, // No 'active' field specified
                             model: Arc::from("gpt-3.5-turbo"),
-                            system_instructions: PathBuf::from(
+                            system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
                                 "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                            ),
+                            )),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
@@ -1607,9 +1612,9 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(false), // Explicitly inactive
                             model: Arc::from("gpt-3.5-turbo"),
-                            system_instructions: PathBuf::from(
+                            system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
                                 "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                            ),
+                            )),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),

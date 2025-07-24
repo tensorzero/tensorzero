@@ -78,11 +78,7 @@ impl<'a> TryFrom<&'a RenderedSample> for FireworksSupervisedRow<'a> {
                         message: "Parallel tool calls are not supported for Fireworks".to_string(),
                     }));
                 }
-                tool_params
-                    .tools_available
-                    .iter()
-                    .map(|t| t.into())
-                    .collect()
+                tool_params.tools_available.iter().map(Into::into).collect()
             }
             None => vec![],
         };

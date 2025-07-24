@@ -1,11 +1,11 @@
 use std::fs;
 use std::path::Path;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::config_parser::path::TomlRelativePath;
 use crate::config_parser::LoadableConfig;
 use crate::config_parser::PathWithContents;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
@@ -70,7 +70,7 @@ pub struct UninitializedDiclConfig {
     pub embedding_model: String,
     pub k: u32, // k as in k-nearest neighbors
     pub model: String,
-    pub system_instructions: Option<PathBuf>,
+    pub system_instructions: Option<TomlRelativePath>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub stop_sequences: Option<Vec<String>>,
@@ -430,7 +430,7 @@ impl DiclConfig {
                 .output
                 .clone()
                 .into_iter()
-                .map(|x| x.into())
+                .map(ContentBlockChatOutput::into)
                 .collect(),
             Example::Json(json_example) => {
                 vec![json_example.output.raw.clone().unwrap_or_default().into()]
@@ -618,7 +618,7 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
     fn load<P: AsRef<Path>>(self, base_path: P) -> Result<DiclConfig, Error> {
         let system_instructions = match self.system_instructions {
             Some(path) => {
-                let path = base_path.as_ref().join(path);
+                let path = base_path.as_ref().join(path.path());
                 fs::read_to_string(path).map_err(|e| {
                     Error::new(ErrorDetails::Config {
                         message: format!("Failed to read system instructions: {e}"),
@@ -723,8 +723,10 @@ mod tests {
         );
 
         // Second message should be from Assistant with content blocks
-        let expected_content: Vec<ContentBlock> =
-            chat_output.into_iter().map(|x| x.into()).collect();
+        let expected_content: Vec<ContentBlock> = chat_output
+            .into_iter()
+            .map(ContentBlockChatOutput::into)
+            .collect();
 
         assert_eq!(chat_messages[1].role, Role::Assistant);
         assert_eq!(chat_messages[1].content, expected_content);

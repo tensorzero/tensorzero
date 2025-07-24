@@ -39,7 +39,7 @@ const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_secs(5);
 const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1200);
 
 /// The expected payload is a JSON object with the following fields:
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
     // the episode ID client is providing feedback for (either this or `inference_id` must be set but not both)
@@ -560,7 +560,7 @@ pub async fn validate_parse_demonstration(
             };
             let content_blocks: Vec<ContentBlockOutput> = content_blocks
                 .into_iter()
-                .map(|block| block.try_into())
+                .map(DemonstrationContentBlock::try_into)
                 .collect::<Result<Vec<ContentBlockOutput>, Error>>()?;
             let parsed_value = parse_chat_output(content_blocks, Some(&tool_call_config)).await;
             for block in &parsed_value {
@@ -656,7 +656,7 @@ async fn get_dynamic_demonstration_info(
                 // This is consistent with how they are serialized at inference time.
                 tool_params_result
                     .tool_params
-                    .map(|x| x.into())
+                    .map(ToolCallConfigDatabaseInsert::into)
                     .unwrap_or_default(),
             ))
         }
