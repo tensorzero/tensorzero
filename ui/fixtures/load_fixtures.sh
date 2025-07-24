@@ -18,7 +18,6 @@ clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "INSERT INTO ModelInference FORMAT JSONEachRow" < model_inference_examples.jsonl
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "INSERT INTO ChatInferenceDatapoint FORMAT JSONEachRow" < chat_inference_datapoint_examples.jsonl
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "INSERT INTO JsonInferenceDatapoint FORMAT JSONEachRow" < json_inference_datapoint_examples.jsonl
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "INSERT INTO ModelInferenceCache FORMAT JSONEachRow" < model_inference_cache_examples.jsonl
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "INSERT INTO DynamicEvaluationRun FORMAT JSONEachRow" < dynamic_evaluation_run_examples.jsonl
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "INSERT INTO DynamicEvaluationRunEpisode FORMAT JSONEachRow" < dynamic_evaluation_run_episode_examples.jsonl
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "INSERT INTO ModelInferenceCache FORMAT JSONEachRow" < model_inference_cache_e2e.jsonl
