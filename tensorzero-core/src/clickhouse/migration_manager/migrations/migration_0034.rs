@@ -40,8 +40,7 @@ impl Migration for Migration0034<'_> {
     }
 
     async fn apply(&self, clean_start: bool) -> Result<(), Error> {
-        let view_offset = Duration::from_secs(1);
-        // let view_offset = Duration::from_secs(15);
+        let view_offset = Duration::from_secs(15);
         let view_timestamp_nanos = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
@@ -68,7 +67,7 @@ impl Migration for Migration0034<'_> {
         // If we are not doing a clean start, we need to add a where clause ot the view to only include rows that have been created
         // after the view_timestamp
         let view_where_clause = if !clean_start {
-            format!("AND UUIDv7ToDateTime(id) >= toDateTime64('{view_timestamp_nanos}', 9)")
+            format!("AND UUIDv7ToDateTime(id) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
         } else {
             String::new()
         };
