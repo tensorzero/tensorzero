@@ -34,6 +34,7 @@ from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
     InferenceFilterTreeNode,
     JsonInferenceOutput,
+    OrderBy,
 )
 
 @final
@@ -60,12 +61,14 @@ class StoredInference:
         output: Any,
         episode_id: UUID,
         inference_id: UUID,
+        timestamp: str,
         tool_params: Optional[Any] = None,
         output_schema: Optional[Any] = None,
         # Dispreferred outputs are lists because there may be several of them in the future.
         dispreferred_outputs: Union[
             List[ChatInferenceOutput], List[JsonInferenceOutput]
         ] = [],
+        tags: Dict[str, str] = {},
     ) -> None: ...
     def __repr__(self) -> str: ...
     @property
@@ -87,9 +90,13 @@ class StoredInference:
     @property
     def type(self) -> str: ...
     @property
+    def timestamp(self) -> str: ...
+    @property
     def dispreferred_outputs(
         self,
     ) -> Union[List[ChatInferenceOutput], List[JsonInferenceOutput]]: ...
+    @property
+    def tags(self) -> Dict[str, str]: ...
 
 @final
 class RenderedSample:
@@ -101,6 +108,7 @@ class RenderedSample:
     tool_params: Optional[ToolCallConfigDatabaseInsert]
     output_schema: Optional[Dict[str, Any]]
     dispreferred_outputs: List[ChatInferenceOutput] = []
+    tags: Dict[str, str]
 
 @final
 class OptimizationJobHandle:
@@ -208,6 +216,8 @@ class ChatCompletionConfig:
     def user_template(self) -> Optional[str]: ...
     @property
     def assistant_template(self) -> Optional[str]: ...
+    @property
+    def model(self) -> str: ...
 
 @final
 class BestOfNSamplingConfig:
@@ -511,6 +521,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         variant_name: Optional[str] = None,
         filters: Optional[InferenceFilterTreeNode] = None,
         output_source: str = "inference",
+        order_by: Optional[List[OrderBy]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> List[StoredInference]:
@@ -852,6 +863,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         variant_name: Optional[str] = None,
         filters: Optional[InferenceFilterTreeNode] = None,
         output_source: str = "inference",
+        order_by: Optional[List[OrderBy]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> List[StoredInference]:

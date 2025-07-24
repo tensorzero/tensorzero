@@ -549,12 +549,9 @@ async fn test_redacted_thinking() {
     );
     let first_block = &content_blocks[0];
     let first_block_type = first_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(first_block_type, "unknown");
-    assert_eq!(
-        first_block["model_provider_name"],
-        "tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body"
-    );
-    assert_eq!(first_block["data"]["type"], "redacted_thinking");
+    assert_eq!(first_block_type, "thought");
+    assert_eq!(first_block["_internal_provider_type"], "anthropic");
+    assert!(first_block["signature"].as_str().is_some());
 
     let second_block = &content_blocks[1];
     assert_eq!(second_block["type"], "text");
@@ -601,9 +598,9 @@ async fn test_redacted_thinking() {
     assert_eq!(content_blocks.len(), 2);
     let first_block = &content_blocks[0];
     // Check the type and content in the block
-    assert_eq!(first_block["type"], "unknown");
-    assert_eq!(first_block["data"]["type"], "redacted_thinking");
-    assert_eq!(first_block["model_provider_name"], "tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body");
+    assert_eq!(first_block["type"], "thought");
+    assert_eq!(first_block["_internal_provider_type"], "anthropic");
+    assert!(first_block["signature"].as_str().is_some());
     let second_block = &content_blocks[1];
     assert_eq!(second_block["type"], "text");
     let clickhouse_content = second_block.get("text").unwrap().as_str().unwrap();

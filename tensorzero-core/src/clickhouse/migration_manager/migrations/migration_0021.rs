@@ -169,10 +169,10 @@ impl Migration for Migration0021<'_> {
             .await?;
 
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
-        let view_where_clause = if !clean_start {
-            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
-        } else {
+        let view_where_clause = if clean_start {
             String::new()
+        } else {
+            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         };
 
         let query = format!(

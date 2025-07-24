@@ -24,7 +24,6 @@ if ! curl -s --connect-timeout 5 "$BASE_URL/ping" > /dev/null; then
   exit 1
 fi
 
-
 # Check if evaluations binary is available and executable
 if ! command -v evaluations &> /dev/null; then
   echo "Error: 'evaluations' command not found. Make sure it's properly installed."
@@ -37,6 +36,7 @@ if ! evaluations -h &> /dev/null; then
   exit 1
 fi
 
-cd /app
+cd /app/ui
 
-pnpm --filter=tensorzero-ui run start
+# Launch React Router
+./node_modules/.bin/react-router-serve ./build/server/index.js
