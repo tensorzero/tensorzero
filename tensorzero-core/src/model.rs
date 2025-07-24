@@ -268,10 +268,16 @@ impl ModelConfig {
                 model_provider_request,
                 clients.cache_options.max_age_s,
             )
-            .await
-            .ok()
-            .flatten();
-            if let Some(cache_lookup) = cache_lookup {
+            .await;
+            let cache_key = model_provider_request.get_cache_key().unwrap();
+            tracing::warn!(
+                "Cache lookup for key `{:?}` short `{:?}` {:?} in mode {:?}",
+                cache_key.get_long_key(),
+                cache_key.get_short_key(),
+                cache_lookup,
+                clients.cache_options
+            );
+            if let Some(cache_lookup) = cache_lookup.ok().flatten() {
                 return Ok(cache_lookup);
             }
         }

@@ -176,10 +176,17 @@ impl ModelProviderRequest<'_> {
                 message: format!("Failed to serialize request: {e}"),
             })
         })?;
+        //tracing::warn!("Request cached key: {serialized_request}");
         // Get the bytes of the serialized request to use in the hash
         let request_bytes = serialized_request.as_bytes();
         hasher.update(request_bytes);
-        Ok(hasher.finalize().into())
+        let res: CacheKey = hasher.finalize().into();
+        tracing::warn!(
+            "Constructed cache key: {:?} for {:?}",
+            res.get_long_key(),
+            serialized_request
+        );
+        Ok(res)
     }
 }
 
@@ -247,6 +254,11 @@ pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     usage: &Usage,
     finish_reason: Option<&FinishReason>,
 ) -> Result<(), Error> {
+    tracing::warn!(
+        "Starting cache write for key: {:?} short: {:?}",
+        cache_key.get_long_key(),
+        cache_key.get_short_key()
+    );
     let short_cache_key = cache_key.get_short_key()?;
     let long_cache_key = cache_key.get_long_key();
     let raw_request = raw_request.to_string();

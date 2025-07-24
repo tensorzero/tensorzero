@@ -571,9 +571,14 @@ async fn write_production(
         {rows_json}"
     );
 
+    tracing::warn!(
+        "Executing write for url {:?}: {query:?}",
+        database_url.expose_secret()
+    );
+
     let response = client
         .post(database_url.expose_secret())
-        .body(query)
+        .body(query.clone())
         .send()
         .await
         .map_err(|e| {
@@ -581,6 +586,13 @@ async fn write_production(
                 message: format!("{e:?}"),
             })
         })?;
+
+    tracing::warn!(
+        "Finished write for url {:?} with status: {:?} for write {:?}",
+        database_url.expose_secret(),
+        response.status(),
+        query
+    );
 
     match response.status() {
         reqwest::StatusCode::OK => Ok(()),
