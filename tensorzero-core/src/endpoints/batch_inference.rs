@@ -442,7 +442,7 @@ pub async fn get_batch_request(
             inference_id: None,
         } => {
             let query = format!(
-                r#"
+                r"
                     SELECT
                         batch_id,
                         id,
@@ -460,7 +460,7 @@ pub async fn get_batch_request(
                     ORDER BY timestamp DESC
                     LIMIT 1
                     FORMAT JSONEachRow
-                "#
+                "
             );
             let response = clickhouse.run_query_synchronous_no_params(query).await?;
             if response.response.is_empty() {
@@ -473,7 +473,7 @@ pub async fn get_batch_request(
             inference_id: Some(inference_id),
         } => {
             let query = format!(
-                r#"
+                r"
                     SELECT br.batch_id as batch_id,
                         br.id as id,
                         br.batch_params as batch_params,
@@ -491,7 +491,7 @@ pub async fn get_batch_request(
                     ORDER BY br.timestamp DESC
                     LIMIT 1
                     FORMAT JSONEachRow
-                "#,
+                ",
             );
             let response = clickhouse.run_query_synchronous_no_params(query).await?;
             if response.response.is_empty() {
