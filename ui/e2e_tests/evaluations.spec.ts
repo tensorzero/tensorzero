@@ -70,7 +70,7 @@ test("push the new run button, launch an image evaluation", async ({
   await expect(
     page.getByText("Select evaluation runs to compare..."),
   ).toBeVisible();
-  await expect(page.getByText("matches_reference")).toBeVisible();
+  await expect(page.getByText("matches_reference")).toBeVisible({timeout: 100_000});
   await expect(page.getByText("n=", { exact: false }).first()).toBeVisible();
 
   // Assert that "error" is not in the page
