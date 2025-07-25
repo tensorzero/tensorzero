@@ -33,7 +33,10 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
   await expect(
     page.getByText("Select evaluation runs to compare..."),
   ).toBeVisible();
-  await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible({timeout: 100_000});
+  // Wait for it to start, then wait for it to finish
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute("data-running", "true");
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute("data-running", "false", {timeout: 100_000});
+  await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
   await expect(page.getByText("n=", { exact: false }).first()).toBeVisible();
 
   // Assert that "error" is not in the page
@@ -70,7 +73,10 @@ test("push the new run button, launch an image evaluation", async ({
   await expect(
     page.getByText("Select evaluation runs to compare..."),
   ).toBeVisible();
-  await expect(page.getByText("matches_reference")).toBeVisible({timeout: 100_000});
+  // Wait for it to start, then wait for it to finish
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute("data-running", "true");
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute("data-running", "false", {timeout: 100_000});
+  await expect(page.getByText("matches_reference")).toBeVisible();
   await expect(page.getByText("n=", { exact: false }).first()).toBeVisible();
 
   // Assert that "error" is not in the page
