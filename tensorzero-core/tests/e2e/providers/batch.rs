@@ -521,7 +521,7 @@ async fn get_latest_batch_inference(
     };
 
     let query = format!(
-        r#"
+        r"
             SELECT DISTINCT
                 br.batch_id,
                 br.id,
@@ -543,7 +543,7 @@ async fn get_latest_batch_inference(
             ORDER BY br.timestamp DESC
             LIMIT 1
             FORMAT JSONEachRow
-        "#
+        "
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query)

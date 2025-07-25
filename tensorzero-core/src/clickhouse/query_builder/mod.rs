@@ -1637,7 +1637,7 @@ FORMAT JSONEachRow";
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
@@ -1661,7 +1661,7 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.timestamp > parseDateTimeBestEffort({p1:String}), 0) AND COALESCE((COALESCE(i.timestamp < parseDateTimeBestEffort({p2:String}), 0) OR COALESCE((COALESCE(j0.value >= {p4:Float64}, 0) AND COALESCE(i.tags[{p5:String}] = {p6:String}, 0)), 0)), 0))
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         assert_eq!(params.len(), 7); // p0 (function) + 6 filter-related params
     }
@@ -1856,7 +1856,7 @@ FORMAT JSONEachRow",
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
@@ -1872,7 +1872,7 @@ FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND i.tags[{p1:String}] = {p2:String}
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -1910,7 +1910,7 @@ FORMAT JSONEachRow"#;
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'chat' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
@@ -1926,7 +1926,7 @@ FROM
     ChatInference AS i
 WHERE
     i.function_name = {p0:String} AND i.tags[{p1:String}] != {p2:String}
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -1973,7 +1973,7 @@ FORMAT JSONEachRow"#;
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
@@ -1989,7 +1989,7 @@ FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.tags[{p1:String}] = {p2:String}, 0) AND COALESCE(i.tags[{p3:String}] = {p4:String}, 0))
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -2044,7 +2044,7 @@ FORMAT JSONEachRow"#;
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
@@ -2068,7 +2068,7 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.tags[{p1:String}] = {p2:String}, 0) AND COALESCE(j0.value > {p4:Float64}, 0))
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -2218,7 +2218,7 @@ FORMAT JSONEachRow";
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
@@ -2234,7 +2234,7 @@ FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND i.timestamp > parseDateTimeBestEffort({p1:String})
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -2278,7 +2278,7 @@ FORMAT JSONEachRow"#;
             };
             let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
             let expected_sql = format!(
-                r#"
+                r"
 SELECT
     'chat' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
@@ -2294,7 +2294,7 @@ FROM
     ChatInference AS i
 WHERE
     i.function_name = {{p0:String}} AND i.timestamp {expected_op_str} parseDateTimeBestEffort({{p1:String}})
-FORMAT JSONEachRow"#,
+FORMAT JSONEachRow",
             );
             assert_eq!(sql, expected_sql);
             let expected_params = vec![
@@ -2343,7 +2343,7 @@ FORMAT JSONEachRow"#,
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
@@ -2368,7 +2368,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.timestamp >= parseDateTimeBestEffort({p1:String}), 0) AND COALESCE(i.tags[{p2:String}] = {p3:String}, 0) AND COALESCE(j0.value > {p5:Float64}, 0))
 LIMIT {p6:UInt64}
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -2734,7 +2734,7 @@ FORMAT JSONEachRow"#;
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
 
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
@@ -2751,7 +2751,7 @@ FROM
 WHERE
     i.function_name = {p0:String}
 ORDER BY i.timestamp DESC NULLS LAST
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
 
         let expected_params = vec![QueryParameter {
@@ -2782,7 +2782,7 @@ FORMAT JSONEachRow"#;
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         // NOTE: This test case enforces that the joins account for metrics that are only used in the order by clause.
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
@@ -2807,7 +2807,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String}
 ORDER BY j0.value ASC NULLS LAST
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
 
         let expected_params = vec![
@@ -2850,7 +2850,7 @@ FORMAT JSONEachRow"#;
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
 
-        let expected_sql = r#"
+        let expected_sql = r"
 SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
@@ -2875,7 +2875,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String}
 ORDER BY j0.value DESC NULLS LAST, i.timestamp ASC NULLS LAST
-FORMAT JSONEachRow"#;
+FORMAT JSONEachRow";
         assert_eq!(sql, expected_sql);
 
         let expected_params = vec![

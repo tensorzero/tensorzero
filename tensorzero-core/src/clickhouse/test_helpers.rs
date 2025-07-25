@@ -512,13 +512,13 @@ pub async fn select_human_static_evaluation_feedback_clickhouse(
         ("datapoint_id", &datapoint_id_str),
         ("output", &escaped_output),
     ]);
-    let query = r#"
+    let query = r"
         SELECT * FROM StaticEvaluationHumanFeedback
         WHERE
             metric_name = {metric_name:String}
             AND datapoint_id = {datapoint_id:UUID}
             AND output = {output:String}
-        FORMAT JSONEachRow"#
+        FORMAT JSONEachRow"
         .to_string();
     let text = clickhouse_connection_info
         .run_query_synchronous(query, &params)
