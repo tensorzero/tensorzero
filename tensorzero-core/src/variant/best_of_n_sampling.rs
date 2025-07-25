@@ -582,7 +582,6 @@ impl BestOfNEvaluatorConfig {
     ///
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
     fn prepare_candidate_message(
-        &self,
         templates: &TemplateConfig,
         candidates: &[InferenceResult],
     ) -> Result<(RequestMessage, Vec<usize>), Error> {
@@ -649,7 +648,7 @@ impl BestOfNEvaluatorConfig {
     ) -> Result<(ModelInferenceRequest<'a>, Vec<usize>), Error> {
         // Do this before we prepare the system message so we can use the correct max index in the system message
         let (candidate_message, skipped_indices) =
-            self.prepare_candidate_message(inference_config.templates, candidates)?;
+            Self::prepare_candidate_message(inference_config.templates, candidates)?;
         // Need to subtract the skipped indices from the total number of candidates to get the correct max index
         let max_index = candidates
             .len()
@@ -949,14 +948,6 @@ mod tests {
         let templates = get_test_template_config();
 
         // Create an EvaluatorConfig
-        let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
-                model: "dummy".into(),
-                weight: Some(1.0),
-                ..Default::default()
-            },
-        };
-
         // Prepare some candidate InferenceResults
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -1033,7 +1024,7 @@ mod tests {
         let candidates = vec![candidate1, candidate2];
 
         // Call prepare_candidate_message
-        let result = evaluator_config.prepare_candidate_message(&templates, &candidates);
+        let result = BestOfNEvaluatorConfig::prepare_candidate_message(&templates, &candidates);
         assert!(result.is_ok());
         let (request_message, skipped_indices) = result.unwrap();
         assert!(skipped_indices.is_empty());
@@ -1047,15 +1038,6 @@ mod tests {
     #[tokio::test]
     async fn test_prepare_candidate_message_json() {
         let templates = get_test_template_config();
-
-        // Create an EvaluatorConfig
-        let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
-                model: "dummy_json".into(),
-                weight: Some(1.0),
-                ..Default::default()
-            },
-        };
 
         // Prepare some candidate InferenceResults - some valid, some malformed
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
@@ -1135,7 +1117,7 @@ mod tests {
         let candidates = vec![candidate1, candidate2];
 
         // Call prepare_candidate_message
-        let result = evaluator_config.prepare_candidate_message(&templates, &candidates);
+        let result = BestOfNEvaluatorConfig::prepare_candidate_message(&templates, &candidates);
         assert!(result.is_ok());
         let (request_message, skipped_indices) = result.unwrap();
 

@@ -47,6 +47,7 @@ impl StorageKind {
     /// During a normal run, we never use a prefix on the object key.
     /// See `StorageKind::S3Compatible.prefix`
     #[cfg(not(feature = "e2e_tests"))]
+    #[expect(clippy::unused_self)]
     fn prefix(&self) -> &str {
         ""
     }
