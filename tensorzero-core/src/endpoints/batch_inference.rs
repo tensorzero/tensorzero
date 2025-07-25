@@ -889,6 +889,7 @@ pub async fn write_completed_batch_inference<'a>(
             inference_result.clone(),
             episode_id,
             variant_name.to_string(),
+            None, // batch inference doesn't support resolved_messages yet
         );
         inferences.push(inference_response);
         let metadata = InferenceDatabaseInsertMetadata {
@@ -1212,6 +1213,7 @@ impl TryFrom<ChatInferenceResponseDatabaseRead> for ChatInferenceResponse {
             variant_name: value.variant_name,
             content: output,
             usage,
+            resolved_messages: None,
             // This is currently unsupported in the batch API
             original_response: None,
             finish_reason: value.finish_reason,
@@ -1249,6 +1251,7 @@ impl TryFrom<JsonInferenceResponseDatabaseRead> for JsonInferenceResponse {
             variant_name: value.variant_name,
             output,
             usage,
+            resolved_messages: None,
             // This is currently unsupported in the batch API
             original_response: None,
             finish_reason: value.finish_reason,
