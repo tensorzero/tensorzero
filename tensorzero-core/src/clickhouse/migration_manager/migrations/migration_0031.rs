@@ -30,13 +30,13 @@ impl Migration for Migration0031<'_> {
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
             .run_query_synchronous_no_params(
-                r#"ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS ttft_ms Nullable(UInt32);"#
+                r"ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS ttft_ms Nullable(UInt32);"
                     .to_string(),
             )
             .await?;
         self.clickhouse
             .run_query_synchronous_no_params(
-                r#"ALTER TABLE JsonInference ADD COLUMN IF NOT EXISTS ttft_ms Nullable(UInt32);"#
+                r"ALTER TABLE JsonInference ADD COLUMN IF NOT EXISTS ttft_ms Nullable(UInt32);"
                     .to_string(),
             )
             .await?;
@@ -45,8 +45,8 @@ impl Migration for Migration0031<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r#"ALTER TABLE ChatInference DROP COLUMN ttft_ms;
-        ALTER TABLE JsonInference DROP COLUMN ttft_ms;"#
+        r"ALTER TABLE ChatInference DROP COLUMN ttft_ms;
+        ALTER TABLE JsonInference DROP COLUMN ttft_ms;"
             .to_string()
     }
 

@@ -229,9 +229,9 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
                 database,
                 "--query",
                 &format!(
-                    r#"
+                    r"
         INSERT INTO {table} FROM INFILE '/s3-fixtures/{file}' FORMAT Parquet
-    "#
+    "
                 ),
             ]);
             assert!(
@@ -840,7 +840,7 @@ async fn test_migration_0013_old_table() {
             .unwrap();
     }
     // Manually create a table that should not exist
-    let query = r#"
+    let query = r"
         CREATE TABLE IF NOT EXISTS InferenceById
         (
             id UUID, -- must be a UUIDv7
@@ -850,7 +850,7 @@ async fn test_migration_0013_old_table() {
             function_type Enum('chat' = 1, 'json' = 2)
         ) ENGINE = MergeTree()
         ORDER BY id;
-    "#;
+    ";
     let _ = clickhouse
         .run_query_synchronous_no_params(query.to_string())
         .await
@@ -920,10 +920,10 @@ async fn test_migration_0013_data_no_table() {
 
     // Add a row to the JsonInference table (would be very odd to have data in this table
     // but not an InferenceById table).
-    let query = r#"
+    let query = r"
         INSERT INTO JsonInference (id, function_name, variant_name, episode_id, input, output, output_schema, inference_params, processing_time_ms)
         VALUES (generateUUIDv7(), 'test_function', 'test_variant', generateUUIDv7(), 'input', 'output', 'output_schema', 'params', 100)
-    "#;
+    ";
     let _ = clickhouse
         .run_query_synchronous_no_params(query.to_string())
         .await
