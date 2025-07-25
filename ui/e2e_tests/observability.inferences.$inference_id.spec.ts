@@ -337,6 +337,63 @@ test("should be able to add chat demonstration feedback via the inference page",
   await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
 });
 
+test("should be able to add demonstration feedback via Try with variant flow", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0196374b-0d7d-7422-b6dc-e94c572cc79b",
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Click on "Try with variant" button
+  await page.getByText("Try with variant").click();
+
+  // Wait for the dropdown menu to appear and select a variant
+  // Look for variant options and click on one that's not the current variant
+  const variantOption = page
+    .getByRole("menuitem")
+    .filter({ hasText: "initial_prompt_gpt4o_mini" });
+  await variantOption.waitFor({ state: "visible" });
+  await variantOption.click();
+
+  // Wait for the variant response modal to open and show results
+  await page.getByRole("dialog").waitFor({ state: "visible" });
+
+  // Wait for the variant inference to complete and show the "Add as Demonstration" button
+  await page
+    .getByText("Add as Demonstration")
+    .waitFor({ state: "visible", timeout: 15000 });
+
+  // Click the "Add as Demonstration" button
+  await page.getByText("Add as Demonstration").click();
+
+  // Wait for the modal to close and the page to redirect with newFeedbackId
+  await page.waitForURL((url) => url.searchParams.has("newFeedbackId"), {
+    timeout: 10000,
+  });
+
+  // Verify the modal is closed (no longer visible)
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+
+  // Verify the toast appears (look for "Feedback Added" text)
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("Feedback Added"),
+  ).toBeVisible();
+
+  // Get the feedback ID from URL and verify it appears in the feedback table
+  const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
+  if (!newFeedbackId) {
+    throw new Error("newFeedbackId is not present in the url");
+  }
+
+  // Assert that the feedback ID is visible in the feedback table
+  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
+});
+
 test("should be able to add a datapoint from the inference page", async ({
   page,
 }) => {
