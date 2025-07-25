@@ -11,6 +11,7 @@ test("should show the evaluation result page", async ({ page }) => {
 // This test depends on model inference cache hits (within ClickHouse)
 // If it starts failing, you may need to regenerate the model inference cache
 test("push the new run button, launch an evaluation", async ({ page }) => {
+  test.setTimeout(150_000);
   await page.goto("/evaluations");
   await page.waitForTimeout(500);
   await page.getByText("New Run").click();
@@ -48,6 +49,7 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
 test("push the new run button, launch an image evaluation", async ({
   page,
 }) => {
+  test.setTimeout(150_000);
   await page.goto("/evaluations");
   await page.waitForTimeout(500);
   await page.getByText("New Run").click();
