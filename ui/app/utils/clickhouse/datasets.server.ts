@@ -24,7 +24,7 @@ import {
   inputSchema,
   jsonInferenceOutputSchema,
 } from "./common";
-import { getConfig } from "../config/index.server";
+import { getConfig, getFunctionConfig } from "../config/index.server";
 import { resolveInput } from "../resolve.server";
 import { logger } from "~/utils/logger";
 
@@ -561,7 +561,7 @@ export async function getDatapoint(
 async function parseDatapointRow(row: DatapointRow): Promise<ParsedDatasetRow> {
   const parsedInput = inputSchema.parse(JSON.parse(row.input));
   const config = await getConfig();
-  const functionConfig = config.functions[row.function_name] || null;
+  const functionConfig = await getFunctionConfig(row.function_name, config);
   const resolvedInput = await resolveInput(parsedInput, functionConfig);
   if ("tool_params" in row) {
     // Chat inference row
@@ -703,7 +703,8 @@ export async function countDatapointsForDatasetFunction(
   function_name: string,
 ): Promise<number | null> {
   const config = await getConfig();
-  const function_type = config.functions[function_name]?.type;
+  const functionConfig = await getFunctionConfig(function_name, config);
+  const function_type = functionConfig?.type;
   if (!function_type) {
     return null;
   }

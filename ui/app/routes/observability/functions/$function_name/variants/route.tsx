@@ -8,10 +8,10 @@ import {
 import type { LoaderFunctionArgs, RouteHandle } from "react-router";
 import BasicInfo from "./VariantBasicInfo";
 import VariantTemplate from "./VariantTemplate";
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import PageButtons from "~/components/utils/PageButtons";
 import VariantInferenceTable from "./VariantInferenceTable";
-import { getConfig } from "~/utils/config/index.server";
+import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import {
   countInferencesForVariant,
   queryInferenceTableBoundsByVariantName,
@@ -55,7 +55,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
-  const function_config = config.functions[function_name];
+  const function_config = await getFunctionConfig(function_name, config);
   if (!function_config) {
     throw data(`Function ${function_name} not found`, { status: 404 });
   }
@@ -134,8 +134,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
   } = loaderData;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const config = useConfig();
-  const function_config = config.functions[function_name];
+  const function_config = useFunctionConfig(function_name);
   if (!function_config) {
     throw new Response(
       "Function not found. This likely means there is data in ClickHouse from an old TensorZero config.",

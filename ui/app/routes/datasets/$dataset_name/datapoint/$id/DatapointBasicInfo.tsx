@@ -1,4 +1,4 @@
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import {
   BasicInfoLayout,
@@ -30,8 +30,7 @@ const createTimestampTooltip = (timestamp: string | number | Date) => {
 };
 
 export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
-  const config = useConfig();
-  const function_config = config.functions[datapoint.function_name];
+  const function_config = useFunctionConfig(datapoint.function_name);
   const type = function_config?.type;
   if (!type) {
     throw new Error(`Function ${datapoint.function_name} not found`);

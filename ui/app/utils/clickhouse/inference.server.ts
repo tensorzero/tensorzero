@@ -33,7 +33,7 @@ import {
 } from "./inference";
 import { z } from "zod";
 import { logger } from "~/utils/logger";
-import { getConfig } from "../config/index.server";
+import { getConfig, getFunctionConfig } from "../config/index.server";
 
 /**
  * Query a table of at most `page_size` Inferences from ChatInference or JsonInference that are
@@ -509,7 +509,7 @@ async function parseInferenceRow(
 ): Promise<ParsedInferenceRow> {
   const input = inputSchema.parse(JSON.parse(row.input));
   const config = await getConfig();
-  const functionConfig = config.functions[row.function_name] || null;
+  const functionConfig = await getFunctionConfig(row.function_name, config);
   const resolvedInput = await resolveInput(input, functionConfig);
   const extra_body = row.extra_body ? JSON.parse(row.extra_body) : undefined;
   if (row.function_type === "chat") {

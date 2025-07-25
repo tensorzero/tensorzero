@@ -15,6 +15,7 @@ import type { Config } from "tensorzero-node";
 import { models } from "./model_options";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 import { logger } from "~/utils/logger";
+import { useAllFunctionConfigs, useFunctionConfig } from "~/context/config";
 
 export function SFTForm({
   config,
@@ -54,6 +55,7 @@ export function SFTForm({
   });
 
   const [functionName, metricName, threshold] = watchedFields;
+  const functionConfig = useFunctionConfig(functionName);
   const counts = useCountFetcher({
     functionName: functionName ?? undefined,
     metricName: metricName ?? undefined,
@@ -100,13 +102,10 @@ export function SFTForm({
     string,
     ChatCompletionConfig
   > => {
-    const selectedFunction = form.getValues("function");
-
-    if (!selectedFunction || !config?.functions[selectedFunction]) {
+    if (!functionConfig) {
       return {};
     }
 
-    const functionConfig = config.functions[selectedFunction];
     return Object.fromEntries(
       Object.entries(functionConfig.variants || {})
         .filter(
@@ -147,7 +146,7 @@ export function SFTForm({
               <FunctionFormField
                 control={form.control}
                 name="function"
-                functions={config.functions}
+                functions={useAllFunctionConfigs()}
                 hideDefaultFunction={true}
               />
 

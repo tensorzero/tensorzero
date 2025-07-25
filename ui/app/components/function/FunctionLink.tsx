@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { AlertDialog } from "~/components/ui/AlertDialog";
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import type { ReactNode } from "react";
 
 type FunctionLinkProps = {
@@ -9,8 +9,7 @@ type FunctionLinkProps = {
 };
 
 export function FunctionLink({ functionName, children }: FunctionLinkProps) {
-  const config = useConfig();
-  const functionConfig = config.functions[functionName];
+  const functionConfig = useFunctionConfig(functionName);
   return functionConfig ? (
     <Link to={`/observability/functions/${functionName}`}>{children}</Link>
   ) : (

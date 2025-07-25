@@ -7,7 +7,7 @@ import {
 } from "./tooltip";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { formatDate } from "~/utils/date";
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import { AlertDialog } from "~/components/ui/AlertDialog";
 
 interface TableItemShortUuidProps {
@@ -77,9 +77,8 @@ function TableItemFunction({
   functionType,
   link,
 }: TableItemFunctionProps) {
-  const config = useConfig();
   const functionIconConfig = getFunctionTypeIcon(functionType);
-  const functionConfig = config.functions[functionName];
+  const functionConfig = useFunctionConfig(functionName);
 
   const baseClasses =
     "flex items-center text-sm text-fg-primary gap-2 rounded-md font-mono";
