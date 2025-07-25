@@ -53,9 +53,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::providers::{
     anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
-    deepseek::DeepSeekProvider, fireworks::FireworksProvider,
-    gcp_vertex_anthropic::GCPVertexAnthropicProvider, gcp_vertex_gemini::GCPVertexGeminiProvider,
-    groq::GroqProvider, mistral::MistralProvider, openai::OpenAIProvider,
+    deepseek::DeepSeekProvider, fireworks::FireworksProvider, gcp_vertex_anthropic::GCPVertexAnthropicProvider,
+    gcp_vertex_gemini::GCPVertexGeminiProvider, groq::GroqProvider,
+    llama::LlamaProvider, mistral::MistralProvider, openai::OpenAIProvider,
     openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
     xai::XAIProvider,
 };
@@ -688,6 +688,7 @@ impl ModelProvider {
             ProviderConfig::GoogleAIStudioGemini(_) => "google_ai_studio_gemini",
             ProviderConfig::Groq(_) => "groq",
             ProviderConfig::Hyperbolic(_) => "hyperbolic",
+            ProviderConfig::Llama(_) => "llama",
             ProviderConfig::Mistral(_) => "mistral",
             ProviderConfig::OpenAI(_) => "openai",
             ProviderConfig::OpenRouter(_) => "openrouter",
@@ -716,6 +717,7 @@ impl ModelProvider {
             ProviderConfig::GoogleAIStudioGemini(provider) => Some(provider.model_name()),
             ProviderConfig::Groq(provider) => Some(provider.model_name()),
             ProviderConfig::Hyperbolic(provider) => Some(provider.model_name()),
+            ProviderConfig::Llama(provider) => Some(provider.model_name()),
             ProviderConfig::Mistral(provider) => Some(provider.model_name()),
             ProviderConfig::OpenAI(provider) => Some(provider.model_name()),
             ProviderConfig::OpenRouter(provider) => Some(provider.model_name()),
@@ -771,6 +773,7 @@ pub enum ProviderConfig {
     GoogleAIStudioGemini(GoogleAIStudioGeminiProvider),
     Groq(GroqProvider),
     Hyperbolic(HyperbolicProvider),
+    LLama(LlamaProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
     OpenRouter(OpenRouterProvider),
@@ -935,6 +938,13 @@ pub enum UninitializedProviderConfig {
         #[serde(default = "crate::providers::fireworks::default_parse_think_blocks")]
         parse_think_blocks: bool,
     },
+    #[strum(serialize = "llama")]
+    #[serde(rename = "llama")]
+    Llama {
+        model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        api_key_location: Option<CredentialLocation>,
+    }
     Mistral {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
@@ -1126,6 +1136,10 @@ impl UninitializedProviderConfig {
             UninitializedProviderConfig::Mistral {
                 model_name,
                 api_key_location,
+            } => ProviderConfig::Llama(LlamaProvider::new(model_name, api_key_location)?),
+            UninitializedProviderConfig::Llama {
+                model_name,
+                api_key_location,
             } => ProviderConfig::Mistral(MistralProvider::new(model_name, api_key_location)?),
             UninitializedProviderConfig::OpenAI {
                 model_name,
@@ -1229,6 +1243,9 @@ impl ModelProvider {
                 provider.infer(request, client, api_keys, self).await
             }
             ProviderConfig::Hyperbolic(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
+            ProviderConfig::Llama(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
             ProviderConfig::Mistral(provider) => {
@@ -1504,6 +1521,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::Groq(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::Llama(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -1806,6 +1828,7 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "gcp_vertex_anthropic::",
     "hyperbolic::",
     "groq::",
+    "llama::",
     "mistral::",
     "openai::",
     "openrouter::",
