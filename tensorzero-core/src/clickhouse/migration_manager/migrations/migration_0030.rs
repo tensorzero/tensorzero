@@ -48,15 +48,15 @@ impl Migration for Migration0030<'_> {
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
             .run_query_synchronous_no_params(
-                r#"ALTER TABLE ModelInference
-                MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5, 'stop_sequence' = 6));"#.to_string(),
+                r"ALTER TABLE ModelInference
+                MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5, 'stop_sequence' = 6));".to_string(),
             )
             .await?;
 
         self.clickhouse
             .run_query_synchronous_no_params(
-                r#"ALTER TABLE ModelInferenceCache
-                MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5, 'stop_sequence' = 6));"#.to_string(),
+                r"ALTER TABLE ModelInferenceCache
+                MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5, 'stop_sequence' = 6));".to_string(),
             )
             .await?;
 
@@ -64,8 +64,8 @@ impl Migration for Migration0030<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r#"ALTER TABLE ModelInference MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5));
-           ALTER TABLE ModelInferenceCache MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5));"#.to_string()
+        r"ALTER TABLE ModelInference MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5));
+           ALTER TABLE ModelInferenceCache MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5));".to_string()
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

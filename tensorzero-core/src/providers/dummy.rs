@@ -230,7 +230,7 @@ pub static DUMMY_STREAMING_TOOL_RESPONSE: [&str; 5] = [
 ];
 
 pub static DUMMY_STREAMING_JSON_RESPONSE: [&str; 5] =
-    [r#"{"name""#, r#":"John""#, r#","age""#, r#":30"#, r#"}"#];
+    [r#"{"name""#, r#":"John""#, r#","age""#, r":30", r"}"];
 
 pub static DUMMY_RAW_REQUEST: &str = "raw request";
 

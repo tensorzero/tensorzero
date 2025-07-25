@@ -1840,10 +1840,10 @@ async fn test_config_s3_allow_http_env_var() {
 #[traced_test]
 #[tokio::test]
 async fn test_deprecated_enable_template_filesystem_access() {
-    let config_str = r#"
+    let config_str = r"
         [gateway]
         enable_template_filesystem_access = true
-        "#;
+        ";
     let config_toml = toml::from_str(config_str).expect("Failed to parse sample config");
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let config = Config::load_from_toml(config_toml, base_path.clone())
