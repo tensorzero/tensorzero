@@ -13,6 +13,7 @@ use tensorzero_core::{
         Input, InputMessage, InputMessageContent,
     },
     tool::DynamicToolParams,
+    variant::dynamic::DynamicVariantParams,
 };
 use uuid::Uuid;
 
@@ -72,7 +73,7 @@ pub struct ClientInferenceParams {
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
-    pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
+    pub internal_dynamic_variant_config: Option<DynamicVariantParams>,
 }
 
 impl TryFrom<ClientInferenceParams> for Params {

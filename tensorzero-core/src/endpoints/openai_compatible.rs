@@ -26,7 +26,6 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cache::CacheParamsOptions;
-use crate::config_parser::UninitializedVariantInfo;
 use crate::endpoints::inference::{
     inference, ChatCompletionInferenceParams, InferenceParams, Params,
 };
@@ -40,6 +39,7 @@ use crate::inference::types::{
     InputMessage, InputMessageContent, Role, TextKind, Usage,
 };
 use crate::tool::{DynamicToolParams, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult};
+use crate::variant::dynamic::DynamicVariantParams;
 use crate::variant::JsonMode;
 use serde::Deserializer;
 
@@ -303,7 +303,7 @@ pub struct OpenAICompatibleParams {
     #[serde(default, rename = "tensorzero::credentials")]
     tensorzero_credentials: InferenceCredentials,
     #[serde(rename = "tensorzero::internal_dynamic_variant_config")]
-    tensorzero_internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
+    tensorzero_internal_dynamic_variant_config: Option<DynamicVariantParams>,
     #[serde(flatten)]
     unknown_fields: HashMap<String, Value>,
 }

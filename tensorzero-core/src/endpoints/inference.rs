@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::{Config, ObjectStoreInfo, UninitializedVariantInfo};
+use crate::config_parser::{Config, ObjectStoreInfo};
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -44,6 +44,7 @@ use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::variant::chat_completion::ChatCompletionConfig;
+use crate::variant::dynamic::DynamicVariantParams;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
 use super::dynamic_evaluation_run::validate_inference_episode_id_and_apply_dynamic_evaluation_run;
@@ -108,7 +109,7 @@ pub struct Params {
     #[serde(default)]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     #[serde(default)]
-    pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
+    pub internal_dynamic_variant_config: Option<DynamicVariantParams>,
 }
 
 #[derive(Clone, Debug)]
@@ -260,6 +261,7 @@ pub async fn inference(
         &mut candidate_variants,
         &mut params.tags,
         params.variant_name.as_deref(),
+        params.internal_dynamic_variant_config.as_ref(),
     )?;
 
     // Should we store the results?
@@ -1189,10 +1191,11 @@ fn prepare_candidate_variants(
     candidate_variants: &mut HashMap<String, Arc<VariantInfo>>,
     tags: &mut HashMap<String, String>,
     pinned_variant_name: Option<&str>,
+    dynamic_variant_config: Option<&DynamicVariantParams>,
 ) -> Result<(), Error> {
-    match pinned_variant_name {
+    match (pinned_variant_name, dynamic_variant_config) {
         // If a variant is pinned, only that variant should be attempted
-        Some(variant_name) => {
+        (Some(variant_name), None) => {
             candidate_variants.retain(|k, _| k == variant_name);
 
             // If the pinned variant doesn't exist, return an error
@@ -1207,12 +1210,26 @@ fn prepare_candidate_variants(
                 variant_name.to_string(),
             );
         }
-        None => {
+        (None, Some(dynamic_variant_config)) => {
+            candidate_variants.clear();
+            candidate_variants.insert(
+                "dynamic_variant".to_string(),
+                Arc::new(dynamic_variant_config.try_into()?),
+            );
+        }
+        (None, None) => {
             // Remove all zero-weight variants - these can only be used if explicitly pinned above
             candidate_variants.retain(|_, variant| {
                 // Retain 'None' and positive-weight variants, discarding zero-weight variants
                 variant.inner.weight().is_none_or(|w| w > 0.0)
             });
+        }
+        _ => {
+            return Err(ErrorDetails::InvalidRequest {
+                message: "`variant_name` and `internal_dynamic_variant_config` cannot both be set."
+                    .to_string(),
+            }
+            .into())
         }
     }
     Ok(())
