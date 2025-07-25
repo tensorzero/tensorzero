@@ -47,7 +47,6 @@ pub mod best_of_n_sampling;
 pub mod chain_of_thought;
 pub mod chat_completion;
 pub mod dicl;
-pub mod dynamic;
 pub mod mixture_of_n;
 
 /// Holds a particular variant implementation, plus additional top-level configuration

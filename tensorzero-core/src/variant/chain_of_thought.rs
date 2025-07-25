@@ -31,7 +31,7 @@ pub struct ChainOfThoughtConfig {
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChainOfThoughtConfig {
     #[serde(flatten)]

@@ -47,7 +47,7 @@ pub struct BestOfNSamplingConfig {
     pub evaluator: BestOfNEvaluatorConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNSamplingConfig {
     #[serde(default)]
@@ -70,7 +70,7 @@ pub struct BestOfNEvaluatorConfig {
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNEvaluatorConfig {
     #[serde(flatten)]

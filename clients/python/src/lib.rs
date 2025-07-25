@@ -498,6 +498,7 @@ impl BaseTensorZeroGateway {
             include_original_response,
             extra_body,
             extra_headers,
+            internal_dynamic_variant_config: None,
         })
     }
 }

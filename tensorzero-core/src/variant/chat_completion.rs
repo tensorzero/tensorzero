@@ -51,7 +51,7 @@ pub struct ChatCompletionConfig {
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatCompletionConfig {
     #[serde(default)]

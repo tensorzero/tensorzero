@@ -62,7 +62,7 @@ pub struct DiclConfig {
     pub retries: RetryConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedDiclConfig {
     #[serde(default)]

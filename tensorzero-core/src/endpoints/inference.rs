@@ -256,28 +256,11 @@ pub async fn inference(
 
     let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
 
-    // If a variant is pinned, only that variant should be attempted
-    if let Some(ref variant_name) = params.variant_name {
-        candidate_variants.retain(|k, _| k == variant_name);
-
-        // If the pinned variant doesn't exist, return an error
-        if candidate_variants.is_empty() {
-            return Err(ErrorDetails::UnknownVariant {
-                name: variant_name.to_string(),
-            }
-            .into());
-        }
-        params.tags.insert(
-            "tensorzero::variant_pinned".to_string(),
-            variant_name.to_string(),
-        );
-    } else {
-        // Remove all zero-weight variants - these can only be used if explicitly pinned above
-        candidate_variants.retain(|_, variant| {
-            // Retain 'None' and positive-weight variants, discarding zero-weight variants
-            variant.inner.weight().is_none_or(|w| w > 0.0)
-        });
-    }
+    prepare_candidate_variants(
+        &mut candidate_variants,
+        &mut params.tags,
+        params.variant_name.as_deref(),
+    )?;
 
     // Should we store the results?
     let dryrun = params.dryrun.unwrap_or(false);
@@ -1200,6 +1183,39 @@ impl ChatCompletionInferenceParams {
             self.stop_sequences = stop_sequences;
         }
     }
+}
+
+fn prepare_candidate_variants(
+    candidate_variants: &mut HashMap<String, Arc<VariantInfo>>,
+    tags: &mut HashMap<String, String>,
+    pinned_variant_name: Option<&str>,
+) -> Result<(), Error> {
+    match pinned_variant_name {
+        // If a variant is pinned, only that variant should be attempted
+        Some(variant_name) => {
+            candidate_variants.retain(|k, _| k == variant_name);
+
+            // If the pinned variant doesn't exist, return an error
+            if candidate_variants.is_empty() {
+                return Err(ErrorDetails::UnknownVariant {
+                    name: variant_name.to_string(),
+                }
+                .into());
+            }
+            tags.insert(
+                "tensorzero::variant_pinned".to_string(),
+                variant_name.to_string(),
+            );
+        }
+        None => {
+            // Remove all zero-weight variants - these can only be used if explicitly pinned above
+            candidate_variants.retain(|_, variant| {
+                // Retain 'None' and positive-weight variants, discarding zero-weight variants
+                variant.inner.weight().is_none_or(|w| w > 0.0)
+            });
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

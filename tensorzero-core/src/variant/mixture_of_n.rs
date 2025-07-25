@@ -49,7 +49,7 @@ pub struct MixtureOfNConfig {
     pub fuser: FuserConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedMixtureOfNConfig {
     #[serde(default)]
@@ -72,7 +72,7 @@ pub struct FuserConfig {
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFuserConfig {
     #[serde(flatten)]

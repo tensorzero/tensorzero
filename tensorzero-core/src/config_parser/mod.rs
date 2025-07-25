@@ -77,7 +77,7 @@ pub struct Config {
     pub optimizers: HashMap<String, OptimizerInfo>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -87,7 +87,7 @@ pub struct NonStreamingTimeouts {
     pub total_ms: Option<u64>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -99,7 +99,7 @@ pub struct StreamingTimeouts {
 
 /// Configures the timeouts for both streaming and non-streaming requests.
 /// This can be attached to various other configs (e.g. variants, models, model providers)
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[serde(deny_unknown_fields)]
@@ -1079,7 +1079,7 @@ impl UninitializedFunctionConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 // We don't use `#[serde(deny_unknown_fields)]` here - it needs to go on 'UninitializedVariantConfig',
 // since we use `#[serde(flatten)]` on the `inner` field.
@@ -1090,7 +1090,7 @@ pub struct UninitializedVariantInfo {
     pub timeouts: Option<TimeoutsConfig>,
 }
 
-#[derive(Debug, TensorZeroDeserialize)]
+#[derive(Clone, Debug, TensorZeroDeserialize, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
