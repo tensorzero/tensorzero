@@ -137,7 +137,7 @@ pub struct InferenceConfig<'a, 'request> {
 /// Maps to the subset of Config that applies to the current inference request.
 #[derive(Clone, Debug)]
 pub struct BatchInferenceConfig<'a> {
-    pub tool_configs: Vec<Option<ToolCallConfig>>,
+    pub tool_configs: &'a Vec<Option<ToolCallConfig>>,
     pub templates: &'a TemplateConfig<'a>,
     pub dynamic_output_schemas: Vec<Option<DynamicJSONSchema>>,
     pub function_name: &'a str,
@@ -762,7 +762,7 @@ impl RetryConfig {
 impl<'a> BatchInferenceConfig<'a> {
     pub fn new(
         templates: &'a TemplateConfig,
-        tool_configs: Vec<Option<ToolCallConfig>>,
+        tool_configs: &'a Vec<Option<ToolCallConfig>>,
         dynamic_output_schemas: Vec<Option<DynamicJSONSchema>>,
         function_name: &'a str,
         variant_name: Option<&'a str>,

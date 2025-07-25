@@ -196,7 +196,7 @@ pub async fn start_batch_inference_handler(
     let mut variant_errors = std::collections::HashMap::new();
     let inference_config = BatchInferenceConfig::new(
         &config.templates,
-        tool_configs,
+        &tool_configs,
         batch_dynamic_output_schemas,
         &params.function_name,
         params.variant_name.as_deref(),
@@ -241,11 +241,7 @@ pub async fn start_batch_inference_handler(
             message: "batch episode_ids unexpectedly empty. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
         }))?;
 
-    // TODO (#496): remove this extra clone
-    // Spent a while fighting the borrow checker here, gave up
-    // The issue is that inference_config holds the ToolConfigs and ModelInferenceRequest has lifetimes that conflict with the inference_config
-    let cloned_config = inference_config.clone();
-    let inference_configs = cloned_config.inference_configs(&episode_ids, &inference_ids);
+    let inference_configs = inference_config.inference_configs(&episode_ids, &inference_ids);
     while !candidate_variant_names.is_empty() {
         // We sample the same variant for the whole batch
         let (variant_name, variant) = sample_variant(
@@ -295,7 +291,7 @@ pub async fn start_batch_inference_handler(
             resolved_inputs,
             result,
             write_metadata,
-            inference_config,
+            &inference_config,
             &inference_configs,
         )
         .await?;
@@ -551,7 +547,7 @@ struct BatchInferenceRowHelper<'a> {
     input: ResolvedInput,
     input_messages: Vec<RequestMessage>,
     system: Option<&'a str>,
-    tool_config: Option<ToolCallConfig>,
+    tool_config: Option<&'a ToolCallConfig>,
     inference_params: &'a InferenceParams,
     output_schema: Option<&'a Value>,
     raw_request: &'a str,
@@ -563,7 +559,7 @@ async fn write_start_batch_inference<'a>(
     inputs: Vec<ResolvedInput>,
     result: StartBatchModelInferenceWithMetadata<'a>,
     metadata: BatchInferenceDatabaseInsertMetadata<'a>,
-    inference_config: BatchInferenceConfig<'a>,
+    inference_config: &BatchInferenceConfig<'a>,
     inference_configs: &[InferenceConfig<'a, 'a>],
 ) -> Result<(Uuid, Vec<Uuid>), Error> {
     // Collect all the data into BatchInferenceRow structs
@@ -599,7 +595,7 @@ async fn write_start_batch_inference<'a>(
                 input,
                 input_messages,
                 system: system.as_deref(),
-                tool_config,
+                tool_config: tool_config.as_ref(),
                 inference_params,
                 output_schema,
                 raw_request,
@@ -612,7 +608,7 @@ async fn write_start_batch_inference<'a>(
     // Process each row by serializing the stuff that needs to be serialized twice
     for row in inference_rows {
         let tool_params: Option<ToolCallConfigDatabaseInsert> =
-            row.tool_config.map(ToolCallConfig::into);
+            row.tool_config.map(|t| ToolCallConfig::into(t.clone()));
 
         rows.push(BatchModelInferenceRow {
             inference_id: *row.inference_id,
