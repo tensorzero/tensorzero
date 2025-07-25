@@ -12,6 +12,7 @@ import type { GoogleAIStudioGeminiProvider } from "./GoogleAIStudioGeminiProvide
 import type { GroqProvider } from "./GroqProvider";
 import type { HyperbolicProvider } from "./HyperbolicProvider";
 import type { MistralProvider } from "./MistralProvider";
+import type { NvidiaNimProvider } from "./NvidiaNimProvider";
 import type { OpenAIProvider } from "./OpenAIProvider";
 import type { OpenRouterProvider } from "./OpenRouterProvider";
 import type { SGLangProvider } from "./SGLangProvider";
@@ -33,6 +34,7 @@ export type ProviderConfig =
   | ({ type: "groq" } & GroqProvider)
   | ({ type: "hyperbolic" } & HyperbolicProvider)
   | ({ type: "mistral" } & MistralProvider)
+  | ({ type: "nvidia_nim" } & NvidiaNimProvider)
   | ({ type: "openai" } & OpenAIProvider)
   | ({ type: "openrouter" } & OpenRouterProvider)
   | ({ type: "sglang" } & SGLangProvider)
