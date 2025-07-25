@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::{Config, ObjectStoreInfo};
+use crate::config_parser::{Config, ObjectStoreInfo, UninitializedVariantInfo};
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -106,6 +106,8 @@ pub struct Params {
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    #[serde(default)]
+    pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
 }
 
 #[derive(Clone, Debug)]
@@ -505,13 +507,17 @@ pub async fn inference(
 /// If `model_name` is specified, then we use the special 'default' function
 /// Returns the function config and the function name
 fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig>, String), Error> {
-    match (&params.function_name, &params.model_name) {
+    match (
+        &params.function_name,
+        &params.model_name,
+        &params.internal_dynamic_variant_config,
+    ) {
         // Get the function config or return an error if it doesn't exist
-        (Some(function_name), None) => Ok((
+        (Some(function_name), None, _) => Ok((
             config.get_function(function_name)?.into_owned(),
             function_name.to_string(),
         )),
-        (None, Some(model_name)) => {
+        (None, Some(model_name), None) => {
             if params.variant_name.is_some() {
                 return Err(ErrorDetails::InvalidInferenceTarget {
                     message: "`variant_name` cannot be provided when using `model_name`"
@@ -551,12 +557,17 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))
         }
-        (Some(_), Some(_)) => Err(ErrorDetails::InvalidInferenceTarget {
+        (Some(_), Some(_), None) => Err(ErrorDetails::InvalidInferenceTarget {
             message: "Only one of `function_name` or `model_name` can be provided".to_string(),
         }
         .into()),
-        (None, None) => Err(ErrorDetails::InvalidInferenceTarget {
+        (None, None, None) => Err(ErrorDetails::InvalidInferenceTarget {
             message: "Either `function_name` or `model_name` must be provided".to_string(),
+        }
+        .into()),
+        (_, _, Some(_)) => Err(ErrorDetails::InvalidInferenceTarget {
+            message: "If a dynamic variant config is passed, `function_name` must be specified."
+                .to_string(),
         }
         .into()),
     }
