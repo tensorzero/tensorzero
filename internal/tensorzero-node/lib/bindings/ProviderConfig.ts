@@ -34,7 +34,7 @@ export type ProviderConfig =
   | ({ type: "groq" } & GroqProvider)
   | ({ type: "hyperbolic" } & HyperbolicProvider)
   | ({ type: "mistral" } & MistralProvider)
-  | ({ type: "nvidia_nim" } & NvidiaNimProvider)  // <-- ADD THIS LINE
+  | ({ type: "nvidia_nim" } & NvidiaNimProvider)
   | ({ type: "openai" } & OpenAIProvider)
   | ({ type: "openrouter" } & OpenRouterProvider)
   | ({ type: "sglang" } & SGLangProvider)
