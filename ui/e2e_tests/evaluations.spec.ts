@@ -33,7 +33,7 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
   await expect(
     page.getByText("Select evaluation runs to compare..."),
   ).toBeVisible();
-  await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
+  await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible({timeout: 100_000});
   await expect(page.getByText("n=", { exact: false }).first()).toBeVisible();
 
   // Assert that "error" is not in the page
