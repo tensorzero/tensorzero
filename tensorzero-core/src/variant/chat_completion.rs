@@ -768,15 +768,15 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             assistant_template: Some(PathWithContents {
                 path: assistant_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             json_mode: Some(JsonMode::On),
             ..Default::default()
@@ -864,15 +864,15 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             assistant_template: Some(PathWithContents {
                 path: assistant_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             json_mode: Some(JsonMode::On),
             ..Default::default()
@@ -990,7 +990,7 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1016,7 +1016,7 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1052,11 +1052,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1249,11 +1249,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1314,11 +1314,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1597,11 +1597,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             extra_body: Default::default(),
             ..Default::default()
@@ -1710,11 +1710,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1811,11 +1811,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             temperature: Some(0.5),
             top_p: Some(0.9),
@@ -1959,11 +1959,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         }));
@@ -2025,11 +2025,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         }));
