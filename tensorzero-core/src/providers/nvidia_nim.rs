@@ -42,8 +42,8 @@ static DEFAULT_CREDENTIALS: OnceLock<NvidiaNimCredentials> = OnceLock::new();
 impl NvidiaNimProvider {
     pub fn new(
         model_name: String,
+        api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
-        api_base: Option<String>,
     ) -> Result<Self, Error> {
         let credentials = build_creds_caching_default(
             api_key_location,
@@ -53,13 +53,7 @@ impl NvidiaNimProvider {
         )?;
 
         let api_base = match api_base {
-            Some(base) => {
-                let mut url = Url::parse(&base).map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!("Invalid api_base URL: {e}"),
-                    })
-                })?;
-
+            Some(mut url) => {
                 // Ensure URL ends with a slash
                 if !url.path().ends_with('/') {
                     url.set_path(&format!("{}/", url.path()));
