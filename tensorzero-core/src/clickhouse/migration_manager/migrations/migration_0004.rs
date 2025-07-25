@@ -50,8 +50,7 @@ impl Migration for Migration0004<'_> {
                     message: format!("Failed to fetch columns for ModelInference: {e}"),
                 })
             })?;
-        let present_columns: Vec<&str> =
-            response.response.lines().map(|line| line.trim()).collect();
+        let present_columns: Vec<&str> = response.response.lines().map(str::trim).collect();
         if present_columns.contains(&"system")
             && present_columns.contains(&"input_messages")
             && present_columns.contains(&"output")

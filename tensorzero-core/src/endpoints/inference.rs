@@ -571,7 +571,7 @@ fn create_stream(
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
-        let mut extra_usage = Some(metadata.previous_model_inference_results.iter().map(|m| m.usage_considering_cached()).sum());
+        let mut extra_usage = Some(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).sum());
         if extra_usage == Some(Usage { input_tokens: 0, output_tokens: 0 }) {
             extra_usage = None;
         }
@@ -601,7 +601,7 @@ fn create_stream(
                         usage: Some(extra_usage),
                         finish_reason: None,
                         latency: Duration::from_millis(0),
-                        raw_response: "".to_string(),
+                        raw_response: String::new(),
                     })
                 }
                 FunctionConfig::Json(_) => {
@@ -611,7 +611,7 @@ fn create_stream(
                         usage: Some(extra_usage),
                         latency: Duration::from_millis(0),
                         raw: None,
-                        raw_response: "".to_string(),
+                        raw_response: String::new(),
                         finish_reason: None,
                     })
                 }
@@ -1230,7 +1230,7 @@ mod tests {
             created: 0,
             usage: None,
             finish_reason: Some(FinishReason::Stop),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(100),
         });
         let raw_request = "raw request".to_string();
@@ -1283,7 +1283,7 @@ mod tests {
             thought: Some("Thought 1".to_string()),
             created: 0,
             usage: None,
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(100),
             finish_reason: Some(FinishReason::Stop),
         });

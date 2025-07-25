@@ -173,7 +173,7 @@ mod tests {
                 expected.children.len(),
                 node.kind(),
                 actual_children.len(),
-                actual_children.iter().map(|c| c.kind()).collect::<Vec<_>>()
+                actual_children.iter().map(Node::kind).collect::<Vec<_>>()
             );
 
             for (actual_child, expected_child) in

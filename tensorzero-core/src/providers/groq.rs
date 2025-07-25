@@ -37,7 +37,7 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "Groq";
-const PROVIDER_TYPE: &str = "groq";
+pub const PROVIDER_TYPE: &str = "groq";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -558,13 +558,7 @@ pub(super) fn prepare_groq_tools<'a>(
             if tool_config.tools_available.is_empty() {
                 return (None, None, None);
             }
-            let tools = Some(
-                tool_config
-                    .tools_available
-                    .iter()
-                    .map(|tool| tool.into())
-                    .collect(),
-            );
+            let tools = Some(tool_config.tools_available.iter().map(Into::into).collect());
             let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
             (tools, tool_choice, parallel_tool_calls)
@@ -923,11 +917,12 @@ impl<'a> GroqRequest<'a> {
             &request.json_mode,
             request.output_schema,
         ));
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
         let mut messages = prepare_groq_messages(request)?;
 
@@ -1217,7 +1212,7 @@ fn groq_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {

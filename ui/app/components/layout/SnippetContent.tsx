@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
 import { CodeEditor, useFormattedJson } from "../ui/code-editor";
+import { useState } from "react";
 
 export function EmptyMessage({ message = "No content" }: { message?: string }) {
   return (
@@ -43,12 +44,16 @@ interface TextMessageProps {
   label?: string;
   content?: string;
   emptyMessage?: string;
+  isEditing?: boolean;
+  onChange?: (value: string) => void;
 }
 
 export function TextMessage({
   label,
   content,
   emptyMessage,
+  isEditing,
+  onChange,
 }: TextMessageProps) {
   const formattedContent = useFormattedJson(content || "");
 
@@ -60,21 +65,50 @@ export function TextMessage({
         text={label}
         icon={<AlignLeftIcon className="text-fg-muted h-3 w-3" />}
       />
-      <CodeEditor value={formattedContent} readOnly />
+      <CodeEditor
+        value={formattedContent}
+        readOnly={!isEditing}
+        onChange={onChange}
+      />
     </div>
   );
 }
 
-export function ParameterizedMessage({ parameters }: { parameters?: unknown }) {
+export function ParameterizedMessage({
+  parameters,
+  isEditing,
+  onChange,
+}: {
+  parameters?: unknown;
+  isEditing?: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onChange?: (value: any) => void;
+}) {
   const formattedJson = useFormattedJson(parameters ?? {});
+  const [jsonError, setJsonError] = useState<string | null>(null);
 
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label
-        text="Template Arguments"
+        text={`Template Arguments`}
         icon={<BlocksIcon className="text-fg-muted h-3 w-3" />}
       />
-      <CodeEditor allowedLanguages={["json"]} value={formattedJson} readOnly />
+      <CodeEditor
+        allowedLanguages={["json"]}
+        value={formattedJson}
+        readOnly={!isEditing}
+        onChange={(updatedJson) => {
+          try {
+            // TODO: does is satisfy the schema?
+            const parsedJson = JSON.parse(updatedJson);
+            setJsonError(null);
+            onChange?.(parsedJson);
+          } catch {
+            setJsonError("Invalid JSON format");
+          }
+        }}
+      />
+      {jsonError && <div className="text-xs text-red-500">{jsonError}</div>}
     </div>
   );
 }
@@ -85,6 +119,8 @@ function ToolDetails({
   id,
   payload,
   payloadLabel,
+  isEditing,
+  onChange,
   enforceJson = false,
 }: {
   name: string;
@@ -92,6 +128,12 @@ function ToolDetails({
   id: string;
   payload: string;
   payloadLabel: string;
+  isEditing?: boolean;
+  onChange?: (
+    toolCallId: string,
+    toolName: string,
+    toolArguments: string,
+  ) => void;
   enforceJson?: boolean;
 }) {
   const formattedPayload = useFormattedJson(payload);
@@ -109,7 +151,10 @@ function ToolDetails({
         allowedLanguages={enforceJson ? ["json"] : undefined}
         value={formattedPayload}
         className="bg-bg-secondary"
-        readOnly
+        readOnly={!isEditing}
+        onChange={(updatedPayload) => {
+          onChange?.(id, name, updatedPayload);
+        }}
       />
     </div>
   );
@@ -121,15 +166,40 @@ interface ToolCallMessageProps {
   toolArguments: string | null;
   toolRawArguments: string;
   toolCallId: string;
+  isEditing?: boolean;
+  onChange?: (
+    toolCallId: string,
+    toolName: string,
+    toolArguments: string,
+  ) => void;
 }
 
-export function ToolCallMessage({
-  toolName,
-  toolRawName,
-  toolArguments,
-  toolRawArguments,
-  toolCallId,
-}: ToolCallMessageProps) {
+interface ModelInferenceToolCallMessageProps {
+  toolName: string;
+  toolArguments: string;
+  toolCallId: string;
+}
+
+export function ToolCallMessage(
+  toolCall: ToolCallMessageProps | ModelInferenceToolCallMessageProps,
+) {
+  let toolName: string;
+  let toolArguments: string;
+  let nameLabel: string;
+  let payloadLabel: string;
+
+  if ("toolRawArguments" in toolCall) {
+    nameLabel = toolCall.toolName ? "Name" : "Name (Invalid)";
+    payloadLabel = toolCall.toolArguments ? "Arguments" : "Arguments (Invalid)";
+    toolName = toolCall.toolName || toolCall.toolRawName;
+    toolArguments = toolCall.toolArguments || toolCall.toolRawArguments;
+  } else {
+    nameLabel = "Name";
+    payloadLabel = "Arguments";
+    toolName = toolCall.toolName;
+    toolArguments = toolCall.toolArguments;
+  }
+
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label
@@ -137,11 +207,13 @@ export function ToolCallMessage({
         icon={<Terminal className="text-fg-muted h-3 w-3" />}
       />
       <ToolDetails
-        name={toolName || toolRawName}
-        nameLabel={toolName ? "Name" : "Name (Invalid)"}
-        id={toolCallId}
-        payload={toolArguments || toolRawArguments}
-        payloadLabel={toolArguments ? "Arguments" : "Arguments (Invalid)"}
+        name={toolName}
+        nameLabel={nameLabel}
+        id={toolCall.toolCallId}
+        payload={toolArguments}
+        payloadLabel={payloadLabel}
+        isEditing={"isEditing" in toolCall ? toolCall.isEditing : undefined}
+        onChange={"onChange" in toolCall ? toolCall.onChange : undefined}
         enforceJson={true}
       />
     </div>
@@ -152,12 +224,20 @@ interface ToolResultMessageProps {
   toolName: string;
   toolResult: string;
   toolResultId: string;
+  isEditing?: boolean;
+  onChange?: (
+    toolResultId: string,
+    toolName: string,
+    toolResult: string,
+  ) => void;
 }
 
 export function ToolResultMessage({
   toolName,
   toolResult,
   toolResultId,
+  isEditing,
+  onChange,
 }: ToolResultMessageProps) {
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
@@ -171,6 +251,8 @@ export function ToolResultMessage({
         id={toolResultId}
         payload={toolResult}
         payloadLabel="Result"
+        isEditing={isEditing}
+        onChange={onChange}
       />
     </div>
   );

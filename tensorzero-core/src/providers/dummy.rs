@@ -30,7 +30,7 @@ use crate::providers::helpers::inject_extra_request_data;
 use crate::tool::{ToolCall, ToolCallChunk};
 
 const PROVIDER_NAME: &str = "Dummy";
-const PROVIDER_TYPE: &str = "dummy";
+pub const PROVIDER_TYPE: &str = "dummy";
 
 #[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -97,6 +97,7 @@ impl DummyProvider {
                 text: Some(chunk.to_string()),
                 signature: None,
                 id: "0".to_string(),
+                provider_type: None,
             })
         });
         let response_chunks = response_chunks.into_iter().map(|chunk| {
@@ -117,7 +118,7 @@ impl DummyProvider {
                     created,
                     content: vec![chunk],
                     usage: None,
-                    raw_response: "".to_string(),
+                    raw_response: String::new(),
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                     finish_reason: None,
                 })
@@ -127,7 +128,7 @@ impl DummyProvider {
                 content: vec![],
                 usage: Some(self.get_model_usage(total_tokens)),
                 finish_reason: Some(FinishReason::Stop),
-                raw_response: "".to_string(),
+                raw_response: String::new(),
                 latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
             })))
             .throttle(std::time::Duration::from_millis(10));
@@ -334,8 +335,9 @@ impl InferenceProvider for DummyProvider {
             })],
             "reasoner" => vec![
                 ContentBlockOutput::Thought(Thought {
-                    text: "hmmm".to_string(),
+                    text: Some("hmmm".to_string()),
                     signature: None,
+                    provider_type: None,
                 }),
                 ContentBlockOutput::Text(Text {
                     text: DUMMY_INFER_RESPONSE_CONTENT.to_string(),
@@ -343,8 +345,9 @@ impl InferenceProvider for DummyProvider {
             ],
             "reasoner_with_signature" => vec![
                 ContentBlockOutput::Thought(Thought {
-                    text: "hmmm".to_string(),
+                    text: Some("hmmm".to_string()),
                     signature: Some("my_signature".to_string()),
+                    provider_type: None,
                 }),
                 ContentBlockOutput::Text(Text {
                     text: DUMMY_INFER_RESPONSE_CONTENT.to_string(),
@@ -352,8 +355,9 @@ impl InferenceProvider for DummyProvider {
             ],
             "json_reasoner" => vec![
                 ContentBlockOutput::Thought(Thought {
-                    text: "hmmm".to_string(),
+                    text: Some("hmmm".to_string()),
                     signature: None,
+                    provider_type: None,
                 }),
                 ContentBlockOutput::Text(Text {
                     text: DUMMY_JSON_RESPONSE_RAW.to_string(),
@@ -418,13 +422,15 @@ impl InferenceProvider for DummyProvider {
                     .to_string(),
                 })]
             }
-            "echo_request_messages" => vec![ContentBlockOutput::Text(Text {
-                text: json!({
-                    "system": request.system,
-                    "messages": request.messages,
-                })
-                .to_string(),
-            })],
+            "echo_request_messages" => {
+                vec![ContentBlockOutput::Text(Text {
+                    text: json!({
+                        "system": request.system,
+                        "messages": request.messages,
+                    })
+                    .to_string(),
+                })]
+            }
             "extract_images" => {
                 let images: Vec<_> = request
                     .messages
@@ -522,9 +528,10 @@ impl InferenceProvider for DummyProvider {
         };
         let system = request.system.clone();
         let input_messages = request.messages.clone();
-        let finish_reason = match self.model_name.contains("tool") {
-            true => Some(FinishReason::ToolCall),
-            false => Some(FinishReason::Stop),
+        let finish_reason = if self.model_name.contains("tool") {
+            Some(FinishReason::ToolCall)
+        } else {
+            Some(FinishReason::Stop)
         };
         Ok(ProviderInferenceResponse {
             id,
@@ -625,9 +632,10 @@ impl InferenceProvider for DummyProvider {
         };
 
         let content_chunk_len = content_chunks.len();
-        let finish_reason = match is_tool_call {
-            true => Some(FinishReason::ToolCall),
-            false => Some(FinishReason::Stop),
+        let finish_reason = if is_tool_call {
+            Some(FinishReason::ToolCall)
+        } else {
+            Some(FinishReason::Stop)
         };
         let split_tool_name = self.model_name == "tool_split_name";
         let slow_second_chunk = self.model_name == "slow_second_chunk";
@@ -685,7 +693,7 @@ impl InferenceProvider for DummyProvider {
                     content: vec![],
                     usage: Some(self.get_model_usage(content_chunk_len as u32)),
                     finish_reason,
-                    raw_response: "".to_string(),
+                    raw_response: String::new(),
                     latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
                 })))
                 .throttle(std::time::Duration::from_millis(10)),

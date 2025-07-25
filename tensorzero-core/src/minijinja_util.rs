@@ -2,7 +2,7 @@ use minijinja::{Environment, UndefinedBehavior};
 use serde_json::Value;
 use std::{
     collections::{HashMap, HashSet},
-    path::PathBuf,
+    path::Path,
 };
 
 use crate::error::{Error, ErrorDetails};
@@ -25,7 +25,7 @@ impl TemplateConfig<'_> {
     pub fn initialize(
         &mut self,
         template_paths: HashMap<String, String>,
-        filesystem_path: Option<PathBuf>,
+        filesystem_path: Option<&Path>,
     ) -> Result<(), Error> {
         self.env.set_undefined_behavior(UndefinedBehavior::Strict);
 
@@ -46,7 +46,7 @@ impl TemplateConfig<'_> {
             self.env.set_loader(|name| {
                 Err(minijinja::Error::new(
                     minijinja::ErrorKind::InvalidOperation,
-                    format!("Could not load template '{name}' - if this a dynamic template included from the filesystem, please set [gateway.enable_template_filesystem_access] to `true`")
+                    format!("Could not load template '{name}' - if this a dynamic template included from the filesystem, please set `gateway.template_filesystem_access.enabled` to `true`")
                 ))
             });
         }

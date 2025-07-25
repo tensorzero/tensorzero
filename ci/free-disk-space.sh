@@ -41,7 +41,6 @@ echo "Phase 3: Removing cloud tools and additional runtimes..."
 (sudo rm -rf /usr/share/miniconda &)     # ~698MB Miniconda
 (sudo rm -rf /opt/pipx &)                # ~528MB pipx
 (sudo rm -rf /opt/google &)              # ~366MB Google Cloud SDK
-(sudo rm -rf /usr/local/aws-cli &)       # AWS CLI
 (sudo rm -rf /usr/local/share/powershell &)  # PowerShell
 (sudo rm -rf /opt/microsoft &)           # ~772MB Microsoft tools
 wait

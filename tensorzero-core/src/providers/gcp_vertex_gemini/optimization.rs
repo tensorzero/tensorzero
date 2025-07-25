@@ -60,11 +60,7 @@ impl<'a> TryFrom<&'a RenderedSample> for GCPVertexGeminiSupervisedRow<'a> {
     type Error = Error;
     fn try_from(inference: &'a RenderedSample) -> Result<Self, Self::Error> {
         let tools = match &inference.tool_params {
-            Some(tool_params) => tool_params
-                .tools_available
-                .iter()
-                .map(|t| t.into())
-                .collect(),
+            Some(tool_params) => tool_params.tools_available.iter().map(Into::into).collect(),
             None => vec![],
         };
         let mut contents =
@@ -200,7 +196,7 @@ pub fn convert_to_optimizer_status(
                 .endpoint
                 .as_ref()
                 .and_then(|endpoint| endpoint.rsplit('/').next())
-                .map(|id| id.to_string());
+                .map(str::to_string);
 
             let model_provider = UninitializedModelProvider {
                 config: UninitializedProviderConfig::GCPVertexGemini {
@@ -282,6 +278,7 @@ mod tests {
             tool_params: None,
             output_schema: None,
             dispreferred_outputs: vec![],
+            tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
         };
         let row = GCPVertexGeminiSupervisedRow::try_from(&inference).unwrap();
 

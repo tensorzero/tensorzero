@@ -611,7 +611,8 @@ async fn write_start_batch_inference<'a>(
 
     // Process each row by serializing the stuff that needs to be serialized twice
     for row in inference_rows {
-        let tool_params: Option<ToolCallConfigDatabaseInsert> = row.tool_config.map(|t| t.into());
+        let tool_params: Option<ToolCallConfigDatabaseInsert> =
+            row.tool_config.map(ToolCallConfig::into);
 
         rows.push(BatchModelInferenceRow {
             inference_id: *row.inference_id,
@@ -624,7 +625,7 @@ async fn write_start_batch_inference<'a>(
             system: row.system.map(Cow::Borrowed),
             tool_params,
             inference_params: Cow::Borrowed(row.inference_params),
-            output_schema: row.output_schema.map(|s| s.to_string()),
+            output_schema: row.output_schema.map(Value::to_string),
             raw_request: Cow::Borrowed(row.raw_request),
             model_name: Cow::Borrowed(result.model_name),
             model_provider_name: Cow::Borrowed(&result.model_provider_name),
@@ -839,7 +840,7 @@ pub async fn write_completed_batch_inference<'a>(
             id: Uuid::now_v7(),
             created: current_timestamp(),
             output: output.clone(),
-            system: system.map(|s| s.into_owned()),
+            system: system.map(Cow::into_owned),
             input_messages,
             raw_request: raw_request.into_owned(),
             raw_response,
@@ -850,7 +851,8 @@ pub async fn write_completed_batch_inference<'a>(
             cached: false,
             finish_reason,
         };
-        let tool_config: Option<ToolCallConfig> = tool_params.map(|t| t.into());
+        let tool_config: Option<ToolCallConfig> =
+            tool_params.map(ToolCallConfigDatabaseInsert::into);
         let output_schema = match output_schema
             .map(|s| DynamicJSONSchema::parse_from_str(&s))
             .transpose()

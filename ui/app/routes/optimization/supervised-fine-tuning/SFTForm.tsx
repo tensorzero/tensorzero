@@ -3,7 +3,7 @@ import { useFetcher } from "react-router";
 import { useEffect } from "react";
 import { v7 as uuid } from "uuid";
 import { type SFTFormValues, SFTFormValuesResolver } from "./types";
-import { FunctionSelector } from "~/components/function/FunctionSelector";
+import { FunctionFormField } from "~/components/function/FunctionFormField";
 import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { VariantSelector } from "./VariantSelector";
 import { ModelSelector } from "./ModelSelector";
@@ -144,13 +144,13 @@ export function SFTForm({
         >
           <div className="space-y-6">
             <div className="flex flex-col gap-1">
-              <FunctionSelector<SFTFormValues>
+              <FunctionFormField
                 control={form.control}
                 name="function"
-                inferenceCount={counts.inferenceCount}
-                config={config}
-                hide_default_function={true}
+                functions={config.functions}
+                hideDefaultFunction={true}
               />
+
               {errors.function && (
                 <p className="text-xs text-red-500">
                   {errors.function.message}
@@ -163,10 +163,10 @@ export function SFTForm({
                 control={form.control}
                 name="metric"
                 functionFieldName="function"
-                feedbackCount={counts.feedbackCount}
-                curatedInferenceCount={counts.curatedInferenceCount}
                 config={config}
                 addDemonstrations={true}
+                feedbackCount={counts.feedbackCount}
+                curatedInferenceCount={counts.curatedInferenceCount}
               />
 
               {errors.metric && (

@@ -53,7 +53,7 @@ pub async fn get_inferences_in_time_range(
         parameters.insert("user", user);
         "AND ci.tags['user'] = {user:String}".to_string()
     } else {
-        "".to_string()
+        String::new()
     };
 
     let mut query = r"WITH inference_ids AS (

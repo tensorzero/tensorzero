@@ -364,7 +364,7 @@ pub async fn update_datapoint_handler(
             let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(
                 chat.tool_params
                     .clone()
-                    .map(|x| x.into())
+                    .map(ToolCallConfigDatabaseInsert::into)
                     .unwrap_or_default(),
             );
 
@@ -613,7 +613,7 @@ pub async fn insert_datapoint(
                     output,
                     tool_params: tool_config.as_ref().map(|x| x.clone().into()),
                     tags: chat.tags,
-                    auxiliary: "".to_string(),
+                    auxiliary: String::new(),
                     is_deleted: false,
                     is_custom: true,
                     source_inference_id: None,
@@ -672,7 +672,7 @@ pub async fn insert_datapoint(
                     Some(JsonInferenceOutput {
                         raw: output
                             .get("raw")
-                            .and_then(|v| v.as_str().map(|s| s.to_string())),
+                            .and_then(|v| v.as_str().map(str::to_string)),
                         parsed: output.get("parsed").cloned(),
                     })
                 } else {
@@ -689,7 +689,7 @@ pub async fn insert_datapoint(
                     output,
                     output_schema,
                     tags: json.tags,
-                    auxiliary: "".to_string(),
+                    auxiliary: String::new(),
                     is_deleted: false,
                     is_custom: true,
                     source_inference_id: None,
@@ -936,14 +936,14 @@ impl TryFrom<BatchDatapointOutputWithSize> for Vec<Option<Value>> {
         let size = value.size;
         if let Some(output) = value.output {
             let output_len = output.len();
-            if output_len != value.size {
+            if output_len == value.size {
+                Ok(output)
+            } else {
                 Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
                         "Output size ({output_len}) does not match number of datapoints ({size})",
                     ),
                 }))
-            } else {
-                Ok(output)
             }
         } else {
             let mut output = Vec::with_capacity(size);
@@ -1104,6 +1104,8 @@ pub struct InsertDatapointResponse {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum Datapoint {
     Chat(ChatInferenceDatapoint),
     Json(JsonInferenceDatapoint),
@@ -1221,7 +1223,7 @@ impl std::fmt::Display for Datapoint {
     }
 }
 
-/// These input datapoints are used as input typesby the `insert_datapoint` endpoint
+/// These input datapoints are used as input types by the `insert_datapoint` endpoint
 /// The distinction here is that they do not include the `dataset_name` field,
 /// which is instead specified as a path parameter.
 /// We also use Input rather than ResolvedInput because the input is not resolved
@@ -1252,6 +1254,8 @@ pub struct JsonDatapointInsert {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -1292,6 +1296,8 @@ impl std::fmt::Display for ChatInferenceDatapoint {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct JsonInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -1360,6 +1366,7 @@ impl StoredSample for Datapoint {
                 output_schema: None,
                 episode_id: None,
                 inference_id: None,
+                tags: datapoint.tags.unwrap_or_default(),
             },
             Datapoint::Json(datapoint) => {
                 let output = datapoint.output.map(|output| match output.raw {
@@ -1374,6 +1381,7 @@ impl StoredSample for Datapoint {
                     output_schema: Some(datapoint.output_schema),
                     episode_id: None,
                     inference_id: None,
+                    tags: datapoint.tags.unwrap_or_default(),
                 }
             }
         }
@@ -1568,11 +1576,25 @@ async fn put_json_datapoints(
     Ok(result.metadata.written_rows)
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct StaleDatasetResponse {
     pub num_staled_datapoints: u64,
+}
+
+#[axum::debug_handler(state = AppStateData)]
+pub async fn stale_dataset_handler(
+    State(app_state): AppState,
+    // These are the same as the path params for `list_datapoints_handler`
+    Path(path_params): Path<ListDatapointsPathParams>,
+) -> Result<Json<StaleDatasetResponse>, Error> {
+    let response = stale_dataset(
+        &app_state.clickhouse_connection_info,
+        &path_params.dataset_name,
+    )
+    .await?;
+    Ok(Json(response))
 }
 
 /// Stales all datapoints in a dataset that have not been staled yet.

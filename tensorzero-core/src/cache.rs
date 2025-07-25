@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::embeddings::{EmbeddingRequest, EmbeddingResponse};
 use crate::error::{Error, ErrorDetails};
+use crate::inference::types::file::serialize_with_file_data;
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
@@ -151,7 +152,8 @@ impl ModelProviderRequest<'_> {
         hasher.update(provider_name.as_bytes());
         hasher.update(&[0]); // null byte after provider name to ensure data is prefix-free
                              // Convert the request to a JSON Value, error if serialization fails
-        let mut request_value = serde_json::to_value(request).map_err(|e| {
+
+        let mut request_value = serialize_with_file_data(request).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize request: {e}"),
             })

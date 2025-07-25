@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ActionFunctionArgs, RouteHandle } from "react-router";
 import {
   data,
@@ -8,24 +10,9 @@ import {
   useParams,
 } from "react-router";
 import { v7 as uuid } from "uuid";
-import DatapointBasicInfo from "./DatapointBasicInfo";
-import Input from "~/components/inference/Input";
+import InputSnippet from "~/components/inference/InputSnippet";
 import Output from "~/components/inference/Output";
-import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
-import { useConfig } from "~/context/config";
-import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
-import type { Route } from "./+types/route";
-import {
-  ParsedDatasetRowSchema,
-  type ParsedDatasetRow,
-} from "~/utils/clickhouse/datasets";
-import {
-  staleDatapoint,
-  getDatasetCounts,
-} from "~/utils/clickhouse/datasets.server";
-import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import {
   PageHeader,
   PageLayout,
@@ -33,16 +20,29 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
-import { DatapointActions } from "./DatapointActions";
-import { getConfig } from "~/utils/config/index.server";
+import { Badge } from "~/components/ui/badge";
+import { useConfig } from "~/context/config";
 import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
 import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
 } from "~/routes/api/tensorzero/inference.utils";
 import type { DisplayInputMessage } from "~/utils/clickhouse/common";
-import { Badge } from "~/components/ui/badge";
+import {
+  ParsedDatasetRowSchema,
+  type ParsedDatasetRow,
+} from "~/utils/clickhouse/datasets";
+import {
+  getDatapoint,
+  getDatasetCounts,
+  staleDatapoint,
+} from "~/utils/clickhouse/datasets.server";
+import { getConfig } from "~/utils/config/index.server";
 import { logger } from "~/utils/logger";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import type { Route } from "./+types/route";
+import { DatapointActions } from "./DatapointActions";
+import DatapointBasicInfo from "./DatapointBasicInfo";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -93,7 +93,7 @@ export async function action({ request }: ActionFunctionArgs) {
       parsedFormData.id,
       functionType,
     );
-    const datasetCounts = await getDatasetCounts();
+    const datasetCounts = await getDatasetCounts({});
     const datasetCount = datasetCounts.find(
       (count) => count.dataset_name === parsedFormData.dataset_name,
     );
@@ -137,10 +137,10 @@ export async function action({ request }: ActionFunctionArgs) {
             }
           : {}),
         source_inference_id: parsedFormData.source_inference_id,
+        id: uuid(), // We generate a new ID here because we want old evaluation runs to be able to point to the correct data.
       };
       const { id } = await getTensorZeroClient().updateDatapoint(
         parsedFormData.dataset_name,
-        uuid(),
         datapoint,
       );
       await staleDatapoint(
@@ -221,8 +221,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const handleSystemChange = (system: string | object) =>
     setInput({ ...input, system });
 
-  const handleMessagesChange = (messages: DisplayInputMessage[]) =>
+  const handleMessagesChange = (messages: DisplayInputMessage[]) => {
     setInput({ ...input, messages });
+  };
 
   const fetcher = useFetcher();
   const saveError = fetcher.data?.success === false ? fetcher.data.error : null;
@@ -328,8 +329,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <Input
-            input={input}
+          <InputSnippet
+            system={input.system}
+            messages={input.messages}
             isEditing={isEditing}
             onSystemChange={handleSystemChange}
             onMessagesChange={handleMessagesChange}
