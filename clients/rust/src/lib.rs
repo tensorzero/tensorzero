@@ -1314,13 +1314,10 @@ mod tests {
     use tracing_test::traced_test;
 
     #[tokio::test]
-    #[ignore] // TODO - set an environment variable, or create a new config with dummy credentials
     async fn test_missing_clickhouse() {
         // This config file requires ClickHouse, so it should fail if no ClickHouse URL is provided
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_file: Some(PathBuf::from(
-                "../../examples/haiku-hidden-preferences/config/tensorzero.toml",
-            )),
+            config_file: Some(PathBuf::from("tests/test_config.toml")),
             clickhouse_url: None,
             timeout: None,
             verify_credentials: true,
@@ -1330,7 +1327,7 @@ mod tests {
         .expect_err("ClientBuilder should have failed");
         let err_msg = err.to_string();
         assert!(
-            err.to_string().contains("Missing ClickHouse URL"),
+            err_msg.contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL"),
             "Bad error message: {err_msg}"
         );
     }
