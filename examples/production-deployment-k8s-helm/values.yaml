@@ -11,7 +11,7 @@ gateway:
 
   image:
     repository: tensorzero/gateway
-    tag: latest
+    tag: 2025.7.4
     pullPolicy: IfNotPresent
 
   service:
@@ -44,11 +44,20 @@ gateway:
   affinity: {}
   ingress:
     enabled: true
+    className: ""
+    annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+      # cert-manager.io/cluster-issuer: letsencrypt-prod
     hosts:
       - host: tensorzero-gateway.local # TODO: change this to the correct host
         paths:
           - path: /
             pathType: Prefix
+    tls: []
+    #  - secretName: tensorzero-gateway-tls
+    #    hosts:
+    #      - tensorzero-gateway.local
 
 # UI Configuration
 ui:
@@ -56,7 +65,7 @@ ui:
   replicaCount: 1
   image:
     repository: tensorzero/ui
-    tag: latest
+    tag: 2025.7.4
     pullPolicy: IfNotPresent
 
   service:
@@ -87,11 +96,20 @@ ui:
 
   ingress:
     enabled: true
+    className: ""
+    annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+      # cert-manager.io/cluster-issuer: letsencrypt-prod
     hosts:
       - host: tensorzero-ui.local # TODO: change this to the correct host
         paths:
           - path: /
             pathType: Prefix
+    tls: []
+    #  - secretName: tensorzero-ui-tls
+    #    hosts:
+    #      - tensorzero-ui.local
 
 # Persistence Configuration
 persistence:
