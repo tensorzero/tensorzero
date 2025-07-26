@@ -269,7 +269,7 @@ impl BestOfNSamplingConfig {
                 // However, the 'A, C' and 'C, D' evaluations will all have distinct cache keys:
                 // (A, 2), (C, 3), (C, 2), (D, 4)
                 let mut config = inference_config.clone();
-                config.variant_name = Some(candidate);
+                config.variant_name = candidate;
                 config.extra_cache_key = Some(format!("candidate_{i}"));
                 Ok((candidate.to_string(), variant, config))
             })
@@ -1303,7 +1303,7 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,

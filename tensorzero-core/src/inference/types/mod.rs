@@ -1757,12 +1757,12 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
             episode_id,
         },
         function_name,
-        variant_name: Some(variant_name),
+        variant_name,
         tool_config,
         templates,
         dynamic_output_schema: dynamic_output_schema.as_ref(),
-        extra_body,
-        extra_headers,
+        extra_body: Cow::Borrowed(&extra_body),
+        extra_headers: Cow::Borrowed(&extra_headers),
         extra_cache_key: None,
     };
     function
