@@ -203,8 +203,8 @@ mod tests {
         // Test with dynamic credentials (the normal case)
         let provider = NvidiaNimProvider::new(
             "meta/llama-3.1-8b-instruct".to_string(),
-            Some(CredentialLocation::Dynamic("nvidia_api_key".to_string())),
             None,
+            Some(CredentialLocation::Dynamic("nvidia_api_key".to_string())),
         );
 
         assert!(provider.is_ok());
@@ -218,8 +218,8 @@ mod tests {
         // Test with custom API base
         let provider = NvidiaNimProvider::new(
             "local:my-model".to_string(),
+            Some(Url::parse("http://localhost:8000/v1/").unwrap()),
             Some(CredentialLocation::Dynamic("custom_key".to_string())),
-            Some("http://localhost:8000/v1/".to_string()),
         );
 
         assert!(provider.is_ok());
@@ -259,10 +259,11 @@ mod tests {
         ];
 
         for (model_name, api_base) in models {
+            let api_base_url = api_base.map(|url| Url::parse(url).unwrap());
             let provider = NvidiaNimProvider::new(
                 model_name.to_string(),
+                api_base_url,
                 Some(CredentialLocation::Dynamic("nvidia_api_key".to_string())),
-                api_base.map(String::from),
             );
 
             assert!(
@@ -286,8 +287,8 @@ mod tests {
         for (input, expected) in test_cases {
             let provider = NvidiaNimProvider::new(
                 "test-model".to_string(),
+                Some(Url::parse(input).unwrap()),
                 Some(CredentialLocation::Dynamic("test_key".to_string())),
-                Some(input.to_string()),
             )
             .unwrap();
 
@@ -306,8 +307,8 @@ mod tests {
 
         let provider = NvidiaNimProvider::new(
             "meta/llama-3.1-8b-instruct".to_string(),
-            Some(CredentialLocation::Dynamic("nvidia_api_key".to_string())),
             None,
+            Some(CredentialLocation::Dynamic("nvidia_api_key".to_string())),
         )
         .expect("Failed to create provider");
 
@@ -324,8 +325,8 @@ mod tests {
         // Scenario 1: Cloud deployment
         let cloud_provider = NvidiaNimProvider::new(
             "meta/llama-3.1-70b-instruct".to_string(),
-            Some(CredentialLocation::Dynamic("nvidia_key".to_string())),
             None,
+            Some(CredentialLocation::Dynamic("nvidia_key".to_string())),
         )
         .unwrap();
 
@@ -337,8 +338,8 @@ mod tests {
         // Scenario 2: Self-hosted deployment
         let self_hosted_provider = NvidiaNimProvider::new(
             "custom-model".to_string(),
+            Some(Url::parse("http://192.168.1.100:8000/v1/").unwrap()),
             Some(CredentialLocation::Dynamic("self_hosted_key".to_string())),
-            Some("http://192.168.1.100:8000/v1/".to_string()),
         )
         .unwrap();
 
@@ -356,22 +357,9 @@ mod tests {
 
     #[test]
     fn test_error_handling_scenarios() {
-        // Test invalid API base URL
-        let invalid_url = NvidiaNimProvider::new(
-            "model".to_string(),
-            Some(CredentialLocation::Dynamic("key".to_string())),
-            Some("not a valid url".to_string()),
-        );
-
-        assert!(invalid_url.is_err());
-        assert!(invalid_url
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid api_base URL"));
-
         // Test invalid credential location
         let no_creds =
-            NvidiaNimProvider::new("model".to_string(), Some(CredentialLocation::None), None);
+            NvidiaNimProvider::new("model".to_string(), None, Some(CredentialLocation::None));
         assert!(no_creds.is_err());
         assert!(no_creds
             .unwrap_err()
@@ -384,8 +372,8 @@ mod tests {
         // Test that CredentialLocation::None is rejected (invalid configuration)
         let result = NvidiaNimProvider::new(
             "meta/llama-3.1-8b-instruct".to_string(),
-            Some(CredentialLocation::None),
             None,
+            Some(CredentialLocation::None),
         );
 
         assert!(result.is_err());
