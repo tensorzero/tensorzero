@@ -545,6 +545,8 @@ impl Params {
             tags: openai_compatible_params.tensorzero_tags,
             // OpenAI compatible endpoint does not support 'include_original_response'
             include_original_response: false,
+            // OpenAI compatible endpoint does not support 'include_resolved_messages'
+            include_resolved_messages: false,
             extra_body: openai_compatible_params.tensorzero_extra_body,
             extra_headers: openai_compatible_params.tensorzero_extra_headers,
         })
