@@ -2786,7 +2786,7 @@ mod tests {
         .to_string();
         assert!(
             err.contains(
-                "Error from anthropic server: Unsupported content block type for ContentBlockStart"
+                "anthropic Server Error: Unsupported content block type for ContentBlockStart"
             ),
             "Unexpected error message: {err}"
         );
