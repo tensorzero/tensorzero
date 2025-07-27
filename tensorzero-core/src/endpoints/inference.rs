@@ -369,11 +369,6 @@ pub async fn inference(
             let (stream, model_used_info) = match result {
                 Ok((stream, model_used_info)) => (stream, model_used_info),
                 Err(e) => {
-                    tracing::warn!(
-                        "functions.{function_name:?}.variants.{variant_name:?} failed during inference: {e}",
-                        function_name = params.function_name,
-                        variant_name = variant_name,
-                    );
                     variant_errors.insert(variant_name.to_string(), e);
                     continue;
                 }
@@ -432,11 +427,6 @@ pub async fn inference(
             let mut result = match result {
                 Ok(result) => result,
                 Err(e) => {
-                    tracing::warn!(
-                        "functions.{function_name}.variants.{variant_name} failed during inference: {e}",
-                        function_name = function_name,
-                        variant_name = variant_name,
-                    );
                     variant_errors.insert(variant_name.to_string(), e);
                     continue;
                 }

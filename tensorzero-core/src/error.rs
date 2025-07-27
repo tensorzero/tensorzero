@@ -487,7 +487,7 @@ impl ErrorDetails {
     fn level(&self) -> tracing::Level {
         match self {
             ErrorDetails::AllModelProvidersFailed { .. } => tracing::Level::DEBUG,
-            ErrorDetails::AllVariantsFailed { .. } => tracing::Level::DEBUG,
+            ErrorDetails::AllVariantsFailed { .. } => tracing::Level::ERROR,
             ErrorDetails::ApiKeyMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::AppState { .. } => tracing::Level::ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
@@ -709,15 +709,17 @@ impl std::fmt::Display for ErrorDetails {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ErrorDetails::AllVariantsFailed { errors } => {
-                write!(
-                    f,
-                    "All variants failed with errors: {}",
-                    errors
-                        .iter()
-                        .map(|(variant_name, error)| format!("{variant_name}: {error}"))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                )
+                let mut error_values = errors.values();
+                let first_error = error_values.next();
+                let errors_left = error_values.count();
+
+                match first_error {
+                    None => write!(f, "Inference Error"), // This shouldn't happen as the inference handler will complain earlier.
+                    Some(first_error) => match errors_left {
+                        0 => write!(f, "Inference Error: {first_error}"),
+                        n => write!(f, "Inference Error: The gateway tried {} variants, but all of them failed. See the gateway logs for details.", n + 1),
+                    }
+                }
             }
             ErrorDetails::ModelProviderTimeout {
                 provider_name,
@@ -859,7 +861,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::Inference { message } => write!(f, "{message}"),
             ErrorDetails::InferenceClient {
                 message,
-                provider_type,
+                provider_type, // TODO: use provider_name instead
                 raw_request,
                 raw_response,
                 status_code,
@@ -887,7 +889,7 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::InferenceServer {
                 message,
-                provider_type,
+                provider_type, // TODO: use provider_name instead
                 raw_request,
                 raw_response,
             } => {
@@ -1059,15 +1061,17 @@ impl std::fmt::Display for ErrorDetails {
                 )
             }
             ErrorDetails::AllModelProvidersFailed { provider_errors } => {
-                write!(
-                    f,
-                    "All model providers failed to infer with errors: {}",
-                    provider_errors
-                        .iter()
-                        .map(|(provider_name, error)| format!("{provider_name}: {error}"))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
+                let mut error_values = provider_errors.values();
+                let first_error = error_values.next();
+                let errors_left = error_values.count();
+
+                match first_error {
+                    None => write!(f, "Model Inference Error"), // This shouldn't happen as the gateway will complain earlier.
+                    Some(first_error) => match errors_left {
+                        0 => write!(f, "Model Inference Error: {first_error}"),
+                        n => write!(f, "Model Inference Error: The gateway tried {} model providers, but all of them failed. See the gateway logs for details.", n+1),
+                    }
+                }
             }
             ErrorDetails::ModelValidation { message } => {
                 write!(f, "Failed to validate model: {message}")
