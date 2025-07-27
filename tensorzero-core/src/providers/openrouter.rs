@@ -1396,12 +1396,12 @@ mod tests {
             message,
             raw_request,
             raw_response,
-            provider_type: provider,
+            provider_type,
         } = details
         {
             assert_eq!(message, "Unauthorized access");
             assert_eq!(*status_code, Some(StatusCode::UNAUTHORIZED));
-            assert_eq!(provider, PROVIDER_TYPE);
+            assert_eq!(provider_type, PROVIDER_TYPE);
             assert_eq!(*raw_request, Some("Request Body".to_string()));
             assert_eq!(*raw_response, Some("Unauthorized access".to_string()));
         }

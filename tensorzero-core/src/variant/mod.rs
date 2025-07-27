@@ -1370,7 +1370,7 @@ mod tests {
         let error = result.unwrap_err();
         assert!(matches!(
             error.get_details(),
-            ErrorDetails::ModelProvidersExhausted { .. }
+            ErrorDetails::AllModelProvidersFailed { .. }
         ));
     }
 

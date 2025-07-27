@@ -157,6 +157,9 @@ impl From<ErrorDetails> for Error {
 #[derive(Debug, Error, Serialize)]
 #[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
 pub enum ErrorDetails {
+    AllModelProvidersFailed {
+        provider_errors: HashMap<String, Error>,
+    },
     AllVariantsFailed {
         errors: HashMap<String, Error>,
     },
@@ -387,9 +390,6 @@ pub enum ErrorDetails {
     MissingFileExtension {
         file_name: String,
     },
-    ModelProvidersExhausted {
-        provider_errors: HashMap<String, Error>,
-    },
     ModelValidation {
         message: String,
     },
@@ -486,28 +486,25 @@ impl ErrorDetails {
     /// Defines the error level for logging this error
     fn level(&self) -> tracing::Level {
         match self {
-            ErrorDetails::AllVariantsFailed { .. } => tracing::Level::ERROR,
+            ErrorDetails::AllModelProvidersFailed { .. } => tracing::Level::DEBUG,
+            ErrorDetails::AllVariantsFailed { .. } => tracing::Level::DEBUG,
             ErrorDetails::ApiKeyMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::AppState { .. } => tracing::Level::ERROR,
-            ErrorDetails::ObjectStoreUnconfigured { .. } => tracing::Level::ERROR,
-            ErrorDetails::ExtraBodyReplacement { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidInferenceTarget { .. } => tracing::Level::WARN,
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
-            ErrorDetails::UnsupportedContentBlockType { .. } => tracing::Level::WARN,
+            ErrorDetails::BadImageFetch { .. } => tracing::Level::ERROR,
             ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::Cache { .. } => tracing::Level::WARN,
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
-            ErrorDetails::BadImageFetch { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
-            ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
             ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::DuplicateTool { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
+            ErrorDetails::ExtraBodyReplacement { .. } => tracing::Level::ERROR,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
             ErrorDetails::Inference { .. } => tracing::Level::ERROR,
@@ -515,36 +512,34 @@ impl ErrorDetails {
             ErrorDetails::InferenceNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::InferenceServer { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
-            ErrorDetails::ModelProviderTimeout { .. } => tracing::Level::WARN,
-            ErrorDetails::ModelTimeout { .. } => tracing::Level::WARN,
-            ErrorDetails::VariantTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::InputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::InternalError { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidBatchParams { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidClientMode { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDatasetName { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDynamicEvaluationRun { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidInferenceOutputSource { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidEncodedJobHandle => tracing::Level::WARN,
+            ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidInferenceOutputSource { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidInferenceTarget { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidJobHandle { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidRenderedStoredInference { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidMetricName { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidMetricName { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidModel { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidModelProvider { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidProviderConfig { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidRenderedStoredInference { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidRequest { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidTemplatePath => tracing::Level::ERROR,
+            ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidTool { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidUuid { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidValFraction { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
             ErrorDetails::JsonRequest { .. } => tracing::Level::WARN,
             ErrorDetails::JsonSchema { .. } => tracing::Level::ERROR,
             ErrorDetails::JsonSchemaValidation { .. } => tracing::Level::ERROR,
@@ -552,35 +547,40 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplate { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
-            ErrorDetails::MissingFunctionInVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
             ErrorDetails::MissingFileExtension { .. } => tracing::Level::WARN,
-            ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
+            ErrorDetails::MissingFunctionInVariants { .. } => tracing::Level::ERROR,
+            ErrorDetails::ModelProviderTimeout { .. } => tracing::Level::WARN,
+            ErrorDetails::ModelTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
+            ErrorDetails::ObjectStoreUnconfigured { .. } => tracing::Level::ERROR,
+            ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Observability { .. } => tracing::Level::WARN,
+            ErrorDetails::OptimizationResponse { .. } => tracing::Level::ERROR,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
-            ErrorDetails::OptimizationResponse { .. } => tracing::Level::ERROR,
             ErrorDetails::ProviderNotFound { .. } => tracing::Level::ERROR,
+            ErrorDetails::RouteNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
             ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ToolNotLoaded { .. } => tracing::Level::ERROR,
             ErrorDetails::TypeConversion { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownCandidate { .. } => tracing::Level::ERROR,
-            ErrorDetails::UnknownFunction { .. } => tracing::Level::WARN,
             ErrorDetails::UnknownEvaluation { .. } => tracing::Level::WARN,
+            ErrorDetails::UnknownFunction { .. } => tracing::Level::WARN,
+            ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
             ErrorDetails::UnknownModel { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownTool { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownVariant { .. } => tracing::Level::WARN,
-            ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedContentBlockType { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForFunctionType { .. } => tracing::Level::ERROR,
             ErrorDetails::UnsupportedVariantForStreamingInference { .. } => tracing::Level::WARN,
             ErrorDetails::UuidInFuture { .. } => tracing::Level::WARN,
-            ErrorDetails::RouteNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::VariantTimeout { .. } => tracing::Level::WARN,
         }
     }
 
@@ -658,7 +658,7 @@ impl ErrorDetails {
             ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFunctionInVariants { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFileExtension { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::AllModelProvidersFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OptimizationResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -864,29 +864,23 @@ impl std::fmt::Display for ErrorDetails {
                 raw_response,
                 status_code,
             } => {
-                // `debug` defaults to false so we don't log raw request and response by default
-                if *DEBUG.get().unwrap_or(&false) {
-                    write!(
-                        f,
-                        "Error from {} client: {}{}{}",
-                        provider_type,
-                        message,
-                        raw_request
-                            .as_ref()
-                            .map_or(String::new(), |r| format!("\nRaw request: {r}")),
-                        raw_response
-                            .as_ref()
-                            .map_or(String::new(), |r| format!("\nRaw response: {r}"))
-                    )
-                } else {
-                    write!(
-                        f,
-                        "Error{} from {} client: {}",
-                        status_code.map_or(String::new(), |s| format!(" {s}")),
-                        provider_type,
-                        message
-                    )
+                let mut error_message = format!("{provider_type} Client Error");
+                if let Some(status_code) = status_code {
+                    error_message.push_str(&format!(" ({status_code})"));
                 }
+                error_message.push_str(&format!(": {message}"));
+                if *DEBUG.get().unwrap_or(&false) {
+                    // `debug` defaults to false so we don't log raw request and response by default
+                    error_message.push_str(&format!(
+                        "\n==== [DEBUG] RAW REQUEST =====\n{}",
+                        raw_request.as_ref().unwrap_or(&String::new())
+                    ));
+                    error_message.push_str(&format!(
+                        "\n==== [DEBUG] RAW RESPONSE =====\n{}",
+                        raw_response.as_ref().unwrap_or(&String::new())
+                    ));
+                }
+                write!(f, "{error_message}")
             }
             ErrorDetails::InferenceNotFound { inference_id } => {
                 write!(f, "Inference not found for id: {inference_id}")
@@ -897,23 +891,19 @@ impl std::fmt::Display for ErrorDetails {
                 raw_request,
                 raw_response,
             } => {
-                // `debug` defaults to false so we don't log raw request and response by default
+                let mut error_message = format!("{provider_type} Server Error: {message}");
                 if *DEBUG.get().unwrap_or(&false) {
-                    write!(
-                        f,
-                        "Error from {} server: {}{}{}",
-                        provider_type,
-                        message,
-                        raw_request
-                            .as_ref()
-                            .map_or(String::new(), |r| format!("\nRaw request: {r}")),
-                        raw_response
-                            .as_ref()
-                            .map_or(String::new(), |r| format!("\nRaw response: {r}"))
-                    )
-                } else {
-                    write!(f, "Error from {provider_type} server: {message}")
+                    // `debug` defaults to false so we don't log raw request and response by default
+                    error_message.push_str(&format!(
+                        "\n==== [DEBUG] RAW REQUEST =====\n{}",
+                        raw_request.as_ref().unwrap_or(&String::new())
+                    ));
+                    error_message.push_str(&format!(
+                        "\n==== [DEBUG] RAW RESPONSE =====\n{}",
+                        raw_response.as_ref().unwrap_or(&String::new())
+                    ));
                 }
+                write!(f, "{error_message}")
             }
             ErrorDetails::InferenceTimeout { variant_name } => {
                 write!(f, "Inference timed out for variant: {variant_name}")
@@ -1068,7 +1058,7 @@ impl std::fmt::Display for ErrorDetails {
                     "Could not determine file extension for file: {file_name}"
                 )
             }
-            ErrorDetails::ModelProvidersExhausted { provider_errors } => {
+            ErrorDetails::AllModelProvidersFailed { provider_errors } => {
                 write!(
                     f,
                     "All model providers failed to infer with errors: {}",

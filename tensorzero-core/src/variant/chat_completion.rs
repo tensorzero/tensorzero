@@ -1292,7 +1292,7 @@ mod tests {
         let details = err.get_details();
         assert_eq!(
             *details,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
                     Error::new(ErrorDetails::InferenceClient {
@@ -2006,7 +2006,7 @@ mod tests {
             Err(e) => e,
         };
         match err.get_details() {
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors, ..
             } => {
                 assert_eq!(provider_errors.len(), 1);

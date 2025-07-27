@@ -153,7 +153,7 @@ impl EmbeddingModelConfig {
                 }
             }
         }
-        Err(ErrorDetails::ModelProvidersExhausted { provider_errors }.into())
+        Err(ErrorDetails::AllModelProvidersFailed { provider_errors }.into())
     }
 }
 
