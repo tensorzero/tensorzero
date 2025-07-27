@@ -1,5 +1,5 @@
 [project]
-name = "tensorzero-recipes-supervised-fine-tuning-demonstrations-fireworks"
+name = "tensorzero-recipes-supervised-fine-tuning-metrics-fireworks"
 version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -11,4 +11,5 @@ dependencies = [
     "pandas",
     "tensorzero",
     "toml",
+    "dotenv"
 ]
