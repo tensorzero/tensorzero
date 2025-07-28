@@ -1707,6 +1707,15 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                 "Unexpected error: {res}"
             );
         }
+        "llama" => {
+            assert!(
+                res["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("401 Unauthorized"),
+                "Unexpected error: {res}"
+            );
+        }
         "mistral" => {
             assert!(
                 res["error"].as_str().unwrap().contains("Bearer token"),
@@ -4821,11 +4830,12 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
 pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Azure, Together, and SGLang don't support `tool_choice: "required"`
+    // Azure, Together, SGLang, and Llama don't support `tool_choice: "required"`
     // Groq says they support it, but it doesn't return the required tool as expected
     if provider.model_provider_name == "azure"
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "sglang"
+        || provider.model_provider_name == "llama"
         || provider.model_provider_name == "groq"
     {
         return;
@@ -5112,11 +5122,12 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
 pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Azure, Together, and SGLang don't support `tool_choice: "required"`
+    // Azure, Together, SGLang, and Llama don't support `tool_choice: "required"`
     // Groq says they support it, but it doesn't return the required tool as expected
     if provider.model_provider_name == "azure"
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "sglang"
+        || provider.model_provider_name == "llama"
         || provider.model_provider_name == "groq"
     {
         return;

@@ -89,6 +89,11 @@ function formatProvider(provider: ProviderConfig["type"]): {
         name: "Hyperbolic",
         className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
       };
+    case "llama":
+      return {
+        name: "Llama",
+        className: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
+      };
     case "mistral":
       return {
         name: "Mistral",
