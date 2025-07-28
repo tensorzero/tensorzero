@@ -261,7 +261,7 @@ pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
             .write(
                 &[FullCacheRow {
                     short_cache_key,
-                    long_cache_key,
+                    long_cache_key: long_cache_key.clone(),
                     data: CacheData {
                         output,
                         raw_request: raw_request.clone(),
