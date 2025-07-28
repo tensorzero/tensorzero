@@ -233,7 +233,6 @@ pub async fn start_batch_inference_handler(
             message: "batch episode_ids unexpectedly empty. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
         }))?;
 
-    // TODO (#496): remove this extra clone
     // Spent a while fighting the borrow checker here, gave up
     // The issue is that inference_config holds the ToolConfigs and ModelInferenceRequest has lifetimes that conflict with the inference_config
     while !candidate_variants.is_empty() {
