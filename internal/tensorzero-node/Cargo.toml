@@ -10,17 +10,17 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Default enable napi4 feature, see https://nodejs.org/api/n-api.html#node-api-version-matrix
-napi = { version = "2.12.2", default-features = false, features = [
+napi = { version = "3.1.2", default-features = false, features = [
     "napi4",
     "tokio_rt",
 ] }
-napi-derive = "2.12.2"
+napi-derive = "3.1.1"
 serde_json.workspace = true
 url.workspace = true
 tensorzero = { path = "../../clients/rust" }
 
 [build-dependencies]
-napi-build = "2.2.2"
+napi-build = "2.2.3"
 
 [dev-dependencies]
 ts-rs.workspace = true
