@@ -256,6 +256,7 @@ pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     let clickhouse_client = clickhouse_client.clone();
     let finish_reason = finish_reason.cloned();
     tokio::spawn(async move {
+        tracing::info!("Starting cache write for short_cache_key={short_cache_key} long_cache_key={long_cache_key} raw_request={raw_request} raw_response={raw_response}");
         if let Err(e) = clickhouse_client
             .write(
                 &[FullCacheRow {
@@ -276,6 +277,7 @@ pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
         {
             tracing::warn!("Failed to write to cache: {e}");
         }
+        tracing::info!("Finished cache write for short_cache_key={short_cache_key} long_cache_key={long_cache_key} raw_request={raw_request} raw_response={raw_response}");
     });
     Ok(())
 }
