@@ -123,6 +123,7 @@ impl Migration for Migration0034<'_> {
                 return Ok(());
             }
 
+            tracing::info!("Running backfill of CumulativeUsage");
             let query = format!(
                 r#"
                 SELECT
