@@ -365,12 +365,18 @@ pub async fn cache_lookup(
     request: ModelProviderRequest<'_>,
     max_age_s: Option<u32>,
 ) -> Result<Option<ModelInferenceResponse>, Error> {
+    let cache_key = request.get_cache_key()?;
+    let short_cache_key = cache_key.get_short_key()?;
+    let long_cache_key = cache_key.get_long_key();
     let result = cache_lookup_inner::<NonStreamingCacheData>(
         clickhouse_connection_info,
-        request.get_cache_key()?,
+        cache_key,
         max_age_s,
     )
     .await?;
+    tracing::info!(
+        "Cache lookup for short_cache_key={short_cache_key} long_cache_key={long_cache_key} request={request:?} result={result:?}"
+    );
     Ok(result.map(|result| {
         ModelInferenceResponse::from_cache(result, request.request, request.provider_name)
     }))
