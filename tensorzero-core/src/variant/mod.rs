@@ -145,7 +145,7 @@ pub struct InferenceConfig<'request> {
 #[derive(Clone, Debug)]
 pub struct BatchInferenceConfig<'a> {
     pub tool_configs: &'a Vec<Option<ToolCallConfig>>,
-    pub templates: &'a Cow<'a, TemplateConfig<'a>>,
+    pub templates: &'a TemplateConfig<'a>,
     pub dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
     pub function_name: &'a str,
     pub variant_name: &'a str,
@@ -778,7 +778,7 @@ impl RetryConfig {
 
 impl<'a> BatchInferenceConfig<'a> {
     pub fn new(
-        templates: &'a Cow<'a, TemplateConfig<'a>>,
+        templates: &'a TemplateConfig<'a>,
         tool_configs: &'a Vec<Option<ToolCallConfig>>,
         dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
         function_name: &'a str,

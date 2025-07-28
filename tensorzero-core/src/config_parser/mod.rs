@@ -1081,6 +1081,8 @@ impl UninitializedFunctionConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 // We don't use `#[serde(deny_unknown_fields)]` here - it needs to go on 'UninitializedVariantConfig',
 // since we use `#[serde(flatten)]` on the `inner` field.
 pub struct UninitializedVariantInfo {
@@ -1094,6 +1096,8 @@ pub struct UninitializedVariantInfo {
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum UninitializedVariantConfig {
     ChatCompletion(UninitializedChatCompletionConfig),
     #[serde(rename = "experimental_best_of_n_sampling")]

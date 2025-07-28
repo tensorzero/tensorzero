@@ -237,7 +237,6 @@ pub async fn start_batch_inference_handler(
     // Spent a while fighting the borrow checker here, gave up
     // The issue is that inference_config holds the ToolConfigs and ModelInferenceRequest has lifetimes that conflict with the inference_config
     while !candidate_variants.is_empty() {
-        let templates = Cow::Borrowed(&config.templates);
         // We sample the same variant for the whole batch
         let (variant_name, variant) = sample_variant(
             &mut candidate_variants,
@@ -245,7 +244,7 @@ pub async fn start_batch_inference_handler(
             first_episode_id,
         )?;
         let inference_config = BatchInferenceConfig::new(
-            &templates,
+            &config.templates,
             &tool_configs,
             &batch_dynamic_output_schemas,
             &params.function_name,
@@ -859,11 +858,10 @@ pub async fn write_completed_batch_inference<'a>(
         };
         let extra_body = Default::default();
         let extra_headers = Default::default();
-        let templates = Cow::Borrowed(&config.templates);
         let inference_config = InferenceConfig {
             tool_config: tool_config.as_ref(),
             dynamic_output_schema: output_schema.as_ref(),
-            templates: &templates,
+            templates: &config.templates,
             function_name,
             variant_name: variant_name.as_ref(),
             ids: InferenceIds {

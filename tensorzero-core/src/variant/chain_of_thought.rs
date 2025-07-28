@@ -33,6 +33,8 @@ pub struct ChainOfThoughtConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct UninitializedChainOfThoughtConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,
