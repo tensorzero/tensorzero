@@ -147,6 +147,7 @@ pub async fn inference_handler(
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
+    tracing::info!("Running inference with params: {params:?}");
     let inference_output =
         inference(config, &http_client, clickhouse_connection_info, params).await?;
     match inference_output {
