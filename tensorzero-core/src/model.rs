@@ -1146,7 +1146,11 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_base,
                 api_key_location,
-            } => ProviderConfig::NvidiaNim(NvidiaNimProvider::new(model_name.expect("REASON"), api_base, api_key_location)?),
+            } => ProviderConfig::NvidiaNim(NvidiaNimProvider::new(
+                model_name.expect("REASON"),
+                api_base,
+                api_key_location,
+            )?),
             UninitializedProviderConfig::OpenAI {
                 model_name,
                 api_base,
@@ -1162,7 +1166,11 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_key_location,
                 parse_think_blocks,
-            } => ProviderConfig::Together(TogetherProvider::new(model_name, api_key_location, parse_think_blocks)?),
+            } => ProviderConfig::Together(TogetherProvider::new(
+                model_name,
+                api_key_location,
+                parse_think_blocks,
+            )?),
             UninitializedProviderConfig::VLLM {
                 model_name,
                 api_base,
@@ -1874,10 +1882,16 @@ impl ShorthandModelConfig for ModelConfig {
             "groq" => ProviderConfig::Groq(GroqProvider::new(model_name, None)?),
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
             "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
-            "nvidia_nim" => ProviderConfig::NvidiaNim(NvidiaNimProvider::new(model_name, None, None)?),
+            "nvidia_nim" => {
+                ProviderConfig::NvidiaNim(NvidiaNimProvider::new(model_name, None, None)?)
+            }
             "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
             "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(model_name, None)?),
-            "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None, crate::providers::together::default_parse_think_blocks())?),
+            "together" => ProviderConfig::Together(TogetherProvider::new(
+                model_name,
+                None,
+                crate::providers::together::default_parse_think_blocks(),
+            )?),
             "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
