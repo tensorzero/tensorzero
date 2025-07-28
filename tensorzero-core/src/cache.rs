@@ -264,8 +264,8 @@ pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
                     long_cache_key,
                     data: CacheData {
                         output,
-                        raw_request,
-                        raw_response,
+                        raw_request: raw_request.clone(),
+                        raw_response: raw_response.clone(),
                         input_tokens,
                         output_tokens,
                         finish_reason,
