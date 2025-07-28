@@ -236,6 +236,7 @@ pub async fn start_batch_inference_handler(
     // TODO (#496): remove this extra clone
     // Spent a while fighting the borrow checker here, gave up
     // The issue is that inference_config holds the ToolConfigs and ModelInferenceRequest has lifetimes that conflict with the inference_config
+    // TODO - investigate why moving 'templates' inside the loop fixes the borrow checker
     let templates = Cow::Borrowed(&config.templates);
     while !candidate_variants.is_empty() {
         // We sample the same variant for the whole batch
