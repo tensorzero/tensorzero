@@ -127,6 +127,8 @@ impl Error {
     }
 }
 
+// Expect for derive Serialize
+#[expect(clippy::trivially_copy_pass_by_ref)]
 fn serialize_status<S>(code: &Option<StatusCode>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -271,7 +273,7 @@ pub enum ErrorDetails {
         variant_name: String,
     },
     VariantTimeout {
-        variant_name: Option<String>,
+        variant_name: String,
         timeout: Duration,
         streaming: bool,
     },
@@ -752,11 +754,7 @@ impl std::fmt::Display for ErrorDetails {
                 timeout,
                 streaming,
             } => {
-                let variant_description = if let Some(variant_name) = variant_name {
-                    format!("Variant `{variant_name}`")
-                } else {
-                    "Unknown variant".to_string()
-                };
+                let variant_description = format!("Variant `{variant_name}`");
                 if *streaming {
                     write!(f, "{variant_description} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})")
                 } else {

@@ -107,11 +107,7 @@ impl Variant for DiclConfig {
                 models.embedding_models,
                 clients,
                 inference_config.function_name,
-                inference_config.variant_name.ok_or_else(|| {
-                    Error::new(ErrorDetails::InvalidDiclConfig {
-                        message: "missing variant_name".to_string(),
-                    })
-                })?,
+                inference_config.variant_name,
                 function,
             )
             .await?;
@@ -173,11 +169,7 @@ impl Variant for DiclConfig {
                 models.embedding_models,
                 clients,
                 inference_config.function_name,
-                inference_config.variant_name.ok_or_else(|| {
-                    Error::new(ErrorDetails::InvalidDiclConfig {
-                        message: "missing variant_name".to_string(),
-                    })
-                })?,
+                inference_config.variant_name,
                 function,
             )
             .await?;
@@ -533,6 +525,7 @@ impl DiclConfig {
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
+                .into_owned()
                 .filter(inference_config.variant_name),
         };
         prepare_model_inference_request(
