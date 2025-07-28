@@ -73,7 +73,7 @@ impl Migration for Migration0034<'_> {
         };
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW CumulativeUsageView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS CumulativeUsageView
             TO CumulativeUsage
             AS
                     SELECT
