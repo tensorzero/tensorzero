@@ -21,7 +21,7 @@ export default defineConfig({
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.TENSORZERO_CI,
   /* Retry on CI only */
-  retries: process.env.TENSORZERO_CI ? 2 : 0,
+  retries: process.env.TENSORZERO_CI ? 0 : 0,
   /* Opt out of parallel tests on CI. */
   workers: process.env.TENSORZERO_CI ? 1 : undefined,
   /* Fail immediately while we're debugging the CI issue */
