@@ -1,0 +1,13 @@
+[models.llama_3_1_8b_instruct]
+routing = ["nvidia_nim"]
+
+[models.llama_3_1_8b_instruct.providers.nvidia_nim]
+type = "nvidia_nim"
+model_name = "llama-3.1-8b-instruct"
+
+[functions.my_function_name]
+type = "chat"
+
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "llama_3_1_8b_instruct"
