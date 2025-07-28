@@ -23,7 +23,7 @@ RUFF="uvx ruff@0.11.10"
 
 compile_notebooks () {
   local failed_nb=()
-  local failed_script=()
+  local failed_scripts=()
 
   # Check if changed scripts match the notebooks
 
@@ -50,7 +50,7 @@ compile_notebooks () {
 
     # Fail if the generated notebook doesn't match the current version of the notebook
     if ! diff -q "$target_nb" "$tmp_nb" >/dev/null; then
-      failed_script+=("${source_script}")
+      failed_scripts+=("${source_script}")
       failed_nb+=("${target_nb}")
     fi
   done
@@ -71,7 +71,7 @@ compile_notebooks () {
     local target_script="${source_nb/.ipynb/_nb.py}"
 
     # Skip if the script has already failed
-    for failed_script in "${failed_scripts[@]}"; do
+    for failed_script in "${failed_scripts[@] + ${failed_scripts[@]}}"; do
       if [[ "$target_script" == "$failed_script" ]]; then
         continue 2
       fi
@@ -92,7 +92,7 @@ compile_notebooks () {
 
     # Fail if the generated notebook doesn't match the current version of the notebook
     if ! diff -q "$target_script" "$tmp_script" >/dev/null; then
-      failed_script+=("${target_script}")
+      failed_scripts+=("${target_script}")
       failed_nb+=("${source_nb}")
     fi
   done
@@ -103,7 +103,7 @@ compile_notebooks () {
     echo "The following notebooks don't match the source script:"
     echo ""
     for i in "${!failed_nb[@]}"; do
-      echo "✖ ${failed_nb[$i]} <> ${failed_script[$i]}" >&2
+      echo "✖ ${failed_nb[$i]} <> ${failed_scripts[$i]}" >&2
     done
     echo ""
     echo "Please use one of the following options to fix the issue:"
