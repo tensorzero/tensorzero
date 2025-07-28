@@ -131,7 +131,7 @@ impl Variant for MixtureOfNConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -222,7 +222,7 @@ impl Variant for MixtureOfNConfig {
         _input: &[ResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
-        _inference_configs: &'a [InferenceConfig<'a, 'a>],
+        _inference_configs: &'a [InferenceConfig<'a>],
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -371,7 +371,7 @@ impl MixtureOfNConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult>, Error> {
         // Get all the variants we are going to infer
@@ -463,7 +463,7 @@ impl MixtureOfNConfig {
         input: &ResolvedInput,
         function: &'a FunctionConfig,
         models: &'a ModelTable,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         mut candidates: Vec<InferenceResult>,
         stream: bool,
@@ -559,7 +559,7 @@ async fn inner_fuse_candidates<'a, 'request>(
     input: &'request ResolvedInput,
     models: &'a ModelTable,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'a, 'request>,
+    inference_config: &'request InferenceConfig<'request>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult],
 ) -> Result<InferenceResult, Error> {
@@ -610,7 +610,7 @@ async fn inner_fuse_candidates_stream<'a, 'request>(
     input: &'request ResolvedInput,
     models: &'a ModelTable,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'a, 'request>,
+    inference_config: &'request InferenceConfig<'request>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult],
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {

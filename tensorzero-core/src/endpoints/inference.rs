@@ -266,6 +266,7 @@ pub async fn inference(
         params.internal_dynamic_variant_config,
         &mut templates,
     )?;
+    let templates = &*templates;
 
     // Should we store the results?
     let dryrun = params.dryrun.unwrap_or(false);
@@ -319,7 +320,7 @@ pub async fn inference(
         let inference_config = InferenceConfig {
             function_name: &function_name,
             variant_name: &variant_name,
-            templates: &templates,
+            templates,
             tool_config: tool_config.as_ref(),
             dynamic_output_schema: output_schema.as_ref(),
             ids: InferenceIds {
@@ -1215,11 +1216,18 @@ fn prepare_candidate_variants(
             );
         }
         (None, Some(dynamic_variant_config)) => {
+            let DynamicVariantParams { config, paths } = dynamic_variant_config;
+            // Replace the variant config with just the dynamic variant
+            let candidate_variant_info = (config, &paths).try_into()?;
             candidate_variants.clear();
             candidate_variants.insert(
                 "dynamic_variant".to_string(),
-                Arc::new(dynamic_variant_config.try_into()?),
+                Arc::new(candidate_variant_info),
             );
+            // Replace the template config with the ones passed in
+            let mut dynamic_template_config = TemplateConfig::new();
+            dynamic_template_config.initialize(paths, None)?;
+            *template_config = Cow::Owned(dynamic_template_config);
         }
         (None, None) => {
             // Remove all zero-weight variants - these can only be used if explicitly pinned above

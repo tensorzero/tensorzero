@@ -127,7 +127,7 @@ pub enum JsonMode {
 #[derive(Clone, Debug)]
 pub struct InferenceConfig<'request> {
     pub tool_config: Option<&'request ToolCallConfig>,
-    pub templates: &'request Cow<'request, TemplateConfig<'request>>,
+    pub templates: &'request TemplateConfig<'request>,
     pub dynamic_output_schema: Option<&'request DynamicJSONSchema>,
     pub function_name: &'request str,
     pub variant_name: &'request str,

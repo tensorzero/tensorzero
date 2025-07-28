@@ -118,7 +118,7 @@ impl Variant for ChainOfThoughtConfig {
         _input: &ResolvedInput,
         _models: &'request InferenceModels<'_>,
         _function: &FunctionConfig,
-        _inference_config: &'request InferenceConfig<'static, 'request>,
+        _inference_config: &'request InferenceConfig<'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -168,7 +168,7 @@ impl Variant for ChainOfThoughtConfig {
         _input: &[ResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
-        _inference_configs: &'a [InferenceConfig<'a, 'a>],
+        _inference_configs: &'a [InferenceConfig<'a>],
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
