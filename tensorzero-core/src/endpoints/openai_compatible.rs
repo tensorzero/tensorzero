@@ -689,8 +689,10 @@ struct OpenAICompatibleFile {
 #[derive(Debug)]
 // Two mutually exclusive modes - the standard OpenAI text, and our special TensorZero mode
 pub enum TextContent {
+    /// "content": [{"type": "tensorzero::raw_text", "value": "Write a haiku about artificial intelligence"}]
+    RawText { value: String },
     /// A normal openai text content block: `{"type": "text", "text": "Some content"}`. The `type` key comes from the parent `OpenAICompatibleContentBlock`
-    RawText { text: String },
+    Text { text: String },
     /// A special TensorZero mode: `{"type": "text", "tensorzero::arguments": {"custom_key": "custom_val"}}`.
     TensorZeroArguments {
         tensorzero_arguments: Map<String, Value>,
@@ -701,9 +703,10 @@ impl<'de> Deserialize<'de> for TextContent {
     fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
         let mut object: Map<String, Value> = Map::deserialize(de)?;
         let text = object.remove("text");
+        let raw_text = object.remove("tensorzero::raw_text");
         let arguments = object.remove("tensorzero::arguments");
-        match (text, arguments) {
-            (Some(text), None) => Ok(TextContent::RawText {
+        match (text, raw_text, arguments) {
+            (Some(text), None, None) => Ok(TextContent::Text {
                 text: match text {
                     Value::String(text) => text,
                     _ => return Err(serde::de::Error::custom(
@@ -711,7 +714,15 @@ impl<'de> Deserialize<'de> for TextContent {
                     )),
                 },
             }),
-            (None, Some(arguments)) => Ok(TextContent::TensorZeroArguments {
+            (None, Some(arguments), None) => Ok(TextContent::RawText {
+                value: match arguments {
+                    Value::String(value) => value,
+                    _ => return Err(serde::de::Error::custom(
+                        "`tensorzero::raw_text` must be a string when using `\"type\": \"text\"`",
+                    )),
+                },
+            }),
+            (None, None, Some(arguments)) => Ok(TextContent::TensorZeroArguments {
                 tensorzero_arguments: match arguments {
                     Value::Object(arguments) => arguments,
                     _ => return Err(serde::de::Error::custom(
@@ -719,11 +730,15 @@ impl<'de> Deserialize<'de> for TextContent {
                     )),
                 },
             }),
-            (Some(_), Some(_)) => Err(serde::de::Error::custom(
+            (Some(_), None, Some(_)) => Err(serde::de::Error::custom(
                 "Only one of `text` or `tensorzero::arguments` can be set when using `\"type\": \"text\"`",
             )),
-            (None, None) => Err(serde::de::Error::custom(
-                "Either `text` or `tensorzero::arguments` must be set when using `\"type\": \"text\"`",
+            (None, None, None) => Err(serde::de::Error::custom(
+                "Either `text` or `tensorzero::arguments` must be set when using `\"type\": \"text\"` or 
+                `tensorzero::raw_text` must be set when using `\"type\": \"tensorzero::raw_text\"`",
+            )),
+            _ => Err(serde::de::Error::custom(
+                "Invalid content block: must be one of `text`, `tensorzero::raw_text`, or `tensorzero::arguments`",
             )),
         }
     }
