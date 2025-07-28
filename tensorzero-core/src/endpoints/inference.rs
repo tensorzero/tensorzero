@@ -256,6 +256,17 @@ pub async fn inference(
     // Validate the input
     function.validate_inference_params(&params)?;
 
+    // Should we store the results?
+    let dryrun = params.dryrun.unwrap_or(false);
+    if params.internal_dynamic_variant_config.is_some() && !dryrun {
+        return Err(ErrorDetails::InvalidRequest {
+            message:
+                "If `internal_dynamic_variant_config` is used, `dryrun` must also be set to true"
+                    .to_string(),
+        }
+        .into());
+    }
+
     let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
     let mut templates = Cow::Borrowed(&config.templates);
 
@@ -267,9 +278,6 @@ pub async fn inference(
         &mut templates,
     )?;
     let templates = &*templates;
-
-    // Should we store the results?
-    let dryrun = params.dryrun.unwrap_or(false);
 
     // Increment the request count if we're not in dryrun mode
     if !dryrun {
