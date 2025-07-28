@@ -342,7 +342,7 @@ impl FunctionConfig {
         inference_id: Uuid,
         content_blocks: Vec<ContentBlockOutput>,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
-        inference_config: &'request InferenceConfig<'_, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         inference_params: InferenceParams,
         original_response: Option<String>,
     ) -> Result<InferenceResult, Error> {
