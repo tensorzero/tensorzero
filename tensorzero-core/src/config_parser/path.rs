@@ -542,7 +542,7 @@ mod tests {
 
     #[test]
     fn test_invalid_resolve_toml_relative_paths() {
-        let table = DeTable::parse(r#"functions.my_function.system_schema = 123"#).unwrap();
+        let table = DeTable::parse("functions.my_function.system_schema = 123").unwrap();
         let err =
             resolve_toml_relative_paths(table.into_inner(), Path::new("my/base/path")).unwrap_err();
         assert_eq!(
