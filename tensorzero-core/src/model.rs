@@ -773,7 +773,7 @@ pub enum ProviderConfig {
     GoogleAIStudioGemini(GoogleAIStudioGeminiProvider),
     Groq(GroqProvider),
     Hyperbolic(HyperbolicProvider),
-    LLama(LlamaProvider),
+    Llama(LlamaProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
     OpenRouter(OpenRouterProvider),
@@ -826,6 +826,7 @@ impl ProviderConfig {
             ProviderConfig::Hyperbolic(_) => {
                 Cow::Borrowed(crate::providers::hyperbolic::PROVIDER_TYPE)
             }
+            ProviderConfig::Llama(_) => Cow::Borrowed(crate::providers::llama::PROVIDER_TYPE),
             ProviderConfig::Mistral(_) => Cow::Borrowed(crate::providers::mistral::PROVIDER_TYPE),
             ProviderConfig::OpenAI(_) => Cow::Borrowed(crate::providers::openai::PROVIDER_TYPE),
             ProviderConfig::OpenRouter(_) => {
@@ -944,7 +945,7 @@ pub enum UninitializedProviderConfig {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
-    }
+    },
     Mistral {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
@@ -1319,6 +1320,9 @@ impl ModelProvider {
             ProviderConfig::Hyperbolic(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
             }
+            ProviderConfig::Llama(provider) => {
+                provider.infer_stream(request, client, api_keys, self).await
+            }
             ProviderConfig::Mistral(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
             }
@@ -1415,6 +1419,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::Hyperbolic(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::Llama(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -1525,12 +1534,12 @@ impl ModelProvider {
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
             }
-            ProviderConfig::Llama(provider) => {
+            ProviderConfig::Hyperbolic(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
             }
-            ProviderConfig::Hyperbolic(provider) => {
+            ProviderConfig::Llama(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
