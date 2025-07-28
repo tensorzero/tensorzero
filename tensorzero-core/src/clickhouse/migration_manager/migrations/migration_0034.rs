@@ -76,26 +76,20 @@ impl Migration for Migration0034<'_> {
             CREATE MATERIALIZED VIEW IF NOT EXISTS CumulativeUsageView
             TO CumulativeUsage
             AS
-                    SELECT
-                        'input_tokens' as type,
-                        input_tokens as count
-                    FROM ModelInference
-                    WHERE input_tokens IS NOT NULL
-                    {view_where_clause}
-                UNION ALL
-                    SELECT
-                        'output_tokens' as type,
-                        output_tokens as count
-                    FROM ModelInference
-                    WHERE output_tokens IS NOT NULL
-                    {view_where_clause}
-                UNION ALL
-                    SELECT
-                        'model_inferences' as type,
-                        1 as count
-                    FROM ModelInference
-                    WHERE input_tokens IS NOT NULL
-                    {view_where_clause}
+            SELECT
+                tupleElement(t, 1) AS type,
+                tupleElement(t, 2) AS count
+            FROM (
+                SELECT
+                    arrayJoin([
+                        tuple('input_tokens', input_tokens),
+                        tuple('output_tokens', output_tokens),
+                        tuple('model_inferences', 1)
+                    ]) AS t
+                FROM ModelInference
+                WHERE input_tokens IS NOT NULL
+                {view_where_clause}
+            )
             "
         );
         let _ = self

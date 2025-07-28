@@ -128,8 +128,8 @@ pub async fn get_howdy_report<'a>(
         feedback_count: feedback_counts.feedback_count,
         gateway_version: crate::endpoints::status::TENSORZERO_VERSION,
         commit_hash: crate::built_info::GIT_COMMIT_HASH_SHORT,
-        input_token_total: Some(token_totals.input_tokens.to_string()),
-        output_token_total: Some(token_totals.output_tokens.to_string()),
+        input_token_total: token_totals.input_tokens.map(|x| x.to_string()),
+        output_token_total: token_totals.output_tokens.map(|x| x.to_string()),
         chat_inference_count: Some(inference_counts.chat_inference_count),
         json_inference_count: Some(inference_counts.json_inference_count),
         float_metric_feedback_count: Some(feedback_counts.float_metric_feedback_count),
@@ -198,10 +198,29 @@ async fn count_inferences(
 
 #[derive(Debug, Deserialize)]
 struct CumulativeUsage {
-    #[serde(deserialize_with = "deserialize_u64")]
-    input_tokens: u64,
-    #[serde(deserialize_with = "deserialize_u64")]
-    output_tokens: u64,
+    #[serde(deserialize_with = "deserialize_optional_u64")]
+    input_tokens: Option<u64>,
+    #[serde(deserialize_with = "deserialize_optional_u64")]
+    output_tokens: Option<u64>,
+}
+
+// Since ClickHouse returns strings for UInt64, we need to deserialize them as u64
+// If the value is null we return None
+fn deserialize_optional_u64<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrNull {
+        String(String),
+        Null,
+    }
+
+    match StringOrNull::deserialize(deserializer)? {
+        StringOrNull::String(s) => Some(s.parse().map_err(serde::de::Error::custom)).transpose(),
+        StringOrNull::Null => Ok(None),
+    }
 }
 
 async fn get_token_totals(
