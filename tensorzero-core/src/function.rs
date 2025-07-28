@@ -16,7 +16,7 @@ use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
@@ -595,8 +595,10 @@ fn validate_single_message(
 
 /// Sample a variant from the function based on variant weights (uniform random selection)
 /// This function pops the sampled variant from the candidate variants map.
+/// NOTE: We use a BTreeMap to ensure that the variants are sorted by their names and the
+/// sampling choices are deterministic given an episode ID.
 pub fn sample_variant(
-    candidate_variants: &mut HashMap<String, Arc<VariantInfo>>,
+    candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     function_name: &str,
     episode_id: &Uuid,
 ) -> Result<(String, Arc<VariantInfo>), Error> {
@@ -665,13 +667,13 @@ pub fn sample_variant(
 
     // If we didn't find a variant (which should only happen due to rare numerical precision issues),
     // pop an arbitrary variant as a fallback
-    return candidate_variants.drain().next().ok_or_else(|| {
+    candidate_variants.pop_first().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidFunctionVariants {
             message: format!(
                 "Function `{function_name}` has no variants. {IMPOSSIBLE_ERROR_MESSAGE}"
             ),
         })
-    });
+    })
 }
 
 /// Implements a uniform distribution over the interval [0, 1) using a hash function.
@@ -1538,7 +1540,7 @@ mod tests {
     #[test]
     fn test_sample_variant() {
         // Helper function to create a HashMap of variant names to their weights
-        fn create_variants(variant_weights: &[(&str, f64)]) -> HashMap<String, Arc<VariantInfo>> {
+        fn create_variants(variant_weights: &[(&str, f64)]) -> BTreeMap<String, Arc<VariantInfo>> {
             variant_weights
                 .iter()
                 .map(|&(name, weight)| {
@@ -1560,7 +1562,7 @@ mod tests {
         // Helper function to test the distribution of variant weights by sampling them many times
         // and checking if the observed distribution is close to the expected distribution
         fn test_variant_distribution(
-            variants: &HashMap<String, Arc<VariantInfo>>,
+            variants: &BTreeMap<String, Arc<VariantInfo>>,
             sample_size: usize,
             tolerance: f64,
         ) {

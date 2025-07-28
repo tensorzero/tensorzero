@@ -7,8 +7,9 @@ use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::iter::repeat;
+use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -41,7 +42,7 @@ use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
     ToolCallConfigDatabaseInsert,
 };
-use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant};
+use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant, VariantInfo};
 
 /// The expected payload to the `/start_batch_inference` endpoint.
 /// It will be a JSON object with the following fields:
@@ -131,7 +132,8 @@ pub async fn start_batch_inference_handler(
         .into_iter()
         .map(|dynamic_tool_params| function.prepare_tool_config(dynamic_tool_params, &config.tools))
         .collect::<Result<Vec<_>, _>>()?;
-    let mut candidate_variants = function.variants().clone();
+    let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
+        function.variants().clone().into_iter().collect();
 
     let inference_ids = (0..num_inferences)
         .map(|_| Uuid::now_v7())
