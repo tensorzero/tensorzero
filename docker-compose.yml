@@ -1,0 +1,91 @@
+# TensorZero Development Environment
+# This docker-compose.yml sets up the complete TensorZero stack:
+# - ClickHouse database
+# - TensorZero Gateway
+# - TensorZero UI
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.12-alpine
+    container_name: tensorzero-clickhouse
+    environment:
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: chpassword
+    ports:
+      - "8123:8123"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - tensorzero
+
+  gateway:
+    image: tensorzero/gateway
+    container_name: tensorzero-gateway
+    volumes:
+      - ./config:/app/config:ro
+    command: --config-file /app/config/tensorzero.toml
+    environment:
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/health",
+        ]
+      start_period: 10s
+      start_interval: 2s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - tensorzero
+
+  ui:
+    image: tensorzero/ui
+    container_name: tensorzero-ui
+    volumes:
+      - ./config:/app/config:ro
+    environment:
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
+      TENSORZERO_GATEWAY_URL: http://gateway:3000
+    env_file:
+      - .env
+    ports:
+      - "4000:4000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - tensorzero
+
+volumes:
+  clickhouse_data:
+    driver: local
+
+networks:
+  tensorzero:
+    driver: bridge
