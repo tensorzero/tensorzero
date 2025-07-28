@@ -467,7 +467,7 @@ impl ClickHouseConnectionInfo {
         // We create this table immediately after creating the database, so that
         // we can insert rows into it when running migrations
         self.run_query_synchronous_no_params(
-            r#"CREATE TABLE IF NOT EXISTS TensorZeroMigration (
+            r"CREATE TABLE IF NOT EXISTS TensorZeroMigration (
                 migration_id UInt32,
                 migration_name String,
                 gateway_version String,
@@ -477,7 +477,7 @@ impl ClickHouseConnectionInfo {
                 extra_data Nullable(String)
             )
             ENGINE = MergeTree()
-            PRIMARY KEY (migration_id)"#
+            PRIMARY KEY (migration_id)"
                 .to_string(),
         )
         .await
@@ -520,6 +520,7 @@ impl ClickHouseConnectionInfo {
 /// These may contain single quotes and backslashes, for example, if the user input contains doubly-serialized JSON.
 /// This function will escape single quotes and backslashes in the input string so that the comparison will be accurate.
 pub fn escape_string_for_clickhouse_literal(s: &str) -> String {
+    #![expect(clippy::needless_raw_string_hashes)]
     s.replace(r#"\"#, r#"\\"#).replace(r#"'"#, r#"\'"#)
 }
 
@@ -830,6 +831,7 @@ mod tests {
     #[test]
     fn test_escape_string_for_clickhouse_comparison() {
         // Test basic escaping of single quotes
+        #![expect(clippy::needless_raw_string_hashes)]
         assert_eq!(
             escape_string_for_clickhouse_literal("test's string"),
             r#"test\'s string"#

@@ -53,12 +53,12 @@ impl Migration for Migration0034<'_> {
             .as_nanos();
         self.clickhouse
             .run_query_synchronous_no_params(
-                r#"CREATE TABLE IF NOT EXISTS CumulativeUsage (
+                r"CREATE TABLE IF NOT EXISTS CumulativeUsage (
                         type LowCardinality(String),
                         count UInt64,
                     )
                     ENGINE = SummingMergeTree
-                    ORDER BY type;"#
+                    ORDER BY type;"
                     .to_string(),
             )
             .await?;
@@ -72,7 +72,7 @@ impl Migration for Migration0034<'_> {
             format!("AND UUIDv7ToDateTime(id) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
         };
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW CumulativeUsageView
             TO CumulativeUsage
             AS
@@ -96,7 +96,7 @@ impl Migration for Migration0034<'_> {
                     FROM ModelInference
                     WHERE input_tokens IS NOT NULL
                     {view_where_clause}
-            "#
+            "
         );
         let _ = self
             .clickhouse
@@ -125,7 +125,7 @@ impl Migration for Migration0034<'_> {
 
             tracing::info!("Running backfill of CumulativeUsage");
             let query = format!(
-                r#"
+                r"
                 SELECT
                     sum(ifNull(input_tokens, 0)) as total_input_tokens,
                     sum(ifNull(output_tokens, 0)) as total_output_tokens,
@@ -133,7 +133,7 @@ impl Migration for Migration0034<'_> {
                 FROM ModelInference
                 WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
                 FORMAT JsonEachRow;
-                "#
+                "
             );
             let response = self
                 .clickhouse
@@ -153,12 +153,12 @@ impl Migration for Migration0034<'_> {
             } = parsed_response;
 
             let write_query = format!(
-                r#"
+                r"
                 INSERT INTO CumulativeUsage (type, count) VALUES
                 ('input_tokens', {total_input_tokens}),
                 ('output_tokens', {total_output_tokens}),
                 ('model_inferences', {total_count})
-                "#
+                "
             );
             self.clickhouse
                 .run_query_synchronous_no_params(write_query)
@@ -169,9 +169,9 @@ impl Migration for Migration0034<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r#"
+        r"
         DROP TABLE CumulativeUsageView;
-        DROP TABLE CumulativeUsage;"#
+        DROP TABLE CumulativeUsage;"
             .to_string()
     }
 

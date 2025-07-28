@@ -171,12 +171,12 @@ async fn count_inferences(
 ) -> Result<InferenceCounts, String> {
     let Ok(response) = clickhouse
         .run_query_synchronous_no_params(
-            r#"
+            r"
             SELECT
                 (SELECT COUNT() FROM ChatInference) as chat_inference_count,
                 (SELECT COUNT() FROM JsonInference) as json_inference_count
             Format JSONEachRow
-            "#
+            "
             .to_string(),
         )
         .await
@@ -209,12 +209,12 @@ async fn get_token_totals(
 ) -> Result<CumulativeUsage, String> {
     let Ok(response) = clickhouse
         .run_query_synchronous_no_params(
-            r#"
+            r"
             SELECT
                 (SELECT count FROM CumulativeUsage FINAL WHERE type = 'input_tokens') as input_tokens,
                 (SELECT count FROM CumulativeUsage FINAL WHERE type = 'output_tokens') as output_tokens
             Format JSONEachRow
-            "#
+            "
             .to_string(),
         )
         .await
@@ -251,14 +251,14 @@ struct ClickHouseFeedbackCounts {
 async fn count_feedbacks(clickhouse: &ClickHouseConnectionInfo) -> Result<FeedbackCounts, String> {
     let Ok(response) = clickhouse
         .run_query_synchronous_no_params(
-            r#"
+            r"
             SELECT
                 (SELECT COUNT() FROM BooleanMetricFeedback) as boolean_metric_feedback_count,
                 (SELECT COUNT() FROM FloatMetricFeedback) as float_metric_feedback_count,
                 (SELECT COUNT() FROM DemonstrationFeedback) as demonstration_feedback_count,
                 (SELECT COUNT() FROM CommentFeedback) as comment_feedback_count
             Format JSONEachRow
-            "#
+            "
             .to_string(),
         )
         .await
