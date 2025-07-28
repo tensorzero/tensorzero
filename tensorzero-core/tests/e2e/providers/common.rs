@@ -1713,6 +1713,23 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                 "Unexpected error: {res}"
             );
         }
+        "nvidia_nim" => {
+    assert!(
+        res["error"]
+            .as_str()
+            .unwrap()
+            .contains("401 Unauthorized")
+            || res["error"]
+                .as_str()
+                .unwrap()
+                .contains("Invalid API Key")
+            || res["error"]
+                .as_str()
+                .unwrap()
+                .contains("Could not validate credentials"),
+        "Unexpected error: {res}"
+    );
+}
         "openrouter" => {
             assert!(
                 res["error"].as_str().unwrap().contains("400 Bad Request")
