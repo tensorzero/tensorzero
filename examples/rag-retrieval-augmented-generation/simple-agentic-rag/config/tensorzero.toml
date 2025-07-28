@@ -2,10 +2,10 @@
 # │                                  GENERAL                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-# To keep things minimal in this example, we don't set up observability with ClickHouse.
+# Enable observability to support the UI and ClickHouse functionality.
 
 [gateway]
-observability.enabled = false
+observability.enabled = true
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
@@ -18,6 +18,14 @@ tool_choice = "required"
 parallel_tool_calls = true
 
 [functions.multi_hop_rag_agent.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
+
+[functions.multi_hop_rag_agent_openai_v1]
+type = "chat"
+
+[functions.multi_hop_rag_agent_openai_v1.variants.baseline]
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
 system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"

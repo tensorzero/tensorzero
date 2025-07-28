@@ -1,10 +1,16 @@
+#!/usr/bin/env python3
 """
 TensorZero + OpenAI Agents SDK Integration Example
 
-This example shows how to use the simple agentic RAG functionality with the
-OpenAI Agents SDK integration, leveraging the existing TensorZero configuration.
+This example demonstrates how to use TensorZero's production-grade LLM infrastructure
+with OpenAI's Agents SDK for building sophisticated AI agents.
 
-Install: pip install tensorzero[agents]
+The integration provides:
+- Automatic template variable conversion
+- A/B testing between variants
+- Observability and metrics collection
+- Episode tracking for multi-turn conversations
+- All TensorZero production features
 """
 
 import asyncio
@@ -14,6 +20,16 @@ from agents import Agent, Runner, function_tool
 
 # Import TensorZero agents integration
 import tensorzero.agents as tz_agents
+import os
+import dotenv
+
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+dotenv.load_dotenv()
+
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# set cwd to file location
 
 
 # Define tools using OpenAI Agents SDK decorators
@@ -110,57 +126,25 @@ async def create_tensorzero_integrated_agent() -> Agent:
     """
 
     # Set up TensorZero + Agents SDK integration
-    config = await tz_agents.setup_tensorzero_agents(
+    await tz_agents.setup_tensorzero_agents(
         config_path="config/tensorzero.toml",
-        base_url="http://localhost:3000",  # TensorZero gateway
-        api_key="your-api-key",
+        gateway_url=os.getenv("TENSORZERO_GATEWAY_URL"),
+        clickhouse_url=os.getenv("TENSORZERO_CLICKHOUSE_URL"),
     )
-
-    # Inspect what was loaded from TensorZero config
-    print(f"\n📋 TensorZero Configuration Loaded:")
-    print(f"   Templated Functions: {list(config.templated_functions.keys())}")
-    print(f"   Available Tools: {list(config.available_tools.keys())}")
 
     # Create agent using TensorZero function
     # This automatically inherits the template from TensorZero config
     agent = tz_agents.create_agent_from_tensorzero_function(
         function_name="multi_hop_rag_agent",
         variant_name="baseline",
-        agent_name="TensorZero RAG Agent",
+        name="TensorZero RAG Agent",
         tools=[think, search_wikipedia, load_wikipedia_page, answer_question],
     )
 
     return agent
 
 
-async def create_manual_agent() -> Agent:
-    """
-    Create an agent manually specifying the model name.
-
-    This shows how you can still use TensorZero models directly
-    while getting all the benefits of automatic templating.
-    """
-
-    # Set up TensorZero integration first
-    await tz_agents.setup_tensorzero_agents(
-        config_path="config/tensorzero.toml",
-        base_url="http://localhost:3000",
-        api_key="your-api-key",
-    )
-
-    # Create agent with explicit TensorZero model reference
-    # The system prompt template is automatically loaded from TensorZero config
-    agent = Agent(
-        name="Manual TensorZero RAG Agent",
-        model="tensorzero::function_name::multi_hop_rag_agent::baseline",
-        instructions="",  # Will be overridden by TensorZero template
-        tools=[think, search_wikipedia, load_wikipedia_page, answer_question],
-    )
-
-    return agent
-
-
-async def ask_question_with_integration(question: str, use_auto_agent: bool = True):
+async def ask_question_with_integration(question: str):
     """
     Ask a question using the TensorZero + Agents SDK integration.
 
@@ -171,12 +155,8 @@ async def ask_question_with_integration(question: str, use_auto_agent: bool = Tr
     print(f"❓ Question: {question}")
     print("=" * 80)
 
-    if use_auto_agent:
-        agent = await create_tensorzero_integrated_agent()
-        print("🤖 Using auto-created agent from TensorZero function")
-    else:
-        agent = await create_manual_agent()
-        print("🔧 Using manually configured agent")
+    agent = await create_tensorzero_integrated_agent()
+    print("🤖 Using auto-created agent from TensorZero function")
 
     # Run the agent with the question
     # All TensorZero features work automatically:
@@ -184,40 +164,10 @@ async def ask_question_with_integration(question: str, use_auto_agent: bool = Tr
     # - Observability and logging to ClickHouse
     # - Template variable resolution
     # - Metrics collection
-    runner = Runner(agent=agent)
 
     print(f"\n🚀 Starting conversation...")
-    response = await runner.run(question)
-
-    print(f"\n📊 Integration Benefits Automatic:")
-    print(f"   ✅ TensorZero observability and logging")
-    print(f"   ✅ A/B testing if multiple variants configured")
-    print(f"   ✅ Template variable handling")
-    print(f"   ✅ All TensorZero gateway features")
-
+    response = await Runner.run(agent, question)
     return response
-
-
-async def compare_implementations():
-    """Compare the pure Agents SDK approach vs TensorZero integration."""
-
-    question = "What is a common dish in the hometown of the scientist who won the Nobel Prize for the discovery of the positron?"
-
-    print("🧪 COMPARISON: Pure Agents SDK vs TensorZero Integration")
-    print("=" * 80)
-
-    print("\n1️⃣ TensorZero Integration (Recommended)")
-    print("-" * 50)
-    response_tz = await ask_question_with_integration(question, use_auto_agent=True)
-
-    print(f"\n🎯 Key Benefits of TensorZero Integration:")
-    print(f"   📊 Automatic observability - all interactions logged to ClickHouse")
-    print(f"   🧪 A/B testing - can easily test different prompts/models")
-    print(f"   🎨 Template system - prompts managed centrally in config")
-    print(f"   🚀 Production ready - proven scaling and reliability")
-    print(f"   📈 Analytics - built-in metrics and monitoring")
-
-    return response_tz
 
 
 async def main():
@@ -226,16 +176,11 @@ async def main():
     print("🎉 TensorZero + OpenAI Agents SDK Integration Demo")
     print("=" * 80)
 
-    # Run comparison
-    await compare_implementations()
+    question = "What is a common dish in the hometown of the scientist who won the Nobel Prize for the discovery of the positron?"
 
-    print(f"\n✨ Integration Summary:")
-    print(
-        f"   • One-line setup: await tz_agents.setup_tensorzero_agents('config.toml')"
-    )
-    print(f"   • Automatic template handling from TensorZero configuration")
-    print(f"   • All TensorZero production features work transparently")
-    print(f"   • Clean Agents SDK code with enterprise-grade infrastructure")
+    response_tz = await ask_question_with_integration(question)
+
+    print(response_tz)
 
 
 if __name__ == "__main__":
