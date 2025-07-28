@@ -29,6 +29,7 @@ env:
   MODAL_KEY: ${{ secrets.MODAL_KEY }}
   MODAL_SECRET: ${{ secrets.MODAL_SECRET }}
   MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+  NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
