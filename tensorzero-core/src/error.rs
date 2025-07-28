@@ -127,6 +127,8 @@ impl Error {
     }
 }
 
+// Expect for derive Serialize
+#[expect(clippy::trivially_copy_pass_by_ref)]
 fn serialize_status<S>(code: &Option<StatusCode>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
