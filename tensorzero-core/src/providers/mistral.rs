@@ -529,6 +529,7 @@ impl From<MistralUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
+            provider_cached_input_tokens: None,
         }
     }
 }

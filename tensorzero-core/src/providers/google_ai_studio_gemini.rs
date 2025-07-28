@@ -1111,6 +1111,7 @@ impl From<GeminiUsageMetadata> for Usage {
         Usage {
             input_tokens: usage_metadata.prompt_token_count,
             output_tokens: usage_metadata.candidates_token_count.unwrap_or(0),
+            provider_cached_input_tokens: None,
         }
     }
 }
@@ -1794,6 +1795,7 @@ mod tests {
             Usage {
                 input_tokens: 10,
                 output_tokens: 10,
+                provider_cached_input_tokens: None,
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -1905,6 +1907,7 @@ mod tests {
             Usage {
                 input_tokens: 15,
                 output_tokens: 20,
+                provider_cached_input_tokens: None,
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -2027,6 +2030,7 @@ mod tests {
             Usage {
                 input_tokens: 25,
                 output_tokens: 40,
+                provider_cached_input_tokens: None,
             }
         );
         assert_eq!(model_inference_response.latency, latency);

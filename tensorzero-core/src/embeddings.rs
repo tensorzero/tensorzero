@@ -210,6 +210,9 @@ impl EmbeddingResponse {
             usage: Usage {
                 input_tokens: cache_lookup.input_tokens,
                 output_tokens: cache_lookup.output_tokens,
+                // when cache hits, no tokens are consumed by the provider, so
+                // there is not provider cached input tokens either.
+                provider_cached_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),

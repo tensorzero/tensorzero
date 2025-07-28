@@ -1381,6 +1381,7 @@ mod tests {
             Usage {
                 input_tokens: 10,
                 output_tokens: 1,
+                provider_cached_input_tokens: None,
             }
         );
         match result {
@@ -1460,6 +1461,7 @@ mod tests {
             Usage {
                 input_tokens: 10,
                 output_tokens: 1,
+                provider_cached_input_tokens: None,
             }
         );
         match result {
@@ -1549,6 +1551,7 @@ mod tests {
             Usage {
                 input_tokens: 10,
                 output_tokens: 1,
+                provider_cached_input_tokens: None,
             }
         );
         match result {
@@ -1624,6 +1627,7 @@ mod tests {
             Usage {
                 input_tokens: 10,
                 output_tokens: 1,
+                provider_cached_input_tokens: None,
             }
         );
         match result {
@@ -1736,6 +1740,7 @@ mod tests {
             Usage {
                 input_tokens: 10,
                 output_tokens: 1,
+                provider_cached_input_tokens: None,
             }
         );
         match result {
@@ -1843,6 +1848,7 @@ mod tests {
             Usage {
                 input_tokens: 10,
                 output_tokens: 1,
+                provider_cached_input_tokens: None,
             }
         );
         match result {
@@ -2094,7 +2100,8 @@ mod tests {
                     chunk.usage(),
                     Some(&Usage {
                         input_tokens: 10,
-                        output_tokens: 16
+                        output_tokens: 16,
+                        provider_cached_input_tokens: None,
                     })
                 );
                 break;

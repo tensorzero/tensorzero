@@ -619,15 +619,23 @@ async fn stream_with_cache_write(
 fn consolidate_usage(chunks: &[ProviderInferenceResponseChunk]) -> Usage {
     let mut input_tokens = 0;
     let mut output_tokens = 0;
+    let mut provider_cached_input_tokens: Option<u32> = None;
     for chunk in chunks {
         if let Some(usage) = &chunk.usage {
             input_tokens += usage.input_tokens;
             output_tokens += usage.output_tokens;
+            if let Some(pcit) = usage.provider_cached_input_tokens {
+                match provider_cached_input_tokens {
+                    Some(existing) => provider_cached_input_tokens = Some(existing + pcit),
+                    None => provider_cached_input_tokens = Some(pcit),
+                }
+            }
         }
     }
     Usage {
         input_tokens,
         output_tokens,
+        provider_cached_input_tokens,
     }
 }
 
@@ -2031,6 +2039,7 @@ mod tests {
             Usage {
                 input_tokens: 10,
                 output_tokens: 1,
+                provider_cached_input_tokens: None,
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");
@@ -2174,6 +2183,7 @@ mod tests {
             Usage {
                 input_tokens: 10,
                 output_tokens: 1,
+                provider_cached_input_tokens: None,
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");

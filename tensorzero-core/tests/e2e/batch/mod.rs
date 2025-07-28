@@ -342,6 +342,7 @@ async fn test_write_read_completed_batch_inference_chat() {
         usage: Usage {
             input_tokens: 10,
             output_tokens: 20,
+            provider_cached_input_tokens: None,
         },
         finish_reason: Some(FinishReason::Stop),
     };
@@ -353,6 +354,7 @@ async fn test_write_read_completed_batch_inference_chat() {
         usage: Usage {
             input_tokens: 20,
             output_tokens: 30,
+            provider_cached_input_tokens: None,
         },
         finish_reason: Some(FinishReason::ToolCall),
     };
@@ -544,6 +546,7 @@ async fn test_write_read_completed_batch_inference_json() {
         usage: Usage {
             input_tokens: 10,
             output_tokens: 20,
+            provider_cached_input_tokens: None,
         },
         finish_reason: Some(FinishReason::Stop),
     };
@@ -555,6 +558,7 @@ async fn test_write_read_completed_batch_inference_json() {
         usage: Usage {
             input_tokens: 20,
             output_tokens: 30,
+            provider_cached_input_tokens: None,
         },
         finish_reason: Some(FinishReason::ToolCall),
     };

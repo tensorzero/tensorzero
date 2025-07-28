@@ -119,6 +119,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 10,
                 output_tokens: 10,
+                provider_cached_input_tokens: None,
             },
             original_response: None,
             finish_reason: None,
@@ -137,6 +138,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 10,
                 output_tokens: 10,
+                provider_cached_input_tokens: None,
             },
             original_response: None,
             finish_reason: None,
@@ -219,6 +221,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 10,
                 output_tokens: 10,
+                provider_cached_input_tokens: None,
             },
             original_response: None,
             finish_reason: None,
@@ -238,6 +241,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 10,
                 output_tokens: 10,
+                provider_cached_input_tokens: None,
             },
             original_response: None,
             finish_reason: None,

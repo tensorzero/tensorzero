@@ -894,6 +894,7 @@ impl From<AnthropicUsage> for Usage {
         Usage {
             input_tokens: value.input_tokens,
             output_tokens: value.output_tokens,
+            provider_cached_input_tokens: None,
         }
     }
 }

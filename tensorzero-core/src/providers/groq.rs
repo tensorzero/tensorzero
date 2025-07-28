@@ -977,6 +977,7 @@ impl From<GroqUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
+            provider_cached_input_tokens: None,
         }
     }
 }
@@ -2153,6 +2154,7 @@ mod tests {
             Some(Usage {
                 input_tokens: 10,
                 output_tokens: 20,
+                provider_cached_input_tokens: None,
             })
         );
     }

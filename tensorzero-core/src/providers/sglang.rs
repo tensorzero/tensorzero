@@ -826,6 +826,8 @@ mod tests {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {

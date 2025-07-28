@@ -972,6 +972,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 50,
                 output_tokens: 100,
+                provider_cached_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
@@ -1008,6 +1009,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 15,
                 output_tokens: 25,
+                provider_cached_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(550),
@@ -1072,6 +1074,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 50,
                 output_tokens: 100,
+                provider_cached_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
@@ -1110,6 +1113,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 15,
                 output_tokens: 25,
+                provider_cached_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(550),
@@ -1181,6 +1185,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 50,
                 output_tokens: 100,
+                provider_cached_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
@@ -1217,6 +1222,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 15,
                 output_tokens: 25,
+                provider_cached_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(550),
@@ -1327,6 +1333,7 @@ mod tests {
         let expected_usage = Usage {
             input_tokens: 75,
             output_tokens: 126,
+            provider_cached_input_tokens: None,
         };
         let expected_content = vec!["Candidate answer 1".to_string().into()];
         assert_eq!(selected.usage_considering_cached(), expected_usage);

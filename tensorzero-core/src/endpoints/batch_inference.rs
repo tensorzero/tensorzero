@@ -1199,6 +1199,7 @@ impl TryFrom<ChatInferenceResponseDatabaseRead> for ChatInferenceResponse {
         let usage = Usage {
             input_tokens: value.input_tokens,
             output_tokens: value.output_tokens,
+            provider_cached_input_tokens: None,
         };
         let output: Vec<ContentBlockChatOutput> =
             serde_json::from_str(&value.output).map_err(|e| {
@@ -1237,6 +1238,7 @@ impl TryFrom<JsonInferenceResponseDatabaseRead> for JsonInferenceResponse {
         let usage = Usage {
             input_tokens: value.input_tokens,
             output_tokens: value.output_tokens,
+            provider_cached_input_tokens: None,
         };
         let output: JsonInferenceOutput = serde_json::from_str(&value.output).map_err(|e| {
             Error::new(ErrorDetails::Serialization {

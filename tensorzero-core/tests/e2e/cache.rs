@@ -98,6 +98,7 @@ async fn test_cache_write_and_read() {
         &Usage {
             input_tokens: 10,
             output_tokens: 16,
+            provider_cached_input_tokens: None,
         },
         Some(&FinishReason::Stop),
     )
@@ -127,6 +128,7 @@ async fn test_cache_write_and_read() {
         Usage {
             input_tokens: 10,
             output_tokens: 16,
+            provider_cached_input_tokens: None
         }
     );
     assert_eq!(*result.model_provider_name, *"test_provider");
@@ -142,7 +144,8 @@ async fn test_cache_write_and_read() {
         result.usage,
         Usage {
             input_tokens: 10,
-            output_tokens: 16
+            output_tokens: 16,
+            provider_cached_input_tokens: None
         }
     );
     assert_eq!(
@@ -218,6 +221,7 @@ async fn test_cache_stream_write_and_read() {
             usage: Some(Usage {
                 input_tokens: 20,
                 output_tokens: 40,
+                provider_cached_input_tokens: None,
             }),
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(999),
@@ -232,6 +236,7 @@ async fn test_cache_stream_write_and_read() {
             usage: Some(Usage {
                 input_tokens: 100,
                 output_tokens: 200,
+                provider_cached_input_tokens: None,
             }),
             raw_response: "raw response 2".to_string(),
             latency: Duration::from_secs(999),
@@ -248,6 +253,7 @@ async fn test_cache_stream_write_and_read() {
         &Usage {
             input_tokens: 1,
             output_tokens: 2,
+            provider_cached_input_tokens: None,
         },
     )
     .unwrap();
@@ -283,6 +289,7 @@ async fn test_cache_stream_write_and_read() {
                 &Some(Usage {
                     input_tokens: 20,
                     output_tokens: 40,
+                    provider_cached_input_tokens: None,
                 })
             )
         } else {
@@ -291,6 +298,7 @@ async fn test_cache_stream_write_and_read() {
                 &Some(Usage {
                     input_tokens: 100,
                     output_tokens: 200,
+                    provider_cached_input_tokens: None,
                 })
             )
         };

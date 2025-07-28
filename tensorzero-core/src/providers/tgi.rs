@@ -592,6 +592,7 @@ impl From<TGIUsage> for Usage {
     fn from(usage: TGIUsage) -> Self {
         Usage {
             input_tokens: usage.prompt_tokens,
+            provider_cached_input_tokens: None,
             output_tokens: usage.completion_tokens,
         }
     }

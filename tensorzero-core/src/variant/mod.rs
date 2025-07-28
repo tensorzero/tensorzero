@@ -1191,6 +1191,7 @@ mod tests {
             Usage {
                 input_tokens: 10,
                 output_tokens: 1,
+                provider_cached_input_tokens: None,
             }
         );
         match inference_result {
@@ -1306,6 +1307,7 @@ mod tests {
             Usage {
                 input_tokens: 10,
                 output_tokens: 1,
+                provider_cached_input_tokens: None,
             }
         );
         match inference_result {
@@ -1509,6 +1511,7 @@ mod tests {
             Usage {
                 input_tokens: 10,
                 output_tokens: 1,
+                provider_cached_input_tokens: None,
             }
         );
         match inference_result {

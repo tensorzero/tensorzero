@@ -1765,12 +1765,28 @@ impl<'a> OpenAIBatchRequest<'a> {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+pub(super) struct OpenAIUsagePromptTokensDetails {
+    pub cached_tokens: u32,
+    pub audio_tokens: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+pub(super) struct OpenAIUsageCompletionTokensDetails {
+    pub reasoning_tokens: u32,
+    pub audio_tokens: u32,
+    pub accepted_prediction_tokens: u32,
+    pub rejected_prediction_tokens: u32,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) struct OpenAIUsage {
     pub prompt_tokens: u32,
     #[serde(default)]
     pub completion_tokens: u32,
     pub total_tokens: u32,
+    pub prompt_tokens_details: Option<OpenAIUsagePromptTokensDetails>,
+    pub completion_tokens_details: Option<OpenAIUsageCompletionTokensDetails>,
 }
 
 impl From<OpenAIUsage> for Usage {
@@ -1778,6 +1794,9 @@ impl From<OpenAIUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
+            provider_cached_input_tokens: usage
+                .prompt_tokens_details
+                .map(|details| details.cached_tokens),
         }
     }
 }
@@ -2718,6 +2737,8 @@ mod tests {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2816,6 +2837,8 @@ mod tests {
                 prompt_tokens: 15,
                 completion_tokens: 25,
                 total_tokens: 40,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2906,6 +2929,8 @@ mod tests {
                 prompt_tokens: 5,
                 completion_tokens: 0,
                 total_tokens: 5,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let request_body = OpenAIRequest {
@@ -2963,6 +2988,8 @@ mod tests {
                 prompt_tokens: 10,
                 completion_tokens: 10,
                 total_tokens: 20,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
 
@@ -3285,6 +3312,8 @@ mod tests {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             }),
         };
         let message = openai_to_tensorzero_chunk(
@@ -3300,6 +3329,7 @@ mod tests {
             Some(Usage {
                 input_tokens: 10,
                 output_tokens: 20,
+                provider_cached_input_tokens: None,
             })
         );
     }

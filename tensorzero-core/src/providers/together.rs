@@ -871,6 +871,8 @@ mod tests {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -939,6 +941,8 @@ mod tests {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let together_response_with_metadata = TogetherResponseWithMetadata {
@@ -985,6 +989,8 @@ mod tests {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let together_response_with_metadata = TogetherResponseWithMetadata {
@@ -1037,6 +1043,8 @@ mod tests {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
 
@@ -1406,6 +1414,8 @@ mod tests {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             }),
         };
         let message = together_to_tensorzero_chunk(
@@ -1423,6 +1433,7 @@ mod tests {
             Some(Usage {
                 input_tokens: 10,
                 output_tokens: 20,
+                provider_cached_input_tokens: None,
             })
         );
 

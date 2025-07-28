@@ -1057,6 +1057,7 @@ impl From<OpenRouterUsage> for Usage {
     fn from(usage: OpenRouterUsage) -> Self {
         Usage {
             input_tokens: usage.prompt_tokens,
+            provider_cached_input_tokens: None,
             output_tokens: usage.completion_tokens,
         }
     }
@@ -2347,6 +2348,7 @@ mod tests {
             Some(Usage {
                 input_tokens: 10,
                 output_tokens: 20,
+                provider_cached_input_tokens: None,
             })
         );
     }

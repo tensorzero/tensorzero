@@ -565,6 +565,7 @@ pub struct ProviderInferenceResponse {
 pub struct Usage {
     pub input_tokens: u32,
     pub output_tokens: u32,
+    pub provider_cached_input_tokens: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -627,6 +628,7 @@ impl ModelInferenceResponseWithMetadata {
             Usage {
                 input_tokens: 0,
                 output_tokens: 0,
+                provider_cached_input_tokens: None,
             }
         } else {
             self.usage
@@ -960,6 +962,9 @@ impl ModelInferenceResponse {
             usage: Usage {
                 input_tokens: cache_lookup.input_tokens,
                 output_tokens: cache_lookup.output_tokens,
+                // when cache hits, no tokens are consumed by the provider, so
+                // there is not provider cached input tokens either.
+                provider_cached_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
@@ -1838,6 +1843,15 @@ impl Add for Usage {
         Usage {
             input_tokens: self.input_tokens.saturating_add(other.input_tokens),
             output_tokens: self.output_tokens.saturating_add(other.output_tokens),
+            provider_cached_input_tokens: match (
+                self.provider_cached_input_tokens,
+                other.provider_cached_input_tokens,
+            ) {
+                (Some(x), Some(y)) => Some(x + y),
+                (Some(x), None) => Some(x),
+                (None, Some(y)) => Some(y),
+                (None, None) => None,
+            },
         }
     }
 }
@@ -1949,6 +1963,7 @@ mod tests {
         let usage = Usage {
             input_tokens: 10,
             output_tokens: 20,
+            provider_cached_input_tokens: None,
         };
         let raw_request = "raw request".to_string();
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
@@ -2630,6 +2645,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: 2,
                     output_tokens: 4,
+                    provider_cached_input_tokens: None,
                 }),
                 raw_response: ", world!\"}".to_string(),
                 latency: Duration::from_millis(250),
@@ -2701,10 +2717,12 @@ mod tests {
         let usage1 = Usage {
             input_tokens: 10,
             output_tokens: 5,
+            provider_cached_input_tokens: None,
         };
         let usage2 = Usage {
             input_tokens: 5,
             output_tokens: 10,
+            provider_cached_input_tokens: None,
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -2753,6 +2771,7 @@ mod tests {
             Usage {
                 input_tokens: 15,
                 output_tokens: 15,
+                provider_cached_input_tokens: None,
             }
         );
         match response {
@@ -2785,6 +2804,7 @@ mod tests {
         let usage = Usage {
             input_tokens: 10,
             output_tokens: 5,
+            provider_cached_input_tokens: None,
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -2857,6 +2877,7 @@ mod tests {
         let usage = Usage {
             input_tokens: 15,
             output_tokens: 10,
+            provider_cached_input_tokens: None,
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -2969,10 +2990,12 @@ mod tests {
         let usage1 = Usage {
             input_tokens: 10,
             output_tokens: 5,
+            provider_cached_input_tokens: None,
         };
         let usage2 = Usage {
             input_tokens: 5,
             output_tokens: 10,
+            provider_cached_input_tokens: None,
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -3021,6 +3044,7 @@ mod tests {
             Usage {
                 input_tokens: 15,
                 output_tokens: 15,
+                provider_cached_input_tokens: None,
             }
         );
         match response {
@@ -3069,10 +3093,12 @@ mod tests {
         let usage1 = Usage {
             input_tokens: 10,
             output_tokens: 5,
+            provider_cached_input_tokens: None,
         };
         let usage2 = Usage {
             input_tokens: 5,
             output_tokens: 10,
+            provider_cached_input_tokens: None,
         };
         let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
             "type": "object",
@@ -3130,6 +3156,7 @@ mod tests {
             Usage {
                 input_tokens: 15,
                 output_tokens: 15,
+                provider_cached_input_tokens: None,
             }
         );
         match response {
@@ -3220,6 +3247,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: 2,
                     output_tokens: 4,
+                    provider_cached_input_tokens: None,
                 }),
                 raw_response: ", world!\"}".to_string(),
                 latency: Duration::from_millis(250),
@@ -3266,6 +3294,7 @@ mod tests {
             Usage {
                 input_tokens: 2,
                 output_tokens: 4,
+                provider_cached_input_tokens: None,
             }
         );
         let chat_result = match result {
@@ -3346,6 +3375,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: 10,
                     output_tokens: 20,
+                    provider_cached_input_tokens: None,
                 }),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
@@ -3432,6 +3462,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: 15,
                     output_tokens: 25,
+                    provider_cached_input_tokens: None,
                 }),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
@@ -3509,6 +3540,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: 5,
                     output_tokens: 10,
+                    provider_cached_input_tokens: None,
                 }),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
@@ -3590,6 +3622,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: 20,
                     output_tokens: 15,
+                    provider_cached_input_tokens: None,
                 }),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
@@ -3656,6 +3689,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: 5,
                 output_tokens: 5,
+                provider_cached_input_tokens: None,
             }),
             raw_response: "chunk1".to_string(),
             latency,
@@ -3772,6 +3806,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: 20,
                     output_tokens: 30,
+                    provider_cached_input_tokens: None,
                 }),
                 raw_response: "chunk3".to_string(),
                 latency: Duration::from_millis(250),
@@ -3975,6 +4010,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: 10,
                 output_tokens: 20,
+                provider_cached_input_tokens: None,
             }),
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
@@ -3991,7 +4027,8 @@ mod tests {
             result.usage,
             Some(Usage {
                 input_tokens: 10,
-                output_tokens: 20
+                output_tokens: 20,
+                provider_cached_input_tokens: None,
             })
         );
         assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));

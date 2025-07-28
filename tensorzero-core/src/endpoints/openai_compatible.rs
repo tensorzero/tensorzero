@@ -305,11 +305,27 @@ pub struct OpenAICompatibleParams {
     unknown_fields: HashMap<String, Value>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+pub(super) struct OpenAICompatibleUsagePromptTokensDetails {
+    pub cached_tokens: u32,
+    pub audio_tokens: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+pub(super) struct OpenAICompatibleUsageCompletionTokensDetails {
+    pub reasoning_tokens: u32,
+    pub audio_tokens: u32,
+    pub accepted_prediction_tokens: u32,
+    pub rejected_prediction_tokens: u32,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAICompatibleUsage {
     prompt_tokens: u32,
     completion_tokens: u32,
     total_tokens: u32,
+    prompt_tokens_details: Option<OpenAICompatibleUsagePromptTokensDetails>,
+    completion_tokens_details: Option<OpenAICompatibleUsageCompletionTokensDetails>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -897,6 +913,13 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                     prompt_tokens: response.usage.input_tokens,
                     completion_tokens: response.usage.output_tokens,
                     total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+                    prompt_tokens_details: response.usage.provider_cached_input_tokens.map(
+                        |cached_tokens| OpenAICompatibleUsagePromptTokensDetails {
+                            cached_tokens,
+                            audio_tokens: 0,
+                        },
+                    ),
+                    completion_tokens_details: None,
                 },
                 episode_id: response.episode_id.to_string(),
             },
@@ -959,6 +982,13 @@ impl From<Usage> for OpenAICompatibleUsage {
             prompt_tokens: usage.input_tokens,
             completion_tokens: usage.output_tokens,
             total_tokens: usage.input_tokens + usage.output_tokens,
+            prompt_tokens_details: usage.provider_cached_input_tokens.map(|cached_tokens| {
+                OpenAICompatibleUsagePromptTokensDetails {
+                    cached_tokens,
+                    audio_tokens: 0,
+                }
+            }),
+            completion_tokens_details: None,
         }
     }
 }
@@ -1103,6 +1133,8 @@ fn prepare_serialized_openai_compatible_events(
             prompt_tokens: 0,
             completion_tokens: 0,
             total_tokens: 0,
+            prompt_tokens_details: None,
+            completion_tokens_details: None,
         };
         let mut inference_id = None;
         let mut episode_id = None;
@@ -1178,6 +1210,8 @@ fn prepare_serialized_openai_compatible_events(
                     prompt_tokens: total_usage.prompt_tokens,
                     completion_tokens: total_usage.completion_tokens,
                     total_tokens: total_usage.total_tokens,
+                    prompt_tokens_details: total_usage.prompt_tokens_details.clone(),
+                    completion_tokens_details: total_usage.completion_tokens_details.clone(),
                 }),
             };
             yield Event::default().json_data(

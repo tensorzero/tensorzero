@@ -558,7 +558,7 @@ fn create_stream(
     async_stream::stream! {
         let mut buffer = vec![];
         let mut extra_usage = Some(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).sum());
-        if extra_usage == Some(Usage { input_tokens: 0, output_tokens: 0 }) {
+        if extra_usage == Some(Usage { input_tokens: 0, output_tokens: 0, provider_cached_input_tokens: None }) {
             extra_usage = None;
         }
         let mut inference_ttft = None;
@@ -1018,6 +1018,7 @@ pub struct JsonInferenceResponseChunk {
 const ZERO_USAGE: Usage = Usage {
     input_tokens: 0,
     output_tokens: 0,
+    provider_cached_input_tokens: None,
 };
 
 impl InferenceResponseChunk {

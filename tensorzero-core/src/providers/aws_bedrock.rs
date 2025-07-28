@@ -519,6 +519,9 @@ fn bedrock_to_tensorzero_stream_message(
                     let usage = Some(Usage {
                         input_tokens: usage.input_tokens as u32,
                         output_tokens: usage.output_tokens as u32,
+                        provider_cached_input_tokens: usage
+                            .cache_read_input_tokens
+                            .and_then(|i| i.try_into().ok()),
                     });
 
                     Ok(Some(ProviderInferenceResponseChunk::new(
@@ -848,6 +851,9 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             .map(|u| Usage {
                 input_tokens: u.input_tokens as u32,
                 output_tokens: u.output_tokens as u32,
+                provider_cached_input_tokens: u
+                    .cache_read_input_tokens
+                    .and_then(|i| i.try_into().ok()),
             })
             .ok_or_else(|| {
                 Error::new(ErrorDetails::InferenceServer {

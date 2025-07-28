@@ -1035,6 +1035,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 50,
                 output_tokens: 100,
+                provider_cached_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
@@ -1068,6 +1069,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 15,
                 output_tokens: 25,
+                provider_cached_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(550),
@@ -1129,6 +1131,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 10,
                 output_tokens: 20,
+                provider_cached_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
@@ -1164,6 +1167,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 15,
                 output_tokens: 25,
+                provider_cached_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(550),
@@ -1241,6 +1245,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 10,
                 output_tokens: 20,
+                provider_cached_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
@@ -1274,6 +1279,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 15,
                 output_tokens: 25,
+                provider_cached_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(550),
@@ -1368,6 +1374,7 @@ mod tests {
         let expected_usage = Usage {
             input_tokens: 35,
             output_tokens: 46,
+            provider_cached_input_tokens: None,
         };
         let expected_content = InternalJsonInferenceOutput {
             raw: Some("{\"answer\":\"Hello\"}".to_string()),
@@ -1612,6 +1619,7 @@ mod tests {
             Some(Usage {
                 input_tokens: 10,
                 output_tokens: 20,
+                provider_cached_input_tokens: None,
             }),
         )
         .unwrap();
@@ -1656,6 +1664,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: 10,
                     output_tokens: 20,
+                    provider_cached_input_tokens: None,
                 }),
                 latency: Duration::from_secs(0),
                 raw_response: "My raw response".to_string(),
