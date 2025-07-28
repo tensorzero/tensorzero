@@ -230,9 +230,10 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        let schema =
-            StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(temp_file.path().to_owned()))
-                .expect("Failed to load schema");
+        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+            temp_file.path().to_owned(),
+        ))
+        .expect("Failed to load schema");
 
         let instance = serde_json::json!({
             "name": "John Doe",
@@ -276,8 +277,9 @@ mod tests {
         write!(temp_file, "{invalid_schema}")
             .expect("Failed to write invalid schema to temporary file");
 
-        let result =
-            StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(temp_file.path().to_owned()));
+        let result = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+            temp_file.path().to_owned(),
+        ));
         assert_eq!(
             result.unwrap_err().to_string(),
             format!(
@@ -289,8 +291,9 @@ mod tests {
 
     #[test]
     fn test_nonexistent_file() {
-        let result =
-            StaticJSONSchema::from_path(TomlRelativePath::new_for_tests("nonexistent_file.json".into()));
+        let result = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+            "nonexistent_file.json".into(),
+        ));
         assert_eq!(
             result.unwrap_err().to_string(),
             "Failed to read JSON Schema `nonexistent_file.json`: No such file or directory (os error 2)".to_string()
