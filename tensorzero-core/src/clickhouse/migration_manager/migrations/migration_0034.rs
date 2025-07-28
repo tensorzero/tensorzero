@@ -41,20 +41,19 @@ impl Migration for Migration0034<'_> {
 
     async fn apply(&self, clean_start: bool) -> Result<(), Error> {
         let view_offset = Duration::from_secs(15);
-        let view_timestamp = (std::time::SystemTime::now()
+        let view_timestamp_nanos = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
                 Error::new(ErrorDetails::ClickHouseMigration {
-                    id: MIGRATION_ID.to_string(),
+                    id: "0009".to_string(),
                     message: e.to_string(),
                 })
             })?
             + view_offset)
-            .as_secs();
-        match self
-            .clickhouse
+            .as_nanos();
+        self.clickhouse
             .run_query_synchronous_no_params(
-                r#"CREATE TABLE CumulativeUsage (
+                r#"CREATE TABLE IF NOT EXISTS CumulativeUsage (
                         type LowCardinality(String),
                         count UInt64,
                     )
@@ -62,20 +61,7 @@ impl Migration for Migration0034<'_> {
                     ORDER BY type;"#
                     .to_string(),
             )
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                if e.to_string().contains("TABLE_ALREADY_EXISTS") {
-                    Err(ErrorDetails::ClickHouseMigration {
-                        id: MIGRATION_ID.to_string(),
-                        message: "A concurrent migration has already created the CumulativeUsage table. Please restart after the migration has completed.".to_string(),
-                    }.into())
-                } else {
-                    Err(e)
-                }
-            }
-        }?;
+            .await?;
 
         // Create the materialized view for the CumulativeUsage table from ModelInference
         // If we are not doing a clean start, we need to add a where clause ot the view to only include rows that have been created
@@ -83,7 +69,7 @@ impl Migration for Migration0034<'_> {
         let view_where_clause = if clean_start {
             String::new()
         } else {
-            format!("AND UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
+            format!("AND UUIDv7ToDateTime(id) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
         };
         let query = format!(
             r#"
@@ -112,23 +98,30 @@ impl Migration for Migration0034<'_> {
                     {view_where_clause}
             "#
         );
-        match self.clickhouse.run_query_synchronous_no_params(query).await {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                if e.to_string().contains("TABLE_ALREADY_EXISTS") {
-                    Err(ErrorDetails::ClickHouseMigration {
-                            id: MIGRATION_ID.to_string(),
-                            message: "A concurrent migration has already created the CumulativeUsage table. Please restart after the migration has completed.".to_string(),
-                        }.into())
-                } else {
-                    Err(e)
-                }
-            }
-        }?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
 
         // If we are not clean starting, we must backfill this table
         if !clean_start {
             tokio::time::sleep(view_offset).await;
+            // Check if the materialized view we wrote is still in the table.
+            // If this is the case, we should compute the backfilled sums and add them to the table.
+            // Otherwise, we should warn that our view was not written (probably because a concurrent client did this first)
+            // and conclude the migration.
+            let create_table = self
+                .clickhouse
+                .run_query_synchronous_no_params(
+                    "SHOW CREATE TABLE CumulativeUsageView".to_string(),
+                )
+                .await?
+                .response;
+            let view_timestamp_nanos_string = view_timestamp_nanos.to_string();
+            if !create_table.contains(&view_timestamp_nanos_string) {
+                tracing::warn!("Materialized view `CumulativeUsageView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+                return Ok(());
+            }
 
             let query = format!(
                 r#"
@@ -137,7 +130,7 @@ impl Migration for Migration0034<'_> {
                     sum(ifNull(output_tokens, 0)) as total_output_tokens,
                     COUNT(input_tokens) as total_count
                 FROM ModelInference
-                WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}))
+                WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
                 FORMAT JsonEachRow;
                 "#
             );
