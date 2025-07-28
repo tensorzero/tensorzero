@@ -778,7 +778,7 @@ impl RetryConfig {
 
 impl<'a> BatchInferenceConfig<'a> {
     pub fn new(
-        templates: &'a TemplateConfig<'a>,
+        templates: &'a TemplateConfig,
         tool_configs: &'a Vec<Option<ToolCallConfig>>,
         dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
         function_name: &'a str,

@@ -7,8 +7,9 @@ use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::iter::repeat;
+use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -41,7 +42,7 @@ use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
     ToolCallConfigDatabaseInsert,
 };
-use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant};
+use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant, VariantInfo};
 
 /// The expected payload to the `/start_batch_inference` endpoint.
 /// It will be a JSON object with the following fields:
@@ -131,7 +132,8 @@ pub async fn start_batch_inference_handler(
         .into_iter()
         .map(|dynamic_tool_params| function.prepare_tool_config(dynamic_tool_params, &config.tools))
         .collect::<Result<Vec<_>, _>>()?;
-    let mut candidate_variants = function.variants().clone();
+    let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
+        function.variants().clone().into_iter().collect();
 
     let inference_ids = (0..num_inferences)
         .map(|_| Uuid::now_v7())
@@ -233,7 +235,6 @@ pub async fn start_batch_inference_handler(
             message: "batch episode_ids unexpectedly empty. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
         }))?;
 
-    // TODO (#496): remove this extra clone
     // Spent a while fighting the borrow checker here, gave up
     // The issue is that inference_config holds the ToolConfigs and ModelInferenceRequest has lifetimes that conflict with the inference_config
     while !candidate_variants.is_empty() {
@@ -438,7 +439,7 @@ pub async fn get_batch_request(
             inference_id: None,
         } => {
             let query = format!(
-                r#"
+                r"
                     SELECT
                         batch_id,
                         id,
@@ -456,7 +457,7 @@ pub async fn get_batch_request(
                     ORDER BY timestamp DESC
                     LIMIT 1
                     FORMAT JSONEachRow
-                "#
+                "
             );
             let response = clickhouse.run_query_synchronous_no_params(query).await?;
             if response.response.is_empty() {
@@ -469,7 +470,7 @@ pub async fn get_batch_request(
             inference_id: Some(inference_id),
         } => {
             let query = format!(
-                r#"
+                r"
                     SELECT br.batch_id as batch_id,
                         br.id as id,
                         br.batch_params as batch_params,
@@ -487,7 +488,7 @@ pub async fn get_batch_request(
                     ORDER BY br.timestamp DESC
                     LIMIT 1
                     FORMAT JSONEachRow
-                "#,
+                ",
             );
             let response = clickhouse.run_query_synchronous_no_params(query).await?;
             if response.response.is_empty() {

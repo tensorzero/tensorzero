@@ -10,7 +10,7 @@ use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -242,8 +242,8 @@ pub async fn inference(
     tracing::Span::current().record("episode_id", episode_id.to_string());
 
     let (function, function_name) = find_function(&params, &config)?;
-    // Collect the function variant names as a Vec<&str>
-    let mut candidate_variants = function.variants().clone();
+    let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
+        function.variants().clone().into_iter().collect();
 
     // If the function has no variants, return an error
     if candidate_variants.is_empty() {
@@ -1200,7 +1200,7 @@ impl ChatCompletionInferenceParams {
 }
 
 fn prepare_candidate_variants(
-    candidate_variants: &mut HashMap<String, Arc<VariantInfo>>,
+    candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     tags: &mut HashMap<String, String>,
     pinned_variant_name: Option<&str>,
     dynamic_variant_config: Option<DynamicVariantParams>,

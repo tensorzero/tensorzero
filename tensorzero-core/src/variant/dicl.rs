@@ -351,12 +351,12 @@ impl DiclConfig {
                 .join(",")
         );
         let query = format!(
-            r#"SELECT input, output, cosineDistance(embedding, {}) as distance
+            r"SELECT input, output, cosineDistance(embedding, {}) as distance
                    FROM DynamicInContextLearningExample
                    WHERE function_name='{}' AND variant_name='{}'
                    ORDER BY distance ASC
                    LIMIT {}
-                   FORMAT JSONEachRow"#,
+                   FORMAT JSONEachRow",
             formatted_embedding, function_name, variant_name, self.k
         );
 
