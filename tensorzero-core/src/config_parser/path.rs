@@ -369,8 +369,8 @@ struct TargetData<'a, 'b> {
 ///
 /// This currently uses the provided `base_path` to resolve relative paths. Once we add config globbing support,
 /// this will be removed in favor of using the `Spanned` data from the original `DeTable`
-pub(super) fn resolve_toml_relative_paths<'a>(
-    table: DeTable<'a>,
+pub(super) fn resolve_toml_relative_paths(
+    table: DeTable<'_>,
     base_path: &Path,
 ) -> Result<Table, Error> {
     let mut root = DeValue::Table(table);
