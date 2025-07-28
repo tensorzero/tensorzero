@@ -41,6 +41,7 @@ use crate::inference::types::{
     ResolvedInputMessageContent, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
+use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::variant::chat_completion::ChatCompletionConfig;
@@ -256,12 +257,14 @@ pub async fn inference(
     function.validate_inference_params(&params)?;
 
     let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
+    let mut templates = Cow::Borrowed(&config.templates);
 
     prepare_candidate_variants(
         &mut candidate_variants,
         &mut params.tags,
         params.variant_name.as_deref(),
-        params.internal_dynamic_variant_config.as_ref(),
+        params.internal_dynamic_variant_config,
+        &mut templates,
     )?;
 
     // Should we store the results?
@@ -316,7 +319,7 @@ pub async fn inference(
         let inference_config = InferenceConfig {
             function_name: &function_name,
             variant_name: &variant_name,
-            templates: &config.templates,
+            templates: &templates,
             tool_config: tool_config.as_ref(),
             dynamic_output_schema: output_schema.as_ref(),
             ids: InferenceIds {
@@ -639,7 +642,7 @@ fn create_stream(
             let config = config.clone();
             let async_write = config.gateway.observability.async_writes;
             let write_future = async move {
-                let templates = &config.templates;
+                let templates = Cow::Borrowed(&config.templates);
                 let collect_chunks_args = CollectChunksArgs {
                     value: buffer,
                     inference_id,
@@ -655,7 +658,7 @@ fn create_stream(
                     function_name: &function_name,
                     variant_name: &variant_name,
                     dynamic_output_schema,
-                    templates,
+                    templates: &templates,
                     tool_config: tool_config.as_ref(),
                     cached,
                     extra_body: extra_body.clone(),
@@ -1191,7 +1194,8 @@ fn prepare_candidate_variants(
     candidate_variants: &mut HashMap<String, Arc<VariantInfo>>,
     tags: &mut HashMap<String, String>,
     pinned_variant_name: Option<&str>,
-    dynamic_variant_config: Option<&DynamicVariantParams>,
+    dynamic_variant_config: Option<DynamicVariantParams>,
+    template_config: &mut Cow<'_, TemplateConfig>,
 ) -> Result<(), Error> {
     match (pinned_variant_name, dynamic_variant_config) {
         // If a variant is pinned, only that variant should be attempted

@@ -60,6 +60,12 @@ pub struct VariantInfo {
     pub timeouts: TimeoutsConfig,
 }
 
+impl VariantInfo {
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        self.inner.set_weight(weight);
+    }
+}
+
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
@@ -119,9 +125,9 @@ pub enum JsonMode {
 
 /// Configuration that applies to the current inference request.
 #[derive(Clone, Debug)]
-pub struct InferenceConfig<'a, 'request> {
+pub struct InferenceConfig<'request> {
     pub tool_config: Option<&'request ToolCallConfig>,
-    pub templates: &'request TemplateConfig<'a>,
+    pub templates: &'request Cow<'request, TemplateConfig<'request>>,
     pub dynamic_output_schema: Option<&'request DynamicJSONSchema>,
     pub function_name: &'request str,
     pub variant_name: &'request str,
@@ -139,7 +145,7 @@ pub struct InferenceConfig<'a, 'request> {
 #[derive(Clone, Debug)]
 pub struct BatchInferenceConfig<'a> {
     pub tool_configs: &'a Vec<Option<ToolCallConfig>>,
-    pub templates: &'a TemplateConfig<'a>,
+    pub templates: &'a Cow<'a, TemplateConfig<'a>>,
     pub dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
     pub function_name: &'a str,
     pub variant_name: &'a str,
@@ -149,7 +155,7 @@ impl<'a> BatchInferenceConfig<'a> {
         &'a self,
         episode_ids: &[Uuid],
         inference_ids: &[Uuid],
-    ) -> Vec<InferenceConfig<'a, 'a>> {
+    ) -> Vec<InferenceConfig<'a>> {
         izip!(
             self.tool_configs.iter().map(|x| x.as_ref()),
             self.dynamic_output_schemas.iter().map(|x| x.as_ref()),
@@ -197,7 +203,7 @@ pub trait Variant {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error>;
@@ -207,7 +213,7 @@ pub trait Variant {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error>;
@@ -229,7 +235,7 @@ pub trait Variant {
         input: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_configs: &'a [InferenceConfig<'a, 'a>],
+        inference_configs: &'a [InferenceConfig<'a>],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error>;
@@ -245,6 +251,16 @@ impl VariantConfig {
             VariantConfig::ChainOfThought(params) => params.inner.weight,
         }
     }
+
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        match self {
+            VariantConfig::ChatCompletion(params) => params.weight = weight,
+            VariantConfig::BestOfNSampling(params) => params.weight = weight,
+            VariantConfig::Dicl(params) => params.weight = weight,
+            VariantConfig::MixtureOfN(params) => params.weight = weight,
+            VariantConfig::ChainOfThought(params) => params.inner.weight = weight,
+        }
+    }
 }
 
 impl Variant for VariantInfo {
@@ -257,7 +273,7 @@ impl Variant for VariantInfo {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -353,7 +369,7 @@ impl Variant for VariantInfo {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -446,7 +462,7 @@ impl Variant for VariantInfo {
         inputs: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_configs: &'a [InferenceConfig<'a, 'a>],
+        inference_configs: &'a [InferenceConfig<'a>],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -559,7 +575,7 @@ fn prepare_model_inference_request<'a, 'request>(
     messages: Vec<RequestMessage>,
     system: Option<String>,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'a, 'request>,
+    inference_config: &'request InferenceConfig<'request>,
     stream: bool,
     inference_params: &InferenceParams,
     base_json_mode: Option<JsonMode>,
@@ -653,7 +669,7 @@ struct InferModelRequestArgs<'a, 'request> {
     model_name: Arc<str>,
     model_config: &'a ModelConfig,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'a, 'request>,
+    inference_config: &'request InferenceConfig<'request>,
     clients: &'request InferenceClients<'request>,
     inference_params: InferenceParams,
     retry_config: &'a RetryConfig,
@@ -762,7 +778,7 @@ impl RetryConfig {
 
 impl<'a> BatchInferenceConfig<'a> {
     pub fn new(
-        templates: &'a TemplateConfig,
+        templates: &'a Cow<'a, TemplateConfig<'a>>,
         tool_configs: &'a Vec<Option<ToolCallConfig>>,
         dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
         function_name: &'a str,

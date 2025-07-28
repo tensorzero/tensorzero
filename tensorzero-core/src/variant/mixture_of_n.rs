@@ -98,7 +98,7 @@ impl Variant for MixtureOfNConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -759,7 +759,7 @@ impl FuserConfig {
         &'a self,
         input: &'request ResolvedInput,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
         stream: bool,

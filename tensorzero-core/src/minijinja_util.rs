@@ -7,7 +7,7 @@ use std::{
 
 use crate::error::{Error, ErrorDetails};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TemplateConfig<'c> {
     env: minijinja::Environment<'c>,
 }

@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero_core::{
     cache::CacheParamsOptions,
-    config_parser::UninitializedVariantInfo,
     endpoints::inference::{InferenceParams, Params},
     error::Error,
     inference::types::{
