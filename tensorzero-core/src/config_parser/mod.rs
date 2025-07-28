@@ -75,6 +75,7 @@ pub struct Config {
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
     pub optimizers: HashMap<String, OptimizerInfo>,
+    pub clickhouse: ClickHouseConfig,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -108,6 +109,37 @@ pub struct TimeoutsConfig {
     pub non_streaming: NonStreamingTimeouts,
     #[serde(default)]
     pub streaming: StreamingTimeouts,
+}
+
+/// Configuration for ClickHouse database settings
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct ClickHouseConfig {
+    /// Whether ClickHouse replication is enabled
+    #[serde(default = "default_replication_enabled")]
+    pub replication_enabled: bool,
+    /// The name of the ClickHouse cluster for replication
+    #[serde(default = "default_cluster_name")]
+    pub cluster_name: String,
+}
+
+impl Default for ClickHouseConfig {
+    fn default() -> Self {
+        Self {
+            replication_enabled: default_replication_enabled(),
+            cluster_name: default_cluster_name(),
+        }
+    }
+}
+
+fn default_replication_enabled() -> bool {
+    false
+}
+
+fn default_cluster_name() -> String {
+    "clickhouse".to_string()
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -526,6 +558,7 @@ impl Config {
             object_store_info,
             provider_types: uninitialized_config.provider_types,
             optimizers,
+            clickhouse: uninitialized_config.clickhouse,
         };
 
         // Initialize the templates
@@ -866,6 +899,8 @@ struct UninitializedConfig {
     pub object_storage: Option<StorageKind>,
     #[serde(default)]
     pub optimizers: HashMap<String, UninitializedOptimizerInfo>, // optimizer name => optimizer config
+    #[serde(default)]
+    pub clickhouse: ClickHouseConfig,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]

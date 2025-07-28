@@ -1,15 +1,21 @@
 use async_trait::async_trait;
 
 use crate::clickhouse::migration_manager::migration_trait::Migration;
+use crate::clickhouse::migration_manager::migrations::{
+    check_table_exists, create_table_engine, create_cluster_clause
+};
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::Error;
-
-use super::check_table_exists;
 
 /// This migration is used to set up the ClickHouse database to store examples
 /// for dynamic in-context learning.
+/// 
+/// As of the replication-aware migration system, this migration creates tables with
+/// the appropriate engine (replicated vs non-replicated) based on configuration.
 pub struct Migration0002<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub config: &'a Config,
 }
 
 #[async_trait]
@@ -31,9 +37,19 @@ impl Migration for Migration0002<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        
         // Create the `DynamicInContextLearningExample` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS DynamicInContextLearningExample
+        let engine = create_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "DynamicInContextLearningExample"
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS DynamicInContextLearningExample {cluster_clause}
             (
                 id UUID, -- must be a UUIDv7
                 function_name LowCardinality(String),
@@ -43,12 +59,12 @@ impl Migration for Migration0002<'_> {
                 output String,
                 embedding Array(Float32),
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = MergeTree()
-            ORDER BY (function_name, variant_name, namespace);
-        ";
+            ) ENGINE = {engine}
+            ORDER BY (function_name, variant_name, namespace);"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
         Ok(())
     }

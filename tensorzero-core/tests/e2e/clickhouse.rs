@@ -452,8 +452,10 @@ async fn run_rollback_instructions(
 }
 async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bool) {
     let (fresh_clickhouse, _cleanup_fresh_clickhouse) = get_clean_clickhouse(true);
-    fresh_clickhouse.create_database().await.unwrap();
-    let migrations = make_all_migrations(&fresh_clickhouse);
+    let default_config = tensorzero_core::config_parser::Config::default();
+    fresh_clickhouse.create_database(&default_config).await.unwrap();
+    let default_config = tensorzero_core::config_parser::Config::default();
+    let migrations = make_all_migrations(&fresh_clickhouse, &default_config);
     println!(
         "Running migrations up to {}",
         migrations[migration_num].name()
@@ -481,7 +483,7 @@ async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bo
     // to try to run commands on a non-existent database.
     // We make sure that the database exists at the end of the rollback to prevent '_cleanup_fresh_clickhouse' from
     // panicking on drop.
-    fresh_clickhouse.create_database().await.unwrap();
+    fresh_clickhouse.create_database(&default_config).await.unwrap();
 }
 
 // Generate tests named 'test_rollback_up_to_migration_index_n' for each migration index `n``
@@ -500,8 +502,10 @@ invoke_all_separate_tests!(
 #[traced_test]
 async fn test_rollback_apply_rollback() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    clickhouse.create_database().await.unwrap();
-    let migrations = make_all_migrations(&clickhouse);
+    let default_config = tensorzero_core::config_parser::Config::default();
+    clickhouse.create_database(&default_config).await.unwrap();
+    let default_config = tensorzero_core::config_parser::Config::default();
+    let migrations = make_all_migrations(&clickhouse, &default_config);
     for migration in migrations {
         let name = migration.name();
         println!("Running migration: {name}");
@@ -523,7 +527,7 @@ async fn test_rollback_apply_rollback() {
 
         // This migration drops the entire database during rollback, so we need to re-create it
         if migration.name() == "Migration0000" {
-            clickhouse.create_database().await.unwrap();
+            clickhouse.create_database(&default_config).await.unwrap();
         }
 
         println!("Re-apply migration: {name}");
@@ -542,10 +546,12 @@ async fn test_rollback_apply_rollback() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clickhouse_migration_manager() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    clickhouse.create_database().await.unwrap();
+    let default_config = tensorzero_core::config_parser::Config::default();
+    clickhouse.create_database(&default_config).await.unwrap();
     // Run it twice to test that it is a no-op the second time
-    clickhouse.create_database().await.unwrap();
-    let migrations = make_all_migrations(&clickhouse);
+    clickhouse.create_database(&default_config).await.unwrap();
+    let default_config = tensorzero_core::config_parser::Config::default();
+    let migrations = make_all_migrations(&clickhouse, &default_config);
     let initial_clean_start = Cell::new(true);
     // This runs all migrations up to and including the given migration number,
     // verifying that only the most recent migration is actually applied.
@@ -744,13 +750,15 @@ async fn test_bad_clickhouse_write() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clean_clickhouse_start() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    migration_manager::run(&clickhouse).await.unwrap();
+    let default_config = tensorzero_core::config_parser::Config::default();
+    migration_manager::run(&clickhouse, &default_config).await.unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_deployment_id_oldest() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    migration_manager::run(&clickhouse).await.unwrap();
+    let default_config = tensorzero_core::config_parser::Config::default();
+    migration_manager::run(&clickhouse, &default_config).await.unwrap();
     // Add a row to the DeploymentID table and make sure that it isn't returned
     let new_deployment_id = "foo";
     clickhouse
@@ -779,12 +787,14 @@ async fn test_deployment_id_oldest() {
 async fn test_concurrent_clickhouse_migrations() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
     let clickhouse = Arc::new(clickhouse);
+    let default_config = Arc::new(tensorzero_core::config_parser::Config::default());
     let num_concurrent_starts = 50;
     let mut handles = Vec::with_capacity(num_concurrent_starts);
     for _ in 0..num_concurrent_starts {
         let clickhouse_clone = clickhouse.clone();
+        let config_clone = default_config.clone();
         handles.push(tokio::spawn(async move {
-            migration_manager::run(&clickhouse_clone).await.unwrap();
+            migration_manager::run(&clickhouse_clone, &config_clone).await.unwrap();
         }));
     }
     for handle in handles {
@@ -799,7 +809,8 @@ async fn test_concurrent_clickhouse_migrations() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_migration_0013_old_table() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    clickhouse.create_database().await.unwrap();
+    let default_config = tensorzero_core::config_parser::Config::default();
+    clickhouse.create_database(&default_config).await.unwrap();
 
     // When creating a new migration, add it to the end of this array,
     // and adjust the call to `invoke_all!` to include the new array index.
@@ -877,7 +888,8 @@ async fn test_migration_0013_old_table() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_migration_0013_data_no_table() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    clickhouse.create_database().await.unwrap();
+    let default_config = tensorzero_core::config_parser::Config::default();
+    clickhouse.create_database(&default_config).await.unwrap();
 
     // When creating a new migration, add it to the end of this array,
     // and adjust the call to `invoke_all!` to include the new array index.

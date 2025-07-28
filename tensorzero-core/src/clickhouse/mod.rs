@@ -405,7 +405,7 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn create_database(&self) -> Result<(), Error> {
+    pub async fn create_database(&self, config: &crate::config_parser::Config) -> Result<(), Error> {
         match self {
             Self::Disabled => {}
             Self::Mock { .. } => {}
@@ -420,7 +420,13 @@ impl ClickHouseConnectionInfo {
                         message: "Invalid ClickHouse database URL".to_string(),
                     })
                 })?;
-                let query = format!("CREATE DATABASE IF NOT EXISTS {database}");
+                
+                // Use ON CLUSTER when replication is enabled
+                let query = if config.clickhouse.replication_enabled {
+                    format!("CREATE DATABASE IF NOT EXISTS {database} ON CLUSTER `{}`", config.clickhouse.cluster_name)
+                } else {
+                    format!("CREATE DATABASE IF NOT EXISTS {database}")
+                };
                 // In order to create the database, we need to remove the database query parameter from the URL
                 // Otherwise, ClickHouse will throw an error
                 let mut base_url = database_url.clone();
@@ -466,8 +472,23 @@ impl ClickHouseConnectionInfo {
         // We decided to add this table after we had already created lots of migrations.
         // We create this table immediately after creating the database, so that
         // we can insert rows into it when running migrations
-        self.run_query_synchronous_no_params(
-            r"CREATE TABLE IF NOT EXISTS TensorZeroMigration (
+        let cluster_clause = if config.clickhouse.replication_enabled {
+            format!("ON CLUSTER `{}`", config.clickhouse.cluster_name)
+        } else {
+            String::new()
+        };
+        
+        let engine = if config.clickhouse.replication_enabled {
+            format!(
+                "ReplicatedMergeTree('/clickhouse/tables/{}/TensorZeroMigration', '{{replica}}')",
+                config.clickhouse.cluster_name
+            )
+        } else {
+            "MergeTree()".to_string()
+        };
+        
+        let migration_table_query = format!(
+            r"CREATE TABLE TensorZeroMigration {cluster_clause} (
                 migration_id UInt32,
                 migration_name String,
                 gateway_version String,
@@ -476,12 +497,11 @@ impl ClickHouseConnectionInfo {
                 execution_time_ms UInt64,
                 extra_data Nullable(String)
             )
-            ENGINE = MergeTree()
+            ENGINE = {engine}
             PRIMARY KEY (migration_id)"
-                .to_string(),
-        )
-        .await
-        .map(|_| ())?;
+        );
+        
+        self.run_query_synchronous_no_params(migration_table_query).await?;
         Ok(())
     }
 

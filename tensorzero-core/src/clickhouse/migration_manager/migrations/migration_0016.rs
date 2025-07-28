@@ -1,9 +1,11 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
+use crate::clickhouse::migration_manager::migrations::{
+    check_table_exists, table_is_nonempty, create_replacing_table_engine, create_cluster_clause
+};
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
-
-use super::{check_table_exists, table_is_nonempty};
 
 /// This migration is used to set up the ClickHouse database for the datasets feature.
 /// It creates two tables: `ChatInferenceDatapoint` and `JsonInferenceDatapoint`
@@ -17,8 +19,12 @@ use super::{check_table_exists, table_is_nonempty};
 /// They should have been removed from the binary upon merging of this migration.
 ///
 /// This migration differs from 0014 in that it uses DateTime64(6, 'UTC') instead of DateTime('UTC')
+/// 
+/// As of the replication-aware migration system, this migration creates tables with
+/// the appropriate engine (replicated vs non-replicated) based on configuration.
 pub struct Migration0016<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub config: &'a Config,
 }
 
 #[async_trait]
@@ -69,21 +75,26 @@ impl Migration for Migration0016<'_> {
         }
 
         // First, drop the ChatInferenceDataset and JsonInferenceDataset tables if they were created in 0014
-        let query = "DROP TABLE IF EXISTS ChatInferenceDataset";
+        let query = "DROP TABLE IF EXISTS JsonInferenceDataset".to_string();
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
-        let query = "DROP TABLE IF EXISTS JsonInferenceDataset";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
 
         // Create the `ChatInferenceDatapoint` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS ChatInferenceDatapoint
+        let engine = create_replacing_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "ChatInferenceDatapoint",
+            Some("updated_at, is_deleted")
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS ChatInferenceDatapoint {cluster_clause}
             (
                 dataset_name LowCardinality(String),
                 function_name LowCardinality(String),
@@ -103,17 +114,23 @@ impl Migration for Migration0016<'_> {
                 auxiliary String, -- a JSON (unstructured, for now)
                 is_deleted Bool DEFAULT false,
                 updated_at DateTime64(6, 'UTC') DEFAULT now()
-            ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
-            ORDER BY (dataset_name, function_name, id)
-        ";
+            ) ENGINE = {engine}
+            ORDER BY (dataset_name, function_name, id);"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Create the `JsonInferenceDatapoint` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS JsonInferenceDatapoint
+        let engine = create_replacing_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "JsonInferenceDatapoint",
+            Some("updated_at, is_deleted")
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS JsonInferenceDatapoint {cluster_clause}
             (
                 dataset_name LowCardinality(String),
                 function_name LowCardinality(String),
@@ -126,12 +143,12 @@ impl Migration for Migration0016<'_> {
                 auxiliary String, -- a JSON (unstructured, for now)
                 is_deleted Bool DEFAULT false,
                 updated_at DateTime64(6, 'UTC') DEFAULT now()
-            ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
-            ORDER BY (dataset_name, function_name, id)
-        ";
+            ) ENGINE = {engine}
+            ORDER BY (dataset_name, function_name, id);"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         Ok(())

@@ -1,9 +1,11 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
+use crate::clickhouse::migration_manager::migrations::{
+    check_column_exists, check_table_exists, create_replacing_table_engine, create_cluster_clause
+};
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::Error;
 use async_trait::async_trait;
-
-use super::{check_column_exists, check_table_exists};
 
 /// This migration is used to set up the ClickHouse database for caching.
 /// We create a table `ModelInferenceCache` that stores the `short_cache_key`, `long_cache_key`, `timestamp`, and `output`
@@ -12,8 +14,12 @@ use super::{check_column_exists, check_table_exists};
 /// The `timestamp` is the timestamp of the request
 /// The `output` is the output of the request, serialized using serde_json::to_string
 /// We also add a column `cached` to indicate if a ModelInference was a cache hit
+/// 
+/// As of the replication-aware migration system, this migration creates tables with
+/// the appropriate engine (replicated vs non-replicated) based on configuration.
 pub struct Migration0011<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub config: &'a Config,
 }
 
 #[async_trait]
@@ -34,9 +40,20 @@ impl Migration for Migration0011<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        
         // Create the `ModelInferenceCache` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS ModelInferenceCache
+        let engine = create_replacing_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "ModelInferenceCache",
+            Some("timestamp, is_deleted")
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS ModelInferenceCache {cluster_clause}
             (
                 short_cache_key UInt64,
                 long_cache_key FixedString(64), -- for a hex-encoded 256-bit key
@@ -46,15 +63,15 @@ impl Migration for Migration0011<'_> {
                 raw_response String,
                 is_deleted Bool DEFAULT false,
                 INDEX idx_long_cache_key long_cache_key TYPE bloom_filter GRANULARITY 100
-            ) ENGINE = ReplacingMergeTree(timestamp, is_deleted)
+            ) ENGINE = {engine}
             PARTITION BY toYYYYMM(timestamp)
             ORDER BY (short_cache_key, long_cache_key)
             PRIMARY KEY (short_cache_key)
-            SETTINGS index_granularity = 256
-        ";
+            SETTINGS index_granularity = 256"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Add the `cached` column to ModelInference

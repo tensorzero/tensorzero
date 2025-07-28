@@ -1,9 +1,11 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
+use crate::clickhouse::migration_manager::migrations::{
+    check_table_exists, create_table_engine, create_cluster_clause
+};
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::Error;
 use async_trait::async_trait;
-
-use super::check_table_exists;
 
 /// This migration is used to set up the ClickHouse database for batch inference
 /// We will add two main tables: `BatchModelInference` and `BatchRequest` as well as a
@@ -16,8 +18,12 @@ use super::check_table_exists;
 /// `BatchRequest` contains metadata about a batch request.
 /// Each time the batch is polled by either inference_id or batch_id, a row will be written to this table.
 /// This allows us to know and also to know the history of actions which have been taken here.
+/// 
+/// As of the replication-aware migration system, this migration creates tables with
+/// the appropriate engine (replicated vs non-replicated) based on configuration.
 pub struct Migration0006<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub config: &'a Config,
 }
 
 #[async_trait]
@@ -45,9 +51,19 @@ impl Migration for Migration0006<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        
         // Create the `BatchModelInference` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS BatchModelInference
+        let engine = create_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "BatchModelInference"
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS BatchModelInference {cluster_clause}
             (
                 inference_id UUID,
                 batch_id UUID,
@@ -65,17 +81,22 @@ impl Migration for Migration0006<'_> {
                 output_schema Nullable(String),
                 tags Map(String, String) DEFAULT map(),
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(inference_id),
-            ) ENGINE = MergeTree()
-            ORDER BY (batch_id, inference_id)
-        ";
+            ) ENGINE = {engine}
+            ORDER BY (batch_id, inference_id);"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Create the `BatchRequest` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS BatchRequest
+        let engine = create_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "BatchRequest"
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS BatchRequest {cluster_clause}
             (
                 batch_id UUID,
                 id UUID,
@@ -85,26 +106,31 @@ impl Migration for Migration0006<'_> {
                 status Enum('pending' = 1, 'completed' = 2, 'failed' = 3),
                 errors Map(UUID, String),
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id),
-            ) ENGINE = MergeTree()
-            ORDER BY (batch_id, id)
-        ";
+            ) ENGINE = {engine}
+            ORDER BY (batch_id, id);"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Create the BatchIdByInferenceId table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS BatchIdByInferenceId
+        let engine = create_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "BatchIdByInferenceId"
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS BatchIdByInferenceId {cluster_clause}
             (
                 inference_id UUID,
                 batch_id UUID,
-            ) ENGINE = MergeTree()
-            ORDER BY (inference_id)
-        ";
+            ) ENGINE = {engine}
+            ORDER BY (inference_id);"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Create the materialized view for the BatchIdByInferenceId table

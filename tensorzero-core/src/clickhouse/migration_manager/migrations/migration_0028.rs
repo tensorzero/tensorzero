@@ -1,11 +1,13 @@
 use std::time::Duration;
 
 use crate::clickhouse::migration_manager::migration_trait::Migration;
+use crate::clickhouse::migration_manager::migrations::{
+    check_table_exists, create_table_engine, create_cluster_clause
+};
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
-
-use super::check_table_exists;
 
 /// NOTE: This migration supersedes migration_0023.
 /// Migration 0023 was inefficient due to its use of joins.
@@ -32,8 +34,12 @@ use super::check_table_exists;
 ///
 /// NOTE: The two views created by this migration are required to be separate as ClickHouse only triggers materialized views
 /// on the first table to appear.
+/// 
+/// As of the replication-aware migration system, this migration creates tables with
+/// the appropriate engine (replicated vs non-replicated) based on configuration.
 pub struct Migration0028<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub config: &'a Config,
 }
 
 const MIGRATION_ID: &str = "0028";
@@ -99,21 +105,32 @@ impl Migration for Migration0028<'_> {
         } else {
             format!("AND UUIDv7ToDateTime(feedback_id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         };
+        
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        
+        let engine = create_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "StaticEvaluationHumanFeedback"
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS StaticEvaluationHumanFeedback {cluster_clause} (
+                metric_name LowCardinality(String),
+                datapoint_id UUID,
+                output String,
+                value String,  -- JSON encoded value of the feedback
+                feedback_id UUID,
+                evaluator_inference_id UUID,
+                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(feedback_id)
+            ) ENGINE = {engine}
+            ORDER BY (metric_name, datapoint_id, output)
+            SETTINGS index_granularity = 256 -- We use a small index granularity to improve lookup performance"
+        );
         self.clickhouse
-            .run_query_synchronous_no_params(
-                r"CREATE TABLE IF NOT EXISTS StaticEvaluationHumanFeedback (
-                    metric_name LowCardinality(String),
-                    datapoint_id UUID,
-                    output String,
-                    value String,  -- JSON encoded value of the feedback
-                    feedback_id UUID,
-                    evaluator_inference_id UUID,
-                    timestamp DateTime MATERIALIZED UUIDv7ToDateTime(feedback_id)
-                ) ENGINE = MergeTree()
-                ORDER BY (metric_name, datapoint_id, output)
-                SETTINGS index_granularity = 256 -- We use a small index granularity to improve lookup performance
-            ".to_string(),
-            )
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Since there cannot have been any StaticEvaluationHumanFeedback rows before this migration runs,

@@ -1,10 +1,12 @@
 use std::time::Duration;
 
 use crate::clickhouse::migration_manager::migration_trait::Migration;
+use crate::clickhouse::migration_manager::migrations::{
+    check_table_exists, create_table_engine, create_cluster_clause
+};
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
-
-use super::check_table_exists;
 use async_trait::async_trait;
 
 /// This migration reinitializes the `InferenceById` and `InferenceByEpisodeId` tables and
@@ -19,8 +21,12 @@ use async_trait::async_trait;
 ///
 /// This migration should subsume migrations 0007 and 0010.
 /// They should have been removed from the binary upon merging of this migration.
+/// 
+/// As of the replication-aware migration system, this migration creates tables with
+/// the appropriate engine (replicated vs non-replicated) based on configuration.
 pub struct Migration0013<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub config: &'a Config,
 }
 
 #[async_trait]
@@ -190,25 +196,40 @@ impl Migration for Migration0013<'_> {
         // let query = "DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView".to_string();
         // let _ = self.clickhouse.run_query_synchronous(query, None).await?;
         // Create the new tables with UInt128 primary keys
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        
         // Create the `InferenceById` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS InferenceById
+        let engine = create_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "InferenceById"
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS InferenceById {cluster_clause}
             (
                 id_uint UInt128,
                 function_name LowCardinality(String),
                 variant_name LowCardinality(String),
                 episode_id UUID, -- must be a UUIDv7
                 function_type Enum8('chat' = 1, 'json' = 2)
-            ) ENGINE = MergeTree()
-            ORDER BY id_uint;
-        ";
+            ) ENGINE = {engine}
+            ORDER BY id_uint;"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
         // Create the `InferenceByEpisodeId` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS InferenceByEpisodeId
+        let engine = create_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "InferenceByEpisodeId"
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS InferenceByEpisodeId {cluster_clause}
             (
                 episode_id_uint UInt128,
                 id_uint UInt128,
@@ -216,12 +237,12 @@ impl Migration for Migration0013<'_> {
                 variant_name LowCardinality(String),
                 function_type Enum8('chat' = 1, 'json' = 2)
             )
-            ENGINE = MergeTree()
-            ORDER BY (episode_id_uint, id_uint);
-        ";
+            ENGINE = {engine}
+            ORDER BY (episode_id_uint, id_uint);"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
         // Create the `uint_to_uuid` function
         let query = r"CREATE FUNCTION IF NOT EXISTS uint_to_uuid AS (x) -> reinterpretAsUUID(

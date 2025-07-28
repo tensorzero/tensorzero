@@ -1,9 +1,11 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
+use crate::clickhouse::migration_manager::migrations::{
+    check_table_exists, create_table_engine, create_cluster_clause
+};
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
-
-use super::check_table_exists;
 
 /// This migration is used to set up the ClickHouse database for tagged feedback.
 /// The primary queries we contemplate are: Select all feedback for a given tag, or select all tags for a given feedback item.
@@ -15,8 +17,12 @@ use super::check_table_exists;
 ///  - Second, we add a column `tags` to each original feedback table
 ///  - Third, we create a materialized view for each original feedback table that writes the tags to the `FeedbackTag`
 ///    table as they are written to the original tables
+/// 
+/// As of the replication-aware migration system, this migration creates tables with
+/// the appropriate engine (replicated vs non-replicated) based on configuration.
 pub struct Migration0003<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub config: &'a Config,
 }
 
 #[async_trait]
@@ -106,20 +112,30 @@ impl Migration for Migration0003<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        
         // Create the `FeedbackTag` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS FeedbackTag
+        let engine = create_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "FeedbackTag"
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS FeedbackTag {cluster_clause}
             (
                 metric_name LowCardinality(String),
                 key String,
                 value String,
                 feedback_id UUID, -- must be a UUIDv7
-            ) ENGINE = MergeTree()
-            ORDER BY (metric_name, key, value);
-        ";
+            ) ENGINE = {engine}
+            ORDER BY (metric_name, key, value);"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Add a column `tags` to the `BooleanMetricFeedback` table

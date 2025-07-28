@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 
-use super::check_table_exists;
+use super::{check_table_exists, create_replacing_table_engine, create_cluster_clause};
 use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::Error;
 
 /// This migration adds the `DynamicEvaluationRun` and `DynamicEvaluationRunEpisode` tables.
@@ -11,8 +12,12 @@ use crate::error::Error;
 /// set of variant pins and experiment tags.
 /// A `DynamicEvaluationRunEpisode` is a single evaluation of a model variant under a given set of
 /// variant pins and experiment tags.
+/// 
+/// As of the replication-aware migration system, this migration creates tables with
+/// the appropriate engine (replicated vs non-replicated) based on configuration.
 pub struct Migration0025<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub config: &'a Config,
 }
 
 #[async_trait]
@@ -30,8 +35,20 @@ impl Migration for Migration0025<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
-        let query = r"
-            CREATE TABLE IF NOT EXISTS DynamicEvaluationRun
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        
+        let engine = create_replacing_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "DynamicEvaluationRun",
+            Some("updated_at, is_deleted")
+        );
+        
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS DynamicEvaluationRun {cluster_clause}
                 (
                     run_id_uint UInt128, -- UUID encoded as a UInt128
                     variant_pins Map(String, String),
@@ -40,16 +57,22 @@ impl Migration for Migration0025<'_> {
                     run_display_name Nullable(String),
                     is_deleted Bool DEFAULT false,
                     updated_at DateTime64(6, 'UTC') DEFAULT now()
-                ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
-                ORDER BY run_id_uint;
-        ";
+                ) ENGINE = {engine}
+                ORDER BY run_id_uint;"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
-        let query = r"
-            CREATE TABLE IF NOT EXISTS DynamicEvaluationRunEpisode
+        let engine = create_replacing_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "DynamicEvaluationRunEpisode",
+            Some("updated_at, is_deleted")
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS DynamicEvaluationRunEpisode {cluster_clause}
             (
                 run_id UUID,
                 episode_id_uint UInt128, -- UUID encoded as a UInt128
@@ -59,12 +82,12 @@ impl Migration for Migration0025<'_> {
                 tags Map(String, String),
                 is_deleted Bool DEFAULT false,
                 updated_at DateTime64(6, 'UTC') DEFAULT now()
-            ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
-                ORDER BY episode_id_uint;
-        ";
+            ) ENGINE = {engine}
+                ORDER BY episode_id_uint;"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         Ok(())

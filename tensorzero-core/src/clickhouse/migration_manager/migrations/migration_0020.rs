@@ -2,10 +2,12 @@ use rand::prelude::*;
 use std::time::Duration;
 
 use crate::clickhouse::migration_manager::migration_trait::Migration;
+use crate::clickhouse::migration_manager::migrations::{
+    check_table_exists, get_table_engine, create_replacing_table_engine, create_cluster_clause
+};
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
-
-use super::{check_table_exists, get_table_engine};
 use async_trait::async_trait;
 
 /// This migration reinitializes the `InferenceById` and `InferenceByEpisodeId` tables and
@@ -21,8 +23,12 @@ use async_trait::async_trait;
 /// This migration should subsume migrations 0007, 0010, and 0013.
 /// They should have been removed from the binary upon merging of this migration.
 /// 0013 is essentially the same migration but this one uses a ReplacingMergeTree engine for idempotency.
+/// 
+/// As of the replication-aware migration system, this migration creates tables with
+/// the appropriate engine (replicated vs non-replicated) based on configuration.
 pub struct Migration0020<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub config: &'a Config,
 }
 
 const MIGRATION_ID: &str = "0020";
@@ -133,6 +139,11 @@ impl Migration for Migration0020<'_> {
         // Only gets used when we are not doing a clean start
         let view_offset = Duration::from_secs(15);
 
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+
         // Check if the InferenceById table exists
         let inference_by_id_exists =
             check_table_exists(self.clickhouse, "InferenceById", MIGRATION_ID).await?;
@@ -146,22 +157,26 @@ impl Migration for Migration0020<'_> {
         } else {
             "InferenceById".to_string()
         };
+        let engine = create_replacing_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            &create_table_name,
+            Some("id_uint")
+        );
         let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS {create_table_name}
+            r"CREATE TABLE IF NOT EXISTS {create_table_name} {cluster_clause}
             (
                 id_uint UInt128,
                 function_name LowCardinality(String),
                 variant_name LowCardinality(String),
                 episode_id UUID, -- must be a UUIDv7
                 function_type Enum8('chat' = 1, 'json' = 2)
-            ) ENGINE = ReplacingMergeTree(id_uint)
-            ORDER BY id_uint;
-        "
+            ) ENGINE = {engine}
+            ORDER BY id_uint;"
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
         // If the InferenceById table exists then we need to swap this table in and drop old one.
         if inference_by_id_exists {
@@ -189,9 +204,14 @@ impl Migration for Migration0020<'_> {
         } else {
             "InferenceByEpisodeId".to_string()
         };
+        let engine = create_replacing_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            &create_table_name,
+            Some("id_uint")
+        );
         let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS {create_table_name}
+            r"CREATE TABLE IF NOT EXISTS {create_table_name} {cluster_clause}
             (
                 episode_id_uint UInt128,
                 id_uint UInt128,
@@ -199,13 +219,12 @@ impl Migration for Migration0020<'_> {
                 variant_name LowCardinality(String),
                 function_type Enum8('chat' = 1, 'json' = 2)
             )
-            ENGINE = ReplacingMergeTree(id_uint)
-            ORDER BY (episode_id_uint, id_uint);
-        "
+            ENGINE = {engine}
+            ORDER BY (episode_id_uint, id_uint);"
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
         // If the InferenceByEpisodeId table exists then we need to swap this table in and drop old one.
         if inference_by_episode_id_exists {
