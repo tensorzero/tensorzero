@@ -297,7 +297,7 @@ pub async fn start_batch_inference_handler(
             &inference_configs,
         )
         .await?;
-
+        drop(inference_configs);
         return Ok(Json(PrepareBatchInferenceOutput {
             batch_id,
             inference_ids,
