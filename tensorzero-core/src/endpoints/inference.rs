@@ -1232,9 +1232,12 @@ fn prepare_candidate_variants(
                 "dynamic_variant".to_string(),
                 Arc::new(candidate_variant_info),
             );
-            // Replace the template config with the ones passed in
-            let mut dynamic_template_config = TemplateConfig::new();
-            dynamic_template_config.initialize(paths, None)?;
+            // Replace templates in the template config with the ones passed in
+            // We Clone here so that we can still reference the old templates that don't conflict
+            let mut dynamic_template_config: TemplateConfig = template_config.clone().into_owned();
+            for (key, value) in paths.into_iter() {
+                dynamic_template_config.add_template(key, value)?;
+            }
             *template_config = Cow::Owned(dynamic_template_config);
         }
         (None, None) => {

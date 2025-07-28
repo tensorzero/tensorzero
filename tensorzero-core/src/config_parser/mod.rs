@@ -568,8 +568,8 @@ impl Config {
                 for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
                         config.templates.add_template(
-                            template.path.path().to_string_lossy().as_ref(),
-                            &template.contents,
+                            template.path.path().to_string_lossy().to_string(),
+                            template.contents.clone(),
                         )?;
                     }
                 }

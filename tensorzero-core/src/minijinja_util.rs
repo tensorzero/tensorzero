@@ -55,11 +55,11 @@ impl TemplateConfig<'_> {
 
     pub fn add_template(
         &mut self,
-        template_name: &str,
-        template_content: &str,
+        template_name: String,
+        template_content: String,
     ) -> Result<(), Error> {
         self.env
-            .add_template_owned(template_name.to_string(), template_content.to_string())
+            .add_template_owned(template_name.clone(), template_content)
             .map_err(|e| {
                 Error::new(ErrorDetails::MiniJinjaTemplate {
                     template_name: template_name.to_string(),
