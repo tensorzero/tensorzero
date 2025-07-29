@@ -70,8 +70,26 @@ enum PathComponent {
 /// If an entry is missing, then deserializing the struct will fail, as the `TomlRelativePath` deserializer
 /// expects a table produced by `resolve_paths`.
 ///
+/// During config loading, we pre-process the `toml::de::DeTable`, and convert all entries located at
+/// `TARGET_PATH_COMPONENTS` (which should be strings) into absolute paths, using the source TOML file
+/// as the base path. For example, `functions.my_function.system_schema = "some/relative/schema_path.json"
+/// will become `functions.my_function.system_schema = { __tensorzero_remapped_path = "base/directory/some/relative/schema_path.json" }`
+///
+/// This allows us to abstract over config file globbing, and allow almost all of the codebase to work with
+/// absolute paths, without needing to know which TOML file a particular path was originally written in.
+///
 /// You should avoid declaring a `PathBuf` inside any TensorZero config structs, unless you're certain
 /// that the path should not be relative to the TOML file that it's written in.
+///
+/// One alternative we considered was use `Spanned<PathBuf>` in our config structs, and deserialize from
+/// a `toml::de::DeTable`. Unfortunately, this breaks whenever serde has an internal 'boundary'
+/// (internally-tagged enums, `#[serde(flatten)]`, and possible other attributes). In these cases, serde
+/// will deserialize into its own custom type (consuming the original `Deserializer`), and continue
+/// deserializing with the internal serde `Deserializer`. This causes any extra information to get
+/// lost (including the span information held by the `toml::de::DeTable` deserializer).
+/// While it might be possible to work around this (similar to what we do for error messages in
+/// the `TensorZeroDeserialize` macro), this is a load-bearing part of the codebase, and implicitly
+/// depends on internal Serde implementation details.
 static TARGET_PATH_COMPONENTS: &[&[PathComponent]] = &[
     &[
         PathComponent::Literal("functions"),
