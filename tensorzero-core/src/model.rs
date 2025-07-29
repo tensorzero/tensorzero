@@ -180,7 +180,6 @@ pub fn fully_qualified_name(model_name: &str, provider_name: &str) -> String {
 
 impl ModelConfig {
     fn filter_content_blocks<'a>(
-        &self,
         request: &'a ModelInferenceRequest<'a>,
         model_name: &str,
         provider: &ModelProvider,
@@ -391,7 +390,7 @@ impl ModelConfig {
                         provider_name: provider_name.to_string(),
                     })
                 })?;
-                let request = self.filter_content_blocks(request, model_name, provider);
+                let request = Self::filter_content_blocks(request, model_name, provider);
                 let model_provider_request = ModelProviderRequest {
                     request: &request,
                     model_name,
@@ -483,7 +482,7 @@ impl ModelConfig {
                         provider_name: provider_name.to_string(),
                     })
                 })?;
-                let request = self.filter_content_blocks(request, model_name, provider);
+                let request = Self::filter_content_blocks(request, model_name, provider);
                 let model_provider_request = ModelProviderRequest {
                     request: &request,
                     model_name,
