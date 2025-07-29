@@ -32,7 +32,9 @@ use super::validate_tags;
 ///
 /// This is the amount of time we want to wait after the target was supposed to have been written
 /// before we decide that the target was actually not written because we can't find it in the database.
-const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_millis(5100);
+/// This should really be read at 5000ms but since there might be some jitter we want to make sure there's
+/// a read at ~5s
+const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_millis(6000);
 /// Since we can't be sure that an inference actually completed when the ID says it was
 /// (the ID is generated at the start of the inference), we wait a minimum amount of time
 /// before we decide that the target was actually not written because we can't find it in the database.
