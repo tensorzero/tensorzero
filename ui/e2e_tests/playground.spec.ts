@@ -100,7 +100,10 @@ test("playground should work for extract_entities JSON function with 2 variants"
 test("playground should work for image_judger function with images in input", async ({
   page,
 }) => {
-  await page.goto("/playground?limit=2");
+  // We set 'limit=1' so that we don't make parallel inference requests
+  // (two of the datapoints have the sample input, and could trample on each other's
+  // cache entries)
+  await page.goto("/playground?limit=1");
   await expect(page.getByText("Select a function")).toBeVisible();
 
   // Select function 'image_judger' by typing in the combobox
