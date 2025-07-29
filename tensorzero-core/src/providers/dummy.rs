@@ -118,7 +118,7 @@ impl DummyProvider {
                     created,
                     content: vec![chunk],
                     usage: None,
-                    raw_response: "".to_string(),
+                    raw_response: String::new(),
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                     finish_reason: None,
                 })
@@ -128,7 +128,7 @@ impl DummyProvider {
                 content: vec![],
                 usage: Some(self.get_model_usage(total_tokens)),
                 finish_reason: Some(FinishReason::Stop),
-                raw_response: "".to_string(),
+                raw_response: String::new(),
                 latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
             })))
             .throttle(std::time::Duration::from_millis(10));
@@ -230,7 +230,7 @@ pub static DUMMY_STREAMING_TOOL_RESPONSE: [&str; 5] = [
 ];
 
 pub static DUMMY_STREAMING_JSON_RESPONSE: [&str; 5] =
-    [r#"{"name""#, r#":"John""#, r#","age""#, r#":30"#, r#"}"#];
+    [r#"{"name""#, r#":"John""#, r#","age""#, r":30", r"}"];
 
 pub static DUMMY_RAW_REQUEST: &str = "raw request";
 
@@ -528,9 +528,10 @@ impl InferenceProvider for DummyProvider {
         };
         let system = request.system.clone();
         let input_messages = request.messages.clone();
-        let finish_reason = match self.model_name.contains("tool") {
-            true => Some(FinishReason::ToolCall),
-            false => Some(FinishReason::Stop),
+        let finish_reason = if self.model_name.contains("tool") {
+            Some(FinishReason::ToolCall)
+        } else {
+            Some(FinishReason::Stop)
         };
         Ok(ProviderInferenceResponse {
             id,
@@ -631,9 +632,10 @@ impl InferenceProvider for DummyProvider {
         };
 
         let content_chunk_len = content_chunks.len();
-        let finish_reason = match is_tool_call {
-            true => Some(FinishReason::ToolCall),
-            false => Some(FinishReason::Stop),
+        let finish_reason = if is_tool_call {
+            Some(FinishReason::ToolCall)
+        } else {
+            Some(FinishReason::Stop)
         };
         let split_tool_name = self.model_name == "tool_split_name";
         let slow_second_chunk = self.model_name == "slow_second_chunk";
@@ -691,7 +693,7 @@ impl InferenceProvider for DummyProvider {
                     content: vec![],
                     usage: Some(self.get_model_usage(content_chunk_len as u32)),
                     finish_reason,
-                    raw_response: "".to_string(),
+                    raw_response: String::new(),
                     latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
                 })))
                 .throttle(std::time::Duration::from_millis(10)),

@@ -1,16 +1,9 @@
 import { data, type RouteHandle } from "react-router";
 import { useEffect, useState } from "react";
-import type {
-  SFTJob,
-  SFTJobStatus,
-} from "~/utils/supervised_fine_tuning/common";
 import { useRevalidator } from "react-router";
 import { redirect } from "react-router";
 import { useConfig } from "~/context/config";
-import {
-  dump_provider_config,
-  get_fine_tuned_provider_config,
-} from "~/utils/config/models";
+import { dump_optimizer_output } from "~/utils/config/models";
 import type { Route } from "./+types/route";
 import FineTuningStatus from "./FineTuningStatus";
 import { SFTForm } from "./SFTForm";
@@ -19,28 +12,44 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import { SFTFormValuesSchema } from "./types";
-import { launch_sft_job } from "~/utils/supervised_fine_tuning/client";
+import { SFTFormValuesSchema, type SFTFormValues } from "./types";
+import {
+  launch_sft_job,
+  poll_sft_job,
+} from "~/utils/supervised_fine_tuning/client";
 import { Badge } from "~/components/ui/badge";
 import { ModelBadge } from "~/components/model/ModelBadge";
+import type {
+  OptimizationJobHandle,
+  OptimizationJobInfo,
+} from "tensorzero-node";
 
 export const handle: RouteHandle = {
   crumb: () => ["Supervised Fine-Tuning"],
 };
 
+export interface JobInfo {
+  formData: SFTFormValues;
+  handle: OptimizationJobHandle;
+}
+
 // Mutable store mapping job IDs to their info
-export const jobStore: { [jobId: string]: SFTJob } = {};
+export const jobStore: { [jobId: string]: JobInfo } = {};
 
 // If there is a job_id in the URL, grab it from the job store and pull it.
-export async function loader({
-  params,
-}: Route.LoaderArgs): Promise<SFTJobStatus> {
+export async function loader({ params }: Route.LoaderArgs): Promise<{
+  jobInfo: { status: "idle" } | OptimizationJobInfo;
+  formData: SFTFormValues | null;
+  jobHandle: OptimizationJobHandle | null;
+}> {
   // for debugging ProgressIndicator without starting a real job
   const job_id = params.job_id;
 
   if (!job_id) {
     return {
-      status: "idle",
+      jobInfo: { status: "idle" },
+      formData: null,
+      jobHandle: null,
     };
   }
 
@@ -52,10 +61,12 @@ export async function loader({
   }
 
   // Poll for updates
-  const updatedJob = await storedJob.poll();
-  jobStore[job_id] = updatedJob;
-  const status = updatedJob.status();
-  return status;
+  const status = await poll_sft_job(storedJob.handle);
+  return {
+    jobInfo: status,
+    formData: storedJob.formData,
+    jobHandle: storedJob.handle,
+  };
 }
 
 // The action actually launches the fine-tuning job.
@@ -79,7 +90,10 @@ export async function action({ request }: Route.ActionArgs) {
     };
     return data({ errors }, { status: 500 });
   }
-  jobStore[validatedData.jobId] = job;
+  jobStore[validatedData.jobId] = {
+    formData: validatedData,
+    handle: job,
+  };
 
   return redirect(
     `/optimization/supervised-fine-tuning/${validatedData.jobId}`,
@@ -88,11 +102,8 @@ export async function action({ request }: Route.ActionArgs) {
 
 type LoaderData = Route.ComponentProps["loaderData"];
 
-function SupervisedFineTuningImpl(
-  props: LoaderData & {
-    status: "running" | "completed" | "idle";
-  },
-) {
+function SupervisedFineTuningImpl(props: LoaderData) {
+  const { jobInfo, formData, jobHandle } = props;
   const config = useConfig();
   const revalidator = useRevalidator();
 
@@ -102,7 +113,7 @@ function SupervisedFineTuningImpl(
 
   // If running, periodically poll for updates on the job
   useEffect(() => {
-    if (props.status === "running") {
+    if (jobInfo.status === "pending") {
       setSubmissionPhase("pending");
       const interval = setInterval(
         () => {
@@ -114,20 +125,18 @@ function SupervisedFineTuningImpl(
         clearInterval(interval);
       };
     }
-  }, [props, revalidator]);
+  }, [jobInfo, revalidator]);
 
   const finalResult =
-    props.status === "completed"
-      ? dump_provider_config(
-          props.result,
-          get_fine_tuned_provider_config(props.result, props.modelProvider),
-        )
+    jobInfo.status === "completed"
+      ? // TODO (Viraj, now): fix up the optimizer output to match E2E test
+        dump_optimizer_output(jobInfo.output)
       : null;
   if (finalResult && submissionPhase !== "complete") {
     setSubmissionPhase("complete");
   }
 
-  return props.status === "idle" ? (
+  return jobInfo.status === "idle" || !formData || !jobHandle ? (
     <PageLayout>
       <PageHeader heading="Supervised Fine-Tuning" />
       <SectionLayout>
@@ -140,27 +149,31 @@ function SupervisedFineTuningImpl(
     </PageLayout>
   ) : (
     <PageLayout>
-      <PageHeader
-        label="Supervised Fine-Tuning Job"
-        heading={props.formData.jobId}
-      >
+      <PageHeader label="Supervised Fine-Tuning Job" heading={formData?.jobId}>
         <div className="flex items-center gap-2">
           <Badge
             variant={
-              props.status === "running"
+              jobInfo.status === "pending"
                 ? "default"
-                : props.status === "completed"
+                : jobInfo.status === "completed"
                   ? "secondary"
                   : "destructive"
             }
           >
-            {props.status}
+            {jobInfo.status === "pending" ? "running" : jobInfo.status}
           </Badge>
-          <ModelBadge provider={props.modelProvider} />
+          {formData?.model.provider && (
+            <ModelBadge provider={formData.model.provider} />
+          )}
         </div>
       </PageHeader>
 
-      <FineTuningStatus status={props} result={finalResult} />
+      <FineTuningStatus
+        status={jobInfo}
+        formData={formData ?? {}}
+        result={finalResult}
+        jobHandle={jobHandle}
+      />
     </PageLayout>
   );
 }
@@ -168,12 +181,14 @@ function SupervisedFineTuningImpl(
 // Renders the fine-tuning form and status info.
 export default function SupervisedFineTuning(props: Route.ComponentProps) {
   const { loaderData } = props;
-  if (loaderData.status === "error") {
+  if (loaderData.jobInfo.status === "failed") {
     return (
       <PageLayout>
         <PageHeader heading="Supervised Fine-Tuning" />
         <SectionLayout>
-          <div className="text-sm text-red-500">Error: {loaderData.error}</div>
+          <div className="text-sm text-red-500">
+            {JSON.stringify(loaderData.jobInfo.error, null, 2)}
+          </div>
         </SectionLayout>
       </PageLayout>
     );

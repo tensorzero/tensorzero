@@ -421,31 +421,31 @@ pub fn parse_shorthand_url<'a>(
 // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations
 pub fn location_subdomain_prefix(location: &str) -> String {
     if location == "global" {
-        "".to_string()
+        String::new()
     } else {
         format!("{location}-")
     }
 }
 
 impl GCPVertexGeminiProvider {
+    pub async fn build_credentials(
+        cred_location: Option<CredentialLocation>,
+    ) -> Result<GCPVertexCredentials, Error> {
+        GCPVertexCredentials::new(
+            cred_location,
+            &DEFAULT_CREDENTIALS,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+        )
+        .await
+    }
     // Constructs a provider from a shorthand string of the form:
     // * 'projects/<project_id>/locations/<location>/publishers/google/models/XXX'
     // * 'projects/<project_id>/locations/<location>/endpoints/XXX'
     //
     // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
     pub async fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
-        let cred_location = default_api_key_location();
-        let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
-            make_gcp_sdk_credentials(PROVIDER_TYPE).await?
-        } else {
-            build_creds_caching_default_with_fn(
-                None,
-                cred_location,
-                PROVIDER_TYPE,
-                &DEFAULT_CREDENTIALS,
-                |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-            )?
-        };
+        let credentials = Self::build_credentials(None).await?;
 
         let shorthand_url = parse_shorthand_url(&project_url_path, "google")?;
         let (location, model_id, endpoint_id, model_or_endpoint_id) = match shorthand_url {
@@ -505,18 +505,7 @@ impl GCPVertexGeminiProvider {
     ) -> Result<Self, Error> {
         let default_location = default_api_key_location();
         let cred_location = api_key_location.as_ref().unwrap_or(&default_location);
-
-        let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
-            make_gcp_sdk_credentials(PROVIDER_TYPE).await?
-        } else {
-            build_creds_caching_default_with_fn(
-                api_key_location,
-                default_api_key_location(),
-                PROVIDER_TYPE,
-                &DEFAULT_CREDENTIALS,
-                |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-            )?
-        };
+        let credentials = Self::build_credentials(Some(cred_location.clone())).await?;
 
         let location_prefix = location_subdomain_prefix(&location);
 
@@ -649,26 +638,49 @@ pub enum GCPVertexCredentials {
     None,
 }
 
-impl TryFrom<(Credential, &str)> for GCPVertexCredentials {
-    type Error = Error;
+impl GCPVertexCredentials {
+    /// Helper method to build credentials for a GCP-based provider
+    /// You should call either `GCPVertexGeminiProvider::build_credentials` or
+    /// `GCPVertexAnthropicProvider::build_credentials` rather than calling this directly.
+    pub async fn new(
+        cred_location: Option<CredentialLocation>,
+        cache: &'static OnceLock<GCPVertexCredentials>,
+        default_location: CredentialLocation,
+        provider_type: &'static str,
+    ) -> Result<Self, Error> {
+        if matches!(cred_location, Some(CredentialLocation::Sdk)) {
+            make_gcp_sdk_credentials(provider_type).await
+        } else {
+            build_creds_caching_default_with_fn(
+                cred_location,
+                default_location,
+                provider_type,
+                cache,
+                |creds| build_non_sdk_credentials(creds, provider_type),
+            )
+        }
+    }
+}
 
-    fn try_from((credentials, model): (Credential, &str)) -> Result<Self, Error> {
-        match credentials {
-            Credential::FileContents(file_content) => Ok(GCPVertexCredentials::Static {
-                parsed: GCPServiceAccountCredentials::from_json_str(file_content.expose_secret())
-                    .map_err(|e| {
+fn build_non_sdk_credentials(
+    credentials: Credential,
+    provider_type: &str,
+) -> Result<GCPVertexCredentials, Error> {
+    match credentials {
+        Credential::FileContents(file_content) => Ok(GCPVertexCredentials::Static {
+            parsed: GCPServiceAccountCredentials::from_json_str(file_content.expose_secret())
+                .map_err(|e| {
                     Error::new(ErrorDetails::GCPCredentials {
                         message: format!("Failed to load GCP credentials: {e}"),
                     })
                 })?,
-                raw: file_content,
-            }),
-            Credential::Dynamic(key_name) => Ok(GCPVertexCredentials::Dynamic(key_name)),
-            Credential::Missing => Ok(GCPVertexCredentials::None),
-            _ => Err(Error::new(ErrorDetails::GCPCredentials {
-                message: format!("Invalid credential_location for {model} provider"),
-            }))?,
-        }
+            raw: file_content,
+        }),
+        Credential::Dynamic(key_name) => Ok(GCPVertexCredentials::Dynamic(key_name)),
+        Credential::Missing => Ok(GCPVertexCredentials::None),
+        _ => Err(Error::new(ErrorDetails::GCPCredentials {
+            message: format!("Invalid credential_location for {provider_type} provider"),
+        }))?,
     }
 }
 
@@ -3743,23 +3755,23 @@ mod tests {
             "universe_domain": "googleapis.com"
         }"#;
         let generic = Credential::FileContents(SecretString::from(json_content));
-        let creds = GCPVertexCredentials::try_from((generic, "GCPVertexGemini")).unwrap();
+        let creds = build_non_sdk_credentials(generic, "GCPVertexGemini").unwrap();
         assert!(matches!(creds, GCPVertexCredentials::Static { .. }));
 
         // Test Dynamic credential
         let generic = Credential::Dynamic("key_name".to_string());
-        let creds = GCPVertexCredentials::try_from((generic, "GCPVertexGemini")).unwrap();
+        let creds = build_non_sdk_credentials(generic, "GCPVertexGemini").unwrap();
         assert!(matches!(creds, GCPVertexCredentials::Dynamic(_)));
 
         // Test Missing credential
         let generic = Credential::Missing;
-        let creds = GCPVertexCredentials::try_from((generic, "GCPVertexGemini")).unwrap();
+        let creds = build_non_sdk_credentials(generic, "GCPVertexGemini").unwrap();
         assert!(matches!(creds, GCPVertexCredentials::None));
 
         // Test invalid JSON content
         let invalid_json = "invalid json";
         let generic = Credential::FileContents(SecretString::from(invalid_json));
-        let result = GCPVertexCredentials::try_from((generic, "GCPVertexGemini"));
+        let result = build_non_sdk_credentials(generic, "GCPVertexGemini");
         assert!(result.is_err());
         let err = result.unwrap_err().get_owned_details();
         assert!(
@@ -3768,7 +3780,7 @@ mod tests {
 
         // Test invalid credential type (Static)
         let generic = Credential::Static(SecretString::from("test"));
-        let result = GCPVertexCredentials::try_from((generic, "GCPVertexGemini"));
+        let result = build_non_sdk_credentials(generic, "GCPVertexGemini");
         assert!(result.is_err());
         let err = result.unwrap_err().get_owned_details();
         assert!(
@@ -4132,7 +4144,7 @@ mod tests {
             thought: false,
             thought_signature: None,
             data: FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(
-                "".to_string(),
+                String::new(),
             )),
         };
         let valid_text_part = GCPVertexGeminiResponseContentPart {

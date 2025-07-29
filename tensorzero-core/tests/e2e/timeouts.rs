@@ -51,7 +51,23 @@ async fn test_variant_timeout_non_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: slow_timeout: Variant `slow_timeout` timed out due to configured `non_streaming.total_ms` timeout (400ms)"
+            "error":"All variants failed with errors: slow_timeout: Variant `slow_timeout` timed out due to configured `non_streaming.total_ms` timeout (400ms)",
+            "error_json": {
+                "AllVariantsFailed": {
+                    "errors": {
+                        "slow_timeout": {
+                            "VariantTimeout": {
+                                "variant_name": "slow_timeout",
+                                "timeout": {
+                                    "secs": 0,
+                                    "nanos": 400000000
+                                },
+                                "streaming": false
+                            }
+                        }
+                    }
+                }
+            }
         })
     );
 }
@@ -85,7 +101,23 @@ async fn test_variant_timeout_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: slow_timeout: Variant `slow_timeout` timed out due to configured `streaming.ttft_ms` timeout (500ms)"
+            "error":"All variants failed with errors: slow_timeout: Variant `slow_timeout` timed out due to configured `streaming.ttft_ms` timeout (500ms)",
+            "error_json": {
+                "AllVariantsFailed": {
+                    "errors": {
+                        "slow_timeout": {
+                            "VariantTimeout": {
+                                "variant_name": "slow_timeout",
+                                "timeout": {
+                                    "secs": 0,
+                                    "nanos": 500000000
+                                },
+                                "streaming": true
+                            }
+                        }
+                    }
+                }
+            }
         })
     );
     assert_eq!(status, StatusCode::BAD_GATEWAY);
@@ -258,7 +290,29 @@ async fn test_model_provider_timeout_non_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: timeout: All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `non_streaming.total_ms` timeout (400ms)"
+            "error":"All variants failed with errors: timeout: All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `non_streaming.total_ms` timeout (400ms)",
+            "error_json": {
+                "AllVariantsFailed":  {
+                    "errors": {
+                        "timeout": {
+                            "ModelProvidersExhausted": {
+                                "provider_errors": {
+                                    "slow": {
+                                        "ModelProviderTimeout": {
+                                            "provider_name": "slow",
+                                            "timeout": {
+                                                "secs": 0,
+                                                "nanos": 400000000
+                                            },
+                                            "streaming": false
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         })
     );
 }
@@ -292,7 +346,29 @@ async fn test_model_provider_timeout_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: timeout: All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `streaming.ttft_ms` timeout (500ms)"
+            "error":"All variants failed with errors: timeout: All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `streaming.ttft_ms` timeout (500ms)",
+            "error_json": {
+                "AllVariantsFailed": {
+                    "errors": {
+                        "timeout": {
+                            "ModelProvidersExhausted": {
+                                "provider_errors": {
+                                    "slow": {
+                                        "ModelProviderTimeout": {
+                                            "provider_name": "slow",
+                                            "timeout": {
+                                                "secs": 0,
+                                                "nanos": 500000000
+                                            },
+                                            "streaming": true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         })
     );
     assert_eq!(status, StatusCode::BAD_GATEWAY);
@@ -606,7 +682,23 @@ async fn test_model_timeout_non_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: slow_variant: Model slow_model_timeout timed out due to configured `non_streaming.total_ms` timeout (400ms)"
+            "error":"All variants failed with errors: slow_variant: Model slow_model_timeout timed out due to configured `non_streaming.total_ms` timeout (400ms)",
+            "error_json": {
+                "AllVariantsFailed": {
+                    "errors": {
+                        "slow_variant": {
+                            "ModelTimeout": {
+                                "model_name": "slow_model_timeout",
+                                "timeout": {
+                                    "secs": 0,
+                                    "nanos": 400000000
+                                },
+                                "streaming": false
+                            }
+                        }
+                    }
+                }
+            }
         })
     );
 }
@@ -640,7 +732,23 @@ async fn test_model_timeout_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: slow_variant: Model slow_model_timeout timed out due to configured `streaming.ttft_ms` timeout (500ms)"
+            "error":"All variants failed with errors: slow_variant: Model slow_model_timeout timed out due to configured `streaming.ttft_ms` timeout (500ms)",
+            "error_json": {
+                "AllVariantsFailed": {
+                    "errors": {
+                        "slow_variant": {
+                            "ModelTimeout": {
+                                "model_name": "slow_model_timeout",
+                                "timeout": {
+                                    "secs": 0,
+                                    "nanos": 500000000
+                                },
+                                "streaming": true
+                            }
+                        }
+                    }
+                }
+            }
         })
     );
     assert_eq!(status, StatusCode::BAD_GATEWAY);

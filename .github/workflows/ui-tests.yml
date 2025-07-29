@@ -37,7 +37,7 @@ jobs:
             ./ui/fixtures/s3-fixtures
 
       - name: Setup `wasm-pack`
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+        run: npm install -g wasm-pack
 
       - name: Build minijinja WASM bindings
         working-directory: ui/app/utils/minijinja
