@@ -2,9 +2,11 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use super::{check_column_exists, check_table_exists, get_default_expression};
+use super::{check_column_exists, check_table_exists, get_default_expression, 
+    create_replacing_table_engine, create_cluster_clause};
 use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
 
 /// This migration adds a ReplacingMergeTree table TagInference.
@@ -21,8 +23,12 @@ use crate::error::{Error, ErrorDetails};
 ///
 /// Additionally, we fixed the default for the updated_at column of ChatInferenceDatapoint
 /// and JsonInferenceDatapoint to now64() from now() since now() is only second resolution.
+/// 
+/// As of the replication-aware migration system, this migration creates tables with
+/// the appropriate engine (replicated vs non-replicated) based on configuration.
 pub struct Migration0021<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub config: &'a Config,
 }
 
 const MIGRATION_ID: &str = "0021";
@@ -115,8 +121,19 @@ impl Migration for Migration0021<'_> {
             + view_offset)
             .as_secs();
 
-        let query = r"
-            CREATE TABLE IF NOT EXISTS TagInference
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        
+        let engine = create_replacing_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "TagInference",
+            Some("updated_at, is_deleted")
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS TagInference {cluster_clause}
                 (
                     key String,
                     value String,
@@ -127,11 +144,12 @@ impl Migration for Migration0021<'_> {
                     function_type Enum8('chat' = 1, 'json' = 2),
                     is_deleted Bool DEFAULT false,
                     updated_at DateTime64(6, 'UTC') DEFAULT now64()
-                ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
-                ORDER BY (key, value, inference_id)";
+                ) ENGINE = {engine}
+                ORDER BY (key, value, inference_id);"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Add the staled_at column to both datapoint tables

@@ -123,7 +123,7 @@ pub async fn setup_clickhouse(
 
     // Run ClickHouse migrations (if any) if we have a production ClickHouse connection
     if let ClickHouseConnectionInfo::Production { .. } = &clickhouse_connection_info {
-        migration_manager::run(&clickhouse_connection_info).await?;
+        migration_manager::run(&clickhouse_connection_info, config).await?;
     }
     Ok(clickhouse_connection_info)
 }

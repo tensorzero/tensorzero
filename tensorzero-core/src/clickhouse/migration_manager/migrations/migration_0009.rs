@@ -1,15 +1,21 @@
 use std::time::Duration;
 
 use crate::clickhouse::migration_manager::migration_trait::Migration;
+use crate::clickhouse::migration_manager::migrations::{
+    check_table_exists, create_table_engine, create_cluster_clause
+};
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
-
-use super::check_table_exists;
 use async_trait::async_trait;
 
 /// This migration allows us to efficiently query feedback tables by their target IDs.
+/// 
+/// As of the replication-aware migration system, this migration creates tables with
+/// the appropriate engine (replicated vs non-replicated) based on configuration.
 pub struct Migration0009<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub config: &'a Config,
 }
 
 #[async_trait]
@@ -70,21 +76,31 @@ impl Migration for Migration0009<'_> {
             + view_offset)
             .as_secs();
 
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+
         // Create the `BooleanMetricFeedbackByTargetId` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS BooleanMetricFeedbackByTargetId
+        let engine = create_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "BooleanMetricFeedbackByTargetId"
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS BooleanMetricFeedbackByTargetId {cluster_clause}
             (
                 id UUID, -- must be a UUIDv7
                 target_id UUID, -- must be a UUIDv7
                 metric_name LowCardinality(String),
                 value Bool,
                 tags Map(String, String)
-            ) ENGINE = MergeTree()
-            ORDER BY target_id;
-        ";
+            ) ENGINE = {engine}
+            ORDER BY target_id;"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
         // Create the materialized view for the `BooleanMetricFeedbackByTargetId` table from BooleanMetricFeedback
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
@@ -114,20 +130,25 @@ impl Migration for Migration0009<'_> {
             .await?;
 
         // Create the `CommentFeedbackByTargetId` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS CommentFeedbackByTargetId
+        let engine = create_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "CommentFeedbackByTargetId"
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS CommentFeedbackByTargetId {cluster_clause}
             (
                 id UUID, -- must be a UUIDv7
                 target_id UUID, -- must be a UUIDv7
                 target_type Enum('inference' = 1, 'episode' = 2),
                 value String,
                 tags Map(String, String)
-            ) ENGINE = MergeTree()
-            ORDER BY target_id;
-        ";
+            ) ENGINE = {engine}
+            ORDER BY target_id;"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Create the materialized view for the `CommentFeedbackByTargetId` table from CommentFeedback
@@ -153,19 +174,24 @@ impl Migration for Migration0009<'_> {
             .await?;
 
         // Create the `DemonstrationFeedbackByInferenceId` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS DemonstrationFeedbackByInferenceId
+        let engine = create_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "DemonstrationFeedbackByInferenceId"
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS DemonstrationFeedbackByInferenceId {cluster_clause}
             (
                 id UUID, -- must be a UUIDv7
                 inference_id UUID, -- must be a UUIDv7
                 value String,
                 tags Map(String, String)
-            ) ENGINE = MergeTree()
-            ORDER BY inference_id;
-        ";
+            ) ENGINE = {engine}
+            ORDER BY inference_id;"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Create the materialized view for the `DemonstrationFeedbackByInferenceId` table from DemonstrationFeedback
@@ -190,20 +216,25 @@ impl Migration for Migration0009<'_> {
             .await?;
 
         // Create the `FloatMetricFeedbackByTargetId` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS FloatMetricFeedbackByTargetId
+        let engine = create_table_engine(
+            self.config.clickhouse.replication_enabled,
+            &self.config.clickhouse.cluster_name,
+            "FloatMetricFeedbackByTargetId"
+        );
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS FloatMetricFeedbackByTargetId {cluster_clause}
            (
                id UUID, -- must be a UUIDv7
                target_id UUID, -- must be a UUIDv7
                metric_name LowCardinality(String),
                value Float32,
                tags Map(String, String)
-           ) ENGINE = MergeTree()
-           ORDER BY target_id;
-       ";
+           ) ENGINE = {engine}
+           ORDER BY target_id;"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Create the materialized view for the `FloatMetricFeedbackByTargetId` table from FloatMetricFeedback

@@ -36,35 +36,41 @@ use migrations::migration_0030::Migration0030;
 use migrations::migration_0031::Migration0031;
 use migrations::migration_0032::Migration0032;
 use migrations::migration_0033::Migration0033;
+use migrations::migration_0034::Migration0034;
 use serde::{Deserialize, Serialize};
 
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
 /// will panic if they don't match.
-pub const NUM_MIGRATIONS: usize = 27;
+pub const NUM_MIGRATIONS: usize = 28;
 
 /// Constructs (but does not run) a vector of all our database migrations.
 /// This is the single source of truth for all migration - it's used during startup to migrate
 /// the database, and in our ClickHouse tests to verify that the migrations apply correctly
 /// to a fresh database.
+/// 
+/// Migrations are now config-aware and will create tables with the appropriate engine
+/// (replicated vs non-replicated) based on the configuration. Migration0034 handles the
+/// conversion of existing non-replicated tables to replicated engines for upgrades.
 pub fn make_all_migrations<'a>(
     clickhouse: &'a ClickHouseConnectionInfo,
+    config: &'a crate::config_parser::Config,
 ) -> Vec<Box<dyn Migration + Send + Sync + 'a>> {
     let migrations: Vec<Box<dyn Migration + Send + Sync + 'a>> = vec![
-        Box::new(Migration0000 { clickhouse }),
+        Box::new(Migration0000 { clickhouse, config }),
         // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0010
         // Box::new(Migration0001 { clickhouse }),
-        Box::new(Migration0002 { clickhouse }),
-        Box::new(Migration0003 { clickhouse }),
+        Box::new(Migration0002 { clickhouse, config }),
+        Box::new(Migration0003 { clickhouse, config }),
         Box::new(Migration0004 { clickhouse }),
-        Box::new(Migration0005 { clickhouse }),
-        Box::new(Migration0006 { clickhouse }),
+        Box::new(Migration0005 { clickhouse, config }),
+        Box::new(Migration0006 { clickhouse, config }),
         // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0013
         // Box::new(Migration0007 { clickhouse }),
         Box::new(Migration0008 { clickhouse }),
-        Box::new(Migration0009 { clickhouse }),
+        Box::new(Migration0009 { clickhouse, config }),
         // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0013
         // Box::new(Migration0010 { clickhouse }),
-        Box::new(Migration0011 { clickhouse }),
+        Box::new(Migration0011 { clickhouse, config }),
         // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0014
         // Box::new(Migration0012 { clickhouse }),
         // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0021
@@ -72,23 +78,24 @@ pub fn make_all_migrations<'a>(
         // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0016
         // Box::new(Migration0014 { clickhouse }),
         Box::new(Migration0015 { clickhouse }),
-        Box::new(Migration0016 { clickhouse }),
+        Box::new(Migration0016 { clickhouse, config }),
         Box::new(Migration0017 { clickhouse }),
         Box::new(Migration0018 { clickhouse }),
         Box::new(Migration0019 { clickhouse }),
-        Box::new(Migration0020 { clickhouse }),
-        Box::new(Migration0021 { clickhouse }),
+        Box::new(Migration0020 { clickhouse, config }),
+        Box::new(Migration0021 { clickhouse, config }),
         Box::new(Migration0022 { clickhouse }),
         Box::new(Migration0024 { clickhouse }),
-        Box::new(Migration0025 { clickhouse }),
-        Box::new(Migration0026 { clickhouse }),
+        Box::new(Migration0025 { clickhouse, config }),
+        Box::new(Migration0026 { clickhouse, config }),
         Box::new(Migration0027 { clickhouse }),
-        Box::new(Migration0028 { clickhouse }),
+        Box::new(Migration0028 { clickhouse, config }),
         Box::new(Migration0029 { clickhouse }),
         Box::new(Migration0030 { clickhouse }),
         Box::new(Migration0031 { clickhouse }),
         Box::new(Migration0032 { clickhouse }),
-        Box::new(Migration0033 { clickhouse }),
+        Box::new(Migration0033 { clickhouse, config }),
+        Box::new(Migration0034 { clickhouse, config }),
     ];
     assert_eq!(
         migrations.len(),
@@ -98,12 +105,12 @@ pub fn make_all_migrations<'a>(
     migrations
 }
 
-pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
+pub async fn run(clickhouse: &ClickHouseConnectionInfo, config: &crate::config_parser::Config) -> Result<(), Error> {
     clickhouse.health().await?;
     // This is a no-op if the database already exists
-    clickhouse.create_database().await?;
+    clickhouse.create_database(config).await?;
 
-    let migrations = make_all_migrations(clickhouse);
+    let migrations = make_all_migrations(clickhouse, config);
 
     // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
     // The value we pass in for 'clean_start' is ignored for the first migration
