@@ -4,8 +4,4 @@ import type { UninitializedGCPVertexGeminiSFTConfig } from "./UninitializedGCPVe
 import type { UninitializedOpenAISFTConfig } from "./UninitializedOpenAISFTConfig";
 import type { UninitializedTogetherSFTConfig } from "./UninitializedTogetherSFTConfig";
 
-export type UninitializedOptimizerInfo =
-  | ({ type: "openai_sft" } & UninitializedOpenAISFTConfig)
-  | ({ type: "fireworks_sft" } & UninitializedFireworksSFTConfig)
-  | ({ type: "gcp_vertex_gemini_sft" } & UninitializedGCPVertexGeminiSFTConfig)
-  | ({ type: "together_sft" } & UninitializedTogetherSFTConfig);
+export type UninitializedOptimizerInfo = { "type": "openai_sft" } & UninitializedOpenAISFTConfig | { "type": "fireworks_sft" } & UninitializedFireworksSFTConfig | { "type": "gcp_vertex_gemini_sft" } & UninitializedGCPVertexGeminiSFTConfig | { "type": "together_sft" } & UninitializedTogetherSFTConfig;

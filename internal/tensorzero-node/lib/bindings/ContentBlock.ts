@@ -9,28 +9,20 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * Core representation of the types of content that could go into a model provider
  */
-export type ContentBlock =
-  | ({ type: "text" } & Text)
-  | ({ type: "tool_call" } & ToolCall)
-  | ({ type: "tool_result" } & ToolResult)
-  | ({ type: "file" } & FileWithPath)
-  | ({ type: "thought" } & Thought)
-  | {
-      type: "unknown";
-      /**
-       * The underlying content block to be passed to the model provider.
-       */
-      data: JsonValue;
-      /**
-       * A fully-qualified name specifying when this content block should
-       * be included in the model provider input.
-       * E.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`
-       *
-       * If set to `Some`, this is compared against the output of `fully_qualified_name` before invoking
-       * a model provider, and stripped from the input if it doesn't match.
-       * If set to `None, then this is passed to all model providers.
-       * Individual model provider implementation never need to check this field themselves -
-       * they only need to produce it with the proper `fully_qualified_name` set.
-       */
-      model_provider_name: string | null;
-    };
+export type ContentBlock = { "type": "text" } & Text | { "type": "tool_call" } & ToolCall | { "type": "tool_result" } & ToolResult | { "type": "file" } & FileWithPath | { "type": "thought" } & Thought | { "type": "unknown", 
+/**
+ * The underlying content block to be passed to the model provider.
+ */
+data: JsonValue, 
+/**
+ * A fully-qualified name specifying when this content block should
+ * be included in the model provider input.
+ * E.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`
+ *
+ * If set to `Some`, this is compared against the output of `fully_qualified_name` before invoking
+ * a model provider, and stripped from the input if it doesn't match.
+ * If set to `None, then this is passed to all model providers.
+ * Individual model provider implementation never need to check this field themselves -
+ * they only need to produce it with the proper `fully_qualified_name` set.
+ */
+model_provider_name: string | null, };

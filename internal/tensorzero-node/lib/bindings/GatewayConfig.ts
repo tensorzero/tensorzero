@@ -3,12 +3,4 @@ import type { ExportConfig } from "./ExportConfig";
 import type { ObservabilityConfig } from "./ObservabilityConfig";
 import type { TemplateFilesystemAccess } from "./TemplateFilesystemAccess";
 
-export type GatewayConfig = {
-  bind_address: string | null;
-  observability: ObservabilityConfig;
-  debug: boolean;
-  template_filesystem_access: TemplateFilesystemAccess;
-  export: ExportConfig;
-  base_path: string | null;
-  unstable_error_json: boolean;
-};
+export type GatewayConfig = { bind_address: string | null, observability: ObservabilityConfig, debug: boolean, template_filesystem_access: TemplateFilesystemAccess, export: ExportConfig, base_path: string | null, unstable_error_json: boolean, };
