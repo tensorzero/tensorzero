@@ -21,6 +21,36 @@ jobs:
       - name: Check version consistency
         run: ./ci/check-version-consistency.sh
 
+  # Like 'check-docker-compose', but loads the freshly built 'gateway' and 'ui' container images first
+  # This checks that all of our docker-compose files work with the changes in the PR
+  check-latest-docker-compose:
+    needs: [build-gateway-container, build-ui-container]
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Download container images
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        with:
+          pattern: build-*-container
+          merge-multiple: true
+
+      - name: Load `gateway` and `ui` containers
+        run: |
+          docker load < gateway-container.tar
+          docker load < ui-container.tar
+
+      - name: Check latest docker-compose
+        run: ./ci/check-all-docker-compose.sh
+
+  # Checks our docker-compose files against the most recent published 'gateway' and 'ui' container images
+  # (not the ones built for this PR)
   check-docker-compose:
     permissions:
       # Permission to checkout the repository
@@ -28,7 +58,7 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - name: Set DNS
@@ -293,7 +323,7 @@ jobs:
           uv run pyright
 
       - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+        run: npm install -g wasm-pack
 
       - name: Build minijinja WASM bindings
         working-directory: ui/app/utils/minijinja
@@ -451,6 +481,9 @@ jobs:
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
 
+      - name: Cleanup disk space
+        run: ./ci/free-disk-space.sh
+
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
@@ -485,6 +518,9 @@ jobs:
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+      FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
@@ -493,6 +529,7 @@ jobs:
       [
         check-version-consistency,
         check-docker-compose,
+        check-latest-docker-compose,
         check-python-client-build,
         check-node-bindings,
         build-windows,

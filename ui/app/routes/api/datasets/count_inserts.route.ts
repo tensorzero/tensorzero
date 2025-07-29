@@ -36,7 +36,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
  *  - count: Number of rows that would be inserted
  *  - isLoading: Whether the count is currently being fetched
  */
-export function useDatasetCountFetcher(
+export function useDatasetInsertCountFetcher(
   control: Control<DatasetBuilderFormValues>,
 ): {
   count: number | null;
