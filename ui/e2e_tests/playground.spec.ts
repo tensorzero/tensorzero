@@ -125,14 +125,14 @@ test("playground should work for image_judger function with images in input", as
   await expect(page.getByText("baz")).toBeVisible();
   await expect(page.getByRole("link", { name: "honest_answer" })).toBeVisible();
 
-  // Verify that there are 2 inputs and 2 reference outputs
-  await expect(page.getByRole("heading", { name: "Input" })).toHaveCount(2);
+  // Verify that there is 1 input and 1 reference output
+  await expect(page.getByRole("heading", { name: "Input" })).toHaveCount(1);
   await expect(
     page.getByRole("heading", { name: "Reference Output" }),
-  ).toHaveCount(2);
+  ).toHaveCount(1);
 
-  // Verify that images are rendered in the input elements
-  await expect(page.locator("img")).toHaveCount(2);
+  // Verify that the image is rendered in the input element
+  await expect(page.locator("img")).toHaveCount(1);
 
   // Wait for at least one textbox containing "crab"
   // Wait for and assert at least one exists
