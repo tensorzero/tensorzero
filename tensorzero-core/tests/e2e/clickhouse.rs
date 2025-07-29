@@ -569,6 +569,7 @@ async fn test_clickhouse_migration_manager() {
     clickhouse.create_database().await.unwrap();
     let migrations = make_all_migrations(&clickhouse);
     let initial_clean_start = Cell::new(true);
+    let manual_run = clickhouse.is_cluster_configured();
     // This runs all migrations up to and including the given migration number,
     // verifying that only the most recent migration is actually applied.
     let run_migrations_up_to = |migration_num: usize, logs_contain: fn(&str) -> bool| {
@@ -582,7 +583,7 @@ async fn test_clickhouse_migration_manager() {
                     clickhouse,
                     migration: migration.as_ref(),
                     clean_start: false,
-                    manual_run: false,
+                    manual_run,
                     is_replicated: false,
                 })
                 .await
@@ -608,7 +609,7 @@ async fn test_clickhouse_migration_manager() {
                     migration: migrations[migration_num].as_ref(),
                     clean_start: initial_clean_start.get(),
                     is_replicated: false,
-                    manual_run: false,
+                    manual_run,
                 })
                 .await
                 .unwrap()
@@ -847,6 +848,10 @@ async fn test_deployment_id_oldest() {
 async fn test_concurrent_clickhouse_migrations() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
     let clickhouse = Arc::new(clickhouse);
+    if clickhouse.is_cluster_configured() {
+        // We can't run concurrent migrations on a cluster.
+        return;
+    }
     let num_concurrent_starts = 50;
     let mut handles = Vec::with_capacity(num_concurrent_starts);
     for _ in 0..num_concurrent_starts {

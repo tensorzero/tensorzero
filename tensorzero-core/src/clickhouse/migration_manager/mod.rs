@@ -4,6 +4,7 @@ pub mod migrations;
 use std::time::{Duration, Instant};
 
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::NonStreamingTimeouts;
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails};
 use crate::serde_util::deserialize_u64;
@@ -294,6 +295,7 @@ pub async fn run_migration(
         let migration_name = migration.name();
 
         if is_replicated && !manual_run {
+            todo!("figure out what the command should be and put it in the message");
             return Err(ErrorDetails::ClickHouseMigration { id: migration_name, message: "Migrations must be run manually if using a replicated ClickHouse cluster. Please run TODO.".to_string() }.into());
         }
 
