@@ -35,7 +35,6 @@ function ResponseColumn({
     <div className="flex flex-1 flex-col">
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
-        {children}
       </div>
       {errorMessage ? (
         <div className="flex-1">
@@ -63,17 +62,20 @@ function ResponseColumn({
               </div>
             )}
 
-            {response.usage && (
-              <div className="mt-4">
-                <h4 className="mb-1 text-xs font-semibold">Usage</h4>
-                <p className="text-xs">
-                  Input tokens: {response.usage.input_tokens}
-                </p>
-                <p className="text-xs">
-                  Output tokens: {response.usage.output_tokens}
-                </p>
-              </div>
-            )}
+            <div className="mt-4 grid grid-cols-2 justify-end gap-4">
+              {response.usage && (
+                <div>
+                  <h4 className="mb-1 text-xs font-semibold">Usage</h4>
+                  <p className="text-xs">
+                    Input tokens: {response.usage.input_tokens}
+                  </p>
+                  <p className="text-xs">
+                    Output tokens: {response.usage.output_tokens}
+                  </p>
+                </div>
+              )}
+              <div className="flex justify-end">{children}</div>
+            </div>
           </>
         )
       )}
