@@ -70,13 +70,14 @@ export function getEnv(): Env {
 
 export function getExtraInferenceOptions(): object {
   if (getEnv().TENSORZERO_FORCE_CACHE_ON) {
+    console.warn("TENSORZERO_FORCE_CACHE_ON is set");
     return {
       cache_options: {
         enabled: 'on',
       },
     };
   }
-  return {};
+  throw new Error("TENSORZERO_FORCE_CACHE_ON is not set");
 }
 
 function getClickhouseUrl() {
