@@ -39,9 +39,8 @@ export function ModelSelector({
       const newModels = [...initialModels];
 
       // Pick all providers from the schema
-      const providers = (
-        ModelOptionSchema.shape.provider.options as ModelOption["provider"][]
-      );
+      const providers = ModelOptionSchema.shape.provider
+        .options as ModelOption["provider"][];
 
       providers.forEach((provider) => {
         const modelExists = initialModels.some(
