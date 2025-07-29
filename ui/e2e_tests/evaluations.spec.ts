@@ -33,8 +33,15 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
     page.getByText("Select evaluation runs to compare..."),
   ).toBeVisible();
   // Wait for evals to start, then wait for them to finish
-  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute("data-running", "true");
-  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute("data-running", "false", {timeout: 500_000});
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
+    "data-running",
+    "true",
+  );
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
+    "data-running",
+    "false",
+    { timeout: 500_000 },
+  );
   await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
   await expect(page.getByText("n=", { exact: false }).first()).toBeVisible();
 
@@ -70,8 +77,15 @@ test("push the new run button, launch an image evaluation", async ({
   ).toBeVisible();
 
   // Wait for evals to start, then wait for them to finish
-  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute("data-running", "true");
-  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute("data-running", "false", {timeout: 500_000});
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
+    "data-running",
+    "true",
+  );
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
+    "data-running",
+    "false",
+    { timeout: 500_000 },
+  );
 
   await expect(page.getByText("matches_reference")).toBeVisible();
   await expect(page.getByText("n=", { exact: false }).first()).toBeVisible();
