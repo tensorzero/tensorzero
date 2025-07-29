@@ -11,6 +11,7 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
   TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+  GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp_jwt_key.json
 
 jobs:
   optimization-tests:
@@ -20,6 +21,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Write GCP JWT key to file
+        env:
+          GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+        run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable

@@ -51,7 +51,7 @@ use crate::providers::openai::check_api_base_suffix;
 use crate::tool::ToolCall;
 
 const PROVIDER_NAME: &str = "TGI";
-const PROVIDER_TYPE: &str = "tgi";
+pub const PROVIDER_TYPE: &str = "tgi";
 
 fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("TGI_API_KEY".to_string())
@@ -132,6 +132,10 @@ impl TGICredentials {
 }
 
 impl WrappedProvider for TGIProvider {
+    fn thought_block_provider_type_suffix(&self) -> Cow<'static, str> {
+        Cow::Borrowed("tgi")
+    }
+
     fn make_body<'a>(
         &'a self,
         ModelProviderRequest {
@@ -434,11 +438,12 @@ impl<'a> TGIRequest<'a> {
             tracing::warn!("TGI does not support JSON mode. Ignoring JSON mode. Consider using `json_mode = \"implicit_tool\"` instead.");
         }
 
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
 
         let messages = prepare_openai_messages(

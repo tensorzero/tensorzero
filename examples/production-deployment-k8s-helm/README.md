@@ -96,6 +96,16 @@ The following table lists the configurable parameters of the chart and their def
 | `ui.ingress.className`  | UI ingress class         | `traefik-ingress-controller-v3` |
 | `ui.ingress.hosts`      | UI ingress hosts         | `tensorzero-ui.local`           |
 
+### Persistence Configuration
+
+| Parameter                    | Description                | Default                         |
+| ---------------------------- | -------------------------- | ------------------------------- |
+| `persistence.enabled`        | Enable persistent storage  | `false`                         |
+| `persistence.size`           | Storage size               | `10Gi`                          |
+| `persistence.accessModes`    | Access modes               | `["ReadWriteOnce"]`             |
+| `persistence.storageClass`   | Storage class name         | `""`                            |
+| `persistence.mountPath`      | Mount path in containers   | `/app/storage`                  |
+
 ### ClickHouse Configuration
 
 This chart requires a ClickHouse instance for observability. We recommend using Altinity's ClickHouse Helm chart, which offers better cross-platform support (including ARM64 architecture).

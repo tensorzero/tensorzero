@@ -42,7 +42,7 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 #[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Bedrock";
-const PROVIDER_TYPE: &str = "aws_bedrock";
+pub const PROVIDER_TYPE: &str = "aws_bedrock";
 
 // NB: If you add `Clone` someday, you'll need to wrap client in Arc
 #[derive(Debug, Serialize)]

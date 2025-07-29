@@ -539,6 +539,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 content.push(ContentBlockOutput::Thought(Thought {
                     text: Some(reasoning),
                     signature: None,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             if !clean_text.is_empty() {
@@ -664,6 +665,7 @@ fn together_to_tensorzero_chunk(
                                 text: Some(text),
                                 signature: None,
                                 id: thinking_state.get_id(),
+                                provider_type: Some(PROVIDER_TYPE.to_string()),
                             }));
                         }
                     }
@@ -960,6 +962,7 @@ mod tests {
             ContentBlockOutput::Thought(Thought {
                 text: Some("hmmm".to_string()),
                 signature: None,
+                provider_type: Some("together".to_string()),
             })
         );
         assert_eq!(
@@ -1005,6 +1008,7 @@ mod tests {
             ContentBlockOutput::Thought(Thought {
                 text: Some("hmmm".to_string()),
                 signature: None,
+                provider_type: Some("together".to_string()),
             })
         );
         assert_eq!(
@@ -1471,6 +1475,7 @@ mod tests {
                 text: Some("some thinking content".to_string()),
                 signature: None,
                 id: "1".to_string(),
+                provider_type: Some("together".to_string()),
             })]
         );
         assert!(matches!(thinking_state, ThinkingState::Thinking));

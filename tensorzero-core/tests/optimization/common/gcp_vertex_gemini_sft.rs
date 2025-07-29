@@ -1,10 +1,13 @@
-use crate::{optimization_test_case, OptimizationTestCase};
-use tensorzero_core::optimization::{
-    gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig, UninitializedOptimizerConfig,
-    UninitializedOptimizerInfo,
+use crate::common::OptimizationTestCase;
+use tensorzero_core::{
+    model::CredentialLocation,
+    optimization::{
+        gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig, UninitializedOptimizerConfig,
+        UninitializedOptimizerInfo,
+    },
 };
 
-struct GCPVertexGeminiSFTTestCase();
+pub struct GCPVertexGeminiSFTTestCase();
 
 impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {
     fn supports_image_data(&self) -> bool {
@@ -24,7 +27,7 @@ impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {
                     adapter_size: None,
                     n_epochs: Some(1),
                     export_last_checkpoint_only: None,
-                    credentials: None,
+                    credentials: Some(CredentialLocation::Sdk),
                     seed: None,
                     api_base: if use_mock_inference_provider {
                         Some("http://localhost:3030/gcp_vertex_gemini/".parse().unwrap())
@@ -43,5 +46,3 @@ impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {
         }
     }
 }
-
-optimization_test_case!(gcp_vertex_gemini_sft, GCPVertexGeminiSFTTestCase());

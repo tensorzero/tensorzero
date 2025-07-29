@@ -31,7 +31,11 @@ default-filter = 'test(batch)'
 default-filter = 'test(test_dummy_only) | test(clickhouse)'
 
 [profile.optimization]
-default-filter = 'test(slow_optimization)'
+default-filter = 'binary(optimization-live)'
+
+[profile.optimization-mock]
+default-filter = 'binary(optimization-mock)'
+
 
 [[profile.optimization.overrides]]
 # Settings for running optimization tests
