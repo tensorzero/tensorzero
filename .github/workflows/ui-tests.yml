@@ -5,7 +5,8 @@ on:
 
 jobs:
   ui-tests:
-    runs-on: namespace-profile-tensorzero-8x16
+    # We're only using namespace here so that we can download the container artifacts
+    runs-on: namespace-profile-tensorzero-2x8
 
     strategy:
       matrix:
