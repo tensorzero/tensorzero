@@ -110,7 +110,8 @@ services:
     depends_on:
       clickhouse-01:
         condition: service_healthy
-    command: ["--default-config"]
+    entrypoint: /bin/bash
+    command: -c "gateway --run-migrations && gateway --default-config"
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
     healthcheck:

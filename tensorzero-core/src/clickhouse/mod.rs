@@ -431,14 +431,44 @@ impl ClickHouseConnectionInfo {
         match self {
             Self::Disabled => Ok(true),
             Self::Mock { .. } => Ok(true),
-            Self::Production { .. } => {
-                let response = self
-                    .run_query_synchronous(
-                        "SELECT COUNT() FROM system.databases WHERE name={name:String}".to_string(),
-                        &HashMap::from([("name", self.database())]),
-                    )
-                    .await?;
-                let count: u8 = response.response.trim().parse().map_err(|e| {
+            Self::Production {
+                client,
+                database_url,
+                ..
+            } => {
+                let database_url = Url::parse(database_url.expose_secret()).map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: "Invalid ClickHouse database URL".to_string(),
+                    })
+                })?;
+                let mut base_url = database_url.clone();
+                let query_pairs = database_url
+                    .query_pairs()
+                    .filter(|(key, _)| key != "database");
+                base_url
+                    .query_pairs_mut()
+                    .clear()
+                    .extend_pairs(query_pairs)
+                    .append_pair("param_name", self.database())
+                    .finish();
+                let query =
+                    "SELECT COUNT() FROM system.databases WHERE name={name:String}".to_string();
+                let response = client
+                    .post(base_url)
+                    .body(query)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseQuery {
+                            message: e.to_string(),
+                        })
+                    })?;
+                let text = response.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: format!("Failed to fetch response text: {e}"),
+                    })
+                })?;
+                let count: u8 = text.trim().parse().map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
                         message: format!("Failed to parse count response as u8: {e}"),
                     })

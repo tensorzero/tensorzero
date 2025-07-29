@@ -103,7 +103,7 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo, manual_run: bool) -> Res
     clickhouse.health().await?;
     let database_exists = clickhouse.check_database_exists().await?;
     if !database_exists {
-        if clickhouse.is_cluster_configured() {
+        if clickhouse.is_cluster_configured() && !manual_run {
             let database = clickhouse.database();
             return Err(ErrorDetails::ClickHouseConfiguration {
                 message: format!("Database {database} does not exist. We do not automatically run migrations to create and set it up when replication is configured. Please run `{RUN_MIGRATIONS_DOCKER_COMMAND}`."),

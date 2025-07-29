@@ -800,6 +800,7 @@ async fn test_clean_clickhouse_start() {
             .await
             .unwrap()
             .response;
+        println!("create_table_info: {}", create_table_info);
         // We only need to worry about MergeTree tables when checking replication
         if !create_table_info.contains("MergeTree") {
             continue;
