@@ -2,12 +2,16 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
   "name": "TensorZero Docs",
+  "description": "TensorZero is an open-source stack for industrial-grade LLM applications that unifies an LLM gateway, observability, optimization, evaluation, and experimentation.",
   "colors": {
     "primary": "#FF4F00",
     "light": "#FFB56D",
     "dark": "#FF4F00"
   },
   "favicon": "/favicon.svg",
+  "contextual": {
+    "options": ["copy", "view", "chatgpt", "claude"]
+  },
   "navigation": {
     "tabs": [
       {
@@ -67,18 +71,23 @@
       "anchors": [
         {
           "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
+          "href": "https://www.tensorzero.com/docs",
           "icon": "book-open-cover"
         },
         {
-          "anchor": "Community",
-          "href": "https://mintlify.com/community",
+          "anchor": "Blog",
+          "href": "https://www.tensorzero.com/blog",
+          "icon": "newspaper"
+        },
+        {
+          "anchor": "Slack",
+          "href": "https://www.tensorzero.com/slack",
           "icon": "slack"
         },
         {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
+          "anchor": "Discord",
+          "href": "https://www.tensorzero.com/discord",
+          "icon": "discord"
         }
       ]
     }
