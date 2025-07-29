@@ -16,6 +16,7 @@ model = "nvidia_nim::llama-3.1-8b-instruct"
 
 Additionally, you can set model_name in the inference request to use a specific NVIDIA NIM model, without having to configure a function and variant in TensorZero.
 
+```bash
 curl -X POST http://localhost:3000/inference \
   -H "Content-Type: application/json" \
   -d '{
@@ -29,32 +30,74 @@ curl -X POST http://localhost:3000/inference \
       ]
     }
   }'
+```
 
+## Advanced Setup
 In more complex scenarios (e.g. fallbacks, custom credentials), you can configure your own model and NVIDIA NIM provider in TensorZero.
 
 For this minimal setup, you'll need just two files in your project directory:
-
+```
 Directory config/
   tensorzero.toml
 docker-compose.yml
+```
 
-See the list of models available on NVIDIA NIM. (https://build.nvidia.com/explore/discover)
+## Configuration
 
-Credentials
-You must set the NVIDIA_API_KEY environment variable before running the gateway.
+Create a minimal configuration file that defines a model and a simple chat function:
 
-You can customize the credential location by setting the api_key_location to env::YOUR_ENVIRONMENT_VARIABLE or dynamic::ARGUMENT_NAME. See the Credential Management guide and Configuration Reference for more information.
+**config/tensorzero.toml**
+```toml
+[models.llama_3_1_8b_instruct]
+routing = ["nvidia_nim"]
 
-Deployment (Docker Compose)
+[models.llama_3_1_8b_instruct.providers.nvidia_nim]
+type = "nvidia_nim"
+model_name = "llama-3.1-8b-instruct"
+
+[functions.my_function_name]
+type = "chat"
+
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "llama_3_1_8b_instruct"
+```
+See the list of models available on [NVIDIA NIM](https://build.nvidia.com/explore/discover).
+
+## Credentials
+
+- You must set the NVIDIA_API_KEY environment variable before running the gateway.
+- You can customize the credential location by setting the api_key_location to env::YOUR_ENVIRONMENT_VARIABLE or dynamic::ARGUMENT_NAME. See the Credential Management guide and Configuration Reference for more information.
+
+## Deployment (Docker Compose)
 Create a minimal Docker Compose configuration:
+
+**docker-compose.yml**
+```yaml
+# This is a simplified example for learning purposes. Do not use this in production.
+# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+
+services:
+  gateway:
+    image: tensorzero/gateway
+    volumes:
+      - ./config:/app/config:ro
+    command: --config-file /app/config/tensorzero.toml
+    environment:
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:?Environment variable NVIDIA_API_KEY must be set.}
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+```
 
 You can start the gateway with:
 
-docker compose up.
+`docker compose up`
 
-Inference
+## Inference
 Make an inference request to the gateway:
-
+```bash
 curl -X POST http://localhost:3000/inference \
   -H "Content-Type: application/json" \
   -d '{
@@ -68,27 +111,29 @@ curl -X POST http://localhost:3000/inference \
       ]
     }
   }'
+```
 
-Prerequisites
+## Prerequisites
 Before running this example, make sure you have:
 
-Docker and Docker Compose installed
-An NVIDIA API key from NVIDIA Build
-Set your API key as an environment variable: export NVIDIA_API_KEY=your_api_key_here
+- Docker and Docker Compose installed
+- An NVIDIA API key from [NVIDIA Build](https://build.nvidia.com/)
+- Set your API key as an environment variable: `export NVIDIA_API_KEY=your_api_key_here`
 
 
-Quick Start
-Clone or create this directory structure
-Set your NVIDIA API key: export NVIDIA_API_KEY=your_api_key_here
-Run docker compose up
-Make inference requests to http://localhost:3000/inference
+## Quick Start
+- Clone or create this directory structure
+- Set your NVIDIA API key: `export NVIDIA_API_KEY=your_api_key_here`
+- Run `docker compose up`
+- Make inference requests to `http://localhost:3000/inference`
 
-Available Models
+## Available Models
 Some popular NVIDIA NIM models include:
 
-llama-3.1-8b-instruct - Llama 3.1 8B Instruct model
-llama-3.1-70b-instruct - Llama 3.1 70B Instruct model
-llama-3.1-405b-instruct - Llama 3.1 405B Instruct model
-mistral-7b-instruct-v0.3 - Mistral 7B Instruct v0.3
-mixtral-8x7b-instruct-v0.1 - Mixtral 8x7B Instruct v0.1
-For a complete list, visit NVIDIA Build.
+- llama-3.1-8b-instruct - Llama 3.1 8B Instruct model
+- llama-3.1-70b-instruct - Llama 3.1 70B Instruct model
+- llama-3.1-405b-instruct - Llama 3.1 405B Instruct model
+- mistral-7b-instruct-v0.3 - Mistral 7B Instruct v0.3
+- mixtral-8x7b-instruct-v0.1 - Mixtral 8x7B Instruct v0.1
+
+For a complete list, visit [NVIDIA Build](https://build.nvidia.com/explore/discover).
