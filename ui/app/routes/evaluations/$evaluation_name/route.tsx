@@ -1,5 +1,5 @@
 import type { Route } from "./+types/route";
-import { getConfig } from "~/utils/config/index.server";
+import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import {
   getEvaluationStatistics,
   getEvaluationResults,
@@ -42,7 +42,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     );
   }
   const function_name = evaluationConfig.function_name;
-  const function_type = config.functions[function_name]?.type;
+  const functionConfig = await getFunctionConfig(function_name, config);
+  const function_type = functionConfig?.type;
   if (!function_type) {
     throw data(`Function config not found for function ${function_name}`, {
       status: 404,

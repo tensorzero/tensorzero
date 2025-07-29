@@ -2,7 +2,6 @@ use jsonschema::Validator;
 use serde::Serialize;
 use serde_json::Value;
 use std::fs;
-use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
 use tracing::instrument;
@@ -70,9 +69,9 @@ impl Default for StaticJSONSchema {
 impl StaticJSONSchema {
     /// Just instantiates the struct, does not load the schema
     /// You should call `load` to load the schema
-    pub fn from_path<P: AsRef<Path>>(path: TomlRelativePath, base_path: P) -> Result<Self, Error> {
-        let path = base_path.as_ref().join(path.path());
-        let content = fs::read_to_string(&path).map_err(|e| {
+    pub fn from_path(path: TomlRelativePath) -> Result<Self, Error> {
+        let path = path.path();
+        let content = fs::read_to_string(path).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
                 message: format!("Failed to read JSON Schema `{}`: {}", path.display(), e),
             })
@@ -211,7 +210,7 @@ impl DynamicJSONSchema {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{io::Write, path::PathBuf};
+    use std::io::Write;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -231,10 +230,9 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        let schema = StaticJSONSchema::from_path(
-            TomlRelativePath::new_for_tests(temp_file.path().to_owned()),
-            PathBuf::from(""),
-        )
+        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+            temp_file.path().to_owned(),
+        ))
         .expect("Failed to load schema");
 
         let instance = serde_json::json!({
@@ -279,10 +277,9 @@ mod tests {
         write!(temp_file, "{invalid_schema}")
             .expect("Failed to write invalid schema to temporary file");
 
-        let result = StaticJSONSchema::from_path(
-            TomlRelativePath::new_for_tests(temp_file.path().to_owned()),
-            PathBuf::from(""),
-        );
+        let result = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+            temp_file.path().to_owned(),
+        ));
         assert_eq!(
             result.unwrap_err().to_string(),
             format!(
@@ -294,7 +291,9 @@ mod tests {
 
     #[test]
     fn test_nonexistent_file() {
-        let result = StaticJSONSchema::from_path("nonexistent_file.json".into(), PathBuf::from(""));
+        let result = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+            "nonexistent_file.json".into(),
+        ));
         assert_eq!(
             result.unwrap_err().to_string(),
             "Failed to read JSON Schema `nonexistent_file.json`: No such file or directory (os error 2)".to_string()
