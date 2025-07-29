@@ -828,7 +828,7 @@ fn check_convert_variant_to_llm_judge_variant(
                 UninitializedLLMJudgeChatCompletionVariantConfig {
                     active: Some(false),
                     model: variant.model,
-                    system_instructions: TomlRelativePath::new_fake_path("".to_string()),
+                    system_instructions: TomlRelativePath::new_fake_path(String::new()),
                     temperature: variant.temperature,
                     top_p: variant.top_p,
                     max_tokens: variant.max_tokens,
@@ -852,7 +852,7 @@ fn check_convert_variant_to_llm_judge_variant(
                     evaluator: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
                         model: variant.evaluator.inner.model,
-                        system_instructions: TomlRelativePath::new_fake_path("".to_string()),
+                        system_instructions: TomlRelativePath::new_fake_path(String::new()),
                         temperature: variant.evaluator.inner.temperature,
                         top_p: variant.evaluator.inner.top_p,
                         max_tokens: variant.evaluator.inner.max_tokens,
@@ -877,7 +877,7 @@ fn check_convert_variant_to_llm_judge_variant(
                     fuser: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
                         model: variant.fuser.inner.model,
-                        system_instructions: TomlRelativePath::new_fake_path("".to_string()),
+                        system_instructions: TomlRelativePath::new_fake_path(String::new()),
                         temperature: variant.fuser.inner.temperature,
                         top_p: variant.fuser.inner.top_p,
                         max_tokens: variant.fuser.inner.max_tokens,
@@ -919,7 +919,7 @@ fn check_convert_variant_to_llm_judge_variant(
                     inner: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
                         model: variant.inner.model,
-                        system_instructions: TomlRelativePath::new_fake_path("".to_string()),
+                        system_instructions: TomlRelativePath::new_fake_path(String::new()),
                         temperature: variant.inner.temperature,
                         top_p: variant.inner.top_p,
                         max_tokens: variant.inner.max_tokens,

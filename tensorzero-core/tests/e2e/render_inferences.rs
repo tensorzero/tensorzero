@@ -263,7 +263,7 @@ pub async fn test_render_samples_normal() {
                                 kind: StorageKind::S3Compatible {
                                     bucket_name: Some("tensorzero-e2e-test-images".to_string()),
                                     region: Some("us-east-1".to_string()),
-                                    prefix: "".to_string(),
+                                    prefix: String::new(),
                                     endpoint: None,
                                     allow_http: None,
                                 },
@@ -802,7 +802,7 @@ pub async fn test_render_datapoints_normal() {
                                 kind: StorageKind::S3Compatible {
                                     bucket_name: Some("tensorzero-e2e-test-images".to_string()),
                                     region: Some("us-east-1".to_string()),
-                                    prefix: "".to_string(),
+                                    prefix: String::new(),
                                     endpoint: None,
                                     allow_http: None,
                                 },
