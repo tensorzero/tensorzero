@@ -1,3 +1,4 @@
+use chrono::Utc;
 use object_store::path::Path;
 use serde_json::json;
 use std::collections::HashMap;
@@ -55,7 +56,9 @@ pub async fn test_render_samples_no_function() {
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
         tool_params: ToolCallConfigDatabaseInsert::default(),
+        timestamp: Utc::now(),
         dispreferred_outputs: vec![],
+        tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
     })];
 
     let rendered_inferences = client
@@ -89,7 +92,9 @@ pub async fn test_render_samples_no_variant() {
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
         tool_params: ToolCallConfigDatabaseInsert::default(),
+        timestamp: Utc::now(),
         dispreferred_outputs: vec![],
+        tags: HashMap::new(),
     })];
 
     let error = client
@@ -131,7 +136,9 @@ pub async fn test_render_samples_missing_variable() {
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
         tool_params: ToolCallConfigDatabaseInsert::default(),
+        timestamp: Utc::now(),
         dispreferred_outputs: vec![],
+        tags: HashMap::new(),
     })];
 
     let rendered_inferences = client
@@ -168,7 +175,9 @@ pub async fn test_render_samples_normal() {
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
             tool_params: ToolCallConfigDatabaseInsert::default(),
+            timestamp: Utc::now(),
             dispreferred_outputs: vec![],
+            tags: HashMap::new(),
         }),
         StoredInference::Json(StoredJsonInference {
             function_name: "json_success".to_string(),
@@ -189,10 +198,12 @@ pub async fn test_render_samples_normal() {
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
             output_schema: json!({}), // This should be taken as-is
+            timestamp: Utc::now(),
             dispreferred_outputs: vec![JsonInferenceOutput {
                 parsed: Some(json!({})),
                 raw: Some("{}".to_string()), // This should not be validated
             }],
+            tags: HashMap::new(),
         }),
         StoredInference::Chat(StoredChatInference {
             function_name: "weather_helper".to_string(),
@@ -225,9 +236,11 @@ pub async fn test_render_samples_normal() {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
             },
+            timestamp: Utc::now(),
             dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
                 text: "Hello, world!".to_string(),
             })]],
+            tags: HashMap::new(),
         }),
         StoredInference::Chat(StoredChatInference {
             function_name: "basic_test".to_string(),
@@ -250,7 +263,7 @@ pub async fn test_render_samples_normal() {
                                 kind: StorageKind::S3Compatible {
                                     bucket_name: Some("tensorzero-e2e-test-images".to_string()),
                                     region: Some("us-east-1".to_string()),
-                                    prefix: "".to_string(),
+                                    prefix: String::new(),
                                     endpoint: None,
                                     allow_http: None,
                                 },
@@ -264,7 +277,9 @@ pub async fn test_render_samples_normal() {
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
             tool_params: ToolCallConfigDatabaseInsert::default(),
+            timestamp: Utc::now(),
             dispreferred_outputs: vec![],
+            tags: HashMap::new(),
         }),
     ];
 
@@ -432,6 +447,7 @@ pub async fn test_render_samples_template_no_schema() {
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
         function_name: "basic_test_template_no_schema".to_string(),
         variant_name: "test".to_string(),
+        timestamp: Utc::now(),
         input: ResolvedInput {
             system: Some("My system message".into()),
             messages: vec![
@@ -464,6 +480,7 @@ pub async fn test_render_samples_template_no_schema() {
         inference_id: Uuid::now_v7(),
         tool_params: ToolCallConfigDatabaseInsert::default(),
         dispreferred_outputs: vec![],
+        tags: HashMap::new(),
     })];
 
     let rendered_inferences = client
@@ -785,7 +802,7 @@ pub async fn test_render_datapoints_normal() {
                                 kind: StorageKind::S3Compatible {
                                     bucket_name: Some("tensorzero-e2e-test-images".to_string()),
                                     region: Some("us-east-1".to_string()),
-                                    prefix: "".to_string(),
+                                    prefix: String::new(),
                                     endpoint: None,
                                     allow_http: None,
                                 },

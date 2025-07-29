@@ -278,6 +278,7 @@ mod tests {
             tool_params: None,
             output_schema: None,
             dispreferred_outputs: vec![],
+            tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
         };
         let row = GCPVertexGeminiSupervisedRow::try_from(&inference).unwrap();
 

@@ -421,7 +421,7 @@ pub fn parse_shorthand_url<'a>(
 // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations
 pub fn location_subdomain_prefix(location: &str) -> String {
     if location == "global" {
-        "".to_string()
+        String::new()
     } else {
         format!("{location}-")
     }
@@ -4145,7 +4145,7 @@ mod tests {
             thought: false,
             thought_signature: None,
             data: FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(
-                "".to_string(),
+                String::new(),
             )),
         };
         let valid_text_part = GCPVertexGeminiResponseContentPart {

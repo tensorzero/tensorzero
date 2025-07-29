@@ -261,7 +261,7 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
-    use crate::config_parser::{GatewayConfig, ObservabilityConfig};
+    use crate::config_parser::{gateway::GatewayConfig, ObservabilityConfig};
 
     #[tokio::test]
     #[traced_test]
@@ -274,7 +274,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
             unstable_error_json: false,
@@ -328,7 +328,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
             unstable_error_json: false,
@@ -352,7 +352,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
             unstable_error_json: false,
@@ -378,7 +378,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: Default::default(),
             export: Default::default(),
             base_path: None,
             unstable_error_json: false,

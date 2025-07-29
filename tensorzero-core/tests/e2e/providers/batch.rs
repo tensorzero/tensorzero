@@ -514,14 +514,14 @@ async fn get_latest_batch_inference(
         .collect::<Vec<_>>()
         .join(" AND ");
 
-    let tag_filter = if !tags.is_empty() {
-        format!("AND bmi.{tag_conditions}")
-    } else {
+    let tag_filter = if tags.is_empty() {
         String::new()
+    } else {
+        format!("AND bmi.{tag_conditions}")
     };
 
     let query = format!(
-        r#"
+        r"
             SELECT DISTINCT
                 br.batch_id,
                 br.id,
@@ -543,7 +543,7 @@ async fn get_latest_batch_inference(
             ORDER BY br.timestamp DESC
             LIMIT 1
             FORMAT JSONEachRow
-        "#
+        "
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query)
