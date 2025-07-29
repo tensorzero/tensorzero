@@ -668,10 +668,16 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
 enum OpenAICompatibleContentBlock {
     Text(TextContent),
-    ImageUrl { image_url: OpenAICompatibleImageUrl },
-    File { file: OpenAICompatibleFile },
+    ImageUrl {
+        image_url: OpenAICompatibleImageUrl,
+    },
+    File {
+        file: OpenAICompatibleFile,
+    },
     #[serde(rename = "tensorzero::raw_text")]
-    RawText { value: String },
+    RawText {
+        value: String,
+    },
 }
 
 #[derive(Deserialize, Debug)]
@@ -1432,6 +1438,26 @@ mod tests {
 
     #[test]
     fn test_convert_openai_message_content() {
+        // text content
+        let content = "Hello, world!".to_string();
+        let value = convert_openai_message_content(Value::String(content.clone())).unwrap();
+        assert_eq!(
+            value,
+            vec![InputMessageContent::Text(TextKind::Text { text: content })]
+        );
+        // tensorzero::raw_text
+        let content = json!([{
+            "type": "tensorzero::raw_text",
+            "value": "This is raw text"
+        }]);
+        let value = convert_openai_message_content(content.clone()).unwrap();
+        assert_eq!(
+            value,
+            vec![InputMessageContent::RawText {
+                value: "This is raw text".to_string()
+            }]
+        );
+        // tensorzero::arguments
         let content = json!([{
             "country": "Japan",
             "city": "Tokyo",
