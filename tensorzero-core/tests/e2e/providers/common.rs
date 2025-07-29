@@ -8043,8 +8043,6 @@ pub async fn test_stop_sequences_inference_request_with_provider(
                 "deepseek",
                 "openrouter",
                 "openai",
-                "sglang",
-                "mistral",
                 "azure",
                 "groq",
                 "hyperbolic",
