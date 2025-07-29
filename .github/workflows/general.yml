@@ -454,6 +454,7 @@ jobs:
         env:
           TENSORZERO_CLICKHOUSE_CLUSTER_NAME: "tensorzero_e2e_tests_cluster"
         run: |
+          cargo run-e2e --run-migrations &&
           cargo run-e2e > e2e_logs.txt 2>&1 &
             count=0
             max_attempts=10
