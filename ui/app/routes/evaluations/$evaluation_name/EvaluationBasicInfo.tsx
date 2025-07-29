@@ -1,4 +1,4 @@
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import {
   BasicInfoLayout,
   BasicInfoItem,
@@ -14,10 +14,8 @@ interface BasicInfoProps {
 }
 
 export default function BasicInfo({ evaluation_config }: BasicInfoProps) {
-  const config = useConfig();
-
   const functionName = evaluation_config.function_name;
-  const functionConfig = config.functions[functionName];
+  const functionConfig = useFunctionConfig(functionName);
   const functionType = functionConfig?.type;
   const functionIconConfig = functionType && getFunctionTypeIcon(functionType);
 
