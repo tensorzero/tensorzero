@@ -39,7 +39,7 @@ const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_secs(5);
 const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1200);
 
 /// The expected payload is a JSON object with the following fields:
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
     // the episode ID client is providing feedback for (either this or `inference_id` must be set but not both)
@@ -489,7 +489,7 @@ impl TryFrom<DemonstrationToolCall> for ToolCall {
                     message: format!("Failed to serialize demonstration tool call arguments: {e}"),
                 })
             })?,
-            id: "".to_string(),
+            id: String::new(),
         })
     }
 }
@@ -1243,7 +1243,7 @@ mod tests {
         .unwrap();
         let expected_parsed_value =
             serde_json::to_string(&vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
-                id: "".to_string(),
+                id: String::new(),
                 name: Some("get_temperature".to_string()),
                 raw_name: "get_temperature".to_string(),
                 arguments: Some(json!({"location": "London", "unit": "celsius"})),

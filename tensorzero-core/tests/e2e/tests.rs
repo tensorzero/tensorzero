@@ -10,6 +10,7 @@ mod dynamic_evaluations;
 mod fallback;
 mod feedback;
 mod health;
+mod howdy;
 mod human_feedback;
 mod human_static_evaluation_feedback;
 mod inference;

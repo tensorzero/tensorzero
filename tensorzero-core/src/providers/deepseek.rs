@@ -51,7 +51,7 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "DeepSeek";
-const PROVIDER_TYPE: &str = "deepseek";
+pub const PROVIDER_TYPE: &str = "deepseek";
 
 #[derive(Debug)]
 pub enum DeepSeekCredentials {
@@ -303,7 +303,7 @@ enum DeepSeekResponseFormat {
 }
 
 impl DeepSeekResponseFormat {
-    fn new(json_mode: &ModelInferenceRequestJsonMode) -> Option<Self> {
+    fn new(json_mode: ModelInferenceRequestJsonMode) -> Option<Self> {
         match json_mode {
             ModelInferenceRequestJsonMode::On => Some(DeepSeekResponseFormat::JsonObject),
             // For now, we never explicitly send `DeepSeekResponseFormat::Text`
@@ -359,18 +359,19 @@ impl<'a> DeepSeekRequest<'a> {
             ..
         } = *request;
 
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
 
         if request.json_mode == ModelInferenceRequestJsonMode::Strict {
             tracing::warn!("DeepSeek provider does not support strict JSON mode. Downgrading to normal JSON mode.");
         }
 
-        let response_format = DeepSeekResponseFormat::new(&request.json_mode);
+        let response_format = DeepSeekResponseFormat::new(request.json_mode);
 
         // NOTE: as mentioned by the DeepSeek team here: https://github.com/deepseek-ai/DeepSeek-R1?tab=readme-ov-file#usage-recommendations
         // the R1 series of models does not perform well with the system prompt. As we move towards first-class support for reasoning models we should check
@@ -516,6 +517,7 @@ fn deepseek_to_tensorzero_chunk(
                 text: Some(reasoning),
                 signature: None,
                 id: "0".to_string(),
+                provider_type: Some(PROVIDER_TYPE.to_string()),
             }));
         }
         if let Some(tool_calls) = choice.delta.tool_calls {
@@ -664,6 +666,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
             content.push(ContentBlockOutput::Thought(Thought {
                 text: Some(reasoning),
                 signature: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
             }));
         }
         if let Some(text) = message.content {
@@ -970,6 +973,7 @@ mod tests {
             ContentBlockOutput::Thought(Thought {
                 text: Some("I'm thinking about the weather".to_string()),
                 signature: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
             })
         );
 

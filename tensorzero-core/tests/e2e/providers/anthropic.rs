@@ -547,12 +547,9 @@ async fn test_redacted_thinking() {
     );
     let first_block = &content_blocks[0];
     let first_block_type = first_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(first_block_type, "unknown");
-    assert_eq!(
-        first_block["model_provider_name"],
-        "tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body"
-    );
-    assert_eq!(first_block["data"]["type"], "redacted_thinking");
+    assert_eq!(first_block_type, "thought");
+    assert_eq!(first_block["_internal_provider_type"], "anthropic");
+    assert!(first_block["signature"].as_str().is_some());
 
     let second_block = &content_blocks[1];
     assert_eq!(second_block["type"], "text");
@@ -599,9 +596,9 @@ async fn test_redacted_thinking() {
     assert_eq!(content_blocks.len(), 2);
     let first_block = &content_blocks[0];
     // Check the type and content in the block
-    assert_eq!(first_block["type"], "unknown");
-    assert_eq!(first_block["data"]["type"], "redacted_thinking");
-    assert_eq!(first_block["model_provider_name"], "tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body");
+    assert_eq!(first_block["type"], "thought");
+    assert_eq!(first_block["_internal_provider_type"], "anthropic");
+    assert!(first_block["signature"].as_str().is_some());
     let second_block = &content_blocks[1];
     assert_eq!(second_block["type"], "text");
     let clickhouse_content = second_block.get("text").unwrap().as_str().unwrap();
@@ -821,10 +818,14 @@ async fn test_streaming_thinking() {
     assert_eq!(clickhouse_content_blocks[1]["type"], "text");
     assert_eq!(clickhouse_content_blocks[2]["type"], "tool_call");
 
-    assert_eq!(clickhouse_content_blocks[0]["text"], content_blocks["0"]);
     assert_eq!(
-        clickhouse_content_blocks[0]["signature"],
-        content_block_signatures["0"]
+        clickhouse_content_blocks[0],
+        serde_json::json!({
+            "type": "thought",
+            "text": content_blocks["0"],
+            "signature": content_block_signatures["0"],
+            "_internal_provider_type": "anthropic",
+        })
     );
     assert_eq!(clickhouse_content_blocks[1]["text"], content_blocks["1"]);
 
