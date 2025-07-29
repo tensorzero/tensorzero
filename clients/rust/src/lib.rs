@@ -410,8 +410,7 @@ impl Client {
                         .await
                         .map_err(err_to_http)
                 })
-                .await?
-                .0)
+                .await?)
             }
         }
     }
