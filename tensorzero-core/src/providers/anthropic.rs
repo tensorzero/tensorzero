@@ -1177,7 +1177,7 @@ fn anthropic_to_tensorzero_stream_message(
                         id,
                         raw_name: Some(name),
                         // As far as I can tell this is always {} so we ignore
-                        raw_arguments: "".to_string(),
+                        raw_arguments: String::new(),
                     })],
                     None,
                     raw_message,
@@ -2385,7 +2385,7 @@ mod tests {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool1".to_string());
                 assert_eq!(tool_call.raw_name, Some("calculator".to_string()));
-                assert_eq!(tool_call.raw_arguments, "".to_string());
+                assert_eq!(tool_call.raw_arguments, String::new());
             }
             _ => panic!("Expected a tool call content block"),
         }
@@ -2665,7 +2665,7 @@ mod tests {
             content: vec![],
             created: 0,
             usage: None,
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
         };
@@ -2682,7 +2682,7 @@ mod tests {
         let chunk = ProviderInferenceResponseChunk {
             created: 0,
             usage: None,
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
             content: vec![ContentBlockChunk::Text(TextChunk {
@@ -2704,7 +2704,7 @@ mod tests {
         let chunk = ProviderInferenceResponseChunk {
             created: 0,
             usage: None,
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
             content: vec![
@@ -2726,7 +2726,7 @@ mod tests {
         let chunk = ProviderInferenceResponseChunk {
             created: 0,
             usage: None,
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
             content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {

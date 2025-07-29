@@ -1674,25 +1674,31 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                 if let Some(chunk_finish_reason) = chunk.finish_reason {
                     finish_reason = Some(chunk_finish_reason);
                 }
-                if let Some(ContentBlockOutput::Text(Text {
-                    text: existing_text,
-                })) = blocks.get_mut(&(ContentBlockOutputType::Text, "".to_string()))
-                {
-                    if let Some(raw) = chunk.raw {
-                        existing_text.push_str(&raw);
+
+                match blocks.get_mut(&(ContentBlockOutputType::Text, String::new())) {
+                    // If there is already a text block, append to it
+                    Some(ContentBlockOutput::Text(Text {
+                        text: existing_text,
+                    })) => {
+                        if let Some(raw) = chunk.raw {
+                            existing_text.push_str(&raw);
+                        }
                     }
-                } else {
-                    // We put this here and below rather than in the loop start because we
-                    // only want to set TTFT if there is some real content
-                    if ttft.is_none() {
-                        ttft = Some(chunk.latency);
-                    }
-                    if let Some(raw) = chunk.raw {
-                        blocks.insert((ContentBlockOutputType::Text, "".to_string()), raw.into());
+                    // If there is no text block, create one
+                    _ => {
+                        // We put this here and below rather than in the loop start because we
+                        // only want to set TTFT if there is some real content
+                        if ttft.is_none() {
+                            ttft = Some(chunk.latency);
+                        }
+                        if let Some(raw) = chunk.raw {
+                            blocks
+                                .insert((ContentBlockOutputType::Text, String::new()), raw.into());
+                        }
                     }
                 }
                 if let Some(thought) = chunk.thought {
-                    match blocks.get_mut(&(ContentBlockOutputType::Thought, "".to_string())) {
+                    match blocks.get_mut(&(ContentBlockOutputType::Thought, String::new())) {
                         // If there is already a thought block, append to it
                         Some(ContentBlockOutput::Thought(existing_thought)) => {
                             existing_thought
@@ -1703,7 +1709,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                         // If there is no thought block, create one
                         _ => {
                             blocks.insert(
-                                (ContentBlockOutputType::Thought, "".to_string()),
+                                (ContentBlockOutputType::Thought, String::new()),
                                 ContentBlockOutput::Thought(Thought {
                                     text: Some(thought),
                                     signature: None,
@@ -1747,12 +1753,12 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
             episode_id,
         },
         function_name,
-        variant_name: Some(variant_name),
+        variant_name,
         tool_config,
         templates,
         dynamic_output_schema: dynamic_output_schema.as_ref(),
-        extra_body,
-        extra_headers,
+        extra_body: Cow::Borrowed(&extra_body),
+        extra_headers: Cow::Borrowed(&extra_headers),
         extra_cache_key: None,
     };
     function
@@ -1945,7 +1951,7 @@ mod tests {
             input_messages: vec![],
             output: content.clone(),
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -1993,7 +1999,7 @@ mod tests {
             input_messages: vec![],
             output: content.clone(),
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2044,7 +2050,7 @@ mod tests {
             input_messages: vec![],
             output: content.clone(),
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             finish_reason: Some(FinishReason::Stop),
             usage,
             latency: Latency::NonStreaming {
@@ -2091,7 +2097,7 @@ mod tests {
             input_messages: vec![],
             output: content.clone(),
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2159,7 +2165,7 @@ mod tests {
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2244,7 +2250,7 @@ mod tests {
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2336,7 +2342,7 @@ mod tests {
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2386,7 +2392,7 @@ mod tests {
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2457,7 +2463,7 @@ mod tests {
             input_messages: vec![],
             output: content.clone(),
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             finish_reason: None,
             latency: Latency::NonStreaming {
@@ -2514,7 +2520,7 @@ mod tests {
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2856,11 +2862,11 @@ mod tests {
                 finish_reason: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                raw: Some("".to_string()),
+                raw: Some(String::new()),
                 thought: Some("Thought 2".to_string()),
                 created,
                 usage: None,
-                raw_response: "".to_string(),
+                raw_response: String::new(),
                 latency: Duration::from_millis(200),
                 finish_reason: None,
             }),
@@ -4130,7 +4136,7 @@ mod tests {
         handle_textual_content_block(
             &mut blocks,
             (ContentBlockOutputType::Text, "2".to_string()),
-            "".to_string(),
+            String::new(),
             &mut ttft,
             chunk_latency,
             |text| ContentBlockOutput::Text(Text { text }),

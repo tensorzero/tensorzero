@@ -167,7 +167,7 @@ mod tests {
                 endpoint: Some("test-endpoint".to_string()),
                 allow_http: Some(true),
                 #[cfg(feature = "e2e_tests")]
-                prefix: "".to_string(),
+                prefix: String::new(),
             },
         };
 

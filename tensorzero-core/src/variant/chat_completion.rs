@@ -191,6 +191,7 @@ impl ChatCompletionConfig {
             inference_extra_body: inference_config
                 .extra_body
                 .clone()
+                .into_owned()
                 .filter(inference_config.variant_name),
         };
 
@@ -199,6 +200,7 @@ impl ChatCompletionConfig {
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
+                .into_owned()
                 .filter(inference_config.variant_name),
         };
 
@@ -768,15 +770,15 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             assistant_template: Some(PathWithContents {
                 path: assistant_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             json_mode: Some(JsonMode::On),
             ..Default::default()
@@ -864,15 +866,15 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             assistant_template: Some(PathWithContents {
                 path: assistant_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             json_mode: Some(JsonMode::On),
             ..Default::default()
@@ -990,7 +992,7 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1016,7 +1018,7 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1052,11 +1054,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1161,7 +1163,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1216,7 +1218,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1249,11 +1251,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1268,7 +1270,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1314,11 +1316,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1352,7 +1354,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1431,7 +1433,7 @@ mod tests {
             templates: &templates,
             tool_config: Some(&weather_tool_config),
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1520,7 +1522,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1586,7 +1588,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1597,11 +1599,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             extra_body: Default::default(),
             ..Default::default()
@@ -1699,7 +1701,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: Some(&output_schema),
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1710,11 +1712,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1800,7 +1802,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: Some(&output_schema),
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1811,11 +1813,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             temperature: Some(0.5),
             top_p: Some(0.9),
@@ -1959,11 +1961,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         }));
@@ -1986,7 +1988,7 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2025,11 +2027,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         }));
@@ -2050,7 +2052,7 @@ mod tests {
             templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -2153,7 +2155,7 @@ mod tests {
             templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -2262,7 +2264,7 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2338,7 +2340,7 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: Some(&dynamic_output_schema),
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),

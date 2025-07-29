@@ -109,7 +109,7 @@ pub fn content_block_to_python(
             file_content_block.call1(
                 py,
                 (
-                    file.file.data.clone().unwrap_or("".to_string()),
+                    file.file.data.clone().unwrap_or(String::new()),
                     file.file.mime_type.to_string(),
                 ),
             )
@@ -246,7 +246,7 @@ pub fn resolved_input_message_content_to_python(
             file_content_block.call1(
                 py,
                 (
-                    file.file.data.clone().unwrap_or("".to_string()),
+                    file.file.data.clone().unwrap_or(String::new()),
                     file.file.mime_type.to_string(),
                 ),
             )
