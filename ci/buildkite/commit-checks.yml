@@ -1,0 +1,36 @@
+agents:
+  queue: "linux-amd64-small"
+
+steps:
+  - label: "Check TensorZero version consistency between Rust (`Cargo.toml`) and TypeScript (`ui/package.json`)"
+    command: ./ci/check-version-consistency.sh
+
+  # - label: "Build `tensorzero/gateway` Docker container"
+  #   command: docker build -t tensorzero/gateway:ci -f gateway/Dockerfile .
+  #   key: "build-gateway-docker-container"
+  #
+  - label: ":rust: Build Gateway"
+    key: "rust-build"
+    command: cargo build -p gateway
+    plugins:
+      - artifacts#v1.9.3:
+          upload: "target/**/*"
+
+  - label: ":rust: Lint Gateway"
+    depends_on: "rust-build"
+    command: cargo fmt -p gateway -- --check
+    plugins:
+      - artifacts#v1.9.3:
+          download: "target/**/*"
+
+  - label: ":rust: Clippy"
+    depends_on: "rust-build"
+    command: cargo clippy -p gateway
+    cache: "target"
+    plugins:
+      - artifacts#v1.9.3:
+          download: "target/**/*"
+
+notify:
+  - github_commit_status:
+      context: "commit-checks-buildkite"
