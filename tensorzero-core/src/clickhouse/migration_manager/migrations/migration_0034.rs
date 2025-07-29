@@ -37,7 +37,7 @@ impl Migration for Migration0034<'_> {
         // Check if there are any non-replicated MergeTree tables that need conversion
         let database = self.clickhouse.database();
         let tables_query = format!(
-            "SELECT COUNT(*) FROM system.tables WHERE database = '{database}' AND engine NOT LIKE 'Replicated%' AND (engine LIKE 'MergeTree%' OR engine LIKE 'ReplacingMergeTree%')"
+            "SELECT COUNT(*) FROM system.tables WHERE database = '{database}' AND engine NOT LIKE 'Replicated%' AND engine LIKE 'MergeTree%'"
         );
         
         let response = self.clickhouse
@@ -240,7 +240,7 @@ impl Migration for Migration0034<'_> {
         // Check that there are no more non-replicated MergeTree tables
         let database = self.clickhouse.database();
         let tables_query = format!(
-            "SELECT COUNT(*) FROM system.tables WHERE database = '{database}' AND engine NOT LIKE 'Replicated%' AND (engine LIKE 'MergeTree%' OR engine LIKE 'ReplacingMergeTree%')"
+            "SELECT COUNT(*) FROM system.tables WHERE database = '{database}' AND engine NOT LIKE 'Replicated%' AND engine LIKE 'MergeTree%'"
         );
         
         let response = self.clickhouse

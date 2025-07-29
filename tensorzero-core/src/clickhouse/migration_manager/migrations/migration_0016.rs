@@ -74,8 +74,8 @@ impl Migration for Migration0016<'_> {
             }
         }
 
-        // First, drop the ChatInferenceDataset and JsonInferenceDataset tables if they were created in 0014
-        let query = "DROP TABLE IF EXISTS JsonInferenceDataset".to_string();
+        // First, drop the ChatInferenceDataset table if it was created in 0014
+        let query = "DROP TABLE IF EXISTS ChatInferenceDataset".to_string();
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -120,6 +120,13 @@ impl Migration for Migration0016<'_> {
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query)
+            .await?;
+
+        // Now drop the JsonInferenceDataset table if it was created in 0014
+        let query = "DROP TABLE IF EXISTS JsonInferenceDataset".to_string();
+        let _ = self
+            .clickhouse
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `JsonInferenceDatapoint` table

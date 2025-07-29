@@ -454,7 +454,6 @@ async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bo
     let (fresh_clickhouse, _cleanup_fresh_clickhouse) = get_clean_clickhouse(true);
     let default_config = tensorzero_core::config_parser::Config::default();
     fresh_clickhouse.create_database(&default_config).await.unwrap();
-    let default_config = tensorzero_core::config_parser::Config::default();
     let migrations = make_all_migrations(&fresh_clickhouse, &default_config);
     println!(
         "Running migrations up to {}",
@@ -504,7 +503,6 @@ async fn test_rollback_apply_rollback() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
     let default_config = tensorzero_core::config_parser::Config::default();
     clickhouse.create_database(&default_config).await.unwrap();
-    let default_config = tensorzero_core::config_parser::Config::default();
     let migrations = make_all_migrations(&clickhouse, &default_config);
     for migration in migrations {
         let name = migration.name();
@@ -550,7 +548,6 @@ async fn test_clickhouse_migration_manager() {
     clickhouse.create_database(&default_config).await.unwrap();
     // Run it twice to test that it is a no-op the second time
     clickhouse.create_database(&default_config).await.unwrap();
-    let default_config = tensorzero_core::config_parser::Config::default();
     let migrations = make_all_migrations(&clickhouse, &default_config);
     let initial_clean_start = Cell::new(true);
     // This runs all migrations up to and including the given migration number,
