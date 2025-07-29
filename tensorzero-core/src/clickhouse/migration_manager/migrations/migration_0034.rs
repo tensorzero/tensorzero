@@ -45,7 +45,7 @@ impl Migration for Migration0034<'_> {
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
                 Error::new(ErrorDetails::ClickHouseMigration {
-                    id: "0009".to_string(),
+                    id: MIGRATION_ID.to_string(),
                     message: e.to_string(),
                 })
             })?
