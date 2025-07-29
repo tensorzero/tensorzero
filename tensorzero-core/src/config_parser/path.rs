@@ -325,6 +325,11 @@ static TARGET_PATH_COMPONENTS: &[&[PathComponent]] = &[
         PathComponent::Wildcard,
         PathComponent::Literal("parameters"),
     ],
+    &[
+        PathComponent::Literal("gateway"),
+        PathComponent::Literal("template_filesystem_access"),
+        PathComponent::Literal("base_path"),
+    ],
 ];
 
 /// Converts a `toml::DeValue` to a `toml::Value`.
