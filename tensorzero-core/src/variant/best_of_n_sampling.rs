@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::path::Path;
 
 use backon::Retryable;
 use futures::future::join_all;
@@ -78,13 +77,13 @@ pub struct UninitializedBestOfNEvaluatorConfig {
 }
 
 impl LoadableConfig<BestOfNSamplingConfig> for UninitializedBestOfNSamplingConfig {
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<BestOfNSamplingConfig, Error> {
+    fn load(self) -> Result<BestOfNSamplingConfig, Error> {
         Ok(BestOfNSamplingConfig {
             weight: self.weight,
             timeout_s: self.timeout_s,
             candidates: self.candidates,
             evaluator: BestOfNEvaluatorConfig {
-                inner: self.evaluator.inner.load(base_path)?,
+                inner: self.evaluator.inner.load()?,
             },
         })
     }
