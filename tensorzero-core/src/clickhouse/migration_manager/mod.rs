@@ -98,8 +98,20 @@ pub fn make_all_migrations<'a>(
     migrations
 }
 
-pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
+pub async fn run(clickhouse: &ClickHouseConnectionInfo, manual_run: bool) -> Result<(), Error> {
     clickhouse.health().await?;
+
+    // To check that the database is replicated, check if either of ChatInference is a ReplicatedMergeTree
+    // or `TENSORZERO_CLICKHOUSE_CLUSTER` is set
+    let chat_is_replicated: Option<bool> = clickhouse
+        .run_query_synchronous_no_params("SHOW CREATE TABLE ChatInference".to_string())
+        .await
+        .ok()
+        .map(|result| result.response.contains("ReplicatedMergeTree"));
+
+    let replicated_env_var_set = std::env::var("TENSORZERO_CLICKHOUSE_CLUSTER").is_ok();
+
+    let is_replicated = replicated_env_var_set || chat_is_replicated.unwrap_or(false);
 
     // This is a no-op if the database already exists
     clickhouse.create_database().await?;
@@ -111,9 +123,23 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
 
     // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
     // The value we pass in for 'clean_start' is ignored for the first migration
-    let clean_start = run_migration(clickhouse, &*migrations[0], false).await?;
+    let clean_start = run_migration(
+        clickhouse,
+        &*migrations[0],
+        false,
+        manual_run,
+        is_replicated,
+    )
+    .await?;
     for migration in &migrations[1..] {
-        run_migration(clickhouse, &**migration, clean_start).await?;
+        run_migration(
+            clickhouse,
+            &**migration,
+            clean_start,
+            manual_run,
+            is_replicated,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -236,12 +262,18 @@ pub async fn run_migration(
     clickhouse: &ClickHouseConnectionInfo,
     migration: &(impl Migration + ?Sized),
     clean_start: bool,
+    manual_run: bool,
+    is_replicated: bool,
 ) -> Result<bool, Error> {
     migration.can_apply().await?;
 
     if migration.should_apply().await? {
         // Get the migration name (e.g. `Migration0000`)
         let migration_name = migration.name();
+
+        if is_replicated && !manual_run {
+            return Err(ErrorDetails::ClickHouseMigration { id: migration_name, message: "Migrations must be run manually if using a replicated ClickHouse cluster. Please run TODO.".to_string() }.into());
+        }
 
         tracing::info!("Applying migration: {migration_name} with clean_start: {clean_start}");
 
