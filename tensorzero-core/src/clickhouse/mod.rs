@@ -427,6 +427,27 @@ impl ClickHouseConnectionInfo {
         }
     }
 
+    pub async fn check_database_exists(&self) -> Result<bool, Error> {
+        match self {
+            Self::Disabled => Ok(true),
+            Self::Mock { .. } => Ok(true),
+            Self::Production { .. } => {
+                let response = self
+                    .run_query_synchronous(
+                        "SELECT COUNT() FROM system.databases WHERE name={name:String}".to_string(),
+                        &HashMap::from([("name", self.database())]),
+                    )
+                    .await?;
+                let count: u8 = response.response.trim().parse().map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: format!("Failed to parse count response as u8: {e}"),
+                    })
+                })?;
+                Ok(count > 0)
+            }
+        }
+    }
+
     pub async fn create_database(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => {}

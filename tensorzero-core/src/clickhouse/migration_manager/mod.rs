@@ -41,6 +41,7 @@ use serde::{Deserialize, Serialize};
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
 /// will panic if they don't match.
 pub const NUM_MIGRATIONS: usize = 27;
+const RUN_MIGRATIONS_DOCKER_COMMAND: &str = "docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway --run-migrations";
 
 /// Constructs (but does not run) a vector of all our database migrations.
 /// This is the single source of truth for all migration - it's used during startup to migrate
@@ -100,6 +101,18 @@ pub fn make_all_migrations<'a>(
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo, manual_run: bool) -> Result<(), Error> {
     clickhouse.health().await?;
+    let database_exists = clickhouse.check_database_exists().await?;
+    if !database_exists {
+        if clickhouse.is_cluster_configured() {
+            let database = clickhouse.database();
+            return Err(ErrorDetails::ClickHouseConfiguration {
+                message: format!("Database {database} does not exist. We do not automatically run migrations to create and set it up when replication is configured. Please run `{RUN_MIGRATIONS_DOCKER_COMMAND}`."),
+            }.into());
+        } else {
+            // This is a no-op if the database already exists
+            clickhouse.create_database().await?;
+        }
+    }
 
     // To check that the database is replicated, check if either of ChatInference is a ReplicatedMergeTree
     // or `clickhouse.cluster_name` is Some
@@ -110,9 +123,6 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo, manual_run: bool) -> Res
         .map(|result| result.response.contains("ReplicatedMergeTree"));
 
     let is_replicated = clickhouse.is_cluster_configured() || chat_is_replicated.unwrap_or(false);
-
-    // This is a no-op if the database already exists
-    clickhouse.create_database().await?;
 
     // Check if the ClickHouse instance is configured correctly for replication.
     check_replication_settings(clickhouse).await?;
@@ -294,7 +304,7 @@ pub async fn run_migration(
         let migration_name = migration.name();
 
         if is_replicated && !manual_run {
-            return Err(ErrorDetails::ClickHouseMigration { id: migration_name, message: "Migrations must be run manually if using a replicated ClickHouse cluster. Please run `docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway --run-migrations`.".to_string() }.into());
+            return Err(ErrorDetails::ClickHouseMigration { id: migration_name, message: format!("Migrations must be run manually if using a replicated ClickHouse cluster. Please run `{RUN_MIGRATIONS_DOCKER_COMMAND}`.") }.into());
         }
 
         tracing::info!("Applying migration: {migration_name} with clean_start: {clean_start}");

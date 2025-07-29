@@ -779,7 +779,10 @@ async fn test_bad_clickhouse_write() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clean_clickhouse_start() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    migration_manager::run(&clickhouse, false).await.unwrap();
+    let is_manual = clickhouse.is_cluster_configured();
+    migration_manager::run(&clickhouse, is_manual)
+        .await
+        .unwrap();
 
     // We also verify here that all tables are either replicated or not replicated as expected
     let response = clickhouse
