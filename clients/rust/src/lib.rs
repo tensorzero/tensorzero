@@ -47,7 +47,8 @@ pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageConten
 pub use tensorzero_core::cache::CacheParamsOptions;
 pub use tensorzero_core::clickhouse::query_builder::{
     BooleanMetricNode, FloatComparisonOperator, FloatMetricNode, InferenceFilterTreeNode,
-    InferenceOutputSource, ListInferencesParams,
+    InferenceOutputSource, ListInferencesParams, TagComparisonOperator, TagNode,
+    TimeComparisonOperator, TimeNode,
 };
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
@@ -771,24 +772,29 @@ impl Client {
         &self,
         dataset_name: String,
     ) -> Result<StaleDatasetResponse, TensorZeroError> {
-        let ClientMode::EmbeddedGateway { gateway, timeout } = &self.mode else {
-            return Err(TensorZeroError::Other {
-                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
-                    mode: "Http".to_string(),
-                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::datasets::stale_dataset(
+                        &gateway.state.clickhouse_connection_info,
+                        &dataset_name,
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
-                .into(),
-            });
-        };
-        with_embedded_timeout(*timeout, async {
-            tensorzero_core::endpoints::datasets::stale_dataset(
-                &gateway.state.clickhouse_connection_info,
-                &dataset_name,
-            )
-            .await
-            .map_err(err_to_http)
-        })
-        .await
+                .await
+            }
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join(&format!("datasets/{dataset_name}")).map_err(|e| TensorZeroError::Other {
+                    source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /datasets/{dataset_name} endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.delete(url);
+                self.parse_http_response(builder.send().await).await
+            }
+        }
     }
 
     /// Query the Clickhouse database for inferences.
@@ -1308,13 +1314,10 @@ mod tests {
     use tracing_test::traced_test;
 
     #[tokio::test]
-    #[ignore] // TODO - set an environment variable, or create a new config with dummy credentials
     async fn test_missing_clickhouse() {
         // This config file requires ClickHouse, so it should fail if no ClickHouse URL is provided
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_file: Some(PathBuf::from(
-                "../../examples/haiku-hidden-preferences/config/tensorzero.toml",
-            )),
+            config_file: Some(PathBuf::from("tests/test_config.toml")),
             clickhouse_url: None,
             timeout: None,
             verify_credentials: true,
@@ -1324,7 +1327,7 @@ mod tests {
         .expect_err("ClientBuilder should have failed");
         let err_msg = err.to_string();
         assert!(
-            err.to_string().contains("Missing ClickHouse URL"),
+            err_msg.contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL"),
             "Bad error message: {err_msg}"
         );
     }

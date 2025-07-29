@@ -18,7 +18,7 @@ type Story = StoryObj<typeof meta>;
 
 export const ChatFunction: Story = {
   args: {
-    output: [{ type: "text", text: "Hello, world!" }],
+    output: [{ type: "text", text: "Hello, world!\n\nHow are you?" }],
   },
 };
 

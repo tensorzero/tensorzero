@@ -1,4 +1,4 @@
-import { UserPen } from "lucide-react";
+import { RefreshCw, UserPen } from "lucide-react";
 import React from "react";
 
 export interface IconProps {
@@ -267,7 +267,7 @@ export const Calendar: React.FC<IconProps> = (props) => (
   </IconWrapper>
 );
 
-export const Input: React.FC<IconProps> = (props) => (
+export const InputIcon: React.FC<IconProps> = (props) => (
   <IconWrapper {...props}>
     <path
       fillRule="evenodd"
@@ -542,6 +542,12 @@ export const SequenceChecks: React.FC<IconProps> = (props) => (
 
 export const UserFeedback: React.FC = () => <UserPen size={12} />;
 
+export const Refresh: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <RefreshCw size={16} />
+  </IconWrapper>
+);
+
 export const iconComponents: Record<string, React.FC<IconProps>> = {
   TensorZeroLogo,
   Placeholder,
@@ -565,7 +571,7 @@ export const iconComponents: Record<string, React.FC<IconProps>> = {
   TypeJson,
   Timer,
   Calendar,
-  Input,
+  Input: InputIcon,
   Output,
   Dataset,
   AddToDataset,

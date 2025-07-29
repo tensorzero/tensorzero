@@ -400,7 +400,7 @@ impl MixtureOfNConfig {
                 // However, the 'A, C' and 'C, D' evaluations will all have distinct cache keys:
                 // (A, 2), (C, 3), (C, 2), (D, 4)
                 let mut config = inference_config.clone();
-                config.variant_name = Some(candidate);
+                config.variant_name = candidate;
                 config.extra_cache_key = Some(format!("candidate_{i}"));
                 Ok((candidate.to_string(), variant, config))
             })
@@ -818,6 +818,7 @@ impl FuserConfig {
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
+                .into_owned()
                 .filter(inference_config.variant_name),
         };
         let model_inference_request = prepare_model_inference_request(
@@ -948,7 +949,7 @@ mod tests {
                 weight: Some(1.0),
                 system_template: Some(PathWithContents {
                     path: system_template_name.into(),
-                    contents: "".to_string(),
+                    contents: String::new(),
                 }),
                 ..Default::default()
             },
@@ -987,7 +988,7 @@ mod tests {
                 weight: Some(1.0),
                 system_template: Some(PathWithContents {
                     path: system_template_name.into(),
-                    contents: "".to_string(),
+                    contents: String::new(),
                 }),
                 ..Default::default()
             },
@@ -1342,7 +1343,7 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
