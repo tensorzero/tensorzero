@@ -6,7 +6,11 @@ import {
 } from "./types";
 import { FunctionFormField } from "~/components/function/FunctionFormField";
 import { DatasetFormField } from "~/components/dataset/DatasetFormField";
-import { useConfig } from "~/context/config";
+import {
+  useAllFunctionConfigs,
+  useConfig,
+  useFunctionConfig,
+} from "~/context/config";
 import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 import { useFetcher } from "react-router";
@@ -54,14 +58,16 @@ export function DatasetBuilderForm() {
     metricName: metricName ?? undefined,
     threshold: threshold ?? undefined,
   });
+  const functionConfig = useFunctionConfig(functionName ?? "");
+
   useEffect(() => {
     const metricConfig = config.metrics[metricName ?? ""];
     form.setValue("metric_config", metricConfig ? metricConfig : undefined);
-    const functionType = config.functions[functionName ?? ""]?.type;
+    const functionType = functionConfig?.type;
     if (functionType) {
       form.setValue("type", functionType);
     }
-  }, [metricName, functionName, config, form]);
+  }, [metricName, functionName, config, form, functionConfig]);
 
   // Handle form submission response
   useEffect(() => {
@@ -132,7 +138,7 @@ export function DatasetBuilderForm() {
           <FunctionFormField
             control={form.control}
             name="function"
-            functions={config.functions}
+            functions={useAllFunctionConfigs()}
             onSelect={() => {
               form.resetField("variant");
             }}
@@ -142,10 +148,10 @@ export function DatasetBuilderForm() {
             control={form.control}
             name="metric_name"
             functionFieldName="function"
-            feedbackCount={counts.feedbackCount}
-            curatedInferenceCount={counts.curatedInferenceCount}
             config={config}
             addDemonstrations={false}
+            feedbackCount={counts.feedbackCount}
+            curatedInferenceCount={counts.curatedInferenceCount}
           />
           <OutputSourceSelector control={form.control} />
         </div>

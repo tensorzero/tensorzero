@@ -1,30 +1,67 @@
 import { describe, it, expect } from "vitest";
-import { get_fine_tuned_provider_config, dump_provider_config } from "./models";
+import { dump_optimizer_output } from "./models";
+import type { OptimizerOutput } from "tensorzero-node";
 
-describe("get_fine_tuned_model_config", () => {
+describe("dump_optimizer_output", () => {
   it("should create correct config for fireworks model", async () => {
-    const result = get_fine_tuned_provider_config("claude-2", "fireworks");
-    expect(result).toEqual({
-      type: "fireworks",
-      model_name: "claude-2",
-      parse_think_blocks: false,
-    });
-    const result_string = dump_provider_config("claude-2", result);
+    const optimizerOutput: OptimizerOutput = {
+      type: "model",
+      routing: ["claude-2"],
+      providers: {
+        "claude-2": {
+          type: "fireworks",
+          model_name: "claude-2",
+          parse_think_blocks: false,
+          api_key_location: null,
+          discard_unknown_chunks: false,
+          extra_body: null,
+          extra_headers: null,
+          timeouts: null,
+        },
+      },
+      timeouts: {
+        non_streaming: {
+          total_ms: null,
+        },
+        streaming: {
+          ttft_ms: null,
+        },
+      },
+    };
+    const result_string = dump_optimizer_output(optimizerOutput);
     expect(result_string).toBe(
-      '[models.claude-2]\nrouting = [ "claude-2" ]\n\n[models.claude-2.providers.claude-2]\ntype = "fireworks"\nmodel_name = "claude-2"\nparse_think_blocks = false',
+      '[models.claude-2]\nrouting = [ "claude-2" ]\n\n[models.claude-2.providers.claude-2]\ntype = "fireworks"\nmodel_name = "claude-2"\nparse_think_blocks = false\ndiscard_unknown_chunks = false',
     );
   });
 
   it("should create correct config for openai model", async () => {
-    const result = get_fine_tuned_provider_config("gpt-4o", "openai");
-    expect(result).toEqual({
-      type: "openai",
-      model_name: "gpt-4o",
-      api_base: null,
-    });
-    const result_string = dump_provider_config("gpt-4o", result);
+    const optimizerOutput: OptimizerOutput = {
+      type: "model",
+      routing: ["gpt-4o"],
+      providers: {
+        "gpt-4o": {
+          type: "openai",
+          model_name: "gpt-4o",
+          api_base: null,
+          api_key_location: null,
+          discard_unknown_chunks: false,
+          extra_body: null,
+          extra_headers: null,
+          timeouts: null,
+        },
+      },
+      timeouts: {
+        non_streaming: {
+          total_ms: null,
+        },
+        streaming: {
+          ttft_ms: null,
+        },
+      },
+    };
+    const result_string = dump_optimizer_output(optimizerOutput);
     expect(result_string).toBe(
-      '[models.gpt-4o]\nrouting = [ "gpt-4o" ]\n\n[models.gpt-4o.providers.gpt-4o]\ntype = "openai"\nmodel_name = "gpt-4o"',
+      '[models.gpt-4o]\nrouting = [ "gpt-4o" ]\n\n[models.gpt-4o.providers.gpt-4o]\ntype = "openai"\nmodel_name = "gpt-4o"\ndiscard_unknown_chunks = false',
     );
   });
 });

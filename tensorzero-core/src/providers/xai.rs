@@ -345,14 +345,15 @@ impl<'a> XAIRequest<'a> {
             ..
         } = *request;
 
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
 
-        let response_format = XAIResponseFormat::new(&request.json_mode, request.output_schema);
+        let response_format = XAIResponseFormat::new(request.json_mode, request.output_schema);
 
         let messages = prepare_openai_messages(
             request.system.as_deref(),
@@ -395,7 +396,7 @@ enum XAIResponseFormat {
 
 impl XAIResponseFormat {
     fn new(
-        json_mode: &ModelInferenceRequestJsonMode,
+        json_mode: ModelInferenceRequestJsonMode,
         output_schema: Option<&Value>,
     ) -> Option<Self> {
         match json_mode {

@@ -34,7 +34,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   const [counts, rows] = await Promise.all([
-    getDatasetCounts(),
+    getDatasetCounts({}),
     getDatasetRows(dataset_name, pageSize, offset),
   ]);
   const count_info = counts.find(

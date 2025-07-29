@@ -29,22 +29,6 @@ repos:
 
   - repo: local
     hooks:
-      # Find every pyproject.toml and generate a uv.lock file
-      - id: uv-lock
-        name: uv lock
-        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Locking $f"; (cd "$dir" && uv lock --project="pyproject.toml" && git add --intent-to-add "uv.lock"); done'
-        language: system
-        pass_filenames: false
-        always_run: true
-
-      # Find every pyproject.toml and generate a requirements.txt file
-      - id: uv-export
-        name: uv export
-        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Exporting $f"; (cd "$dir" && uv export --project="pyproject.toml" --output-file="requirements.txt" --quiet && git add --intent-to-add "requirements.txt"); done'
-        language: system
-        pass_filenames: false
-        always_run: true
-
       - id: cargo-deny
         name: cargo deny
         entry: cargo deny check

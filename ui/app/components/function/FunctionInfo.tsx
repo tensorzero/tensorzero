@@ -1,5 +1,5 @@
 import { Code } from "~/components/ui/code";
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import { AlertDialog } from "~/components/ui/AlertDialog";
 import type { FunctionConfig } from "tensorzero-node";
 import { FunctionLink } from "./FunctionLink";
@@ -13,8 +13,7 @@ export function FunctionInfo({
   functionName,
   functionType,
 }: FunctionInfoProps) {
-  const config = useConfig();
-  const functionConfig = config.functions[functionName];
+  const functionConfig = useFunctionConfig(functionName);
 
   return (
     <>

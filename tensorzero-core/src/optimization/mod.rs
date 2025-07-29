@@ -38,9 +38,9 @@ pub struct OptimizerInfo {
 }
 
 impl OptimizerInfo {
-    pub fn new(uninitialized_info: UninitializedOptimizerInfo) -> Result<Self, Error> {
+    pub async fn new(uninitialized_info: UninitializedOptimizerInfo) -> Result<Self, Error> {
         Ok(Self {
-            inner: uninitialized_info.inner.load()?,
+            inner: uninitialized_info.inner.load().await?,
         })
     }
 }
@@ -294,9 +294,9 @@ pub struct UninitializedOptimizerInfo {
 }
 
 impl UninitializedOptimizerInfo {
-    pub fn load(self) -> Result<OptimizerInfo, Error> {
+    pub async fn load(self) -> Result<OptimizerInfo, Error> {
         Ok(OptimizerInfo {
-            inner: self.inner.load()?,
+            inner: self.inner.load().await?,
         })
     }
 }
@@ -318,7 +318,7 @@ pub enum UninitializedOptimizerConfig {
 
 impl UninitializedOptimizerConfig {
     // TODO: add a provider_types argument as needed
-    fn load(self) -> Result<OptimizerConfig, Error> {
+    async fn load(self) -> Result<OptimizerConfig, Error> {
         Ok(match self {
             UninitializedOptimizerConfig::OpenAISFT(config) => {
                 OptimizerConfig::OpenAISFT(config.load()?)
@@ -327,7 +327,7 @@ impl UninitializedOptimizerConfig {
                 OptimizerConfig::FireworksSFT(config.load()?)
             }
             UninitializedOptimizerConfig::GCPVertexGeminiSFT(config) => {
-                OptimizerConfig::GCPVertexGeminiSFT(Box::new(config.load()?))
+                OptimizerConfig::GCPVertexGeminiSFT(Box::new(config.load().await?))
             }
             UninitializedOptimizerConfig::TogetherSFT(config) => {
                 OptimizerConfig::TogetherSFT(config.load()?)

@@ -303,8 +303,8 @@ enum DeepSeekResponseFormat {
 }
 
 impl DeepSeekResponseFormat {
-    fn new(json_mode: &ModelInferenceRequestJsonMode) -> Option<Self> {
-        #[expect(clippy::match_same_arms)]
+    #[expect(clippy::match_same_arms)]
+    fn new(json_mode: ModelInferenceRequestJsonMode) -> Option<Self> {
         match json_mode {
             ModelInferenceRequestJsonMode::On => Some(DeepSeekResponseFormat::JsonObject),
             // For now, we never explicitly send `DeepSeekResponseFormat::Text`
@@ -360,18 +360,19 @@ impl<'a> DeepSeekRequest<'a> {
             ..
         } = *request;
 
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
 
         if request.json_mode == ModelInferenceRequestJsonMode::Strict {
             tracing::warn!("DeepSeek provider does not support strict JSON mode. Downgrading to normal JSON mode.");
         }
 
-        let response_format = DeepSeekResponseFormat::new(&request.json_mode);
+        let response_format = DeepSeekResponseFormat::new(request.json_mode);
 
         // NOTE: as mentioned by the DeepSeek team here: https://github.com/deepseek-ai/DeepSeek-R1?tab=readme-ov-file#usage-recommendations
         // the R1 series of models does not perform well with the system prompt. As we move towards first-class support for reasoning models we should check

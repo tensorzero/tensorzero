@@ -326,6 +326,7 @@ mod tests {
             tool_params: None,
             output_schema: None,
             dispreferred_outputs: vec![],
+            tags: HashMap::new(),
         };
         let row = OpenAISupervisedRow::try_from(&inference).unwrap();
         assert_eq!(row.messages.len(), 3);

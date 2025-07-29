@@ -134,14 +134,14 @@ pub async fn get_howdy_report<'a>(
 async fn count_inferences(clickhouse: &ClickHouseConnectionInfo) -> Result<String, String> {
     let Ok(response) = clickhouse
         .run_query_synchronous_no_params(
-            r#"SELECT SUM(count) AS inference_count
+            r"SELECT SUM(count) AS inference_count
                   FROM
                   (
                     SELECT COUNT() AS count FROM ChatInference
                     UNION ALL
                     SELECT COUNT() AS count FROM JsonInference
                   )
-                  "#
+                  "
             .to_string(),
         )
         .await
@@ -164,7 +164,7 @@ async fn count_inferences(clickhouse: &ClickHouseConnectionInfo) -> Result<Strin
 async fn count_feedbacks(clickhouse: &ClickHouseConnectionInfo) -> Result<String, String> {
     let Ok(response) = clickhouse
         .run_query_synchronous_no_params(
-            r#"SELECT SUM(count) AS feedback_count
+            r"SELECT SUM(count) AS feedback_count
                   FROM
                   (
                     SELECT COUNT() AS count FROM BooleanMetricFeedback
@@ -175,7 +175,7 @@ async fn count_feedbacks(clickhouse: &ClickHouseConnectionInfo) -> Result<String
                     UNION ALL
                     SELECT COUNT() AS count FROM CommentFeedback
                   )
-                  "#
+                  "
             .to_string(),
         )
         .await

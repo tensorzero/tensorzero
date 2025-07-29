@@ -437,11 +437,12 @@ impl<'a> TGIRequest<'a> {
             tracing::warn!("TGI does not support JSON mode. Ignoring JSON mode. Consider using `json_mode = \"implicit_tool\"` instead.");
         }
 
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
 
         let messages = prepare_openai_messages(

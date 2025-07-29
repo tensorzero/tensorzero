@@ -1,5 +1,6 @@
 import inspect
 import os
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List
 
@@ -115,6 +116,7 @@ def mixed_rendered_samples(
         output=[Text(text="Hello world")],
         episode_id=uuid7(),
         inference_id=uuid7(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         tool_params=ToolParams(
             tools_available=[
                 Tool(
@@ -129,6 +131,7 @@ def mixed_rendered_samples(
         ),
         output_schema=None,
         dispreferred_outputs=[],
+        tags={"test_key": "test_value"},
     )
     json_inference = StoredInference(
         type="json",
@@ -148,12 +151,14 @@ def mixed_rendered_samples(
         ),
         episode_id=uuid7(),
         inference_id=uuid7(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         output_schema={
             "type": "object",
             "properties": {"answer": {"type": "string"}},
         },
         tool_params=None,
         dispreferred_outputs=[],
+        tags={"test_key": "test_value"},
     )
     sample_list = [chat_inference] * 10 + [json_inference] * 10
     return embedded_sync_client.experimental_render_samples(

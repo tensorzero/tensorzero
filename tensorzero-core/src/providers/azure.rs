@@ -369,7 +369,7 @@ struct AzureRequest<'a> {
 
 impl<'a> AzureRequest<'a> {
     pub fn new(request: &'a ModelInferenceRequest<'_>) -> Result<AzureRequest<'a>, Error> {
-        let response_format = AzureResponseFormat::new(&request.json_mode, request.output_schema);
+        let response_format = AzureResponseFormat::new(request.json_mode, request.output_schema);
         let messages = prepare_openai_messages(
             request.system.as_deref(),
             &request.messages,
@@ -408,7 +408,7 @@ pub enum AzureResponseFormat {
 
 impl AzureResponseFormat {
     fn new(
-        json_mode: &ModelInferenceRequestJsonMode,
+        json_mode: ModelInferenceRequestJsonMode,
         output_schema: Option<&Value>,
     ) -> Option<Self> {
         // Note: Some models on Azure won't support strict JSON mode.
