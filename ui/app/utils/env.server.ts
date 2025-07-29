@@ -61,8 +61,7 @@ export function getEnv(): Env {
     TENSORZERO_EVALUATIONS_PATH:
       process.env.TENSORZERO_EVALUATIONS_PATH || "evaluations",
     FIREWORKS_ACCOUNT_ID: process.env.FIREWORKS_ACCOUNT_ID || null,
-    TENSORZERO_FORCE_CACHE_ON:
-      process.env.TENSORZERO_FORCE_CACHE_ON === "true",
+    TENSORZERO_FORCE_CACHE_ON: process.env.TENSORZERO_FORCE_CACHE_ON === "true",
   };
 
   return _env;
@@ -73,7 +72,7 @@ export function getExtraInferenceOptions(): object {
     console.warn("TENSORZERO_FORCE_CACHE_ON is set");
     return {
       cache_options: {
-        enabled: 'on',
+        enabled: "on",
       },
     };
   }
