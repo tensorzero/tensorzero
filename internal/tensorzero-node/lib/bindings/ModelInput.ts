@@ -4,7 +4,4 @@ import type { RequestMessage } from "./RequestMessage";
 /**
  * For use in rendering for optimization purposes
  */
-export type ModelInput = {
-  system: string | null;
-  messages: Array<RequestMessage>;
-};
+export type ModelInput = { system: string | null, messages: Array<RequestMessage>, };

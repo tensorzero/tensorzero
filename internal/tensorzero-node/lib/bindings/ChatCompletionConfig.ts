@@ -5,21 +5,4 @@ import type { JsonMode } from "./JsonMode";
 import type { PathWithContents } from "./PathWithContents";
 import type { RetryConfig } from "./RetryConfig";
 
-export type ChatCompletionConfig = {
-  weight: number | null;
-  model: string;
-  system_template: PathWithContents | null;
-  user_template: PathWithContents | null;
-  assistant_template: PathWithContents | null;
-  temperature: number | null;
-  top_p: number | null;
-  max_tokens: number | null;
-  presence_penalty: number | null;
-  frequency_penalty: number | null;
-  seed: number | null;
-  stop_sequences: Array<string> | null;
-  json_mode: JsonMode | null;
-  retries: RetryConfig;
-  extra_body: ExtraBodyConfig | null;
-  extra_headers: ExtraHeadersConfig | null;
-};
+export type ChatCompletionConfig = { weight: number | null, model: string, system_template: PathWithContents | null, user_template: PathWithContents | null, assistant_template: PathWithContents | null, temperature: number | null, top_p: number | null, max_tokens: number | null, presence_penalty: number | null, frequency_penalty: number | null, seed: number | null, stop_sequences: Array<string> | null, json_mode: JsonMode | null, retries: RetryConfig, extra_body: ExtraBodyConfig | null, extra_headers: ExtraHeadersConfig | null, };

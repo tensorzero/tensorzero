@@ -4,8 +4,4 @@ import type { GCPVertexGeminiSFTJobHandle } from "./GCPVertexGeminiSFTJobHandle"
 import type { OpenAISFTJobHandle } from "./OpenAISFTJobHandle";
 import type { TogetherSFTJobHandle } from "./TogetherSFTJobHandle";
 
-export type OptimizationJobHandle =
-  | ({ type: "openai_sft" } & OpenAISFTJobHandle)
-  | ({ type: "fireworks_sft" } & FireworksSFTJobHandle)
-  | ({ type: "gcp_vertex_gemini_sft" } & GCPVertexGeminiSFTJobHandle)
-  | ({ type: "together_sft" } & TogetherSFTJobHandle);
+export type OptimizationJobHandle = { "type": "openai_sft" } & OpenAISFTJobHandle | { "type": "fireworks_sft" } & FireworksSFTJobHandle | { "type": "gcp_vertex_gemini_sft" } & GCPVertexGeminiSFTJobHandle | { "type": "together_sft" } & TogetherSFTJobHandle;
