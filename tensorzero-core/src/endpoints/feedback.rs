@@ -32,11 +32,13 @@ use super::validate_tags;
 ///
 /// This is the amount of time we want to wait after the target was supposed to have been written
 /// before we decide that the target was actually not written because we can't find it in the database.
-const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_secs(5);
+const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_millis(5100);
 /// Since we can't be sure that an inference actually completed when the ID says it was
 /// (the ID is generated at the start of the inference), we wait a minimum amount of time
 /// before we decide that the target was actually not written because we can't find it in the database.
-const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1200);
+const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1000);
+/// We also poll in the intermediate time so that we can return as soon as we find a target entry.
+const FEEDBACK_TARGET_POLL_INTERVAL: Duration = Duration::from_millis(2000);
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -434,7 +436,7 @@ async fn throttled_get_function_name(
                 }
             }
         }
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        tokio::time::sleep(FEEDBACK_TARGET_POLL_INTERVAL).await;
     }
 }
 
