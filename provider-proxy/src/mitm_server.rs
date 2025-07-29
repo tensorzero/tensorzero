@@ -206,7 +206,7 @@ where
                     ))
                 } else {
                     // http
-                    service.call(req).await.map(|res| res.map(|b| b.boxed()))
+                    service.call(req).await.map(|res| res.map(BodyExt::boxed))
                 }
             }
         })

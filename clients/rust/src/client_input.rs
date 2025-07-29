@@ -80,6 +80,7 @@ impl TryFrom<ClientInputMessageContent> for InputMessageContent {
 pub fn deserialize_content<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<ClientInputMessageContent>, D::Error> {
+    #[expect(clippy::redundant_closure_for_method_calls)]
     UntaggedEnumVisitor::new()
         .string(|text| {
             Ok(vec![ClientInputMessageContent::Text(TextKind::Text {

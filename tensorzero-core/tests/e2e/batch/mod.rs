@@ -209,7 +209,7 @@ async fn test_write_poll_batch_inference() {
     assert_eq!(batch_request.status, BatchStatus::Failed);
 }
 
-/// Helper function to write 2 rows to the BatchModelInference table
+/// Helper function to write 2 rows to the `BatchModelInference` table
 async fn write_2_batch_model_inference_rows(
     clickhouse: &ClickHouseConnectionInfo,
     batch_id: Uuid,
@@ -338,7 +338,7 @@ async fn test_write_read_completed_batch_inference_chat() {
     let output_1 = ProviderBatchInferenceOutput {
         id: inference_id1,
         output: vec!["hello world".to_string().into()],
-        raw_response: "".to_string(),
+        raw_response: String::new(),
         usage: Usage {
             input_tokens: 10,
             output_tokens: 20,
@@ -349,7 +349,7 @@ async fn test_write_read_completed_batch_inference_chat() {
     let output_2 = ProviderBatchInferenceOutput {
         id: inference_id2,
         output: vec!["goodbye world".to_string().into()],
-        raw_response: "".to_string(),
+        raw_response: String::new(),
         usage: Usage {
             input_tokens: 20,
             output_tokens: 30,
@@ -367,7 +367,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             .unwrap();
 
     // Sort inferences by inference_id to ensure consistent ordering
-    inference_responses.sort_by_key(|response| response.inference_id());
+    inference_responses.sort_by_key(tensorzero::InferenceResponse::inference_id);
 
     assert_eq!(inference_responses.len(), 2);
     let inference_response_1 = &inference_responses[0];
@@ -540,7 +540,7 @@ async fn test_write_read_completed_batch_inference_json() {
     let output_1 = ProviderBatchInferenceOutput {
         id: inference_id1,
         output: vec!["{\"answer\": \"hello world\"}".to_string().into()],
-        raw_response: "".to_string(),
+        raw_response: String::new(),
         usage: Usage {
             input_tokens: 10,
             output_tokens: 20,
@@ -551,7 +551,7 @@ async fn test_write_read_completed_batch_inference_json() {
     let output_2 = ProviderBatchInferenceOutput {
         id: inference_id2,
         output: vec!["{\"response\": \"goodbye world\"}".to_string().into()],
-        raw_response: "".to_string(),
+        raw_response: String::new(),
         usage: Usage {
             input_tokens: 20,
             output_tokens: 30,

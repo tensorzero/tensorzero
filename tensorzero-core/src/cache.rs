@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::embeddings::{EmbeddingRequest, EmbeddingResponse};
 use crate::error::{Error, ErrorDetails};
+use crate::inference::types::file::serialize_with_file_data;
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
@@ -151,7 +152,8 @@ impl ModelProviderRequest<'_> {
         hasher.update(provider_name.as_bytes());
         hasher.update(&[0]); // null byte after provider name to ensure data is prefix-free
                              // Convert the request to a JSON Value, error if serialization fails
-        let mut request_value = serde_json::to_value(request).map_err(|e| {
+
+        let mut request_value = serialize_with_file_data(request).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize request: {e}"),
             })
@@ -397,7 +399,7 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
     let long_cache_key = cache_key.get_long_key();
     // The clickhouse query args look like rust format string args, but they're not.
     let query = if max_age_s.is_some() {
-        r#"
+        r"
             SELECT
                 output,
                 raw_request,
@@ -412,9 +414,9 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
             ORDER BY timestamp DESC
             LIMIT 1
             FORMAT JSONEachRow
-        "#
+        "
     } else {
-        r#"
+        r"
             SELECT
                 output,
                 raw_request,
@@ -428,7 +430,7 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
             ORDER BY timestamp DESC
             LIMIT 1
             FORMAT JSONEachRow
-        "#
+        "
     };
     let mut query_params = HashMap::from([
         ("short_cache_key", short_cache_key.as_str()),

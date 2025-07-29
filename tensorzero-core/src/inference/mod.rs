@@ -16,6 +16,7 @@ use futures::Future;
 use futures::Stream;
 use reqwest::Client;
 use reqwest_eventsource::Event;
+use std::borrow::Cow;
 use std::fmt::Debug;
 use std::pin::Pin;
 use tokio::time::Instant;
@@ -67,6 +68,8 @@ pub trait InferenceProvider {
 ///
 /// Currently, we only implement `WrappedProvider` for OpenAI
 pub trait WrappedProvider: Debug {
+    fn thought_block_provider_type_suffix(&self) -> Cow<'static, str>;
+
     fn make_body<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,

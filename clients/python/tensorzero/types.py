@@ -120,9 +120,10 @@ class ToolCall(ContentBlock):
 
 @dataclass
 class Thought(ContentBlock):
-    text: str
+    text: Optional[str] = None
     type: str = "thought"
     signature: Optional[str] = None
+    _internal_provider_type: Optional[str] = None
 
 
 @dataclass
@@ -282,6 +283,7 @@ class ThoughtChunk(ContentBlockChunk):
     text: str
     type: str = "thought"
     signature: Optional[str] = None
+    _internal_provider_type: Optional[str] = None
 
 
 @dataclass
@@ -548,6 +550,21 @@ class BooleanMetricNode(BooleanMetricFilter):
 
 
 @dataclass
+class TagFilter(InferenceFilterTreeNode):
+    key: str
+    value: str
+    comparison_operator: Literal["=", "!="]
+    type: str = "tag"
+
+
+@dataclass
+class TimeFilter(InferenceFilterTreeNode):
+    time: str  # RFC 3339 timestamp
+    comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
+    type: str = "time"
+
+
+@dataclass
 class AndFilter(InferenceFilterTreeNode):
     children: List[InferenceFilterTreeNode]
     type: str = "and"
@@ -596,3 +613,10 @@ class NotNode(NotFilter):
             stacklevel=2,
         )
         super().__init__(*args, **kwargs)
+
+
+@dataclass
+class OrderBy:
+    by: Literal["timestamp", "metric"]
+    name: Optional[str] = None
+    direction: Literal["ASC", "DESC"] = "DESC"

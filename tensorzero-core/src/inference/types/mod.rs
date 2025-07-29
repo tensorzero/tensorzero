@@ -284,7 +284,6 @@ impl Role {
 /// These RequestMessages are collected into a ModelInferenceRequest,
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
-
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, ts(export))]
@@ -311,27 +310,21 @@ impl Text {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
-    pub text: String,
+    pub text: Option<String>,
     /// An optional signature - currently, this is only used with Anthropic,
     /// and is ignored by other providers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
-}
-
-impl std::fmt::Display for Thought {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.text)
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl Thought {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
+    /// When set, this 'Thought' block will only be used for providers
+    /// matching this type (e.g. `anthropic`). Other providers will emit
+    /// a warning and discard the block.
+    #[serde(
+        rename = "_internal_provider_type",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub provider_type: Option<String>,
 }
 
 /// Core representation of the types of content that could go into a model provider
@@ -445,7 +438,7 @@ impl RequestMessage {
             .iter()
             .map(|c| content_block_to_python(py, c))
             .collect::<PyResult<Vec<_>>>()?;
-        PyList::new(py, content).map(|list| list.into_any())
+        PyList::new(py, content).map(Bound::into_any)
     }
 
     #[getter]
@@ -681,6 +674,8 @@ pub struct JsonInferenceResult {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct JsonInferenceOutput {
     pub raw: Option<String>,
     pub parsed: Option<Value>,
@@ -753,6 +748,12 @@ pub struct ThoughtChunk {
     pub id: String,
     pub text: Option<String>,
     pub signature: Option<String>,
+    /// See `Thought.provider_type`
+    #[serde(
+        rename = "_internal_provider_type",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub provider_type: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -893,6 +894,7 @@ impl From<Value> for ResolvedInputMessageContent {
 fn deserialize_content<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<InputMessageContent>, D::Error> {
+    #[expect(clippy::redundant_closure_for_method_calls)]
     UntaggedEnumVisitor::new()
         .string(|text| {
             Ok(vec![InputMessageContent::Text(TextKind::Text {
@@ -1109,7 +1111,7 @@ impl InferenceResult {
     pub fn usage_considering_cached(&self) -> Usage {
         self.model_inference_results()
             .iter()
-            .map(|r| r.usage_considering_cached())
+            .map(ModelInferenceResponseWithMetadata::usage_considering_cached)
             .sum()
     }
 
@@ -1538,7 +1540,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
     let raw_response = raw_response.unwrap_or_else(|| {
         value
             .iter()
-            .map(|chunk| chunk.raw_response())
+            .map(InferenceResultChunk::raw_response)
             .collect::<Vec<&str>>()
             .join("\n")
     });
@@ -1577,7 +1579,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                 text.text,
                                 &mut ttft,
                                 chunk.latency,
-                                |text| text.into(),
+                                Into::into,
                                 |block, text| {
                                     if let ContentBlockOutput::Text(Text {
                                         text: existing_text,
@@ -1603,13 +1605,14 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                     chunk.latency,
                                     |text| {
                                         ContentBlockOutput::Thought(Thought {
-                                            text,
+                                            text: Some(text),
                                             signature: None,
+                                            provider_type: thought.provider_type.clone(),
                                         })
                                     },
                                     |block, text| {
                                         if let ContentBlockOutput::Thought(thought) = block {
-                                            thought.text.push_str(text);
+                                            thought.text.get_or_insert_default().push_str(text);
                                         }
                                     },
                                 );
@@ -1623,8 +1626,9 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                     chunk.latency,
                                     |signature| {
                                         ContentBlockOutput::Thought(Thought {
-                                            text: String::new(),
+                                            text: None,
                                             signature: Some(signature),
+                                            provider_type: thought.provider_type,
                                         })
                                     },
                                     |block, signature| {
@@ -1676,7 +1680,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                 if let Some(chunk_finish_reason) = chunk.finish_reason {
                     finish_reason = Some(chunk_finish_reason);
                 }
-                match blocks.get_mut(&(ContentBlockOutputType::Text, "".to_string())) {
+                match blocks.get_mut(&(ContentBlockOutputType::Text, String::new())) {
                     // If there is already a text block, append to it
                     Some(ContentBlockOutput::Text(Text {
                         text: existing_text,
@@ -1694,23 +1698,27 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                         }
                         if let Some(raw) = chunk.raw {
                             blocks
-                                .insert((ContentBlockOutputType::Text, "".to_string()), raw.into());
+                                .insert((ContentBlockOutputType::Text, String::new()), raw.into());
                         }
                     }
                 }
                 if let Some(thought) = chunk.thought {
-                    match blocks.get_mut(&(ContentBlockOutputType::Thought, "".to_string())) {
+                    match blocks.get_mut(&(ContentBlockOutputType::Thought, String::new())) {
                         // If there is already a thought block, append to it
                         Some(ContentBlockOutput::Thought(existing_thought)) => {
-                            existing_thought.text.push_str(&thought);
+                            existing_thought
+                                .text
+                                .get_or_insert_default()
+                                .push_str(&thought);
                         }
                         // If there is no thought block, create one
                         _ => {
                             blocks.insert(
-                                (ContentBlockOutputType::Thought, "".to_string()),
+                                (ContentBlockOutputType::Thought, String::new()),
                                 ContentBlockOutput::Thought(Thought {
-                                    text: thought,
+                                    text: Some(thought),
                                     signature: None,
+                                    provider_type: None,
                                 }),
                             );
                         }
@@ -1750,12 +1758,12 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
             episode_id,
         },
         function_name,
-        variant_name: Some(variant_name),
+        variant_name,
         tool_config,
         templates,
         dynamic_output_schema: dynamic_output_schema.as_ref(),
-        extra_body,
-        extra_headers,
+        extra_body: Cow::Borrowed(&extra_body),
+        extra_headers: Cow::Borrowed(&extra_headers),
         extra_cache_key: None,
     };
     function
@@ -1951,7 +1959,7 @@ mod tests {
             input_messages: vec![],
             output: content.clone(),
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -1999,7 +2007,7 @@ mod tests {
             input_messages: vec![],
             output: content.clone(),
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2050,7 +2058,7 @@ mod tests {
             input_messages: vec![],
             output: content.clone(),
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             finish_reason: Some(FinishReason::Stop),
             usage,
             latency: Latency::NonStreaming {
@@ -2097,7 +2105,7 @@ mod tests {
             input_messages: vec![],
             output: content.clone(),
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2165,7 +2173,7 @@ mod tests {
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2250,7 +2258,7 @@ mod tests {
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2342,7 +2350,7 @@ mod tests {
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2392,7 +2400,7 @@ mod tests {
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2463,7 +2471,7 @@ mod tests {
             input_messages: vec![],
             output: content.clone(),
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             finish_reason: None,
             latency: Latency::NonStreaming {
@@ -2520,7 +2528,7 @@ mod tests {
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2862,11 +2870,11 @@ mod tests {
                 finish_reason: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                raw: Some("".to_string()),
+                raw: Some(String::new()),
                 thought: Some("Thought 2".to_string()),
                 created,
                 usage: None,
-                raw_response: "".to_string(),
+                raw_response: String::new(),
                 latency: Duration::from_millis(200),
                 finish_reason: None,
             }),
@@ -2914,8 +2922,9 @@ mod tests {
                             text: "{\"name\":\"John\",\"age\":30}".to_string()
                         }),
                         ContentBlockChatOutput::Thought(Thought {
-                            text: "Thought 2".to_string(),
+                            text: Some("Thought 2".to_string()),
                             signature: None,
+                            provider_type: None,
                         }),
                     ]
                 );
@@ -3188,11 +3197,13 @@ mod tests {
                         text: Some("Some thou".to_string()),
                         id: "0".to_string(),
                         signature: None,
+                        provider_type: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         text: Some("My other interleaved thought".to_string()),
                         id: "1".to_string(),
                         signature: None,
+                        provider_type: None,
                     }),
                 ],
                 created,
@@ -3220,6 +3231,7 @@ mod tests {
                     text: Some("ght".to_string()),
                     id: "0".to_string(),
                     signature: None,
+                    provider_type: None,
                 })],
                 created,
                 usage: None,
@@ -3277,12 +3289,14 @@ mod tests {
                 id: "0".to_string(),
             }),
             ContentBlockChatOutput::Thought(Thought {
-                text: "Some thought".to_string(),
+                text: Some("Some thought".to_string()),
                 signature: None,
+                provider_type: None,
             }),
             ContentBlockChatOutput::Thought(Thought {
-                text: "My other interleaved thought".to_string(),
+                text: Some("My other interleaved thought".to_string()),
                 signature: None,
+                provider_type: None,
             }),
         ];
         assert_eq!(chat_result.content, expected_content);
@@ -4005,6 +4019,7 @@ mod tests {
                 id: "123".to_string(),
                 text: Some("thinking...".to_string()),
                 signature: None,
+                provider_type: None,
             })],
             created: 1234567890,
             usage: None,
@@ -4033,6 +4048,7 @@ mod tests {
                     id: "789".to_string(),
                     text: Some("final thought".to_string()),
                     signature: None,
+                    provider_type: None,
                 }),
             ],
             created: 1234567890,
@@ -4128,7 +4144,7 @@ mod tests {
         handle_textual_content_block(
             &mut blocks,
             (ContentBlockOutputType::Text, "2".to_string()),
-            "".to_string(),
+            String::new(),
             &mut ttft,
             chunk_latency,
             |text| ContentBlockOutput::Text(Text { text }),
@@ -4153,13 +4169,14 @@ mod tests {
             chunk_latency,
             |text| {
                 ContentBlockOutput::Thought(Thought {
-                    text,
+                    text: Some(text),
                     signature: None,
+                    provider_type: None,
                 })
             },
             |block, text| {
                 if let ContentBlockOutput::Thought(thought) = block {
-                    thought.text.push_str(text);
+                    thought.text.get_or_insert_default().push_str(text);
                 }
             },
         );
@@ -4169,8 +4186,12 @@ mod tests {
             .get(&(ContentBlockOutputType::Thought, "3".to_string()))
             .unwrap()
         {
-            ContentBlockOutput::Thought(Thought { text, signature: _ }) => {
-                assert_eq!(text, "Thinking...")
+            ContentBlockOutput::Thought(Thought {
+                text,
+                signature: _,
+                provider_type: _,
+            }) => {
+                assert_eq!(text, &Some("Thinking...".to_string()))
             }
             _ => panic!("Expected thought block"),
         }

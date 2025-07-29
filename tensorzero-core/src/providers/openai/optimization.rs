@@ -159,11 +159,7 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAISupervisedRow<'a> {
         let (parallel_tool_calls, tools) = match &inference.tool_params {
             Some(tool_params) => (
                 tool_params.parallel_tool_calls.unwrap_or_default(),
-                tool_params
-                    .tools_available
-                    .iter()
-                    .map(|t| t.into())
-                    .collect(),
+                tool_params.tools_available.iter().map(Into::into).collect(),
             ),
             None => (false, vec![]),
         };
@@ -330,6 +326,7 @@ mod tests {
             tool_params: None,
             output_schema: None,
             dispreferred_outputs: vec![],
+            tags: HashMap::new(),
         };
         let row = OpenAISupervisedRow::try_from(&inference).unwrap();
         assert_eq!(row.messages.len(), 3);

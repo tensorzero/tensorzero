@@ -514,14 +514,14 @@ async fn get_latest_batch_inference(
         .collect::<Vec<_>>()
         .join(" AND ");
 
-    let tag_filter = if !tags.is_empty() {
-        format!("AND bmi.{tag_conditions}")
-    } else {
+    let tag_filter = if tags.is_empty() {
         String::new()
+    } else {
+        format!("AND bmi.{tag_conditions}")
     };
 
     let query = format!(
-        r#"
+        r"
             SELECT DISTINCT
                 br.batch_id,
                 br.id,
@@ -543,7 +543,7 @@ async fn get_latest_batch_inference(
             ORDER BY br.timestamp DESC
             LIMIT 1
             FORMAT JSONEachRow
-        "#
+        "
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query)
@@ -821,7 +821,7 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
 /// that are used for the simple batch inference tests,
 /// this will poll the batch inference and check that the response is correct.
 ///
-/// This test polls by batch_id then by inference id.
+/// This test polls by `batch_id` then by `inference id`.
 pub async fn test_poll_existing_simple_image_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -904,7 +904,7 @@ pub async fn test_poll_existing_simple_image_batch_inference_request_with_provid
 ///
 /// This way the gateway will actually poll the inference data from the inference provider.
 ///
-/// This test polls by inference_id then by batch_id.
+/// This test polls by `inference_id` then by `batch_id`.
 pub async fn test_poll_completed_simple_image_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -1166,7 +1166,7 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
 /// that are used for the inference params batch inference tests,
 /// this will poll the batch inference and check that the response is correct.
 ///
-/// This test polls by batch_id then by inference id.
+/// This test polls by `batch_id` then by inference id.
 pub async fn test_poll_existing_inference_params_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -1247,7 +1247,7 @@ pub async fn test_poll_existing_inference_params_batch_inference_request_with_pr
 ///
 /// This way the gateway will actually poll the inference data from the inference provider.
 ///
-/// This test polls by inference_id then by batch_id.
+/// This test polls by `inference_id` then by `batch_id`.
 pub async fn test_poll_completed_inference_params_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -1787,7 +1787,7 @@ async fn get_tags_for_batch_inferences(
 /// that are used for the tool choice auto used tests,
 /// this will poll the batch inference and check that the response is correct.
 ///
-/// This test polls by batch_id then by inference id.
+/// This test polls by `batch_id` then by inference id.
 pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -1906,7 +1906,7 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
 ///
 /// This way the gateway will actually poll the inference data from the inference provider.
 ///
-/// This test polls by inference_id then by batch_id.
+/// This test polls by `inference_id` then by `batch_id`.
 pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -2200,7 +2200,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
 /// that are used for the inference params batch inference tests,
 /// this will poll the batch inference and check that the response is correct.
 ///
-/// This test polls by batch_id then by inference id.
+/// This test polls by `batch_id` then by inference id.
 pub async fn test_poll_existing_allowed_tools_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -2292,7 +2292,7 @@ pub async fn test_poll_existing_allowed_tools_batch_inference_request_with_provi
 ///
 /// This way the gateway will actually poll the inference data from the inference provider.
 ///
-/// This test polls by inference_id then by batch_id.
+/// This test polls by `inference_id` then by `batch_id`.
 pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -2850,7 +2850,7 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
 /// that are used for the inference params batch inference tests,
 /// this will poll the batch inference and check that the response is correct.
 ///
-/// This test polls by batch_id then by inference id.
+/// This test polls by `batch_id` then by inference id.
 pub async fn test_poll_existing_multi_turn_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -3102,7 +3102,7 @@ pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_wit
 ///
 /// This way the gateway will actually poll the inference data from the inference provider.
 ///
-/// This test polls by inference_id then by batch_id.
+/// This test polls by `inference_id` then by `batch_id`.
 pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -3378,7 +3378,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
 /// that are used for the inference params batch inference tests,
 /// this will poll the batch inference and check that the response is correct.
 ///
-/// This test polls by batch_id then by inference id.
+/// This test polls by `batch_id` then by inference id.
 pub async fn test_poll_existing_dynamic_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -3460,7 +3460,7 @@ pub async fn test_poll_existing_dynamic_tool_use_batch_inference_request_with_pr
 ///
 /// This way the gateway will actually poll the inference data from the inference provider.
 ///
-/// This test polls by inference_id then by batch_id.
+/// This test polls by `inference_id` then by `batch_id`.
 pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -3728,7 +3728,7 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
 /// that are used for the inference params batch inference tests,
 /// this will poll the batch inference and check that the response is correct.
 ///
-/// This test polls by batch_id then by inference id.
+/// This test polls by `batch_id` then by inference id.
 pub async fn test_poll_existing_parallel_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -3823,7 +3823,7 @@ pub async fn test_poll_existing_parallel_tool_use_batch_inference_request_with_p
 ///
 /// This way the gateway will actually poll the inference data from the inference provider.
 ///
-/// This test polls by inference_id then by batch_id.
+/// This test polls by `inference_id` then by `batch_id`.
 pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -4074,7 +4074,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
 /// that are used for the inference params batch inference tests,
 /// this will poll the batch inference and check that the response is correct.
 ///
-/// This test polls by batch_id then by inference id.
+/// This test polls by `batch_id` then by `inference id`.
 pub async fn test_poll_existing_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -4159,7 +4159,7 @@ pub async fn test_poll_existing_json_mode_batch_inference_request_with_provider(
 ///
 /// This way the gateway will actually poll the inference data from the inference provider.
 ///
-/// This test polls by inference_id then by batch_id.
+/// This test polls by `inference_id` then by `batch_id`.
 pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -4413,7 +4413,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
 /// that are used for the inference params batch inference tests,
 /// this will poll the batch inference and check that the response is correct.
 ///
-/// This test polls by batch_id then by inference id.
+/// This test polls by `batch_id` then by inference id.
 pub async fn test_poll_existing_dynamic_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -4512,7 +4512,7 @@ pub async fn test_poll_existing_dynamic_json_mode_batch_inference_request_with_p
 ///
 /// This way the gateway will actually poll the inference data from the inference provider.
 ///
-/// This test polls by inference_id then by batch_id.
+/// This test polls by `inference_id` then by `batch_id`.
 pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {

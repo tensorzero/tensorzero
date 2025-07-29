@@ -479,7 +479,7 @@ impl Params {
                             message: "variant_name header is not valid UTF-8".to_string(),
                         })
                     })
-                    .map(|s| s.to_string())
+                    .map(str::to_string)
             })
             .transpose()?;
         let header_dryrun = headers
@@ -505,10 +505,10 @@ impl Params {
             allowed_tools: None,
             additional_tools: openai_compatible_params
                 .tools
-                .map(|tools| tools.into_iter().map(|tool| tool.into()).collect()),
+                .map(|tools| tools.into_iter().map(OpenAICompatibleTool::into).collect()),
             tool_choice: openai_compatible_params
                 .tool_choice
-                .map(|tool_choice| tool_choice.into()),
+                .map(ChatCompletionToolChoiceOption::into),
             parallel_tool_calls: openai_compatible_params.parallel_tool_calls,
         };
         let output_schema = match openai_compatible_params.response_format {
@@ -871,7 +871,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                     created: current_timestamp() as u32,
                     model: format!("{response_model_prefix}{}", response.variant_name),
                     service_tier: None,
-                    system_fingerprint: "".to_string(),
+                    system_fingerprint: String::new(),
                     object: "chat.completion".to_string(),
                     usage: response.usage.into(),
                     episode_id: response.episode_id.to_string(),
@@ -890,7 +890,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                 }],
                 created: current_timestamp() as u32,
                 model: format!("{response_model_prefix}{}", response.variant_name),
-                system_fingerprint: "".to_string(),
+                system_fingerprint: String::new(),
                 service_tier: None,
                 object: "chat.completion".to_string(),
                 usage: OpenAICompatibleUsage {
@@ -986,7 +986,7 @@ struct OpenAICompatibleChoiceChunk {
 
 fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
     // if it’s None → skip, or if the Vec is empty → skip
-    v.as_ref().is_none_or(|vec| vec.is_empty())
+    v.as_ref().is_none_or(Vec::is_empty)
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1010,7 +1010,7 @@ fn convert_inference_response_chunk_to_openai_compatible(
                 episode_id: c.episode_id.to_string(),
                 choices: vec![OpenAICompatibleChoiceChunk {
                     index: 0,
-                    finish_reason: c.finish_reason.map(|finish_reason| finish_reason.into()),
+                    finish_reason: c.finish_reason.map(FinishReason::into),
                     logprobs: None,
                     delta: OpenAICompatibleDelta {
                         content,
@@ -1020,7 +1020,7 @@ fn convert_inference_response_chunk_to_openai_compatible(
                 created: current_timestamp() as u32,
                 service_tier: None,
                 model: format!("{response_model_prefix}{}", c.variant_name),
-                system_fingerprint: "".to_string(),
+                system_fingerprint: String::new(),
                 object: "chat.completion.chunk".to_string(),
                 // We emit a single chunk containing 'usage' at the end of the stream
                 usage: None,
@@ -1031,7 +1031,7 @@ fn convert_inference_response_chunk_to_openai_compatible(
             episode_id: c.episode_id.to_string(),
             choices: vec![OpenAICompatibleChoiceChunk {
                 index: 0,
-                finish_reason: c.finish_reason.map(|finish_reason| finish_reason.into()),
+                finish_reason: c.finish_reason.map(FinishReason::into),
                 logprobs: None,
                 delta: OpenAICompatibleDelta {
                     content: Some(c.raw),
@@ -1041,7 +1041,7 @@ fn convert_inference_response_chunk_to_openai_compatible(
             created: current_timestamp() as u32,
             service_tier: None,
             model: format!("{response_model_prefix}{}", c.variant_name),
-            system_fingerprint: "".to_string(),
+            system_fingerprint: String::new(),
             object: "chat.completion.chunk".to_string(),
             // We emit a single chunk containing 'usage' at the end of the stream
             usage: None,
@@ -1171,7 +1171,7 @@ fn prepare_serialized_openai_compatible_events(
                 choices: vec![],
                 created: current_timestamp() as u32,
                 model: format!("{response_model_prefix}{variant_name}"),
-                system_fingerprint: "".to_string(),
+                system_fingerprint: String::new(),
                 object: "chat.completion.chunk".to_string(),
                 service_tier: None,
                 usage: Some(OpenAICompatibleUsage {

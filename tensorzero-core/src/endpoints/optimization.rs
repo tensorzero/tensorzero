@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     clickhouse::{
-        query_builder::{InferenceFilterTreeNode, InferenceOutputSource, ListInferencesParams},
+        query_builder::{
+            InferenceFilterTreeNode, InferenceOutputSource, ListInferencesParams, OrderBy,
+        },
         ClickHouseConnectionInfo, ClickhouseFormat,
     },
     config_parser::Config,
@@ -36,6 +38,7 @@ pub struct LaunchOptimizationWorkflowParams {
     pub query_variant_name: Option<String>,
     pub filters: Option<InferenceFilterTreeNode>,
     pub output_source: InferenceOutputSource,
+    pub order_by: Option<Vec<OrderBy>>,
     #[serde(deserialize_with = "deserialize_option_u64")]
     pub limit: Option<u64>,
     #[serde(deserialize_with = "deserialize_option_u64")]
@@ -79,6 +82,7 @@ pub async fn launch_optimization_workflow(
         query_variant_name,
         filters,
         output_source,
+        order_by,
         limit,
         offset,
         val_fraction,
@@ -97,6 +101,7 @@ pub async fn launch_optimization_workflow(
                 limit,
                 offset,
                 format,
+                order_by: order_by.as_deref(),
             },
         )
         .await?;
@@ -115,7 +120,8 @@ pub async fn launch_optimization_workflow(
 
     // Launch the optimization job
     optimizer_config
-        .load()?
+        .load()
+        .await?
         .launch(
             http_client,
             train_examples,
@@ -149,7 +155,7 @@ pub async fn launch_optimization(
         val_samples: val_examples,
         optimization_config: optimizer_config,
     } = params;
-    let optimizer = optimizer_config.load()?;
+    let optimizer = optimizer_config.load().await?;
     optimizer
         .launch(
             http_client,

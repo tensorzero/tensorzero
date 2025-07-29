@@ -1,4 +1,5 @@
 #![expect(clippy::print_stdout)]
+use std::io::Cursor;
 use std::{collections::HashMap, net::SocketAddr};
 
 use aws_config::Region;
@@ -13,6 +14,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{routing::get, Router};
 use base64::prelude::*;
 use futures::StreamExt;
+use image::{ImageFormat, ImageReader};
 use object_store::path::Path;
 
 use rand::Rng;
@@ -666,14 +668,14 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.image_test.variants.gcp_vertex]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-06-05"
+model = "gcp-gemini-2.5-pro"
 
-[models."gemini-2.5-pro-preview-06-05"]
+[models."gcp-gemini-2.5-pro"]
 routing = ["gcp_vertex_gemini"]
 
-[models."gemini-2.5-pro-preview-06-05".providers.gcp_vertex_gemini]
+[models."gcp-gemini-2.5-pro".providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
-model_id = "gemini-2.5-pro-preview-06-05"
+model_id = "gemini-2.5-pro"
 location = "global"
 project_id = "tensorzero-public"
 
@@ -1133,35 +1135,34 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     let client = make_embedded_gateway_with_config(config_toml).await;
     let mut storage_path = None;
 
+    let mut params = ClientInferenceParams {
+        function_name: Some("image_test".to_string()),
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![
+                    ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Describe the contents of the image".to_string(),
+                    }),
+                    ClientInputMessageContent::File(File::Base64 {
+                        mime_type: mime::IMAGE_PNG,
+                        data: image_data.clone(),
+                    }),
+                ],
+            }],
+        },
+        cache_options: CacheParamsOptions {
+            enabled: CacheEnabledMode::On,
+            max_age_s: Some(10),
+        },
+        ..Default::default()
+    };
+
     for should_be_cached in [false, true] {
-        let response = client
-            .inference(ClientInferenceParams {
-                function_name: Some("image_test".to_string()),
-                variant_name: Some(provider.variant_name.clone()),
-                episode_id: Some(episode_id),
-                input: ClientInput {
-                    system: None,
-                    messages: vec![ClientInputMessage {
-                        role: Role::User,
-                        content: vec![
-                            ClientInputMessageContent::Text(TextKind::Text {
-                                text: "Describe the contents of the image".to_string(),
-                            }),
-                            ClientInputMessageContent::File(File::Base64 {
-                                mime_type: mime::IMAGE_PNG,
-                                data: image_data.clone(),
-                            }),
-                        ],
-                    }],
-                },
-                cache_options: CacheParamsOptions {
-                    enabled: CacheEnabledMode::On,
-                    max_age_s: Some(10),
-                },
-                ..Default::default()
-            })
-            .await
-            .unwrap();
+        let response = client.inference(params.clone()).await.unwrap();
 
         let InferenceOutput::NonStreaming(response) = response else {
             panic!("Expected non-streaming inference response");
@@ -1179,6 +1180,52 @@ pub async fn test_base64_image_inference_with_provider_and_store(
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         storage_path = Some(latest_storage_path);
     }
+
+    let mut image_png = ImageReader::new(Cursor::new(FERRIS_PNG))
+        .with_guessed_format()
+        .unwrap()
+        .decode()
+        .unwrap();
+
+    // Get 32 random bytes, and write then to the image. This should force a cache miss
+    let mut rng = rand::rng();
+    let random_bytes: Vec<u8> = (0..32)
+        .map(|_| rng.sample(rand::distr::StandardUniform))
+        .collect();
+    image_png
+        .as_mut_rgba8()
+        .unwrap()
+        .as_flat_samples_mut()
+        .samples[0..(random_bytes.len())]
+        .copy_from_slice(&random_bytes);
+
+    let mut updated_image = Cursor::new(Vec::new());
+    image_png
+        .write_to(&mut updated_image, ImageFormat::Png)
+        .unwrap();
+
+    let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
+
+    params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64 {
+        mime_type: mime::IMAGE_PNG,
+        data: updated_base64,
+    });
+
+    let response = client.inference(params.clone()).await.unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    let inference_id = response.inference_id();
+
+    let clickhouse = get_clickhouse().await;
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    assert_eq!(result["cached"], false);
+    // Should be a cache miss since the image data was changed
     (client, storage_path.unwrap())
 }
 
@@ -1728,8 +1775,9 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
                     ClientInputMessage {
                         role: Role::Assistant,
                         content: vec![ClientInputMessageContent::Thought(Thought {
-                            text: "My TensorZero thought".to_string(),
+                            text: Some("My TensorZero thought".to_string()),
                             signature: Some("My TensorZero signature".to_string()),
+                            provider_type: None,
                         })],
                     },
                     ClientInputMessage {
@@ -3073,8 +3121,8 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 }
 
 pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
-    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-06-05'
-    if provider.model_name.starts_with("gemini-2.5-pro") {
+    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
+    if provider.model_name.contains("gemini-2.5-pro") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -3244,11 +3292,11 @@ pub async fn check_inference_params_response(
         .unwrap();
     assert_eq!(frequency_penalty, 0.2);
 
-    if !is_batch {
+    if is_batch {
+        assert!(result.get("processing_time_ms").unwrap().is_null());
+    } else {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
         assert!(processing_time_ms > 0);
-    } else {
-        assert!(result.get("processing_time_ms").unwrap().is_null());
     }
 
     // Check the ModelInference Table
@@ -3285,12 +3333,12 @@ pub async fn check_inference_params_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -3315,8 +3363,8 @@ pub async fn check_inference_params_response(
 pub async fn test_inference_params_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-06-05'
-    if provider.model_name.starts_with("gemini-2.5-pro") {
+    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
+    if provider.model_name.contains("gemini-2.5-pro") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -4218,7 +4266,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
 }
 
 /// This test is similar to `test_tool_use_tool_choice_auto_used_inference_request_with_provider`, but it steers the model to not use the tool.
-/// This ensures that ToolChoice::Auto is working as expected.
+/// This ensures that `ToolChoice::Auto` is working as expected.
 pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -4375,11 +4423,11 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
         location["description"],
         "The location to get the temperature for (e.g. \"New York\")"
     );
-    if !is_batch {
+    if is_batch {
+        assert!(result.get("processing_time_ms").unwrap().is_null());
+    } else {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
         assert!(processing_time_ms > 0);
-    } else {
-        assert!(result.get("processing_time_ms").unwrap().is_null());
     }
 
     let units = properties["units"].as_object().unwrap();
@@ -4421,12 +4469,12 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
 
@@ -4437,12 +4485,12 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
 
@@ -4473,7 +4521,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
 }
 
 /// This test is similar to `test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider`, but it steers the model to not use the tool.
-/// This ensures that ToolChoice::Auto is working as expected.
+/// This ensures that `ToolChoice::Auto` is working as expected.
 pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -4874,16 +4922,16 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
         assert!(units == "celsius" || units == "fahrenheit");
     }
 
-    let arguments = content_block.get("arguments").unwrap();
-    let arguments = arguments.as_object().unwrap();
-    // OpenAI occasionally emits a tool call with an empty object for `arguments`
-    assert!(arguments.len() <= 2);
-    if let Some(location) = arguments.get("location") {
-        assert!(location.as_str().is_some())
-    }
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "celsius" || units == "fahrenheit");
+    if let Some(arguments) = content_block["arguments"].as_object() {
+        // OpenAI occasionally emits a tool call with an empty object for `arguments`
+        assert!(arguments.len() <= 2);
+        if let Some(location) = arguments.get("location") {
+            assert!(location.as_str().is_some())
+        }
+        if arguments.len() == 2 {
+            let units = arguments.get("units").unwrap().as_str().unwrap();
+            assert!(units == "celsius" || units == "fahrenheit");
+        }
     }
 
     let usage = response_json.get("usage").unwrap();
@@ -5020,12 +5068,12 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
 
@@ -5426,7 +5474,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
 
     // NOTE - Gemini 2.5 produces 'UNEXPECTED_TOOL_CALL' here
     // See https://github.com/tensorzero/tensorzero/issues/2329
-    if provider.model_name == "gemini-2.5-pro-preview-06-05" {
+    if provider.model_name == "gcp-gemini-2.5-pro" {
         return;
     }
 
@@ -5675,7 +5723,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
 ) {
     // Gemini 2.5 Pro will produce 'executableCode' blocks for this test, which we don't support
     // in streaming mode (since we don't have "unknown" streaming chunks)
-    if provider.model_name.starts_with("gemini-2.5-pro") {
+    if provider.model_name.contains("gemini-2.5-pro") {
         return;
     }
 
@@ -10146,7 +10194,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("gemini-2.5-pro") {
+    let max_tokens = if provider.model_name.contains("gemini-2.5-pro") {
         500
     } else if provider.model_name.starts_with("o1") {
         1000
@@ -10281,7 +10329,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     // {"generationConfig": {"thinkingConfig": {"thinkingBudget": 0 }}
     // This prevents us from setting a low max_tokens, since the thinking tokens will
     // use up all of the output tokens before an actual response is generated.
-    if provider.model_name.starts_with("gemini-2.5-pro") {
+    if provider.model_name.contains("gemini-2.5-pro") {
         return;
     }
 
