@@ -37,7 +37,7 @@ impl Migration for Migration0033<'_> {
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
             .run_query_synchronous_no_params(
-                r#"CREATE TABLE IF NOT EXISTS DeploymentID (
+                r"CREATE TABLE IF NOT EXISTS DeploymentID (
                         deployment_id String,
                         dummy UInt32 DEFAULT 0, -- the dummy column is used to enforce a single row in the table
                         created_at DateTime DEFAULT now(),
@@ -47,7 +47,7 @@ impl Migration for Migration0033<'_> {
                     ENGINE = ReplacingMergeTree(
                         version_number
                     )
-                    ORDER BY dummy;"#
+                    ORDER BY dummy;"
                     .to_string(),
             )
             .await?;
@@ -67,7 +67,7 @@ impl Migration for Migration0033<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r#"DROP TABLE DeploymentID;"#.to_string()
+        r"DROP TABLE DeploymentID;".to_string()
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

@@ -163,10 +163,10 @@ export function SFTForm({
                 control={form.control}
                 name="metric"
                 functionFieldName="function"
-                feedbackCount={counts.feedbackCount}
-                curatedInferenceCount={counts.curatedInferenceCount}
                 config={config}
                 addDemonstrations={true}
+                feedbackCount={counts.feedbackCount}
+                curatedInferenceCount={counts.curatedInferenceCount}
               />
 
               {errors.metric && (

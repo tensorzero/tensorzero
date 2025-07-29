@@ -14,6 +14,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { DatasetsActions } from "./DatasetsActions";
 import { logger } from "~/utils/logger";
+import { getNativeTensorZeroClient } from "~/utils/supervised_fine_tuning/client";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -28,6 +29,21 @@ export async function loader({ request }: Route.LoaderArgs) {
   });
   const numberOfDatasets = await getNumberOfDatasets();
   return { counts, pageSize, offset, numberOfDatasets };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const action = formData.get("action");
+  if (action === "delete") {
+    const datasetName = formData.get("datasetName");
+    if (typeof datasetName !== "string") {
+      throw data("Dataset name is required", { status: 400 });
+    }
+    const client = await getNativeTensorZeroClient();
+    const staleDataset = await client.staleDataset(datasetName);
+    return staleDataset;
+  }
+  return null;
 }
 
 export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
