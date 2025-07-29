@@ -32,7 +32,7 @@ import { TagsTable } from "~/components/utils/TagsTable";
 import { ModelInferencesTable } from "./ModelInferencesTable";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import {
@@ -55,8 +55,6 @@ import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { logger } from "~/utils/logger";
-import { JSONParseError } from "~/utils/common";
-import { processJson } from "~/utils/syntax-highlighting.server";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
 
@@ -127,23 +125,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     });
   }
 
-  const [inferenceParams, toolParams] = await Promise.all([
-    processJson(
-      inference.inference_params,
-      `inference params: ${inference_id}`,
-    ).catch(handleJsonProcessingError),
-    inference.function_type === "chat"
-      ? processJson(
-          inference.tool_params,
-          `tool params: ${inference_id}`,
-        ).catch(handleJsonProcessingError)
-      : Promise.resolve(null),
-  ]);
-
   return {
     inference,
-    inferenceParams,
-    toolParams,
     model_inferences,
     feedback,
     feedback_bounds,
@@ -239,8 +222,6 @@ type ModalType = "human-feedback" | "variant-response" | null;
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const {
     inference,
-    inferenceParams,
-    toolParams,
     model_inferences,
     feedback,
     feedback_bounds,
@@ -286,10 +267,8 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   const num_feedbacks = feedback.length;
 
-  const config = useConfig();
-  const variants = Object.keys(
-    config.functions[inference.function_name]?.variants || {},
-  );
+  const functionConfig = useFunctionConfig(inference.function_name);
+  const variants = Object.keys(functionConfig?.variants || {});
   const addToDatasetFetcher = useFetcher<typeof action>();
   const addToDatasetError =
     addToDatasetFetcher.state === "idle" && addToDatasetFetcher.data?.error
@@ -463,13 +442,19 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Inference Parameters" />
-          <ParameterCard parameters={inferenceParams.raw} />
+          <ParameterCard
+            parameters={JSON.stringify(inference.inference_params, null, 2)}
+          />
         </SectionLayout>
 
         {inference.function_type === "chat" && (
           <SectionLayout>
             <SectionHeader heading="Tool Parameters" />
-            {toolParams && <ParameterCard parameters={toolParams.raw} />}
+            {inference.tool_params && (
+              <ParameterCard
+                parameters={JSON.stringify(inference.tool_params, null, 2)}
+              />
+            )}
           </SectionLayout>
         )}
 
@@ -566,13 +551,4 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </div>
     </div>
   );
-}
-
-function handleJsonProcessingError(error: unknown): never {
-  if (error instanceof JSONParseError) {
-    throw data(error.message, { status: 400 });
-  }
-  throw data(`Server error while processing JSON. Please contact support.`, {
-    status: 500,
-  });
 }

@@ -73,81 +73,81 @@ impl Migration for Migration0027<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
-        let create_index_query = r#"
+        let create_index_query = r"
             ALTER TABLE TagInference ADD INDEX IF NOT EXISTS inference_id_index inference_id TYPE bloom_filter GRANULARITY 1;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(create_index_query.to_string())
             .await?;
 
-        let materialize_index_query = r#"
+        let materialize_index_query = r"
             ALTER TABLE TagInference MATERIALIZE INDEX inference_id_index;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(materialize_index_query.to_string())
             .await?;
 
-        let create_index_query = r#"
+        let create_index_query = r"
             ALTER TABLE ChatInference ADD INDEX IF NOT EXISTS inference_id_index id TYPE bloom_filter GRANULARITY 1;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(create_index_query.to_string())
             .await?;
 
-        let materialize_index_query = r#"
+        let materialize_index_query = r"
             ALTER TABLE ChatInference MATERIALIZE INDEX inference_id_index;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(materialize_index_query.to_string())
             .await?;
 
-        let create_index_query = r#"
+        let create_index_query = r"
             ALTER TABLE JsonInference ADD INDEX IF NOT EXISTS inference_id_index id TYPE bloom_filter GRANULARITY 1;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(create_index_query.to_string())
             .await?;
 
-        let materialize_index_query = r#"
+        let materialize_index_query = r"
             ALTER TABLE JsonInference MATERIALIZE INDEX inference_id_index;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(materialize_index_query.to_string())
             .await?;
 
-        let create_index_query = r#"
+        let create_index_query = r"
             ALTER TABLE ChatInferenceDatapoint ADD INDEX IF NOT EXISTS id_index id TYPE bloom_filter GRANULARITY 1;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(create_index_query.to_string())
             .await?;
 
-        let materialize_index_query = r#"
+        let materialize_index_query = r"
             ALTER TABLE ChatInferenceDatapoint MATERIALIZE INDEX id_index;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(materialize_index_query.to_string())
             .await?;
 
-        let create_index_query = r#"
+        let create_index_query = r"
             ALTER TABLE JsonInferenceDatapoint ADD INDEX IF NOT EXISTS id_index id TYPE bloom_filter GRANULARITY 1;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(create_index_query.to_string())
             .await?;
 
-        let materialize_index_query = r#"
+        let materialize_index_query = r"
             ALTER TABLE JsonInferenceDatapoint MATERIALIZE INDEX id_index;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(materialize_index_query.to_string())
@@ -157,13 +157,13 @@ impl Migration for Migration0027<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r#"
+        r"
         ALTER TABLE TagInference DROP INDEX IF EXISTS inference_id_index;
         ALTER TABLE ChatInference DROP INDEX IF EXISTS inference_id_index;
         ALTER TABLE JsonInference DROP INDEX IF EXISTS inference_id_index;
         ALTER TABLE ChatInferenceDatapoint DROP INDEX IF EXISTS id_index;
         ALTER TABLE JsonInferenceDatapoint DROP INDEX IF EXISTS id_index;
-        "#
+        "
         .to_string()
     }
 
