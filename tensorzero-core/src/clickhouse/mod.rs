@@ -241,14 +241,14 @@ impl ClickHouseConnectionInfo {
     ) -> Result<ClickHouseResponse, Error> {
         match self {
             Self::Disabled => Ok(ClickHouseResponse {
-                response: "".to_string(),
+                response: String::new(),
                 metadata: ClickHouseResponseMetadata {
                     read_rows: 0,
                     written_rows: 0,
                 },
             }),
             Self::Mock { .. } => Ok(ClickHouseResponse {
-                response: "".to_string(),
+                response: String::new(),
                 metadata: ClickHouseResponseMetadata {
                     read_rows: 0,
                     written_rows: 0,
@@ -347,7 +347,7 @@ impl ClickHouseConnectionInfo {
     ) -> Result<ClickHouseResponse, Error> {
         match self {
             Self::Disabled | Self::Mock { .. } => Ok(ClickHouseResponse {
-                response: "".to_string(),
+                response: String::new(),
                 metadata: ClickHouseResponseMetadata {
                     read_rows: 0,
                     written_rows: 0,
@@ -497,7 +497,7 @@ impl ClickHouseConnectionInfo {
                 engine_args: &[],
             });
         let query = format!(
-            r#"CREATE TABLE IF NOT EXISTS TensorZeroMigration{on_cluster_name} (
+            r"CREATE TABLE IF NOT EXISTS TensorZeroMigration{on_cluster_name} (
                 migration_id UInt32,
                 migration_name String,
                 gateway_version String,
@@ -507,7 +507,7 @@ impl ClickHouseConnectionInfo {
                 extra_data Nullable(String)
             )
             ENGINE = {table_engine_name}
-            PRIMARY KEY (migration_id)"#
+            PRIMARY KEY (migration_id)"
         );
         self.run_query_synchronous_no_params(query)
             .await
@@ -622,6 +622,7 @@ fn get_replicated_table_engine_name(
 /// These may contain single quotes and backslashes, for example, if the user input contains doubly-serialized JSON.
 /// This function will escape single quotes and backslashes in the input string so that the comparison will be accurate.
 pub fn escape_string_for_clickhouse_literal(s: &str) -> String {
+    #![expect(clippy::needless_raw_string_hashes)]
     s.replace(r#"\"#, r#"\\"#).replace(r#"'"#, r#"\'"#)
 }
 
@@ -931,6 +932,7 @@ mod tests {
     #[test]
     fn test_escape_string_for_clickhouse_comparison() {
         // Test basic escaping of single quotes
+        #![expect(clippy::needless_raw_string_hashes)]
         assert_eq!(
             escape_string_for_clickhouse_literal("test's string"),
             r#"test\'s string"#

@@ -200,7 +200,7 @@ impl Migration for Migration0013<'_> {
         );
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS InferenceById{on_cluster_name}
             (
                 id_uint UInt128,
@@ -210,7 +210,7 @@ impl Migration for Migration0013<'_> {
                 function_type Enum8('chat' = 1, 'json' = 2)
             ) ENGINE = {table_engine_name}
             ORDER BY id_uint;
-        "#,
+        ",
         );
         let _ = self
             .clickhouse
@@ -226,7 +226,7 @@ impl Migration for Migration0013<'_> {
         );
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS InferenceByEpisodeId{on_cluster_name}
             (
                 episode_id_uint UInt128,
@@ -237,7 +237,7 @@ impl Migration for Migration0013<'_> {
             )
             ENGINE = {table_engine_name}
             ORDER BY (episode_id_uint, id_uint);
-        "#,
+        ",
         );
         let _ = self
             .clickhouse
@@ -245,12 +245,12 @@ impl Migration for Migration0013<'_> {
             .await?;
         // Create the `uint_to_uuid` function
         let query = format!(
-            r#"CREATE FUNCTION IF NOT EXISTS uint_to_uuid{on_cluster_name} AS (x) -> reinterpretAsUUID(
+            r"CREATE FUNCTION IF NOT EXISTS uint_to_uuid{on_cluster_name} AS (x) -> reinterpretAsUUID(
             concat(
                 substring(reinterpretAsString(x), 9, 8),
                 substring(reinterpretAsString(x), 1, 8)
             )
-        );"#,
+        );",
         );
         let _ = self
             .clickhouse
@@ -258,15 +258,15 @@ impl Migration for Migration0013<'_> {
             .await?;
 
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
-        let view_where_clause = if !clean_start {
-            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
-        } else {
+        let view_where_clause = if clean_start {
             String::new()
+        } else {
+            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         };
         // Create the materialized views for the `InferenceById` table
         // IMPORTANT: The function_type column is now correctly set to 'chat'
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByIdView
             TO InferenceById
             AS
@@ -278,7 +278,7 @@ impl Migration for Migration0013<'_> {
                     'chat' AS function_type
                 FROM ChatInference
                 {view_where_clause};
-            "#
+            "
         );
         let _ = self
             .clickhouse
@@ -287,7 +287,7 @@ impl Migration for Migration0013<'_> {
 
         // IMPORTANT: The function_type column is now correctly set to 'json'
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByIdView
             TO InferenceById
             AS
@@ -299,7 +299,7 @@ impl Migration for Migration0013<'_> {
                     'json' AS function_type
                 FROM JsonInference
                 {view_where_clause};
-            "#
+            "
         );
         let _ = self
             .clickhouse
@@ -309,7 +309,7 @@ impl Migration for Migration0013<'_> {
         // Create the materialized view for the `InferenceByEpisodeId` table from ChatInference
         // IMPORTANT: The function_type column is now correctly set to 'chat'
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByEpisodeIdView
             TO InferenceByEpisodeId
             AS
@@ -321,7 +321,7 @@ impl Migration for Migration0013<'_> {
                     'chat' as function_type
                 FROM ChatInference
                 {view_where_clause};
-            "#
+            "
         );
         let _ = self
             .clickhouse
@@ -331,7 +331,7 @@ impl Migration for Migration0013<'_> {
         // Create the materialized view for the `InferenceByEpisodeId` table from JsonInference
         // IMPORTANT: The function_type column is now correctly set to 'json'
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByEpisodeIdView
             TO InferenceByEpisodeId
             AS
@@ -343,7 +343,7 @@ impl Migration for Migration0013<'_> {
                     'json' as function_type
                 FROM JsonInference
                 {view_where_clause};
-            "#
+            "
         );
         let _ = self
             .clickhouse

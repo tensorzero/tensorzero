@@ -44,7 +44,7 @@ impl Migration for Migration0011<'_> {
             },
         );
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS ModelInferenceCache{on_cluster_name}
             (
                 short_cache_key UInt64,
@@ -60,7 +60,7 @@ impl Migration for Migration0011<'_> {
             ORDER BY (short_cache_key, long_cache_key)
             PRIMARY KEY (short_cache_key)
             SETTINGS index_granularity = 256
-        "#,
+        ",
         );
         let _ = self
             .clickhouse
@@ -68,9 +68,9 @@ impl Migration for Migration0011<'_> {
             .await?;
 
         // Add the `cached` column to ModelInference
-        let query = r#"
+        let query = r"
             ALTER TABLE ModelInference ADD COLUMN IF NOT EXISTS cached Bool DEFAULT false;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

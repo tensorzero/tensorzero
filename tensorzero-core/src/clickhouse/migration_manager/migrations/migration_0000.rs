@@ -62,7 +62,7 @@ impl Migration for Migration0000<'_> {
         );
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS BooleanMetricFeedback{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
@@ -72,7 +72,7 @@ impl Migration for Migration0000<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = {table_engine_name}
             ORDER BY (metric_name, target_id);
-        "#,
+        ",
         );
         let _ = self
             .clickhouse
@@ -88,7 +88,7 @@ impl Migration for Migration0000<'_> {
             },
         );
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS CommentFeedback{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
@@ -98,7 +98,7 @@ impl Migration for Migration0000<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = {table_engine_name}
             ORDER BY target_id;
-        "#,
+        ",
         );
         let _ = self
             .clickhouse
@@ -114,7 +114,7 @@ impl Migration for Migration0000<'_> {
             },
         );
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS DemonstrationFeedback{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
@@ -123,7 +123,7 @@ impl Migration for Migration0000<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = {table_engine_name}
             ORDER BY inference_id;
-        "#,
+        ",
         );
         let _ = self
             .clickhouse
@@ -139,7 +139,7 @@ impl Migration for Migration0000<'_> {
             },
         );
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS FloatMetricFeedback{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
@@ -149,7 +149,7 @@ impl Migration for Migration0000<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = {table_engine_name}
             ORDER BY (metric_name, target_id);
-        "#,
+        ",
         );
         let _ = self
             .clickhouse
@@ -165,7 +165,7 @@ impl Migration for Migration0000<'_> {
             },
         );
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS ChatInference{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
@@ -180,7 +180,7 @@ impl Migration for Migration0000<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = {table_engine_name}
             ORDER BY (function_name, variant_name, episode_id);
-        "#,
+        ",
         );
         let _ = self
             .clickhouse
@@ -196,7 +196,7 @@ impl Migration for Migration0000<'_> {
             },
         );
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS JsonInference{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
@@ -211,7 +211,7 @@ impl Migration for Migration0000<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = {table_engine_name}
             ORDER BY (function_name, variant_name, episode_id);
-        "#,
+        ",
         );
         let _ = self
             .clickhouse
@@ -227,7 +227,7 @@ impl Migration for Migration0000<'_> {
             },
         );
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS ModelInference{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
@@ -243,7 +243,7 @@ impl Migration for Migration0000<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = {table_engine_name}
             ORDER BY inference_id;
-        "#,
+        ",
         );
         let _ = self
             .clickhouse

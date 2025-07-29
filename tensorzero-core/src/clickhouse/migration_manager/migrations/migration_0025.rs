@@ -39,7 +39,7 @@ impl Migration for Migration0025<'_> {
             },
         );
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS DynamicEvaluationRun{on_cluster_name}
                 (
                     run_id_uint UInt128, -- UUID encoded as a UInt128
@@ -51,7 +51,7 @@ impl Migration for Migration0025<'_> {
                     updated_at DateTime64(6, 'UTC') DEFAULT now()
                 ) ENGINE = {table_engine_name}
                 ORDER BY run_id_uint;
-        "#,
+        ",
         );
         let _ = self
             .clickhouse
@@ -66,7 +66,7 @@ impl Migration for Migration0025<'_> {
             },
         );
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS DynamicEvaluationRunEpisode{on_cluster_name}
             (
                 run_id UUID,
@@ -79,7 +79,7 @@ impl Migration for Migration0025<'_> {
                 updated_at DateTime64(6, 'UTC') DEFAULT now()
             ) ENGINE = {table_engine_name}
                 ORDER BY episode_id_uint;
-        "#,
+        ",
         );
         let _ = self
             .clickhouse

@@ -81,7 +81,7 @@ impl Migration for Migration0026<'_> {
             },
         );
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS DynamicEvaluationRunEpisodeByRunId{on_cluster_name}
                 (
                     run_id_uint UInt128, -- UUID encoded as a UInt128
@@ -93,20 +93,20 @@ impl Migration for Migration0026<'_> {
                     updated_at DateTime64(6, 'UTC') DEFAULT now()
                 ) ENGINE = {table_engine_name}
                 ORDER BY (run_id_uint, episode_id_uint);
-        "#
+        "
         );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
-        let query = r#"
+        let query = r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS DynamicEvaluationRunEpisodeByRunIdView
                 TO DynamicEvaluationRunEpisodeByRunId
                 AS
                 SELECT * EXCEPT run_id, toUInt128(run_id) AS run_id_uint FROM DynamicEvaluationRunEpisode
                 ORDER BY run_id_uint, episode_id_uint;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -120,7 +120,7 @@ impl Migration for Migration0026<'_> {
             },
         );
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS DynamicEvaluationRunByProjectName{on_cluster_name}
                 (
                     run_id_uint UInt128, -- UUID encoded as a UInt128
@@ -132,21 +132,21 @@ impl Migration for Migration0026<'_> {
                     updated_at DateTime64(6, 'UTC') DEFAULT now()
                 ) ENGINE = {table_engine_name}
                 ORDER BY (project_name, run_id_uint);
-        "#,
+        ",
         );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
-        let query = r#"
+        let query = r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS DynamicEvaluationRunByProjectNameView
                 TO DynamicEvaluationRunByProjectName
                 AS
                 SELECT * FROM DynamicEvaluationRun
                 WHERE project_name IS NOT NULL
                 ORDER BY project_name, run_id_uint;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

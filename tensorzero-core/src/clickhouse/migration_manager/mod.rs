@@ -143,7 +143,7 @@ async fn check_replication_settings(clickhouse: &ClickHouseConnectionInfo) -> Re
     }
 
     // Next, let's check if there are replicated tables in our deployment
-    let max_cluster_count_query = r#"
+    let max_cluster_count_query = r"
         SELECT MAX(node_count) AS max_nodes_per_cluster
         FROM (
             SELECT
@@ -151,7 +151,7 @@ async fn check_replication_settings(clickhouse: &ClickHouseConnectionInfo) -> Re
                 COUNT() as node_count
             FROM system.clusters
             GROUP BY cluster
-        );"#
+        );"
     .to_string();
     let max_cluster_count_response = clickhouse
         .run_query_synchronous_no_params(max_cluster_count_query)
@@ -362,7 +362,7 @@ mod tests {
         }
 
         fn rollback_instructions(&self) -> String {
-            "".to_string()
+            String::new()
         }
     }
 

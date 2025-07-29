@@ -56,7 +56,8 @@ FROM rust:latest AS minijinja-build-env
 COPY . /build
 
 WORKDIR /build/ui/app/utils/minijinja
-RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+RUN apt-get update && apt-get install -y nodejs npm
+RUN npm install -g wasm-pack
 RUN wasm-pack build --features console_error_panic_hook
 
 # ========== tensorzero-node-build-env ==========
@@ -112,7 +113,7 @@ FROM base AS ui
 
 RUN useradd -m -s /bin/sh ui
 
-RUN apt-get update && apt-get install -y curl python3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl wget python3 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -150,3 +151,4 @@ ENV RUST_LOG=warn
 ENV TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
 
 ENTRYPOINT ["./entrypoint.sh"]
+HEALTHCHECK --start-period=10s --start-interval=1s --timeout=1s CMD wget --no-verbose --tries=1 --spider http://localhost:4000/api/tensorzero/status

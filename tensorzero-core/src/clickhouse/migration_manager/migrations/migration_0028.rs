@@ -94,10 +94,10 @@ impl Migration for Migration0028<'_> {
             })?
             + view_offset)
             .as_secs();
-        let view_timestamp_where_clause = if !clean_start {
-            format!("AND UUIDv7ToDateTime(feedback_id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
-        } else {
+        let view_timestamp_where_clause = if clean_start {
             String::new()
+        } else {
+            format!("AND UUIDv7ToDateTime(feedback_id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         };
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
@@ -109,7 +109,7 @@ impl Migration for Migration0028<'_> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(
-                format!(r#"CREATE TABLE IF NOT EXISTS StaticEvaluationHumanFeedback{on_cluster_name} (
+                format!(r"CREATE TABLE IF NOT EXISTS StaticEvaluationHumanFeedback{on_cluster_name} (
                     metric_name LowCardinality(String),
                     datapoint_id UUID,
                     output String,
@@ -120,7 +120,7 @@ impl Migration for Migration0028<'_> {
                 ) ENGINE = {table_engine_name}
                 ORDER BY (metric_name, datapoint_id, output)
                 SETTINGS index_granularity = 256 -- We use a small index granularity to improve lookup performance
-            "#,
+            ",
         ))
             .await?;
 
@@ -129,7 +129,7 @@ impl Migration for Migration0028<'_> {
 
         // Create the materialized view for FloatMetricFeedback
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS StaticEvaluationFloatHumanFeedbackView
             TO StaticEvaluationHumanFeedback
             AS
@@ -194,7 +194,7 @@ impl Migration for Migration0028<'_> {
                 i.variant_name = ji.variant_name AND
                 i.episode_id = ji.episode_id AND
                 f.target_id = ji.id;
-        "#
+        "
         );
         self.clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -202,7 +202,7 @@ impl Migration for Migration0028<'_> {
 
         // Create the materialized view for BooleanMetricFeedback
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS StaticEvaluationBooleanHumanFeedbackView
             TO StaticEvaluationHumanFeedback
             AS
@@ -267,7 +267,7 @@ impl Migration for Migration0028<'_> {
                 i.variant_name = ji.variant_name AND
                 i.episode_id = ji.episode_id AND
                 f.target_id = ji.id;
-        "#
+        "
         );
 
         self.clickhouse
@@ -287,13 +287,13 @@ impl Migration for Migration0028<'_> {
                 })?
                 .as_secs();
             let insert_timestamp_where_clause = format!(
-                r#"
+                r"
                 AND UUIDv7ToDateTime(feedback_id) < toDateTime(toUnixTimestamp({view_timestamp}))
-                AND UUIDv7ToDateTime(feedback_id) >= toDateTime(toUnixTimestamp({current_timestamp}))"#
+                AND UUIDv7ToDateTime(feedback_id) >= toDateTime(toUnixTimestamp({current_timestamp}))"
             );
 
             let query = format!(
-                r#"
+                r"
                 WITH human_feedback AS (
                     SELECT
                         metric_name,
@@ -372,7 +372,7 @@ impl Migration for Migration0028<'_> {
                 i.variant_name = ji.variant_name AND
                 i.episode_id = ji.episode_id AND
                 f.target_id = ji.id;
-        "#
+        "
             );
             self.clickhouse
                 .run_query_synchronous_no_params(query.to_string())
@@ -383,11 +383,11 @@ impl Migration for Migration0028<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r#"
+        r"
         DROP VIEW IF EXISTS StaticEvaluationFloatHumanFeedbackView;
         DROP VIEW IF EXISTS StaticEvaluationBooleanHumanFeedbackView;
         DROP TABLE IF EXISTS StaticEvaluationHumanFeedback;
-        "#
+        "
         .to_string()
     }
 

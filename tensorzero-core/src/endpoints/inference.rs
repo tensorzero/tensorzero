@@ -9,7 +9,8 @@ use object_store::{ObjectStore, PutMode, PutOptions};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::borrow::Cow;
+use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -237,12 +238,11 @@ pub async fn inference(
     tracing::Span::current().record("episode_id", episode_id.to_string());
 
     let (function, function_name) = find_function(&params, &config)?;
-    // Collect the function variant names as a Vec<&str>
-    let mut candidate_variant_names: Vec<&str> =
-        function.variants().keys().map(AsRef::as_ref).collect();
+    let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
+        function.variants().clone().into_iter().collect();
 
     // If the function has no variants, return an error
-    if candidate_variant_names.is_empty() {
+    if candidate_variants.is_empty() {
         return Err(ErrorDetails::InvalidFunctionVariants {
             message: format!("Function `{function_name}` has no variants"),
         }
@@ -256,10 +256,10 @@ pub async fn inference(
 
     // If a variant is pinned, only that variant should be attempted
     if let Some(ref variant_name) = params.variant_name {
-        candidate_variant_names.retain(|k| k == variant_name);
+        candidate_variants.retain(|k, _| k == variant_name);
 
         // If the pinned variant doesn't exist, return an error
-        if candidate_variant_names.is_empty() {
+        if candidate_variants.is_empty() {
             return Err(ErrorDetails::UnknownVariant {
                 name: variant_name.to_string(),
             }
@@ -271,14 +271,9 @@ pub async fn inference(
         );
     } else {
         // Remove all zero-weight variants - these can only be used if explicitly pinned above
-        candidate_variant_names.retain(|name| {
-            if let Some(variant) = function.variants().get(*name) {
-                // Retain 'None' and positive-weight variants, discarding zero-weight variants
-                variant.inner.weight().is_none_or(|w| w > 0.0)
-            } else {
-                // Keep missing variants - later code will error if we try to use them
-                true
-            }
+        candidate_variants.retain(|_, variant| {
+            // Retain 'None' and positive-weight variants, discarding zero-weight variants
+            variant.inner.weight().is_none_or(|w| w > 0.0)
         });
     }
 
@@ -302,24 +297,11 @@ pub async fn inference(
     let stream = params.stream.unwrap_or(false);
 
     // Keep track of which variants failed
-    let mut variant_errors = std::collections::HashMap::new();
+    let mut variant_errors: HashMap<String, Error> = HashMap::new();
 
     // Set up inference config
     let output_schema = params.output_schema.map(DynamicJSONSchema::new);
-    let mut inference_config = InferenceConfig {
-        function_name: &function_name,
-        variant_name: None,
-        templates: &config.templates,
-        tool_config: tool_config.as_ref(),
-        dynamic_output_schema: output_schema.as_ref(),
-        ids: InferenceIds {
-            inference_id,
-            episode_id,
-        },
-        extra_cache_key: None,
-        extra_body: Default::default(),
-        extra_headers: Default::default(),
-    };
+
     let inference_clients = InferenceClients {
         http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
@@ -339,19 +321,25 @@ pub async fn inference(
         })
         .await?;
     // Keep sampling variants until one succeeds
-    while !candidate_variant_names.is_empty() {
-        let (variant_name, variant) = sample_variant(
-            &mut candidate_variant_names,
-            function.variants(),
-            &function_name,
-            &episode_id,
-        )?;
+    while !candidate_variants.is_empty() {
+        let (variant_name, variant) =
+            sample_variant(&mut candidate_variants, &function_name, &episode_id)?;
         // Will be edited by the variant as part of making the request so we must clone here
         let variant_inference_params = params.params.clone();
-
-        inference_config.variant_name = Some(variant_name);
-        inference_config.extra_body = params.extra_body.clone();
-        inference_config.extra_headers = params.extra_headers.clone();
+        let inference_config = InferenceConfig {
+            function_name: &function_name,
+            variant_name: &variant_name,
+            templates: &config.templates,
+            tool_config: tool_config.as_ref(),
+            dynamic_output_schema: output_schema.as_ref(),
+            ids: InferenceIds {
+                inference_id,
+                episode_id,
+            },
+            extra_cache_key: None,
+            extra_body: Cow::Borrowed(&params.extra_body),
+            extra_headers: Cow::Borrowed(&params.extra_headers),
+        };
         if stream {
             let result = variant
                 .infer_stream(
@@ -372,20 +360,18 @@ pub async fn inference(
                     tracing::warn!(
                         "functions.{function_name:?}.variants.{variant_name:?} failed during inference: {e}",
                         function_name = params.function_name,
-                        variant_name = variant_name,
+                        variant_name = inference_config.variant_name,
                     );
-                    variant_errors.insert(variant_name.to_string(), e);
+                    variant_errors.insert(inference_config.variant_name.to_string(), e);
                     continue;
                 }
             };
-
-            let extra_body = inference_config.extra_body.clone();
-            let extra_headers = inference_config.extra_headers.clone();
-
+            let extra_body = inference_config.extra_body.into_owned();
+            let extra_headers = inference_config.extra_headers.into_owned();
             // Create InferenceMetadata for a streaming inference
             let inference_metadata = InferenceMetadata {
                 function_name: function_name.to_string(),
-                variant_name: variant_name.to_string(),
+                variant_name: inference_config.variant_name.to_string(),
                 inference_id,
                 episode_id,
                 input: resolved_input.clone(),
@@ -435,21 +421,21 @@ pub async fn inference(
                     tracing::warn!(
                         "functions.{function_name}.variants.{variant_name} failed during inference: {e}",
                         function_name = function_name,
-                        variant_name = variant_name,
+                        variant_name = inference_config.variant_name,
                     );
-                    variant_errors.insert(variant_name.to_string(), e);
+                    variant_errors.insert(inference_config.variant_name.to_string(), e);
                     continue;
                 }
             };
 
             if !dryrun {
                 // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
-                let extra_body = inference_config.extra_body.clone();
-                let extra_headers = inference_config.extra_headers.clone();
                 let result_to_write = result.clone();
+                let extra_body = inference_config.extra_body.into_owned();
+                let extra_headers = inference_config.extra_headers.into_owned();
                 let write_metadata = InferenceDatabaseInsertMetadata {
                     function_name: function_name.to_string(),
-                    variant_name: variant_name.to_string(),
+                    variant_name: inference_config.variant_name.to_string(),
                     episode_id,
                     tool_config,
                     processing_time: Some(start_time.elapsed()),
@@ -487,7 +473,7 @@ pub async fn inference(
                 result.set_original_response(None);
             }
 
-            let response = InferenceResponse::new(result, episode_id, variant_name.to_string());
+            let response = InferenceResponse::new(result, episode_id, variant_name);
 
             return Ok(InferenceOutput::NonStreaming(response));
         }
@@ -601,7 +587,7 @@ fn create_stream(
                         usage: Some(extra_usage),
                         finish_reason: None,
                         latency: Duration::from_millis(0),
-                        raw_response: "".to_string(),
+                        raw_response: String::new(),
                     })
                 }
                 FunctionConfig::Json(_) => {
@@ -611,7 +597,7 @@ fn create_stream(
                         usage: Some(extra_usage),
                         latency: Duration::from_millis(0),
                         raw: None,
-                        raw_response: "".to_string(),
+                        raw_response: String::new(),
                         finish_reason: None,
                     })
                 }
@@ -1230,7 +1216,7 @@ mod tests {
             created: 0,
             usage: None,
             finish_reason: Some(FinishReason::Stop),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(100),
         });
         let raw_request = "raw request".to_string();
@@ -1283,7 +1269,7 @@ mod tests {
             thought: Some("Thought 1".to_string()),
             created: 0,
             usage: None,
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(100),
             finish_reason: Some(FinishReason::Stop),
         });

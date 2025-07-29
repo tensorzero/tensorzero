@@ -91,7 +91,7 @@ impl Migration for Migration0016<'_> {
         );
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS ChatInferenceDatapoint{on_cluster_name}
             (
                 dataset_name LowCardinality(String),
@@ -114,7 +114,7 @@ impl Migration for Migration0016<'_> {
                 updated_at DateTime64(6, 'UTC') DEFAULT now()
             ) ENGINE = {table_engine_name}
             ORDER BY (dataset_name, function_name, id)
-        "#,
+        ",
         );
         let _ = self
             .clickhouse
@@ -131,7 +131,7 @@ impl Migration for Migration0016<'_> {
         );
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS JsonInferenceDatapoint{on_cluster_name}
             (
                 dataset_name LowCardinality(String),
@@ -147,7 +147,7 @@ impl Migration for Migration0016<'_> {
                 updated_at DateTime64(6, 'UTC') DEFAULT now()
             ) ENGINE = {table_engine_name}
             ORDER BY (dataset_name, function_name, id)
-        "#,
+        ",
         );
         let _ = self
             .clickhouse

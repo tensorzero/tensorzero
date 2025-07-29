@@ -80,7 +80,7 @@ impl Migration for Migration0009<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         // Create the `BooleanMetricFeedbackByTargetId` table
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS BooleanMetricFeedbackByTargetId{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
@@ -90,7 +90,7 @@ impl Migration for Migration0009<'_> {
                 tags Map(String, String)
             ) ENGINE = {table_engine_name}
             ORDER BY target_id;
-        "#,
+        ",
         );
         let _ = self
             .clickhouse
@@ -98,13 +98,13 @@ impl Migration for Migration0009<'_> {
             .await?;
         // Create the materialized view for the `BooleanMetricFeedbackByTargetId` table from BooleanMetricFeedback
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
-        let view_where_clause = if !clean_start {
-            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
-        } else {
+        let view_where_clause = if clean_start {
             String::new()
+        } else {
+            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         };
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackByTargetIdView
             TO BooleanMetricFeedbackByTargetId
             AS
@@ -116,7 +116,7 @@ impl Migration for Migration0009<'_> {
                     tags
                 FROM BooleanMetricFeedback
                 {view_where_clause};
-            "#
+            "
         );
         let _ = self
             .clickhouse
@@ -132,7 +132,7 @@ impl Migration for Migration0009<'_> {
             },
         );
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS CommentFeedbackByTargetId{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
@@ -142,7 +142,7 @@ impl Migration for Migration0009<'_> {
                 tags Map(String, String)
             ) ENGINE = {table_engine_name}
             ORDER BY target_id;
-        "#,
+        ",
         );
         let _ = self
             .clickhouse
@@ -152,7 +152,7 @@ impl Migration for Migration0009<'_> {
         // Create the materialized view for the `CommentFeedbackByTargetId` table from CommentFeedback
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS CommentFeedbackByTargetIdView
             TO CommentFeedbackByTargetId
             AS
@@ -164,7 +164,7 @@ impl Migration for Migration0009<'_> {
                     tags
                 FROM CommentFeedback
                 {view_where_clause};
-            "#
+            "
         );
         let _ = self
             .clickhouse
@@ -180,7 +180,7 @@ impl Migration for Migration0009<'_> {
             },
         );
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS DemonstrationFeedbackByInferenceId{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
@@ -189,7 +189,7 @@ impl Migration for Migration0009<'_> {
                 tags Map(String, String)
             ) ENGINE = {table_engine_name}
             ORDER BY inference_id;
-        "#,
+        ",
         );
         let _ = self
             .clickhouse
@@ -199,7 +199,7 @@ impl Migration for Migration0009<'_> {
         // Create the materialized view for the `DemonstrationFeedbackByInferenceId` table from DemonstrationFeedback
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS DemonstrationFeedbackByInferenceIdView
             TO DemonstrationFeedbackByInferenceId
             AS
@@ -210,7 +210,7 @@ impl Migration for Migration0009<'_> {
                     tags
                 FROM DemonstrationFeedback
                 {view_where_clause};
-            "#
+            "
         );
         let _ = self
             .clickhouse
@@ -226,7 +226,7 @@ impl Migration for Migration0009<'_> {
             },
         );
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS FloatMetricFeedbackByTargetId{on_cluster_name}
            (
                id UUID, -- must be a UUIDv7
@@ -236,7 +236,7 @@ impl Migration for Migration0009<'_> {
                tags Map(String, String)
            ) ENGINE = {table_engine_name}
            ORDER BY target_id;
-       "#,
+       ",
         );
         let _ = self
             .clickhouse
@@ -245,13 +245,13 @@ impl Migration for Migration0009<'_> {
 
         // Create the materialized view for the `FloatMetricFeedbackByTargetId` table from FloatMetricFeedback
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
-        let view_where_clause = if !clean_start {
-            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
-        } else {
+        let view_where_clause = if clean_start {
             String::new()
+        } else {
+            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         };
         let query = format!(
-            r#"
+            r"
            CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackByTargetIdView
            TO FloatMetricFeedbackByTargetId
            AS
@@ -263,7 +263,7 @@ impl Migration for Migration0009<'_> {
                    tags
                FROM FloatMetricFeedback
                {view_where_clause};
-           "#
+           "
         );
         let _ = self
             .clickhouse
@@ -276,7 +276,7 @@ impl Migration for Migration0009<'_> {
             tokio::time::sleep(view_offset).await;
             let insert_boolean_metric_feedback = async {
                 let query = format!(
-                    r#"
+                    r"
                     INSERT INTO BooleanMetricFeedbackByTargetId
                     SELECT
                         id,
@@ -286,14 +286,14 @@ impl Migration for Migration0009<'_> {
                         tags
                     FROM BooleanMetricFeedback
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#
+                "
                 );
                 self.clickhouse.run_query_synchronous_no_params(query).await
             };
 
             let insert_comment_feedback = async {
                 let query = format!(
-                    r#"
+                    r"
                     INSERT INTO CommentFeedbackByTargetId
                     SELECT
                         id,
@@ -303,14 +303,14 @@ impl Migration for Migration0009<'_> {
                         tags
                     FROM CommentFeedback
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#
+                "
                 );
                 self.clickhouse.run_query_synchronous_no_params(query).await
             };
 
             let insert_demonstration_feedback = async {
                 let query = format!(
-                    r#"
+                    r"
                     INSERT INTO DemonstrationFeedbackByInferenceId
                     SELECT
                         id,
@@ -319,14 +319,14 @@ impl Migration for Migration0009<'_> {
                         tags
                     FROM DemonstrationFeedback
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#
+                "
                 );
                 self.clickhouse.run_query_synchronous_no_params(query).await
             };
 
             let insert_float_metric_feedback = async {
                 let query = format!(
-                    r#"
+                    r"
                     INSERT INTO FloatMetricFeedbackByTargetId
                     SELECT
                         id,
@@ -336,7 +336,7 @@ impl Migration for Migration0009<'_> {
                         tags
                     FROM FloatMetricFeedback
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#
+                "
                 );
                 self.clickhouse.run_query_synchronous_no_params(query).await
             };

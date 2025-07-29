@@ -41,7 +41,7 @@ impl Migration for Migration0002<'_> {
         );
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let query = format!(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS DynamicInContextLearningExample{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
@@ -54,7 +54,7 @@ impl Migration for Migration0002<'_> {
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = {table_engine_name}
             ORDER BY (function_name, variant_name, namespace);
-        "#,
+        ",
         );
         let _ = self
             .clickhouse

@@ -45,7 +45,7 @@ impl Migration for Migration0033<'_> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(
-                format!(r#"CREATE TABLE IF NOT EXISTS DeploymentID{on_cluster_name} (
+                format!(r"CREATE TABLE IF NOT EXISTS DeploymentID{on_cluster_name} (
                         deployment_id String,
                         dummy UInt32 DEFAULT 0, -- the dummy column is used to enforce a single row in the table
                         created_at DateTime DEFAULT now(),
@@ -53,7 +53,7 @@ impl Migration for Migration0033<'_> {
                         -- we hardcode UINT32_MAX
                     )
                     ENGINE = {table_engine_name}
-                    ORDER BY dummy;"#,
+                    ORDER BY dummy;",
                 )
                 .to_string(),
             )
@@ -74,7 +74,7 @@ impl Migration for Migration0033<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r#"DROP TABLE DeploymentID;"#.to_string()
+        r"DROP TABLE DeploymentID;".to_string()
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {
