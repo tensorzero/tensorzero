@@ -8,6 +8,7 @@ use paste::paste;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::json;
 use tensorzero_core::clickhouse::migration_manager::migration_trait::Migration;
+use tensorzero_core::clickhouse::migration_manager::RunMigrationArgs;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tokio::runtime::Handle;
 use tracing_test::traced_test;
@@ -464,9 +465,15 @@ async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bo
     for migration in &migrations[..=migration_num] {
         let name = migration.name();
         println!("Running migration: {name}");
-        migration_manager::run_migration(&fresh_clickhouse, migration.as_ref(), false)
-            .await
-            .unwrap();
+        migration_manager::run_migration(RunMigrationArgs {
+            clickhouse: &fresh_clickhouse,
+            migration: migration.as_ref(),
+            clean_start: false,
+            manual_run: false,
+            is_replicated: false,
+        })
+        .await
+        .unwrap();
         // Migration0029 only runs if `StaticEvaluationHumanFeedbackFloatView` or `StaticEvaluationHumanFeedbackBooleanView`
         // exists, which were created by the banned migration Migration0023
         let should_succeed = migration.name() != "Migration0029";
@@ -508,9 +515,15 @@ async fn test_rollback_apply_rollback() {
     for migration in migrations {
         let name = migration.name();
         println!("Running migration: {name}");
-        migration_manager::run_migration(&clickhouse, migration.as_ref(), false)
-            .await
-            .unwrap();
+        migration_manager::run_migration(RunMigrationArgs {
+            clickhouse: &clickhouse,
+            migration: migration.as_ref(),
+            clean_start: false,
+            manual_run: false,
+            is_replicated: false,
+        })
+        .await
+        .unwrap();
 
         // Migration0029 only runs if `StaticEvaluationHumanFeedbackFloatView` or `StaticEvaluationHumanFeedbackBooleanView`
         // exists, which were created by the banned migration Migration0023
@@ -530,9 +543,15 @@ async fn test_rollback_apply_rollback() {
         }
 
         println!("Re-apply migration: {name}");
-        migration_manager::run_migration(&clickhouse, migration.as_ref(), false)
-            .await
-            .unwrap();
+        migration_manager::run_migration(RunMigrationArgs {
+            clickhouse: &clickhouse,
+            migration: migration.as_ref(),
+            clean_start: false,
+            manual_run: false,
+            is_replicated: false,
+        })
+        .await
+        .unwrap();
         if should_succeed {
             assert!(
                 logs_contain(&format!("Migration succeeded: {name}")),
@@ -559,10 +578,15 @@ async fn test_clickhouse_migration_manager() {
         async move {
             // All of the previous migrations should have already been run
             for (i, migration) in migrations.iter().enumerate().take(migration_num) {
-                let clean_start =
-                    migration_manager::run_migration(clickhouse, migration.as_ref(), false)
-                        .await
-                        .unwrap();
+                let clean_start = migration_manager::run_migration(RunMigrationArgs {
+                    clickhouse,
+                    migration: migration.as_ref(),
+                    clean_start: false,
+                    manual_run: false,
+                    is_replicated: false,
+                })
+                .await
+                .unwrap();
                 if i == 0 {
                     // We know that the first migration was run in a previous test, so clean start should be false
                     assert!(!clean_start);
@@ -579,11 +603,13 @@ async fn test_clickhouse_migration_manager() {
             }
 
             let run_migration = || async {
-                migration_manager::run_migration(
+                migration_manager::run_migration(RunMigrationArgs {
                     clickhouse,
-                    migrations[migration_num].as_ref(),
-                    initial_clean_start.get(),
-                )
+                    migration: migrations[migration_num].as_ref(),
+                    clean_start: initial_clean_start.get(),
+                    is_replicated: false,
+                    manual_run: false,
+                })
                 .await
                 .unwrap()
             };
@@ -640,10 +666,15 @@ async fn test_clickhouse_migration_manager() {
     ) {
         // Now, run all of the migrations, and verify that none of them apply
         for (i, migration) in migrations.iter().enumerate() {
-            let clean_start =
-                migration_manager::run_migration(clickhouse, migration.as_ref(), true)
-                    .await
-                    .unwrap();
+            let clean_start = migration_manager::run_migration(RunMigrationArgs {
+                clickhouse,
+                migration: migration.as_ref(),
+                clean_start: true,
+                is_replicated: false,
+                manual_run: true,
+            })
+            .await
+            .unwrap();
             if i == 0 {
                 // We know that the first migration was run in a previous test, so clean start should be false
                 assert!(!clean_start);
@@ -747,7 +778,7 @@ async fn test_bad_clickhouse_write() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clean_clickhouse_start() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    migration_manager::run(&clickhouse).await.unwrap();
+    migration_manager::run(&clickhouse, false).await.unwrap();
 
     // We also verify here that all tables are either replicated or not replicated as expected
     let response = clickhouse
@@ -787,7 +818,7 @@ async fn test_clean_clickhouse_start() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_deployment_id_oldest() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    migration_manager::run(&clickhouse).await.unwrap();
+    migration_manager::run(&clickhouse, false).await.unwrap();
     // Add a row to the DeploymentID table and make sure that it isn't returned
     let new_deployment_id = "foo";
     clickhouse
@@ -821,7 +852,9 @@ async fn test_concurrent_clickhouse_migrations() {
     for _ in 0..num_concurrent_starts {
         let clickhouse_clone = clickhouse.clone();
         handles.push(tokio::spawn(async move {
-            migration_manager::run(&clickhouse_clone).await.unwrap();
+            migration_manager::run(&clickhouse_clone, false)
+                .await
+                .unwrap();
         }));
     }
     for handle in handles {
@@ -872,9 +905,15 @@ async fn test_migration_0013_old_table() {
 
     // Run migrations up to right before 0013
     for migration in migrations.iter() {
-        migration_manager::run_migration(&clickhouse, migration.as_ref(), true)
-            .await
-            .unwrap();
+        migration_manager::run_migration(RunMigrationArgs {
+            clickhouse: &clickhouse,
+            migration: migration.as_ref(),
+            clean_start: true,
+            manual_run: false,
+            is_replicated: false,
+        })
+        .await
+        .unwrap();
     }
     // Manually create a table that should not exist
     let query = r"
@@ -892,13 +931,15 @@ async fn test_migration_0013_old_table() {
         .run_query_synchronous_no_params(query.to_string())
         .await
         .unwrap();
-    let err = migration_manager::run_migration(
-        &clickhouse,
-        &Migration0013 {
+    let err = migration_manager::run_migration(RunMigrationArgs {
+        clickhouse: &clickhouse,
+        migration: &Migration0013 {
             clickhouse: &clickhouse,
         },
-        false,
-    )
+        clean_start: false,
+        manual_run: false,
+        is_replicated: false,
+    })
     .await
     .unwrap_err();
     assert!(
@@ -950,9 +991,15 @@ async fn test_migration_0013_data_no_table() {
 
     // Run migrations up to right before 0013
     for migration in migrations.iter() {
-        migration_manager::run_migration(&clickhouse, migration.as_ref(), true)
-            .await
-            .unwrap();
+        migration_manager::run_migration(RunMigrationArgs {
+            clickhouse: &clickhouse,
+            migration: migration.as_ref(),
+            clean_start: true,
+            manual_run: false,
+            is_replicated: false,
+        })
+        .await
+        .unwrap();
     }
 
     // Add a row to the JsonInference table (would be very odd to have data in this table
@@ -965,13 +1012,15 @@ async fn test_migration_0013_data_no_table() {
         .run_query_synchronous_no_params(query.to_string())
         .await
         .unwrap();
-    let err = migration_manager::run_migration(
-        &clickhouse,
-        &Migration0013 {
+    let err = migration_manager::run_migration(RunMigrationArgs {
+        clickhouse: &clickhouse,
+        migration: &Migration0013 {
             clickhouse: &clickhouse,
         },
-        false,
-    )
+        clean_start: false,
+        manual_run: false,
+        is_replicated: false,
+    })
     .await
     .unwrap_err();
     assert!(err.to_string()

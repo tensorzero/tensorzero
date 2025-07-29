@@ -36,7 +36,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
             .await
             .unwrap(),
     );
-    migration_manager::run(&clickhouse).await.unwrap();
+    migration_manager::run(&clickhouse, false).await.unwrap();
     let state =
         AppStateData::new_with_clickhouse_and_http_client(config, clickhouse, Client::new());
     ClientBuilder::build_from_state(state).await.unwrap()

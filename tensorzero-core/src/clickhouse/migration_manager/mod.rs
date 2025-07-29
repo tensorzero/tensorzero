@@ -102,16 +102,14 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo, manual_run: bool) -> Res
     clickhouse.health().await?;
 
     // To check that the database is replicated, check if either of ChatInference is a ReplicatedMergeTree
-    // or `TENSORZERO_CLICKHOUSE_CLUSTER` is set
+    // or `clickhouse.cluster_name` is Some
     let chat_is_replicated: Option<bool> = clickhouse
         .run_query_synchronous_no_params("SHOW CREATE TABLE ChatInference".to_string())
         .await
         .ok()
         .map(|result| result.response.contains("ReplicatedMergeTree"));
 
-    let replicated_env_var_set = std::env::var("TENSORZERO_CLICKHOUSE_CLUSTER").is_ok();
-
-    let is_replicated = replicated_env_var_set || chat_is_replicated.unwrap_or(false);
+    let is_replicated = clickhouse.is_cluster_configured() || chat_is_replicated.unwrap_or(false);
 
     // This is a no-op if the database already exists
     clickhouse.create_database().await?;
@@ -123,22 +121,22 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo, manual_run: bool) -> Res
 
     // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
     // The value we pass in for 'clean_start' is ignored for the first migration
-    let clean_start = run_migration(
+    let clean_start = run_migration(RunMigrationArgs {
         clickhouse,
-        &*migrations[0],
-        false,
+        migration: &*migrations[0],
+        clean_start: false,
         manual_run,
         is_replicated,
-    )
+    })
     .await?;
     for migration in &migrations[1..] {
-        run_migration(
+        run_migration(RunMigrationArgs {
             clickhouse,
-            &**migration,
+            migration: &**migration,
             clean_start,
             manual_run,
             is_replicated,
-        )
+        })
         .await?;
     }
     Ok(())
@@ -255,16 +253,40 @@ async fn insert_migration_record(
     Ok(())
 }
 
+pub struct RunMigrationArgs<'a, T: Migration + ?Sized> {
+    pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub migration: &'a T,
+    pub clean_start: bool,
+    pub manual_run: bool,
+    pub is_replicated: bool,
+}
+
+pub async fn manual_run_migrations() -> Result<(), Error> {
+    let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
+        .ok()
+        .or_else(|| {
+            std::env::var("CLICKHOUSE_URL").ok().inspect(|_| {
+                tracing::warn!("Deprecation Warning: The environment variable \"CLICKHOUSE_URL\" has been renamed to \"TENSORZERO_CLICKHOUSE_URL\" and will be removed in a future version. Please update your environment to use \"TENSORZERO_CLICKHOUSE_URL\" instead.");
+            })
+        }).ok_or_else(|| Error::new(ErrorDetails::ClickHouseConfiguration { message: "TENSORZERO_CLICKHOUSE_URL not found".to_string() }))?;
+    let clickhouse = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
+    run(&clickhouse, true).await
+}
+
 /// Returns Err(e) if the migration fails to apply.
 /// Returns Ok(false) if the migration should not apply.
 /// Returns Ok(true) if the migration succeeds.
 pub async fn run_migration(
-    clickhouse: &ClickHouseConnectionInfo,
-    migration: &(impl Migration + ?Sized),
-    clean_start: bool,
-    manual_run: bool,
-    is_replicated: bool,
+    args: RunMigrationArgs<'_, impl Migration + ?Sized>,
 ) -> Result<bool, Error> {
+    let RunMigrationArgs {
+        clickhouse,
+        migration,
+        clean_start,
+        manual_run,
+        is_replicated,
+    } = args;
+
     migration.can_apply().await?;
 
     if migration.should_apply().await? {
@@ -403,11 +425,75 @@ mod tests {
         let mock_migration = MockMigration::default();
 
         // First check that method succeeds
-        assert!(
-            run_migration(&ClickHouseConnectionInfo::Disabled, &mock_migration, false)
-                .await
-                .is_ok()
-        );
+        assert!(run_migration(RunMigrationArgs {
+            clickhouse: &ClickHouseConnectionInfo::Disabled,
+            migration: &mock_migration,
+            clean_start: false,
+            is_replicated: false,
+            manual_run: false,
+        })
+        .await
+        .is_ok());
+
+        // Check that we called every method
+        assert!(mock_migration
+            .called_can_apply
+            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(mock_migration
+            .called_should_apply
+            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(mock_migration
+            .called_apply
+            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(mock_migration
+            .called_has_succeeded
+            .load(std::sync::atomic::Ordering::Relaxed));
+    }
+
+    #[tokio::test]
+    async fn test_run_migration_replicated_automatic_fails() {
+        let mock_migration = MockMigration::default();
+
+        // First check that method succeeds
+        assert!(run_migration(RunMigrationArgs {
+            clickhouse: &ClickHouseConnectionInfo::Disabled,
+            migration: &mock_migration,
+            clean_start: false,
+            is_replicated: true,
+            manual_run: false,
+        })
+        .await
+        .is_err());
+
+        // Check that we called can / should but not apply or has_succeeded
+        assert!(mock_migration
+            .called_can_apply
+            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(mock_migration
+            .called_should_apply
+            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(!mock_migration
+            .called_apply
+            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(!mock_migration
+            .called_has_succeeded
+            .load(std::sync::atomic::Ordering::Relaxed));
+    }
+
+    #[tokio::test]
+    async fn test_run_migration_replicated_manual() {
+        let mock_migration = MockMigration::default();
+
+        // First check that method succeeds
+        assert!(run_migration(RunMigrationArgs {
+            clickhouse: &ClickHouseConnectionInfo::Disabled,
+            migration: &mock_migration,
+            clean_start: false,
+            is_replicated: true,
+            manual_run: true,
+        })
+        .await
+        .is_ok());
 
         // Check that we called every method
         assert!(mock_migration
@@ -432,11 +518,15 @@ mod tests {
         };
 
         // First check that the method fails
-        assert!(
-            run_migration(&ClickHouseConnectionInfo::Disabled, &mock_migration, false)
-                .await
-                .is_err()
-        );
+        assert!(run_migration(RunMigrationArgs {
+            clickhouse: &ClickHouseConnectionInfo::Disabled,
+            migration: &mock_migration,
+            clean_start: false,
+            is_replicated: false,
+            manual_run: false,
+        })
+        .await
+        .is_err());
 
         // Check that we called every method
         assert!(mock_migration
@@ -461,13 +551,50 @@ mod tests {
         };
 
         // First check that the method succeeds
-        assert!(
-            run_migration(&ClickHouseConnectionInfo::Disabled, &mock_migration, false)
-                .await
-                .is_ok()
-        );
+        assert!(run_migration(RunMigrationArgs {
+            clickhouse: &ClickHouseConnectionInfo::Disabled,
+            migration: &mock_migration,
+            clean_start: false,
+            is_replicated: false,
+            manual_run: false,
+        })
+        .await
+        .is_ok());
 
         // Check that we called every method
+        assert!(mock_migration
+            .called_can_apply
+            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(mock_migration
+            .called_should_apply
+            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(!mock_migration
+            .called_apply
+            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(!mock_migration
+            .called_has_succeeded
+            .load(std::sync::atomic::Ordering::Relaxed));
+    }
+
+    #[tokio::test]
+    async fn test_run_migration_should_apply_false_replicated() {
+        let mock_migration = MockMigration {
+            should_apply_result: false,
+            ..Default::default()
+        };
+
+        // First check that the method succeeds
+        assert!(run_migration(RunMigrationArgs {
+            clickhouse: &ClickHouseConnectionInfo::Disabled,
+            migration: &mock_migration,
+            clean_start: false,
+            is_replicated: true,
+            manual_run: false,
+        })
+        .await
+        .is_ok());
+
+        // Check that we called can / should but not apply or has_succeeded
         assert!(mock_migration
             .called_can_apply
             .load(std::sync::atomic::Ordering::Relaxed));
@@ -490,11 +617,15 @@ mod tests {
         };
 
         // First check that the method fails
-        assert!(
-            run_migration(&ClickHouseConnectionInfo::Disabled, &mock_migration, false)
-                .await
-                .is_err()
-        );
+        assert!(run_migration(RunMigrationArgs {
+            clickhouse: &ClickHouseConnectionInfo::Disabled,
+            migration: &mock_migration,
+            clean_start: false,
+            is_replicated: false,
+            manual_run: false,
+        })
+        .await
+        .is_err());
 
         // Check that we called every method
         assert!(mock_migration
@@ -519,11 +650,15 @@ mod tests {
         };
 
         // First check that the method fails
-        assert!(
-            run_migration(&ClickHouseConnectionInfo::Disabled, &mock_migration, false)
-                .await
-                .is_err()
-        );
+        assert!(run_migration(RunMigrationArgs {
+            clickhouse: &ClickHouseConnectionInfo::Disabled,
+            migration: &mock_migration,
+            clean_start: false,
+            is_replicated: false,
+            manual_run: false,
+        })
+        .await
+        .is_err());
 
         // Check that we called every method
         assert!(mock_migration
