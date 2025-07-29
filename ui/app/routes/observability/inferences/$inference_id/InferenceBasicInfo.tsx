@@ -2,7 +2,7 @@ import type {
   ParsedInferenceRow,
   ParsedModelInferenceRow,
 } from "~/utils/clickhouse/inference";
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import {
   BasicInfoLayout,
@@ -46,10 +46,9 @@ export default function BasicInfo({
   inferenceUsage,
   modelInferences = [],
 }: BasicInfoProps) {
-  const config = useConfig();
+  const functionConfig = useFunctionConfig(inference.function_name);
   const variantType =
-    config.functions[inference.function_name]?.variants[inference.variant_name]
-      ?.inner.type;
+    functionConfig?.variants[inference.variant_name]?.inner.type;
 
   // Create timestamp tooltip
   const timestampTooltip = createTimestampTooltip(inference.timestamp);

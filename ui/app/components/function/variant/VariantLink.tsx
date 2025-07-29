@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { AlertDialog } from "~/components/ui/AlertDialog";
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import type { ReactNode } from "react";
 
 type VariantLinkProps = {
@@ -14,8 +14,7 @@ export function VariantLink({
   functionName,
   children,
 }: VariantLinkProps) {
-  const config = useConfig();
-  const functionConfig = config.functions[functionName];
+  const functionConfig = useFunctionConfig(functionName);
   const variantConfig = functionConfig?.variants[variantName];
   return variantConfig ? (
     <Link
