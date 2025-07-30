@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -39,9 +37,9 @@ pub struct UninitializedChainOfThoughtConfig {
 }
 
 impl LoadableConfig<ChainOfThoughtConfig> for UninitializedChainOfThoughtConfig {
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<ChainOfThoughtConfig, Error> {
+    fn load(self) -> Result<ChainOfThoughtConfig, Error> {
         Ok(ChainOfThoughtConfig {
-            inner: self.inner.load(base_path)?,
+            inner: self.inner.load()?,
         })
     }
 }

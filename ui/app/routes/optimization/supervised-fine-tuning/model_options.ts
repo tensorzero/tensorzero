@@ -3,7 +3,7 @@ import { z } from "zod";
 export const ModelOptionSchema = z.object({
   displayName: z.string().nonempty("Model name is required"),
   name: z.string().nonempty("Model name is required"),
-  provider: z.enum(["openai", "fireworks", "mistral"]),
+  provider: z.enum(["openai", "fireworks"]),
 });
 
 export type ModelOption = z.infer<typeof ModelOptionSchema>;

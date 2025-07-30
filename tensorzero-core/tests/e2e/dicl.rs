@@ -362,6 +362,7 @@ async fn embed_insert_example(
         toml::from_str::<UninitializedEmbeddingProviderConfig>(provider_config_serialized)
             .expect("Failed to deserialize EmbeddingProviderConfig")
             .load(&ProviderTypesConfig::default())
+            .await
             .unwrap();
 
     let client = Client::new();
