@@ -32,11 +32,15 @@ use super::validate_tags;
 ///
 /// This is the amount of time we want to wait after the target was supposed to have been written
 /// before we decide that the target was actually not written because we can't find it in the database.
-const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_secs(5);
+/// This should really be read at 5000ms but since there might be some jitter we want to make sure there's
+/// a read at ~5s
+const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_millis(6000);
 /// Since we can't be sure that an inference actually completed when the ID says it was
 /// (the ID is generated at the start of the inference), we wait a minimum amount of time
 /// before we decide that the target was actually not written because we can't find it in the database.
-const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1200);
+const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1000);
+/// We also poll in the intermediate time so that we can return as soon as we find a target entry.
+const FEEDBACK_TARGET_POLL_INTERVAL: Duration = Duration::from_millis(2000);
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -94,7 +98,7 @@ pub async fn feedback_handler(
     State(app_state): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Json<FeedbackResponse>, Error> {
-    feedback(app_state, params).await
+    Ok(Json(feedback(app_state, params).await?))
 }
 
 // Helper function to avoid requiring axum types in the client
@@ -105,7 +109,7 @@ pub async fn feedback(
         ..
     }: AppStateData,
     params: Params,
-) -> Result<Json<FeedbackResponse>, Error> {
+) -> Result<FeedbackResponse, Error> {
     validate_tags(&params.tags, params.internal)?;
     validate_feedback_specific_tags(&params.tags)?;
     // Get the metric config or return an error if it doesn't exist
@@ -139,6 +143,7 @@ pub async fn feedback(
                 feedback_metadata.level,
                 feedback_id,
                 dryrun,
+                config.gateway.unstable_disable_feedback_target_validation,
             )
             .await?;
         }
@@ -161,6 +166,7 @@ pub async fn feedback(
                 feedback_metadata.target_id,
                 feedback_id,
                 dryrun,
+                config.gateway.unstable_disable_feedback_target_validation,
             )
             .await?;
         }
@@ -172,12 +178,13 @@ pub async fn feedback(
                 feedback_metadata.target_id,
                 feedback_id,
                 dryrun,
+                config.gateway.unstable_disable_feedback_target_validation,
             )
             .await?;
         }
     }
 
-    Ok(Json(FeedbackResponse { feedback_id }))
+    Ok(FeedbackResponse { feedback_id })
 }
 
 #[derive(Debug)]
@@ -248,10 +255,13 @@ async fn write_comment(
     level: &MetricConfigLevel,
     feedback_id: Uuid,
     dryrun: bool,
+    disable_validation: bool,
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
     // Verify that the function name exists.
-    let _ = throttled_get_function_name(&connection_info, level, &target_id).await?;
+    if !disable_validation {
+        let _ = throttled_get_function_name(&connection_info, level, &target_id).await?;
+    }
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
     })?;
@@ -318,6 +328,7 @@ async fn write_float(
     target_id: Uuid,
     feedback_id: Uuid,
     dryrun: bool,
+    disable_validation: bool,
 ) -> Result<(), Error> {
     let Params {
         metric_name,
@@ -327,8 +338,11 @@ async fn write_float(
     } = params;
     let metric_config: &crate::config_parser::MetricConfig =
         config.get_metric_or_err(metric_name)?;
-    // Verify that the function name exists.
-    let _ = throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
+    if !disable_validation {
+        // Verify that the function name exists.
+        let _ =
+            throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
+    }
 
     let value = value.as_f64().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
@@ -353,6 +367,7 @@ async fn write_boolean(
     target_id: Uuid,
     feedback_id: Uuid,
     dryrun: bool,
+    disable_validation: bool,
 ) -> Result<(), Error> {
     let Params {
         metric_name,
@@ -361,8 +376,11 @@ async fn write_boolean(
         ..
     } = params;
     let metric_config = config.get_metric_or_err(metric_name)?;
-    // Verify that the function name exists.
-    let _ = throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
+    if !disable_validation {
+        // Verify that the function name exists.
+        let _ =
+            throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
+    }
     let value = value.as_bool().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
@@ -420,7 +438,7 @@ async fn throttled_get_function_name(
                 }
             }
         }
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        tokio::time::sleep(FEEDBACK_TARGET_POLL_INTERVAL).await;
     }
 }
 
