@@ -1244,7 +1244,7 @@ fn prepare_candidate_variants(
             *template_config = Cow::Owned(dynamic_template_config);
             candidate_variants.clear();
             candidate_variants.insert(
-                "dynamic_variant".to_string(),
+                "tensorzero::dynamic_variant".to_string(),
                 Arc::new(candidate_variant_info),
             );
         }

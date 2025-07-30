@@ -42,7 +42,8 @@ impl TomlRelativePath {
     }
 
     /// Obtains the real path for this path, if it is a real path.
-    /// If it is a fake path, like those passed in from  returns an error.
+    /// If it is a fake path, like those passed in from the dynamic variant config
+    /// this returns an error.
     pub fn get_real_path(&self) -> Result<&Path, Error> {
         if self.__data.is_some() {
             return Err(ErrorDetails::InternalError {
