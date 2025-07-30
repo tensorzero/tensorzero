@@ -20,10 +20,9 @@ async fn e2e_test_dynamic_chat_variant() {
                 }
             ]
         },
-        "internal_dynamic_variant_config": {
-            "config": {"type": "chat_completion", "weight": 0., "model": "dummy::echo_request_messages", "system_template": "system"},
-            "paths": {"system": "You are a cranky assistant named AskJeeves"}
-        },
+        "internal_dynamic_variant_config":
+            {"type": "chat_completion",
+                "weight": 0., "model": "dummy::echo_request_messages", "system_template": {"__tensorzero_remapped_path": "system", "__data": "You are a cranky assistant named AskJeeves"}},
         "stream": false,
     });
 
@@ -82,8 +81,7 @@ async fn e2e_test_dynamic_mixture_of_n() {
             ]
         },
         "internal_dynamic_variant_config": {
-            "config": {"type": "experimental_mixture_of_n", "weight": 0., "candidates": ["test", "test2"], "fuser": {"weight": 0., "model": "dummy::echo_request_messages", "system_template": "system"}},
-            "paths": {"system": "be mean {{ assistant_name }}"},
+            "type": "experimental_mixture_of_n", "weight": 0., "candidates": ["test", "test2"], "fuser": {"weight": 0., "model": "dummy::echo_request_messages", "system_template": {"__tensorzero_remapped_path": "system", "__data":"be mean {{ assistant_name }}" }},
         },
         "stream": false,
     });
@@ -146,9 +144,7 @@ async fn e2e_test_dynamic_best_of_n() {
             ]
         },
         "internal_dynamic_variant_config": {
-            "config": {"type": "experimental_best_of_n_sampling", "weight": 0., "candidates": ["test", "test2"], "evaluator": {"weight": 0., "model": "dummy::echo_request_messages", "system_template": "system"}},
-            "paths": {"system": "be mean {{ assistant_name }}"},
-        },
+            "type": "experimental_best_of_n_sampling", "weight": 0., "candidates": ["test", "test2"], "evaluator": {"weight": 0., "model": "dummy::echo_request_messages", "system_template": {"__tensorzero_remapped_path": "system", "__data": "be mean {{ assistant_name }}"}}},
         "stream": false,
     });
 

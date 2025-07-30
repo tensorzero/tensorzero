@@ -108,6 +108,10 @@ impl TemplateConfig<'_> {
         Ok(!self.get_undeclared_variables(template_name)?.is_empty())
     }
 
+    pub fn contains_template(&self, template_name: &str) -> bool {
+        self.env.get_template(template_name).is_ok()
+    }
+
     pub fn add_hardcoded_templates(&mut self) -> Result<(), Error> {
         self.env
             .add_template("t0:best_of_n_evaluator_system", BEST_OF_N_EVALUATOR_SYSTEM)

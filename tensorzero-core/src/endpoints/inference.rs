@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::{Config, ObjectStoreInfo};
+use crate::config_parser::{Config, ObjectStoreInfo, UninitializedVariantInfo};
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -45,7 +45,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::variant::chat_completion::ChatCompletionConfig;
-use crate::variant::dynamic::DynamicVariantParams;
+use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
 use super::dynamic_evaluation_run::validate_inference_episode_id_and_apply_dynamic_evaluation_run;
@@ -110,7 +110,7 @@ pub struct Params {
     #[serde(default)]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     #[serde(default)]
-    pub internal_dynamic_variant_config: Option<DynamicVariantParams>,
+    pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
 }
 
 #[derive(Clone, Debug)]
@@ -1203,7 +1203,7 @@ fn prepare_candidate_variants(
     candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     tags: &mut HashMap<String, String>,
     pinned_variant_name: Option<&str>,
-    dynamic_variant_config: Option<DynamicVariantParams>,
+    dynamic_variant_config: Option<UninitializedVariantInfo>,
     template_config: &mut Cow<'_, TemplateConfig>,
 ) -> Result<(), Error> {
     match (pinned_variant_name, dynamic_variant_config) {
@@ -1224,21 +1224,29 @@ fn prepare_candidate_variants(
             );
         }
         (None, Some(dynamic_variant_config)) => {
-            let DynamicVariantParams { config, paths } = dynamic_variant_config;
             // Replace the variant config with just the dynamic variant
-            let candidate_variant_info = (config, &paths).try_into()?;
+            let candidate_variant_info = load_dynamic_variant_info(dynamic_variant_config)?;
+
+            // Replace templates in the template config with the ones passed in
+            // We Clone here so that we can still reference the old templates that don't conflict
+            let mut dynamic_template_config: TemplateConfig = template_config.clone().into_owned();
+            for path_with_contents in candidate_variant_info.get_all_template_paths() {
+                let template_name = path_with_contents.path.get_template_key();
+                if dynamic_template_config.contains_template(&template_name) {
+                    return Err(ErrorDetails::InvalidDynamicTemplatePath {
+                        name: template_name,
+                    }
+                    .into());
+                }
+                dynamic_template_config
+                    .add_template(template_name, path_with_contents.contents.clone())?;
+            }
+            *template_config = Cow::Owned(dynamic_template_config);
             candidate_variants.clear();
             candidate_variants.insert(
                 "dynamic_variant".to_string(),
                 Arc::new(candidate_variant_info),
             );
-            // Replace templates in the template config with the ones passed in
-            // We Clone here so that we can still reference the old templates that don't conflict
-            let mut dynamic_template_config: TemplateConfig = template_config.clone().into_owned();
-            for (key, value) in paths.into_iter() {
-                dynamic_template_config.add_template(key, value)?;
-            }
-            *template_config = Cow::Owned(dynamic_template_config);
         }
         (None, None) => {
             // Remove all zero-weight variants - these can only be used if explicitly pinned above

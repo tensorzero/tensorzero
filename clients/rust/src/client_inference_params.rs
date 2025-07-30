@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero_core::{
     cache::CacheParamsOptions,
+    config_parser::UninitializedVariantInfo,
     endpoints::inference::{InferenceParams, Params},
     error::Error,
     inference::types::{
@@ -12,7 +13,6 @@ use tensorzero_core::{
         Input, InputMessage, InputMessageContent,
     },
     tool::DynamicToolParams,
-    variant::dynamic::DynamicVariantParams,
 };
 use uuid::Uuid;
 
@@ -72,7 +72,7 @@ pub struct ClientInferenceParams {
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
-    pub internal_dynamic_variant_config: Option<DynamicVariantParams>,
+    pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
 }
 
 impl TryFrom<ClientInferenceParams> for Params {

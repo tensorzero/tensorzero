@@ -540,7 +540,8 @@ impl Config {
                     .base_path
                     .clone()
                     .as_ref()
-                    .map(path::TomlRelativePath::path)
+                    .map(path::TomlRelativePath::get_real_path)
+                    .transpose()?
                     .unwrap_or(&base_path),
             ),
         )?;
@@ -569,7 +570,7 @@ impl Config {
                 for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
                         config.templates.add_template(
-                            template.path.path().to_string_lossy().to_string(),
+                            template.path.get_template_key(),
                             template.contents.clone(),
                         )?;
                     }
@@ -753,10 +754,7 @@ impl Config {
             for variant in function.variants().values() {
                 let variant_template_paths = variant.get_all_template_paths();
                 for path in variant_template_paths {
-                    templates.insert(
-                        path.path.path().to_string_lossy().to_string(),
-                        path.contents.clone(),
-                    );
+                    templates.insert(path.path.get_template_key(), path.contents.clone());
                 }
             }
         }
@@ -1162,19 +1160,7 @@ pub struct PathWithContents {
 
 impl PathWithContents {
     pub fn from_path(path: TomlRelativePath) -> Result<Self, Error> {
-        let full_path = path.path();
-        let contents = std::fs::read_to_string(full_path).map_err(|e| {
-            Error::new(ErrorDetails::Config {
-                message: format!(
-                    "Failed to read file at {}: {}",
-                    full_path.to_string_lossy(),
-                    e
-                ),
-            })
-        })?;
-        Ok(Self {
-            path: path.to_owned(),
-            contents,
-        })
+        let contents = path.read()?;
+        Ok(Self { path, contents })
     }
 }

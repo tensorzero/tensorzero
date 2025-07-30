@@ -1,4 +1,3 @@
-use std::fs;
 use std::sync::Arc;
 
 use serde::Deserialize;
@@ -608,14 +607,7 @@ pub fn default_system_instructions() -> String {
 impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
     fn load(self) -> Result<DiclConfig, Error> {
         let system_instructions = match self.system_instructions {
-            Some(path) => {
-                let path = path.path();
-                fs::read_to_string(path).map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!("Failed to read system instructions from `{path:?}`: {e}"),
-                    })
-                })?
-            }
+            Some(path) => path.read()?,
             None => default_system_instructions(),
         };
 

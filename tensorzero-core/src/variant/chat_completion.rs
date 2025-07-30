@@ -121,14 +121,14 @@ impl ChatCompletionConfig {
             Role::User => self.user_template.as_ref(),
             Role::Assistant => self.assistant_template.as_ref(),
         }
-        .map(|x| {
-            x.path
-                .path()
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
-        })
-        .transpose()?;
-        prepare_request_message(message, templates, template_path, template_schema_info)
+        .map(|x| x.path.get_template_key());
+
+        prepare_request_message(
+            message,
+            templates,
+            template_path.as_deref(),
+            template_schema_info,
+        )
     }
 
     pub fn prepare_system_message(
@@ -140,14 +140,13 @@ impl ChatCompletionConfig {
         let template_path = self
             .system_template
             .as_ref()
-            .map(|x| {
-                x.path
-                    .path()
-                    .to_str()
-                    .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
-            })
-            .transpose()?;
-        prepare_system_message(system, templates, template_path, template_schema_info)
+            .map(|x| x.path.get_template_key());
+        prepare_system_message(
+            system,
+            templates,
+            template_path.as_deref(),
+            template_schema_info,
+        )
     }
 
     fn prepare_request<'a, 'request>(
@@ -614,11 +613,8 @@ pub fn validate_template_and_schema(
 ) -> Result<(), Error> {
     match (schema, template) {
         (None, Some(template)) => {
-            let template_name = template
-                .path()
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))?;
-            let undeclared_vars = templates.get_undeclared_variables(template_name)?;
+            let template_name = template.get_template_key();
+            let undeclared_vars = templates.get_undeclared_variables(&template_name)?;
             let allowed_var = match kind {
                 TemplateKind::System => SYSTEM_TEXT_TEMPLATE_VAR,
                 TemplateKind::User => USER_TEXT_TEMPLATE_VAR,
