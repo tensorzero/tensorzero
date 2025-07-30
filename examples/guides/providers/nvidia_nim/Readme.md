@@ -11,7 +11,7 @@ You can use NVIDIA NIM models in your TensorZero variants by setting the model f
 ```toml
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "nvidia_nim::llama-3.1-8b-instruct"
+model = "nvidia_nim::meta/llama-3.1-8b-instruct"
 ```
 
 Additionally, you can set model_name in the inference request to use a specific NVIDIA NIM model, without having to configure a function and variant in TensorZero.
@@ -20,7 +20,7 @@ Additionally, you can set model_name in the inference request to use a specific 
 curl -X POST http://localhost:3000/inference \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "nvidia_nim::llama-3.1-8b-instruct",
+    "model_name": "nvidia_nim::meta/llama-3.1-8b-instruct",
     "input": {
       "messages": [
         {
@@ -53,7 +53,7 @@ routing = ["nvidia_nim"]
 
 [models.llama_3_1_8b_instruct.providers.nvidia_nim]
 type = "nvidia_nim"
-model_name = "llama-3.1-8b-instruct"
+model_name = "meta/llama-3.1-8b-instruct" 
 
 [functions.my_function_name]
 type = "chat"
@@ -97,6 +97,8 @@ You can start the gateway with:
 
 ## Inference
 Make an inference request to the gateway:
+
+**Using curl (Linux/Mac/Git Bash):**
 ```bash
 curl -X POST http://localhost:3000/inference \
   -H "Content-Type: application/json" \
@@ -111,6 +113,25 @@ curl -X POST http://localhost:3000/inference \
       ]
     }
   }'
+```
+**Using PowerShell (Windows):**
+```powershell
+$body = @{
+    function_name = "my_function_name"
+    input = @{
+        messages = @(
+            @{
+                role = "user"
+                content = "What is the capital of Japan?"
+            }
+        )
+    }
+} | ConvertTo-Json -Depth 10
+
+Invoke-WebRequest -Uri "http://localhost:3000/inference" `
+  -Method POST `
+  -Headers @{"Content-Type"="application/json"} `
+  -Body $body
 ```
 
 ## Prerequisites
@@ -130,10 +151,10 @@ Before running this example, make sure you have:
 ## Available Models
 Some popular NVIDIA NIM models include:
 
-- llama-3.1-8b-instruct - Llama 3.1 8B Instruct model
-- llama-3.1-70b-instruct - Llama 3.1 70B Instruct model
-- llama-3.1-405b-instruct - Llama 3.1 405B Instruct model
-- mistral-7b-instruct-v0.3 - Mistral 7B Instruct v0.3
-- mixtral-8x7b-instruct-v0.1 - Mixtral 8x7B Instruct v0.1
+- `meta/llama-3.1-8b-instruct` - Llama 3.1 8B Instruct model
+- `meta/llama-3.1-70b-instruct` - Llama 3.1 70B Instruct model
+- `meta/llama-3.1-405b-instruct` - Llama 3.1 405B Instruct model
+- `mistralai/mistral-7b-instruct-v0.3` - Mistral 7B Instruct v0.3
+- `mistralai/mixtral-8x7b-instruct-v0.1` - Mixtral 8x7B Instruct v0.1
 
 For a complete list, visit [NVIDIA Build](https://build.nvidia.com/explore/discover).
