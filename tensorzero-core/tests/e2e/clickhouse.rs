@@ -58,7 +58,7 @@ impl Drop for DeleteDbOnDrop {
                         .unwrap();
                 }
                 eprintln!("Database dropped: {database}");
-            })
+            });
         });
     }
 }

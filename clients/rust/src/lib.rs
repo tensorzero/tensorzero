@@ -1185,7 +1185,7 @@ impl Client {
             ClientMode::HTTPGateway(client) => {
                 // Acquire the lock on the gateway version
                 let mut gateway_version = client.gateway_version.lock().await;
-                *gateway_version = Some(version)
+                *gateway_version = Some(version);
             }
             // Should never be called
             ClientMode::EmbeddedGateway { .. } => {}
