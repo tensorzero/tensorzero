@@ -22,7 +22,7 @@ async fn e2e_test_dynamic_chat_variant() {
         },
         "internal_dynamic_variant_config":
             {"type": "chat_completion",
-                "weight": 0., "model": "dummy::echo_request_messages", "system_template": {"__tensorzero_remapped_path": "system", "__data": "You are a cranky assistant named AskJeeves"}},
+                "weight": 0., "model": "dummy::echo_request_messages", "system_template": {"__tensorzero_remapped_path": "system", "__data": "You are a cranky assistant named {{ assistant_name }}"}},
         "stream": false,
     });
 
