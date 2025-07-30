@@ -186,6 +186,8 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     let insert_futures = [
         ("large_chat_inference_v2.parquet", "ChatInference"),
         ("large_json_inference_v2.parquet", "JsonInference"),
+        ("large_chat_model_inference_v2.parquet", "ModelInference"),
+        ("large_json_model_inference_v2.parquet", "ModelInference"),
         (
             "large_chat_boolean_feedback.parquet",
             "BooleanMetricFeedback",
@@ -229,9 +231,9 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
                 database,
                 "--query",
                 &format!(
-                    r#"
+                    r"
         INSERT INTO {table} FROM INFILE '/s3-fixtures/{file}' FORMAT Parquet
-    "#
+    "
                 ),
             ]);
             assert!(
@@ -492,7 +494,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26
+        25, 26, 27
     ]
 );
 
@@ -574,6 +576,8 @@ async fn test_clickhouse_migration_manager() {
                     "Migration {name} should not have succeeded (because it wasn't applied)"
                 );
             }
+            assert!(!logs_contain("Materialized view `CumulativeUsageView` was not written because it was recently created"),
+                "CumulativeUsage backfilling failed.");
 
             let run_migration = || async {
                 migration_manager::run_migration(
@@ -665,7 +669,7 @@ async fn test_clickhouse_migration_manager() {
         // for each element in the array.
         [
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 26
+            24, 25, 26, 27
         ]
     );
     let rows = get_all_migration_records(&clickhouse).await;
@@ -700,6 +704,23 @@ async fn test_clickhouse_migration_manager() {
     }
     run_all(&clickhouse, &migrations).await;
     let new_rows = get_all_migration_records(&clickhouse).await;
+
+    let response = clickhouse
+        .run_query_synchronous_no_params(
+            "SELECT count FROM CumulativeUsage FINAL WHERE type='input_tokens'".to_string(),
+        )
+        .await
+        .unwrap();
+    let input_token_total: u64 = response.response.trim().parse().unwrap();
+    assert_eq!(input_token_total, 200000000);
+    let response = clickhouse
+        .run_query_synchronous_no_params(
+            "SELECT count FROM CumulativeUsage FINAL WHERE type='output_tokens'".to_string(),
+        )
+        .await
+        .unwrap();
+    let output_token_total: u64 = response.response.trim().parse().unwrap();
+    assert_eq!(output_token_total, 200000000);
     // Since we've already ran all of the migrations, we shouldn't have written any new records
 
     assert_eq!(new_rows, rows);
@@ -840,7 +861,7 @@ async fn test_migration_0013_old_table() {
             .unwrap();
     }
     // Manually create a table that should not exist
-    let query = r#"
+    let query = r"
         CREATE TABLE IF NOT EXISTS InferenceById
         (
             id UUID, -- must be a UUIDv7
@@ -850,7 +871,7 @@ async fn test_migration_0013_old_table() {
             function_type Enum('chat' = 1, 'json' = 2)
         ) ENGINE = MergeTree()
         ORDER BY id;
-    "#;
+    ";
     let _ = clickhouse
         .run_query_synchronous_no_params(query.to_string())
         .await
@@ -920,10 +941,10 @@ async fn test_migration_0013_data_no_table() {
 
     // Add a row to the JsonInference table (would be very odd to have data in this table
     // but not an InferenceById table).
-    let query = r#"
+    let query = r"
         INSERT INTO JsonInference (id, function_name, variant_name, episode_id, input, output, output_schema, inference_params, processing_time_ms)
         VALUES (generateUUIDv7(), 'test_function', 'test_variant', generateUUIDv7(), 'input', 'output', 'output_schema', 'params', 100)
-    "#;
+    ";
     let _ = clickhouse
         .run_query_synchronous_no_params(query.to_string())
         .await

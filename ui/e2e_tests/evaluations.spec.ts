@@ -29,12 +29,11 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
   await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
   await page.getByTestId("concurrency-limit").fill("1");
   await page.getByRole("button", { name: "Launch" }).click();
-  await page.waitForTimeout(10000);
 
   await expect(
     page.getByText("Select evaluation runs to compare..."),
   ).toBeVisible();
-  // Wait for it to start, then wait for it to finish
+  // Wait for evals to start, then wait for them to finish
   await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
     "data-running",
     "true",
@@ -44,7 +43,7 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
     "false",
     { timeout: 1900_000 },
   );
-  //await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
+  await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
   await expect(page.getByText("n=", { exact: false }).first()).toBeVisible();
 
   // Assert that "error" is not in the page
@@ -77,12 +76,12 @@ test("push the new run button, launch an image evaluation", async ({
   // identical inputs. See https://www.notion.so/tensorzerodotcom/Evaluations-cache-non-determinism-23a7520bbad3801f80fceaa7e859ce06
   await page.getByTestId("concurrency-limit").fill("1");
   await page.getByRole("button", { name: "Launch" }).click();
-  await page.waitForTimeout(5000);
 
   await expect(
     page.getByText("Select evaluation runs to compare..."),
   ).toBeVisible();
-  // Wait for it to start, then wait for it to finish
+
+  // Wait for evals to start, then wait for them to finish
   await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
     "data-running",
     "true",
@@ -92,7 +91,7 @@ test("push the new run button, launch an image evaluation", async ({
     "false",
     { timeout: 1900_000 },
   );
-  //await expect(page.getByText("matches_reference")).toBeVisible();
+  await expect(page.getByText("matches_reference")).toBeVisible();
   await expect(page.getByText("n=", { exact: false }).first()).toBeVisible();
 
   // Assert that "error" is not in the page

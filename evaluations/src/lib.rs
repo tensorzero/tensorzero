@@ -465,7 +465,7 @@ impl ThrottledTensorZeroClient {
     }
 
     async fn inference(&self, params: ClientInferenceParams) -> Result<InferenceOutput> {
-        let _permit = self.semaphore.acquire().await;
+        let _permit = self.semaphore.acquire().await?;
         tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         let inference_output = self.client.inference(params).await?;
         Ok(inference_output)

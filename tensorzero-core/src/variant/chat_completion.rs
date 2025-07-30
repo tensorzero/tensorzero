@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::path::Path;
 use std::sync::Arc;
 
 use crate::config_parser::path::TomlRelativePath;
@@ -78,21 +77,21 @@ pub struct UninitializedChatCompletionConfig {
 }
 
 impl LoadableConfig<ChatCompletionConfig> for UninitializedChatCompletionConfig {
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<ChatCompletionConfig, Error> {
+    fn load(self) -> Result<ChatCompletionConfig, Error> {
         Ok(ChatCompletionConfig {
             weight: self.weight,
             model: self.model,
             system_template: self
                 .system_template
-                .map(|path| PathWithContents::from_path(path, Some(&base_path)))
+                .map(PathWithContents::from_path)
                 .transpose()?,
             user_template: self
                 .user_template
-                .map(|path| PathWithContents::from_path(path, Some(&base_path)))
+                .map(PathWithContents::from_path)
                 .transpose()?,
             assistant_template: self
                 .assistant_template
-                .map(|path| PathWithContents::from_path(path, Some(&base_path)))
+                .map(PathWithContents::from_path)
                 .transpose()?,
             temperature: self.temperature,
             top_p: self.top_p,
@@ -191,6 +190,7 @@ impl ChatCompletionConfig {
             inference_extra_body: inference_config
                 .extra_body
                 .clone()
+                .into_owned()
                 .filter(inference_config.variant_name),
         };
 
@@ -199,6 +199,7 @@ impl ChatCompletionConfig {
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
+                .into_owned()
                 .filter(inference_config.variant_name),
         };
 
@@ -1161,7 +1162,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1216,7 +1217,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1268,7 +1269,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1352,7 +1353,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1431,7 +1432,7 @@ mod tests {
             templates: &templates,
             tool_config: Some(&weather_tool_config),
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1520,7 +1521,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1586,7 +1587,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1699,7 +1700,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: Some(&output_schema),
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1800,7 +1801,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: Some(&output_schema),
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1986,7 +1987,7 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2050,7 +2051,7 @@ mod tests {
             templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -2153,7 +2154,7 @@ mod tests {
             templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -2262,7 +2263,7 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2338,7 +2339,7 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: Some(&dynamic_output_schema),
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
@@ -2372,10 +2373,9 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_both_some() {
         let templates = get_test_template_config();
-        let schema = StaticJSONSchema::from_path(
+        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
-            PathBuf::new(),
-        )
+        ))
         .unwrap();
         let template = PathBuf::from("test_validate_template_and_schema_both_some");
         let result = validate_template_and_schema(
@@ -2426,10 +2426,9 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_schema_some_template_none() {
         let templates = get_test_template_config(); // Default TemplateConfig
-        let schema = StaticJSONSchema::from_path(
+        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
-            PathBuf::new(),
-        )
+        ))
         .unwrap();
         let err =
             validate_template_and_schema(TemplateKind::System, Some(&schema), None, &templates)

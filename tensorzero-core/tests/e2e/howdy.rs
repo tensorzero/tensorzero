@@ -51,6 +51,8 @@ async fn test_get_howdy_report() {
     let howdy_report = get_howdy_report(&clickhouse, &deployment_id).await.unwrap();
     assert_eq!(howdy_report.inference_count, "0");
     assert_eq!(howdy_report.feedback_count, "0");
+    assert!(howdy_report.input_token_total.is_none());
+    assert!(howdy_report.output_token_total.is_none());
     assert_eq!(
         howdy_report.gateway_version,
         tensorzero_core::endpoints::status::TENSORZERO_VERSION
@@ -123,9 +125,17 @@ async fn test_get_howdy_report() {
     assert!(!new_howdy_report.feedback_count.is_empty());
     // Since we're in an e2e test, this should be true
     assert!(new_howdy_report.dryrun);
-    println!("new_howdy_report: {new_howdy_report:?}");
-    println!("howdy_report: {howdy_report:?}");
+
     // Assert that the parsed inference and feedback counts are greater than the old ones
     assert_eq!(new_howdy_report.inference_count, "2");
     assert_eq!(new_howdy_report.feedback_count, "2");
+    // Assert that the token counts are also positive now
+    let input_token_total: u64 = new_howdy_report.input_token_total.unwrap().parse().unwrap();
+    assert_eq!(input_token_total, 20);
+    let output_token_total: u64 = new_howdy_report
+        .output_token_total
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(output_token_total, 2);
 }
