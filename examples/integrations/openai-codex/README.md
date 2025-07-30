@@ -16,6 +16,7 @@ Why?
   [Google AI Studio (Gemini API)](https://www.tensorzero.com/docs/gateway/guides/providers/google-ai-studio-gemini),
   [Hyperbolic](https://www.tensorzero.com/docs/gateway/guides/providers/hyperbolic),
   [Mistral](https://www.tensorzero.com/docs/gateway/guides/providers/mistral),
+  [NVIDIA NIM](https://www.tensorzero.com/docs/gateway/guides/providers/nvidia-nim),
   [OpenAI](https://www.tensorzero.com/docs/gateway/guides/providers/openai),
   [Together](https://www.tensorzero.com/docs/gateway/guides/providers/together),
   [vLLM](https://www.tensorzero.com/docs/gateway/guides/providers/vllm),

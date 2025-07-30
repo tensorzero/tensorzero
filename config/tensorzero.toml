@@ -83,9 +83,8 @@ api_key_location = "env::OPENAI_API_KEY"
 routing = ["my_nim_provider/llama-8b"]
 
 [models.llama_model.providers."my_nim_provider/llama-8b"]
-type = "openai"
+type = "nvidia_nim"
 model_name = "meta/llama-3.1-8b-instruct"
-api_base = "https://integrate.api.nvidia.com/v1"
 api_key_location = "env::NVIDIA_API_KEY"
 
 # Add Llama 70B model
