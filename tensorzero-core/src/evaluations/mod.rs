@@ -1292,7 +1292,7 @@ mod tests {
                             model: Arc::from("gpt-4"),
                             system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                            )),
+                            ), None),
                             temperature: Some(0.5),
                             top_p: None,
                             max_tokens: Some(200),
@@ -1407,7 +1407,7 @@ mod tests {
                             model: Arc::from("gpt-3.5-turbo"),
                             system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                            )),
+                            ), None),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
@@ -1478,7 +1478,7 @@ mod tests {
                             model: Arc::from("gpt-3.5-turbo"),
                             system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                            )),
+                            ), None),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
@@ -1551,7 +1551,7 @@ mod tests {
                             model: Arc::from("gpt-3.5-turbo"),
                             system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                            )),
+                            ), None),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),

@@ -727,8 +727,11 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(temp_file.path().to_owned()))
-            .expect("Failed to create schema")
+        StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+            temp_file.path().to_owned(),
+            None,
+        ))
+        .expect("Failed to create schema")
     }
 
     #[test]

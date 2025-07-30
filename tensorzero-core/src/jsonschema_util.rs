@@ -234,6 +234,7 @@ mod tests {
 
         let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
             temp_file.path().to_owned(),
+            None,
         ))
         .expect("Failed to load schema");
 
@@ -281,6 +282,7 @@ mod tests {
 
         let result = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
             temp_file.path().to_owned(),
+            None,
         ));
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -295,10 +297,12 @@ mod tests {
     fn test_nonexistent_file() {
         let result = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
             "nonexistent_file.json".into(),
+            None,
         ));
         assert_eq!(
             result.unwrap_err().to_string(),
-            "Failed to read JSON Schema `nonexistent_file.json`: No such file or directory (os error 2)".to_string()
+            "Failed to read file at nonexistent_file.json: No such file or directory (os error 2)"
+                .to_string()
         );
     }
 

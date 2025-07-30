@@ -2376,13 +2376,14 @@ mod tests {
         let templates = get_test_template_config();
         let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
+            None,
         ))
         .unwrap();
         let template = PathBuf::from("test_validate_template_and_schema_both_some");
         let result = validate_template_and_schema(
             TemplateKind::System,
             Some(&schema),
-            Some(&TomlRelativePath::new_for_tests(template)),
+            Some(&TomlRelativePath::new_for_tests(template, None)),
             &templates,
         );
         assert!(result.is_ok());
@@ -2395,7 +2396,7 @@ mod tests {
         let result = validate_template_and_schema(
             TemplateKind::System,
             None,
-            Some(&TomlRelativePath::new_for_tests(template)),
+            Some(&TomlRelativePath::new_for_tests(template, None)),
             &templates,
         );
         assert!(result.is_ok());
@@ -2408,7 +2409,7 @@ mod tests {
         let err = validate_template_and_schema(
             TemplateKind::System,
             None,
-            Some(&TomlRelativePath::new_for_tests(template)),
+            Some(&TomlRelativePath::new_for_tests(template, None)),
             &templates,
         )
         .unwrap_err();
@@ -2429,6 +2430,7 @@ mod tests {
         let templates = get_test_template_config(); // Default TemplateConfig
         let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
+            None,
         ))
         .unwrap();
         let err =

@@ -146,7 +146,8 @@ async fn test_config_from_toml_table_valid() {
                                 path: TomlRelativePath::new_for_tests(
                                     PathBuf::from(
                                         "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
-                                    )
+                                    ),
+                                    Some("Return True if there is NSFW content in this generation.\n\n".to_string())
                                 ),
                                 contents:
                                     "Return True if there is NSFW content in this generation.\n\n"
@@ -648,8 +649,8 @@ async fn test_config_system_schema_does_not_exist() {
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
             result.unwrap_err(),
-            ErrorDetails::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            ErrorDetails::Config {
+                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
             }.into()
         );
     let mut sample_config = get_sample_valid_config();
@@ -664,8 +665,8 @@ async fn test_config_system_schema_does_not_exist() {
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
             result.unwrap_err(),
-            ErrorDetails::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            ErrorDetails::Config {
+                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
             }.into()
         );
 }
@@ -685,8 +686,8 @@ async fn test_config_user_schema_does_not_exist() {
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
             result.unwrap_err(),
-            ErrorDetails::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            ErrorDetails::Config {
+                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
             }.into()
         );
     let mut sample_config = get_sample_valid_config();
@@ -701,8 +702,8 @@ async fn test_config_user_schema_does_not_exist() {
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
             result.unwrap_err(),
-            ErrorDetails::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            ErrorDetails::Config {
+                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
             }.into()
         );
 }
@@ -723,8 +724,8 @@ async fn test_config_assistant_schema_does_not_exist() {
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
             result.unwrap_err(),
-            ErrorDetails::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            ErrorDetails::Config {
+                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
             }.into()
         );
     let mut sample_config = get_sample_valid_config();
@@ -739,8 +740,8 @@ async fn test_config_assistant_schema_does_not_exist() {
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
             result.unwrap_err(),
-            ErrorDetails::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            ErrorDetails::Config {
+                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
             }.into()
         );
 }

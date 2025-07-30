@@ -76,10 +76,10 @@ impl TomlRelativePath {
     /// Test-only method for unit tests.
     /// This allows constructing a `TomlRelativePath` outside of deserializing from a toml file
     #[cfg(any(test, feature = "e2e_tests"))]
-    pub fn new_for_tests(buf: PathBuf) -> Self {
+    pub fn new_for_tests(buf: PathBuf, data: Option<String>) -> Self {
         Self {
             __tensorzero_remapped_path: buf,
-            __data: None,
+            __data: data,
         }
     }
 }
