@@ -472,25 +472,29 @@ impl Config {
             .map(|(name, config)| config.load(name.clone()).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
 
-        let models = uninitialized_config
-            .models
-            .into_iter()
-            .map(|(name, config)| {
+        let models = try_join_all(uninitialized_config.models.into_iter().map(
+            |(name, config)| async {
                 config
                     .load(&name, &uninitialized_config.provider_types)
+                    .await
                     .map(|c| (name, c))
-            })
-            .collect::<Result<HashMap<_, _>, _>>()?;
+            },
+        ))
+        .await?
+        .into_iter()
+        .collect::<HashMap<_, _>>();
 
-        let embedding_models = uninitialized_config
-            .embedding_models
-            .into_iter()
-            .map(|(name, config)| {
+        let embedding_models = try_join_all(uninitialized_config.embedding_models.into_iter().map(
+            |(name, config)| async {
                 config
                     .load(&uninitialized_config.provider_types)
+                    .await
                     .map(|c| (name, c))
-            })
-            .collect::<Result<HashMap<_, _>, _>>()?;
+            },
+        ))
+        .await?
+        .into_iter()
+        .collect::<HashMap<_, _>>();
 
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
         let optimizers = try_join_all(
