@@ -39,7 +39,7 @@ export const MessagesNoSystem: Story = {
         content: [
           {
             type: "unstructured_text",
-            text: "What is the capital of Japan?",
+            text: "What is the capital of Japan?\n\nRespond with just the city name.",
           },
         ],
       },
@@ -48,7 +48,7 @@ export const MessagesNoSystem: Story = {
         content: [
           {
             type: "unstructured_text",
-            text: "The capital of Japan is Tokyo.",
+            text: "Tokyo",
           },
         ],
       },

@@ -140,7 +140,7 @@ pub fn tensorzero_derive(input: TokenStream) -> TokenStream {
             }
             Fields::Unnamed(fields) => {
                 let field_idents = fields.unnamed.iter().enumerate().map(|(i, field)| {
-                    syn::Ident::new(&format!("field_{i}"), field.ident.as_ref().map(|i| i.span()).unwrap_or_else(Span::call_site))
+                    syn::Ident::new(&format!("field_{i}"), field.ident.as_ref().map(syn::Ident::span).unwrap_or_else(Span::call_site))
                 });
                 let field_idents_clone = field_idents.clone();
                 quote! {

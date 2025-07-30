@@ -537,8 +537,9 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 process_think_blocks(&raw_text, parse_think_blocks, PROVIDER_TYPE)?;
             if let Some(reasoning) = extracted_reasoning {
                 content.push(ContentBlockOutput::Thought(Thought {
-                    text: reasoning,
+                    text: Some(reasoning),
                     signature: None,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             if !clean_text.is_empty() {
@@ -561,7 +562,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_response: raw_response.clone(),
                 usage,
                 latency,
-                finish_reason: finish_reason.map(|r| r.into()),
+                finish_reason: finish_reason.map(Into::into),
             },
         ))
     }
@@ -642,7 +643,7 @@ fn together_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(Into::into);
     let mut finish_reason = None;
     let mut content = vec![];
     if let Some(choice) = chunk.choices.pop() {
@@ -664,6 +665,7 @@ fn together_to_tensorzero_chunk(
                                 text: Some(text),
                                 signature: None,
                                 id: thinking_state.get_id(),
+                                provider_type: Some(PROVIDER_TYPE.to_string()),
                             }));
                         }
                     }
@@ -959,8 +961,9 @@ mod tests {
         assert_eq!(
             inference_response.output[0],
             ContentBlockOutput::Thought(Thought {
-                text: "hmmm".to_string(),
+                text: Some("hmmm".to_string()),
                 signature: None,
+                provider_type: Some("together".to_string()),
             })
         );
         assert_eq!(
@@ -1004,8 +1007,9 @@ mod tests {
         assert_eq!(
             inference_response.output[0],
             ContentBlockOutput::Thought(Thought {
-                text: "hmmm".to_string(),
+                text: Some("hmmm".to_string()),
                 signature: None,
+                provider_type: Some("together".to_string()),
             })
         );
         assert_eq!(
@@ -1082,7 +1086,10 @@ mod tests {
             ContentBlockOutput::Thought(_)
         ));
         if let ContentBlockOutput::Thought(thought) = &inference_response.output[0] {
-            assert_eq!(thought.text, "This is the reasoning process");
+            assert_eq!(
+                thought.text,
+                Some("This is the reasoning process".to_string())
+            );
             assert_eq!(thought.signature, None);
         }
 
@@ -1092,7 +1099,7 @@ mod tests {
             ContentBlockOutput::Text(_)
         ));
         if let ContentBlockOutput::Text(text) = &inference_response.output[1] {
-            assert_eq!(text.text, "This is the answer");
+            assert_eq!(text.text, "This is the answer".to_string());
         }
 
         // With parsing disabled
@@ -1469,6 +1476,7 @@ mod tests {
                 text: Some("some thinking content".to_string()),
                 signature: None,
                 id: "1".to_string(),
+                provider_type: Some("together".to_string()),
             })]
         );
         assert!(matches!(thinking_state, ThinkingState::Thinking));

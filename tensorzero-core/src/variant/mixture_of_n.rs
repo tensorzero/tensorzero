@@ -317,8 +317,9 @@ fn make_stream_from_non_stream(
                 ContentBlockChatOutput::Thought(thought) => {
                     let chunk = ContentBlockChunk::Thought(ThoughtChunk {
                         id: id.to_string(),
-                        text: Some(thought.text),
+                        text: thought.text,
                         signature: thought.signature,
+                        provider_type: thought.provider_type,
                     });
                     id += 1;
                     Ok(chunk)
@@ -399,7 +400,7 @@ impl MixtureOfNConfig {
                 // However, the 'A, C' and 'C, D' evaluations will all have distinct cache keys:
                 // (A, 2), (C, 3), (C, 2), (D, 4)
                 let mut config = inference_config.clone();
-                config.variant_name = Some(candidate);
+                config.variant_name = candidate;
                 config.extra_cache_key = Some(format!("candidate_{i}"));
                 Ok((candidate.to_string(), variant, config))
             })
@@ -817,6 +818,7 @@ impl FuserConfig {
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
+                .into_owned()
                 .filter(inference_config.variant_name),
         };
         let model_inference_request = prepare_model_inference_request(
@@ -836,6 +838,7 @@ impl FuserConfig {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     use std::collections::HashMap;
 
     use reqwest::Client;
@@ -950,7 +953,7 @@ mod tests {
                 weight: Some(1.0),
                 system_template: Some(PathWithContents {
                     path: system_template_name.into(),
-                    contents: "".to_string(),
+                    contents: String::new(),
                 }),
                 ..Default::default()
             },
@@ -989,7 +992,7 @@ mod tests {
                 weight: Some(1.0),
                 system_template: Some(PathWithContents {
                     path: system_template_name.into(),
-                    contents: "".to_string(),
+                    contents: String::new(),
                 }),
                 ..Default::default()
             },
@@ -1344,9 +1347,9 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "",
-            variant_name: Some(""),
-            extra_body: UnfilteredInferenceExtraBody::default(),
-            extra_headers: UnfilteredInferenceExtraHeaders::default(),
+            variant_name: "",
+            extra_body: Cow::Owned(UnfilteredInferenceExtraBody::default()),
+            extra_headers: Cow::Owned(UnfilteredInferenceExtraHeaders::default()),
             extra_cache_key: None,
         };
 
@@ -1582,12 +1585,14 @@ mod tests {
                         raw_arguments: r#"{"my"  :  "first_arg"}"#.to_string(),
                     }),
                     ContentBlockChatOutput::Thought(Thought {
-                        text: "My first thought".into(),
+                        text: Some("My first thought".into()),
                         signature: Some("my_first_signature".into()),
+                        provider_type: Some("my_first_provider_type".into()),
                     }),
                     ContentBlockChatOutput::Thought(Thought {
-                        text: "My second thought".into(),
+                        text: Some("My second thought".into()),
                         signature: Some("my_second_signature".into()),
+                        provider_type: None,
                     }),
                     ContentBlockChatOutput::ToolCall(ToolCallOutput {
                         id: "456".into(),
@@ -1633,11 +1638,13 @@ mod tests {
                         id: "1".into(),
                         text: Some("My first thought".into()),
                         signature: Some("my_first_signature".into()),
+                        provider_type: Some("my_first_provider_type".into()),
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         id: "2".into(),
                         text: Some("My second thought".into()),
                         signature: Some("my_second_signature".into()),
+                        provider_type: None,
                     }),
                     ContentBlockChunk::ToolCall(ToolCallChunk {
                         id: "456".into(),

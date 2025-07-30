@@ -37,6 +37,20 @@ pub enum ClickHouseConnectionInfo {
     },
 }
 
+pub fn make_clickhouse_http_client() -> Result<Client, Error> {
+    Client::builder()
+        // https://github.com/ClickHouse/clickhouse-rs/blob/56c5dd3fc95693acc5aa3d02db1f910a26fe5b1c/src/http_client.rs#L45
+        .pool_idle_timeout(Duration::from_secs(2))
+        // https://github.com/ClickHouse/clickhouse-rs/blob/56c5dd3fc95693acc5aa3d02db1f910a26fe5b1c/src/http_client.rs#L41
+        .tcp_keepalive(Some(Duration::from_secs(60)))
+        .build()
+        .map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseConnection {
+                message: format!("Failed to build ClickHouse HTTP client: {e}"),
+            })
+        })
+}
+
 impl ClickHouseConnectionInfo {
     /// Create a new ClickHouse connection info from a database URL.
     /// You should always use this function in production code or generic integration tests that
@@ -78,7 +92,7 @@ impl ClickHouseConnectionInfo {
         let connection_info = Self::Production {
             database_url,
             database,
-            client: Client::new(),
+            client: make_clickhouse_http_client()?,
         };
         // If the connection is unhealthy, we won't be able to run / check migrations. So we just fail here.
         connection_info.health().await?;
@@ -205,14 +219,14 @@ impl ClickHouseConnectionInfo {
     ) -> Result<ClickHouseResponse, Error> {
         match self {
             Self::Disabled => Ok(ClickHouseResponse {
-                response: "".to_string(),
+                response: String::new(),
                 metadata: ClickHouseResponseMetadata {
                     read_rows: 0,
                     written_rows: 0,
                 },
             }),
             Self::Mock { .. } => Ok(ClickHouseResponse {
-                response: "".to_string(),
+                response: String::new(),
                 metadata: ClickHouseResponseMetadata {
                     read_rows: 0,
                     written_rows: 0,
@@ -311,7 +325,7 @@ impl ClickHouseConnectionInfo {
     ) -> Result<ClickHouseResponse, Error> {
         match self {
             Self::Disabled | Self::Mock { .. } => Ok(ClickHouseResponse {
-                response: "".to_string(),
+                response: String::new(),
                 metadata: ClickHouseResponseMetadata {
                     read_rows: 0,
                     written_rows: 0,
@@ -453,7 +467,7 @@ impl ClickHouseConnectionInfo {
         // We create this table immediately after creating the database, so that
         // we can insert rows into it when running migrations
         self.run_query_synchronous_no_params(
-            r#"CREATE TABLE IF NOT EXISTS TensorZeroMigration (
+            r"CREATE TABLE IF NOT EXISTS TensorZeroMigration (
                 migration_id UInt32,
                 migration_name String,
                 gateway_version String,
@@ -463,7 +477,7 @@ impl ClickHouseConnectionInfo {
                 extra_data Nullable(String)
             )
             ENGINE = MergeTree()
-            PRIMARY KEY (migration_id)"#
+            PRIMARY KEY (migration_id)"
                 .to_string(),
         )
         .await
@@ -493,7 +507,7 @@ impl ClickHouseConnectionInfo {
                             message: format!("Failed to deserialize response: {e:?}"),
                         })
                     })
-                    .and_then(|inference| inference.try_into())
+                    .and_then(query_builder::ClickHouseStoredInference::try_into)
             })
             .collect::<Result<Vec<StoredInference>, Error>>()?;
         Ok(inferences)
@@ -506,6 +520,7 @@ impl ClickHouseConnectionInfo {
 /// These may contain single quotes and backslashes, for example, if the user input contains doubly-serialized JSON.
 /// This function will escape single quotes and backslashes in the input string so that the comparison will be accurate.
 pub fn escape_string_for_clickhouse_literal(s: &str) -> String {
+    #![expect(clippy::needless_raw_string_hashes)]
     s.replace(r#"\"#, r#"\\"#).replace(r#"'"#, r#"\'"#)
 }
 
@@ -652,7 +667,10 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
     // username, password, and query-strings are optional, so we don't need to validate them
 
     // Validate that the path is either empty or ends with the database name (a single segment)
-    let mut path_segments: Vec<_> = url.path_segments().map(|s| s.collect()).unwrap_or_default();
+    let mut path_segments: Vec<_> = url
+        .path_segments()
+        .map(Iterator::collect)
+        .unwrap_or_default();
     if let Some(last) = path_segments.last() {
         if last.is_empty() {
             path_segments.pop();
@@ -812,6 +830,7 @@ mod tests {
     #[test]
     fn test_escape_string_for_clickhouse_comparison() {
         // Test basic escaping of single quotes
+        #![expect(clippy::needless_raw_string_hashes)]
         assert_eq!(
             escape_string_for_clickhouse_literal("test's string"),
             r#"test\'s string"#

@@ -13,6 +13,7 @@ use tensorzero::ContentBlockChunk;
 use tensorzero_core::cache::cache_lookup_streaming;
 use tensorzero_core::cache::start_cache_write_streaming;
 use tensorzero_core::cache::NonStreamingCacheData;
+use tensorzero_core::inference::types::extra_body::FullExtraBodyConfig;
 use tensorzero_core::inference::types::ContentBlock;
 use tensorzero_core::inference::types::ContentBlockOutput;
 use tensorzero_core::inference::types::FinishReason;
@@ -65,7 +66,7 @@ async fn test_cache_write_and_read() {
         json_mode: ModelInferenceRequestJsonMode::Off,
         function_type: FunctionType::Chat,
         output_schema: None,
-        extra_body: Default::default(),
+        extra_body: FullExtraBodyConfig::default(),
         ..Default::default()
     };
     let model_provider_request = ModelProviderRequest {
@@ -189,7 +190,7 @@ async fn test_cache_stream_write_and_read() {
         json_mode: ModelInferenceRequestJsonMode::Off,
         function_type: FunctionType::Chat,
         output_schema: None,
-        extra_body: Default::default(),
+        extra_body: FullExtraBodyConfig::default(),
         ..Default::default()
     };
     let model_provider_request = ModelProviderRequest {

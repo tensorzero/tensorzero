@@ -261,7 +261,9 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
-    use crate::config_parser::{ExportConfig, GatewayConfig, ObservabilityConfig};
+    use crate::config_parser::{
+        gateway::GatewayConfig, ExportConfig, ObservabilityConfig, TemplateFilesystemAccess,
+    };
 
     #[tokio::test]
     #[traced_test]
@@ -274,9 +276,10 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: TemplateFilesystemAccess::default(),
             export: ExportConfig::default(),
             base_path: None,
+            unstable_error_json: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -299,6 +302,7 @@ mod tests {
                 enabled: None,
                 async_writes: false,
             },
+            unstable_error_json: false,
             ..Default::default()
         };
         let config = Box::leak(Box::new(Config {
@@ -326,9 +330,10 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: TemplateFilesystemAccess::default(),
             export: ExportConfig::default(),
             base_path: None,
+            unstable_error_json: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -349,9 +354,10 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: TemplateFilesystemAccess::default(),
             export: ExportConfig::default(),
             base_path: None,
+            unstable_error_json: false,
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -374,9 +380,10 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            enable_template_filesystem_access: false,
+            template_filesystem_access: TemplateFilesystemAccess::default(),
             export: ExportConfig::default(),
             base_path: None,
+            unstable_error_json: false,
         };
         let config = Config {
             gateway: gateway_config,
