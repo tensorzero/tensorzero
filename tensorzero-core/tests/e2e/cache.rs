@@ -284,7 +284,7 @@ async fn test_cache_stream_write_and_read() {
                     input_tokens: 20,
                     output_tokens: 40,
                 })
-            )
+            );
         } else {
             assert_eq!(
                 usage,
@@ -292,7 +292,7 @@ async fn test_cache_stream_write_and_read() {
                     input_tokens: 100,
                     output_tokens: 200,
                 })
-            )
+            );
         };
         assert_eq!(raw_response, &initial_chunks[i].raw_response);
         assert_eq!(latency, &Duration::from_secs(0));

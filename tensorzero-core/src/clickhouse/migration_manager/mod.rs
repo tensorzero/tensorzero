@@ -3,7 +3,7 @@ pub mod migrations;
 
 use std::time::{Duration, Instant};
 
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails};
 use crate::serde_util::deserialize_u64;
@@ -147,7 +147,7 @@ async fn insert_migration_record(
                 execution_time_ms: execution_time.as_millis() as u64,
                 applied_at: None,
             }],
-            "TensorZeroMigration",
+            TableName::TensorZeroMigration,
         )
         .await?;
     Ok(())

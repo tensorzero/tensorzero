@@ -2467,7 +2467,7 @@ mod tests {
         assert_eq!(json_block_index, Some(0));
         match &auxiliary_content[0] {
             ContentBlockOutput::Thought(t) => {
-                assert_eq!(t.text, Some("final thought".to_string()))
+                assert_eq!(t.text, Some("final thought".to_string()));
             }
             _ => panic!("Expected Thought block"),
         }

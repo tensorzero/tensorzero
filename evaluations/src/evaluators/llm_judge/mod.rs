@@ -298,7 +298,7 @@ fn prepare_messages_input(input: &ClientInput) -> Result<Vec<ClientInputMessage>
                     content: vec![ClientInputMessageContent::Text(TextKind::Text {
                         text: system_message,
                     })],
-                })
+                });
             }
             _ => {
                 bail!("System message is not a string or object");

@@ -371,7 +371,7 @@ mod tests {
             filename_to_mime_type("test.pdf").unwrap(),
             mime::APPLICATION_PDF
         );
-        assert!(!logs_contain("Guessed"))
+        assert!(!logs_contain("Guessed"));
     }
 
     #[test]
@@ -381,6 +381,6 @@ mod tests {
             filename_to_mime_type("my_file.txt").unwrap(),
             mime::TEXT_PLAIN
         );
-        assert!(logs_contain("Guessed"))
+        assert!(logs_contain("Guessed"));
     }
 }
