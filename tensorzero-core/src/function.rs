@@ -706,9 +706,9 @@ mod tests {
     use super::*;
     use crate::config_parser::path::TomlRelativePath;
     use serde_json::json;
+    use std::io::Write;
     use std::time::Duration;
     use std::time::Instant;
-    use std::{io::Write, path::PathBuf};
     use tempfile::NamedTempFile;
     use tracing_test::traced_test;
 
@@ -727,11 +727,8 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        StaticJSONSchema::from_path(
-            TomlRelativePath::new_for_tests(temp_file.path().to_owned()),
-            PathBuf::new(),
-        )
-        .expect("Failed to create schema")
+        StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(temp_file.path().to_owned()))
+            .expect("Failed to create schema")
     }
 
     #[test]

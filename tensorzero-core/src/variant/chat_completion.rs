@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::path::Path;
 use std::sync::Arc;
 
 use crate::config_parser::path::TomlRelativePath;
@@ -80,21 +79,21 @@ pub struct UninitializedChatCompletionConfig {
 }
 
 impl LoadableConfig<ChatCompletionConfig> for UninitializedChatCompletionConfig {
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<ChatCompletionConfig, Error> {
+    fn load(self) -> Result<ChatCompletionConfig, Error> {
         Ok(ChatCompletionConfig {
             weight: self.weight,
             model: self.model,
             system_template: self
                 .system_template
-                .map(|path| PathWithContents::from_path(path, Some(&base_path)))
+                .map(PathWithContents::from_path)
                 .transpose()?,
             user_template: self
                 .user_template
-                .map(|path| PathWithContents::from_path(path, Some(&base_path)))
+                .map(PathWithContents::from_path)
                 .transpose()?,
             assistant_template: self
                 .assistant_template
-                .map(|path| PathWithContents::from_path(path, Some(&base_path)))
+                .map(PathWithContents::from_path)
                 .transpose()?,
             temperature: self.temperature,
             top_p: self.top_p,
@@ -2379,10 +2378,9 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_both_some() {
         let templates = get_test_template_config();
-        let schema = StaticJSONSchema::from_path(
+        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
-            PathBuf::new(),
-        )
+        ))
         .unwrap();
         let template = PathBuf::from("test_validate_template_and_schema_both_some");
         let result = validate_template_and_schema(
@@ -2433,10 +2431,9 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_schema_some_template_none() {
         let templates = get_test_template_config(); // Default TemplateConfig
-        let schema = StaticJSONSchema::from_path(
+        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
-            PathBuf::new(),
-        )
+        ))
         .unwrap();
         let err =
             validate_template_and_schema(TemplateKind::System, Some(&schema), None, &templates)

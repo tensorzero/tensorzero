@@ -15,8 +15,8 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.7.4"
-rust-version = "1.85.0"
+version = "2025.7.5"
+rust-version = "1.86.0"
 license = "Apache-2.0"
 
 [workspace.dependencies]
@@ -87,6 +87,7 @@ trivially_copy_pass_by_ref = "deny"
 unimplemented = "deny"
 uninlined_format_args = "deny"
 unreachable = "deny"
+unused_self = "deny"
 unwrap_used = "deny"
 
 [profile.performance]

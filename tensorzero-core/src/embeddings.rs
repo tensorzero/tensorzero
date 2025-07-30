@@ -20,6 +20,7 @@ use crate::{
     model::ProviderConfig,
     providers::openai::OpenAIProvider,
 };
+use futures::future::try_join_all;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
@@ -68,15 +69,17 @@ pub struct UninitializedEmbeddingModelConfig {
 }
 
 impl UninitializedEmbeddingModelConfig {
-    pub fn load(self, provider_types: &ProviderTypesConfig) -> Result<EmbeddingModelConfig, Error> {
-        let providers = self
-            .providers
-            .into_iter()
-            .map(|(name, config)| {
-                let provider_config = config.load(provider_types)?;
-                Ok((name, provider_config))
-            })
-            .collect::<Result<HashMap<_, _>, Error>>()?;
+    pub async fn load(
+        self,
+        provider_types: &ProviderTypesConfig,
+    ) -> Result<EmbeddingModelConfig, Error> {
+        let providers = try_join_all(self.providers.into_iter().map(|(name, config)| async {
+            let provider_config = config.load(provider_types).await?;
+            Ok::<_, Error>((name, provider_config))
+        }))
+        .await?
+        .into_iter()
+        .collect::<HashMap<_, _>>();
         Ok(EmbeddingModelConfig {
             routing: self.routing,
             providers,
@@ -318,11 +321,11 @@ pub struct UninitializedEmbeddingProviderConfig {
 }
 
 impl UninitializedEmbeddingProviderConfig {
-    pub fn load(
+    pub async fn load(
         self,
         provider_types: &ProviderTypesConfig,
     ) -> Result<EmbeddingProviderConfig, Error> {
-        let provider_config = self.config.load(provider_types)?;
+        let provider_config = self.config.load(provider_types).await?;
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderConfig::OpenAI(provider),
             _ => {
