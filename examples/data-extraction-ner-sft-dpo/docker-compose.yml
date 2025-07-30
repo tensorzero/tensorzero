@@ -1,6 +1,3 @@
-# This is a simplified example for learning purposes. Do not use this in production.
-# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
-
 services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.12-alpine
@@ -9,28 +6,31 @@ services:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: chpassword
     ports:
-      - "8123:8123"
+      - "8123:8123" # HTTP port
+      - "9000:9000" # Native port
+    volumes:
+      - ./data/clickhouse:/var/lib/clickhouse/backups/mounted:ro # optional fixture data
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
     healthcheck:
       test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
       start_period: 30s
       start_interval: 1s
       timeout: 1s
 
-  # The TensorZero Python client *doesn't* require a separate gateway service.
-  #
-  # The gateway is only needed if you want to use the OpenAI Python client
-  # or interact with TensorZero via its HTTP API (for other programming languages).
-  #
-  # The TensorZero UI also requires the gateway service.
   gateway:
     image: tensorzero/gateway
     volumes:
-      # Mount our tensorzero.toml file into the container
       - ./config:/app/config:ro
+      - ${GCP_VERTEX_CREDENTIALS_PATH:-/dev/null}:/app/gcp-credentials.json:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
-      OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+      GCP_VERTEX_CREDENTIALS_PATH: ${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
+    env_file:
+      - ${ENV_FILE:-.env}
     ports:
       - "3000:3000"
     extra_hosts:
@@ -55,16 +55,29 @@ services:
   ui:
     image: tensorzero/ui
     volumes:
-      # Mount our tensorzero.toml file into the container
       - ./config:/app/config:ro
     environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000
+    env_file:
+      - ${ENV_FILE:-.env}
     ports:
       - "4000:4000"
     depends_on:
       clickhouse:
         condition: service_healthy
       gateway:
+        condition: service_healthy
+
+  # Optional: Load fixture data into ClickHouse (`docker compose up load-fixture`)
+  load-fixture:
+    profiles: [load-fixture]
+    image: clickhouse/clickhouse-server:24.12-alpine
+    environment:
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_PASSWORD: chpassword
+    command: |
+      bash -c "clickhouse-client --host clickhouse --query \"DROP DATABASE IF EXISTS tensorzero; RESTORE DATABASE tensorzero FROM File('mounted/fixture.zip');\" && exit 0"
+    depends_on:
+      clickhouse:
         condition: service_healthy
