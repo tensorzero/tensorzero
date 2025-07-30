@@ -32,7 +32,8 @@ use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
     current_timestamp, ContentBlock, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Usage,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Thought,
+    Usage,
 };
 use crate::inference::WrappedProvider;
 use crate::model_table::{BaseModelTable, ShorthandModelConfig};
@@ -183,20 +184,23 @@ impl ModelConfig {
         &self,
         request: &'a ModelInferenceRequest<'a>,
         model_name: &str,
-        provider_name: &str,
+        provider: &ModelProvider,
     ) -> Cow<'a, ModelInferenceRequest<'a>> {
-        let name = fully_qualified_name(model_name, provider_name);
+        let name = fully_qualified_name(model_name, provider.name.as_ref());
         let needs_filter = request.messages.iter().any(|m| {
-            m.content.iter().any(|c| {
-                if let ContentBlock::Unknown {
+            m.content.iter().any(|c| match c {
+                ContentBlock::Unknown {
                     model_provider_name,
                     data: _,
-                } = c
-                {
-                    model_provider_name.as_ref().is_some_and(|n| n != &name)
-                } else {
-                    false
-                }
+                } => model_provider_name.as_ref().is_some_and(|n| n != &name),
+                ContentBlock::Thought(Thought {
+                    text: _,
+                    signature: _,
+                    provider_type,
+                }) => provider_type
+                    .as_ref()
+                    .is_some_and(|t| t != &provider.config.thought_block_provider_type()),
+                _ => false,
             })
         });
         if needs_filter {
@@ -207,20 +211,34 @@ impl ModelConfig {
                     content: m
                         .content
                         .iter()
-                        .flat_map(|c| {
-                            if let ContentBlock::Unknown {
+                        .flat_map(|c| match c {
+                            ContentBlock::Unknown {
                                 model_provider_name,
                                 data: _,
-                            } = c
-                            {
+                            } => {
                                 if model_provider_name.as_ref().is_some_and(|n| n != &name) {
                                     None
                                 } else {
                                     Some(c.clone())
                                 }
-                            } else {
-                                Some(c.clone())
                             }
+                            ContentBlock::Thought(Thought {
+                                text: _,
+                                signature: _,
+                                provider_type,
+                            }) => {
+                                // When a thought is scoped to a particular provider type, we discard
+                                // if it doesn't match our target provider.
+                                // Thoughts without a `provider_type` are used for all providers.
+                                if provider_type.as_ref().is_some_and(|t| {
+                                    t != &provider.config.thought_block_provider_type()
+                                }) {
+                                    None
+                                } else {
+                                    Some(c.clone())
+                                }
+                            }
+                            _ => Some(c.clone()),
                         })
                         .collect(),
                     ..m.clone()
@@ -369,21 +387,18 @@ impl ModelConfig {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         let run_all_models = async {
             for provider_name in &self.routing {
-                let request = self.filter_content_blocks(request, model_name, provider_name);
+                let provider = self.providers.get(provider_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::ProviderNotFound {
+                        provider_name: provider_name.to_string(),
+                    })
+                })?;
+                let request = self.filter_content_blocks(request, model_name, provider);
                 let model_provider_request = ModelProviderRequest {
                     request: &request,
                     model_name,
                     provider_name,
                 };
                 let cache_key = model_provider_request.get_cache_key()?;
-                let provider = self
-                    .providers
-                    .get(model_provider_request.provider_name)
-                    .ok_or_else(|| {
-                        Error::new(ErrorDetails::ProviderNotFound {
-                            provider_name: model_provider_request.provider_name.to_string(),
-                        })
-                    })?;
 
                 let response_fut =
                     self.non_streaming_provider_request(model_provider_request, provider, clients);
@@ -464,17 +479,17 @@ impl ModelConfig {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         let run_all_models = async {
             for provider_name in &self.routing {
-                let request = self.filter_content_blocks(request, model_name, provider_name);
-                let model_provider_request = ModelProviderRequest {
-                    request: &request,
-                    model_name,
-                    provider_name,
-                };
                 let provider = self.providers.get(provider_name).ok_or_else(|| {
                     Error::new(ErrorDetails::ProviderNotFound {
                         provider_name: provider_name.to_string(),
                     })
                 })?;
+                let request = self.filter_content_blocks(request, model_name, provider);
+                let model_provider_request = ModelProviderRequest {
+                    request: &request,
+                    model_name,
+                    provider_name,
+                };
 
                 // This future includes a call to `peek_first_chunk`, so applying
                 // `streaming_ttft_timeout` is correct.
@@ -771,6 +786,58 @@ pub enum ProviderConfig {
     XAI(XAIProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
+}
+
+impl ProviderConfig {
+    fn thought_block_provider_type(&self) -> Cow<'static, str> {
+        match self {
+            ProviderConfig::Anthropic(_) => {
+                Cow::Borrowed(crate::providers::anthropic::PROVIDER_TYPE)
+            }
+            ProviderConfig::AWSBedrock(_) => {
+                Cow::Borrowed(crate::providers::aws_bedrock::PROVIDER_TYPE)
+            }
+            // Note - none of our current  wrapped provider types emit thought blocks
+            // If any of them ever start producing thoughts, we'll need to make sure that the `provider_type`
+            // field uses `thought_block_provider_type` on the parent SageMaker provider.
+            ProviderConfig::AWSSagemaker(sagemaker) => Cow::Owned(format!(
+                "aws_sagemaker::{}",
+                sagemaker
+                    .hosted_provider
+                    .thought_block_provider_type_suffix()
+            )),
+            ProviderConfig::Azure(_) => Cow::Borrowed(crate::providers::azure::PROVIDER_TYPE),
+            ProviderConfig::DeepSeek(_) => Cow::Borrowed(crate::providers::deepseek::PROVIDER_TYPE),
+            ProviderConfig::Fireworks(_) => {
+                Cow::Borrowed(crate::providers::fireworks::PROVIDER_TYPE)
+            }
+            ProviderConfig::GCPVertexAnthropic(_) => {
+                Cow::Borrowed(crate::providers::gcp_vertex_anthropic::PROVIDER_TYPE)
+            }
+            ProviderConfig::GCPVertexGemini(_) => {
+                Cow::Borrowed(crate::providers::gcp_vertex_gemini::PROVIDER_TYPE)
+            }
+            ProviderConfig::GoogleAIStudioGemini(_) => {
+                Cow::Borrowed(crate::providers::google_ai_studio_gemini::PROVIDER_TYPE)
+            }
+            ProviderConfig::Groq(_) => Cow::Borrowed(crate::providers::groq::PROVIDER_TYPE),
+            ProviderConfig::Hyperbolic(_) => {
+                Cow::Borrowed(crate::providers::hyperbolic::PROVIDER_TYPE)
+            }
+            ProviderConfig::Mistral(_) => Cow::Borrowed(crate::providers::mistral::PROVIDER_TYPE),
+            ProviderConfig::OpenAI(_) => Cow::Borrowed(crate::providers::openai::PROVIDER_TYPE),
+            ProviderConfig::OpenRouter(_) => {
+                Cow::Borrowed(crate::providers::openrouter::PROVIDER_TYPE)
+            }
+            ProviderConfig::SGLang(_) => Cow::Borrowed(crate::providers::sglang::PROVIDER_TYPE),
+            ProviderConfig::TGI(_) => Cow::Borrowed(crate::providers::tgi::PROVIDER_TYPE),
+            ProviderConfig::Together(_) => Cow::Borrowed(crate::providers::together::PROVIDER_TYPE),
+            ProviderConfig::VLLM(_) => Cow::Borrowed(crate::providers::vllm::PROVIDER_TYPE),
+            ProviderConfig::XAI(_) => Cow::Borrowed(crate::providers::xai::PROVIDER_TYPE),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            ProviderConfig::Dummy(_) => Cow::Borrowed(crate::providers::dummy::PROVIDER_TYPE),
+        }
+    }
 }
 
 /// Contains all providers which implement `SelfHostedProvider` - these providers

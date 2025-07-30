@@ -42,7 +42,7 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 #[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Bedrock";
-const PROVIDER_TYPE: &str = "aws_bedrock";
+pub const PROVIDER_TYPE: &str = "aws_bedrock";
 
 // NB: If you add `Clone` someday, you'll need to wrap client in Arc
 #[derive(Debug, Serialize)]
@@ -480,7 +480,7 @@ fn bedrock_to_tensorzero_stream_message(
                         vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                             id: tool_use.tool_use_id,
                             raw_name: Some(tool_use.name),
-                            raw_arguments: "".to_string(),
+                            raw_arguments: String::new(),
                         })],
                         None,
                         raw_message,
@@ -749,7 +749,7 @@ impl TryFrom<&RequestMessage> for Message {
         let content: Vec<BedrockContentBlock> = inference_message
             .content
             .iter()
-            .map(|block| block.try_into())
+            .map(TryInto::try_into)
             .collect::<Result<Vec<Option<BedrockContentBlock>>, _>>()?
             .into_iter()
             .flatten()
@@ -833,7 +833,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             })?
             .content
             .into_iter()
-            .map(|block| block.try_into())
+            .map(TryInto::try_into)
             .collect::<Result<Vec<ContentBlockOutput>, _>>()?;
 
         if model_id.contains("claude")

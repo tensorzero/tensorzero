@@ -6,7 +6,7 @@ import {
 } from "~/utils/clickhouse/curation.server";
 import { countInferencesForFunction } from "~/utils/clickhouse/inference.server";
 import { getFeedbackConfig } from "~/utils/config/feedback";
-import { getConfig } from "~/utils/config/index.server";
+import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 
 /// Count the number of inferences, feedbacks, and curated inferences for a given function and metric
 /// This is used to determine the number of inferences to display in the UI
@@ -23,7 +23,9 @@ export async function loader({
   const threshold = parseFloat(url.searchParams.get("threshold") || "0");
 
   const config = await getConfig();
-  const functionConfig = config.functions[functionName || ""];
+  const functionConfig = functionName
+    ? await getFunctionConfig(functionName, config)
+    : null;
   if (functionName && !functionConfig) {
     throw data(`Function ${functionName} not found in config`, { status: 404 });
   }

@@ -49,7 +49,7 @@ impl UnfilteredInferenceExtraHeaders {
     /// Filter the 'InferenceExtraHeader' options by variant name
     /// If the variant name is `None`, then all variant-specific extra header options are removed
     #[must_use]
-    pub fn filter(self, variant_name: Option<&str>) -> FilteredInferenceExtraHeaders {
+    pub fn filter(self, variant_name: &str) -> FilteredInferenceExtraHeaders {
         FilteredInferenceExtraHeaders {
             data: self
                 .headers
@@ -93,16 +93,12 @@ pub enum InferenceExtraHeader {
 
 impl InferenceExtraHeader {
     #[must_use]
-    pub fn should_apply_variant(&self, variant_name: Option<&str>) -> bool {
-        match (self, variant_name) {
-            (InferenceExtraHeader::Provider { .. }, _) => true,
-            (
-                InferenceExtraHeader::Variant {
-                    variant_name: v, ..
-                },
-                Some(expected_name),
-            ) => v == expected_name,
-            (InferenceExtraHeader::Variant { .. }, None) => false,
+    pub fn should_apply_variant(&self, variant_name: &str) -> bool {
+        match self {
+            InferenceExtraHeader::Provider { .. } => true,
+            InferenceExtraHeader::Variant {
+                variant_name: v, ..
+            } => v == variant_name,
         }
     }
 }

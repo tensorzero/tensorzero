@@ -3,8 +3,10 @@ use std::time::Duration;
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
+use serde::{Serialize, Serializer};
 use serde_json::{json, Value};
 use std::fmt::{Debug, Display};
+use thiserror::Error;
 use tokio::sync::OnceCell;
 use url::Url;
 use uuid::Uuid;
@@ -40,9 +42,19 @@ pub fn set_debug(debug: bool) -> Result<(), Error> {
     })
 }
 
+static UNSTABLE_ERROR_JSON: OnceCell<bool> = OnceCell::const_new();
+
+pub fn set_unstable_error_json(unstable_error_json: bool) -> Result<(), Error> {
+    UNSTABLE_ERROR_JSON.set(unstable_error_json).map_err(|_| {
+        Error::new(ErrorDetails::Config {
+            message: "Failed to set unstable error JSON".to_string(),
+        })
+    })
+}
+
 pub fn warn_discarded_thought_block(provider_type: &str, thought: &Thought) {
     if *DEBUG.get().unwrap_or(&false) {
-        tracing::warn!("Provider type `{provider_type}` does not support input thought blocks, discarding: {thought}");
+        tracing::warn!("Provider type `{provider_type}` does not support input thought blocks, discarding: {thought:?}");
     } else {
         tracing::warn!(
             "Provider type `{provider_type}` does not support input thought blocks, discarding"
@@ -81,7 +93,9 @@ impl<T: Debug + Display> Display for DisplayOrDebugGateway<T> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Error, Serialize)]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
+#[error(transparent)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
 // We box `ErrorDetails` per the `clippy::result_large_err` lint
 pub struct Error(Box<ErrorDetails>);
@@ -118,10 +132,27 @@ impl Error {
     }
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
+// Expect for derive Serialize
+#[expect(clippy::trivially_copy_pass_by_ref)]
+fn serialize_status<S>(code: &Option<StatusCode>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match code {
+        Some(c) => serializer.serialize_u16(c.as_u16()),
+        None => serializer.serialize_none(),
     }
+}
+
+fn serialize_if_debug<T, S>(data: T, serializer: S) -> Result<S::Ok, S::Error>
+where
+    T: Serialize,
+    S: Serializer,
+{
+    if *DEBUG.get().unwrap_or(&false) {
+        return data.serialize(serializer);
+    }
+    serializer.serialize_none()
 }
 
 impl From<ErrorDetails> for Error {
@@ -130,7 +161,8 @@ impl From<ErrorDetails> for Error {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Error, Serialize)]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
 pub enum ErrorDetails {
     AllVariantsFailed {
         errors: HashMap<String, Error>,
@@ -205,9 +237,12 @@ pub enum ErrorDetails {
     },
     InferenceClient {
         message: String,
+        #[serde(serialize_with = "serialize_status")]
         status_code: Option<StatusCode>,
         provider_type: String,
+        #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
+        #[serde(serialize_with = "serialize_if_debug")]
         raw_response: Option<String>,
     },
     InferenceNotFound {
@@ -216,7 +251,9 @@ pub enum ErrorDetails {
     InferenceServer {
         message: String,
         provider_type: String,
+        #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
+        #[serde(serialize_with = "serialize_if_debug")]
         raw_response: Option<String>,
     },
     InvalidClientMode {
@@ -228,7 +265,7 @@ pub enum ErrorDetails {
         message: String,
     },
     InvalidInferenceOutputSource {
-        source: String,
+        source_kind: String,
     },
     ObjectStoreWrite {
         message: String,
@@ -241,7 +278,7 @@ pub enum ErrorDetails {
         variant_name: String,
     },
     VariantTimeout {
-        variant_name: Option<String>,
+        variant_name: String,
         timeout: Duration,
         streaming: bool,
     },
@@ -722,11 +759,7 @@ impl std::fmt::Display for ErrorDetails {
                 timeout,
                 streaming,
             } => {
-                let variant_description = if let Some(variant_name) = variant_name {
-                    format!("Variant `{variant_name}`")
-                } else {
-                    "Unknown variant".to_string()
-                };
+                let variant_description = format!("Variant `{variant_name}`");
                 if *streaming {
                     write!(f, "{variant_description} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})")
                 } else {
@@ -843,16 +876,16 @@ impl std::fmt::Display for ErrorDetails {
                         message,
                         raw_request
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw request: {r}")),
+                            .map_or(String::new(), |r| format!("\nRaw request: {r}")),
                         raw_response
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw response: {r}"))
+                            .map_or(String::new(), |r| format!("\nRaw response: {r}"))
                     )
                 } else {
                     write!(
                         f,
                         "Error{} from {} client: {}",
-                        status_code.map_or("".to_string(), |s| format!(" {s}")),
+                        status_code.map_or(String::new(), |s| format!(" {s}")),
                         provider_type,
                         message
                     )
@@ -876,10 +909,10 @@ impl std::fmt::Display for ErrorDetails {
                         message,
                         raw_request
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw request: {r}")),
+                            .map_or(String::new(), |r| format!("\nRaw request: {r}")),
                         raw_response
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw response: {r}"))
+                            .map_or(String::new(), |r| format!("\nRaw response: {r}"))
                     )
                 } else {
                     write!(f, "Error from {provider_type} server: {message}")
@@ -935,8 +968,8 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidTensorzeroUuid { message, kind } => {
                 write!(f, "Invalid {kind} ID: {message}")
             }
-            ErrorDetails::InvalidInferenceOutputSource { source } => {
-                write!(f, "Invalid inference output source: {source}. Should be one of: \"inference\" or \"demonstration\".")
+            ErrorDetails::InvalidInferenceOutputSource { source_kind } => {
+                write!(f, "Invalid inference output source: {source_kind}. Should be one of: \"inference\" or \"demonstration\".")
             }
             ErrorDetails::InvalidMetricName { metric_name } => {
                 write!(f, "Invalid metric name: {metric_name}")
@@ -1146,12 +1179,16 @@ impl std::fmt::Display for ErrorDetails {
     }
 }
 
-impl std::error::Error for Error {}
-
 impl IntoResponse for Error {
     /// Log the error and convert it into an Axum response
     fn into_response(self) -> Response {
-        let body = json!({"error": self.to_string()});
+        let mut body = json!({
+            "error": self.to_string(),
+        });
+        if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
+            body["error_json"] =
+                serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
+        }
         (self.status_code(), Json(body)).into_response()
     }
 }

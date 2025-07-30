@@ -72,7 +72,7 @@ impl Base64File {
     #[getter(url)]
     #[must_use]
     pub fn url_string(&self) -> Option<String> {
-        self.url.as_ref().map(|u| u.to_string())
+        self.url.as_ref().map(Url::to_string)
     }
 
     #[getter(mime_type)]

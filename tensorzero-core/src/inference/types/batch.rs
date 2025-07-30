@@ -492,7 +492,12 @@ impl TryFrom<BatchOutputSchemasWithSize> for Vec<Option<DynamicJSONSchema>> {
         BatchOutputSchemasWithSize(schemas, num_inferences): BatchOutputSchemasWithSize,
     ) -> Result<Self, Self::Error> {
         if let Some(schemas) = schemas {
-            if schemas.len() != num_inferences {
+            if schemas.len() == num_inferences {
+                Ok(schemas
+                    .into_iter()
+                    .map(|schema| schema.map(DynamicJSONSchema::new))
+                    .collect())
+            } else {
                 Err(ErrorDetails::InvalidRequest {
                     message: format!(
                         "output_schemas vector length ({}) does not match number of inferences ({})",
@@ -501,11 +506,6 @@ impl TryFrom<BatchOutputSchemasWithSize> for Vec<Option<DynamicJSONSchema>> {
                     ),
                 }
                 .into())
-            } else {
-                Ok(schemas
-                    .into_iter()
-                    .map(|schema| schema.map(DynamicJSONSchema::new))
-                    .collect())
             }
         } else {
             Ok(vec![None; num_inferences])
@@ -519,7 +519,9 @@ impl TryFrom<BatchOutputSchemasWithSize> for Vec<Option<Value>> {
     fn try_from(schemas: BatchOutputSchemasWithSize) -> Result<Self, Self::Error> {
         let BatchOutputSchemasWithSize(schemas, num_inferences) = schemas;
         if let Some(schemas) = schemas {
-            if schemas.len() != num_inferences {
+            if schemas.len() == num_inferences {
+                Ok(schemas.into_iter().collect())
+            } else {
                 Err(ErrorDetails::InvalidRequest {
                     message: format!(
                     "output_schemas vector length ({}) does not match number of inferences ({})",
@@ -528,8 +530,6 @@ impl TryFrom<BatchOutputSchemasWithSize> for Vec<Option<Value>> {
                 ),
                 }
                 .into())
-            } else {
-                Ok(schemas.into_iter().collect())
             }
         } else {
             Ok(vec![None; num_inferences])

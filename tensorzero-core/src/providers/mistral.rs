@@ -50,7 +50,7 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "Mistral";
-const PROVIDER_TYPE: &str = "mistral";
+pub const PROVIDER_TYPE: &str = "mistral";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -730,7 +730,7 @@ fn mistral_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {

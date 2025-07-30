@@ -18,6 +18,8 @@ use pyo3::prelude::*;
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ResolvedInput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<Value>,
@@ -56,6 +58,8 @@ impl ResolvedInput {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ResolvedInputMessage {
     pub role: Role,
     pub content: Vec<ResolvedInputMessageContent>,
@@ -96,6 +100,8 @@ impl ResolvedInputMessage {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum ResolvedInputMessageContent {
     Text {
         value: Value,

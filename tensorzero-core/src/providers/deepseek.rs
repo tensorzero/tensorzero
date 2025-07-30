@@ -51,7 +51,7 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "DeepSeek";
-const PROVIDER_TYPE: &str = "deepseek";
+pub const PROVIDER_TYPE: &str = "deepseek";
 
 #[derive(Debug)]
 pub enum DeepSeekCredentials {
@@ -304,7 +304,7 @@ enum DeepSeekResponseFormat {
 }
 
 impl DeepSeekResponseFormat {
-    fn new(json_mode: &ModelInferenceRequestJsonMode) -> Option<Self> {
+    fn new(json_mode: ModelInferenceRequestJsonMode) -> Option<Self> {
         match json_mode {
             ModelInferenceRequestJsonMode::On => Some(DeepSeekResponseFormat::JsonObject),
             // For now, we never explicitly send `DeepSeekResponseFormat::Text`
@@ -360,18 +360,19 @@ impl<'a> DeepSeekRequest<'a> {
             ..
         } = *request;
 
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
 
         if request.json_mode == ModelInferenceRequestJsonMode::Strict {
             tracing::warn!("DeepSeek provider does not support strict JSON mode. Downgrading to normal JSON mode.");
         }
 
-        let response_format = DeepSeekResponseFormat::new(&request.json_mode);
+        let response_format = DeepSeekResponseFormat::new(request.json_mode);
 
         // NOTE: as mentioned by the DeepSeek team here: https://github.com/deepseek-ai/DeepSeek-R1?tab=readme-ov-file#usage-recommendations
         // the R1 series of models does not perform well with the system prompt. As we move towards first-class support for reasoning models we should check
@@ -499,7 +500,7 @@ fn deepseek_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(OpenAIUsage::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
@@ -517,6 +518,7 @@ fn deepseek_to_tensorzero_chunk(
                 text: Some(reasoning),
                 signature: None,
                 id: "0".to_string(),
+                provider_type: Some(PROVIDER_TYPE.to_string()),
             }));
         }
         if let Some(tool_calls) = choice.delta.tool_calls {
@@ -663,8 +665,9 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(reasoning) = message.reasoning_content {
             content.push(ContentBlockOutput::Thought(Thought {
-                text: reasoning,
+                text: Some(reasoning),
                 signature: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
             }));
         }
         if let Some(text) = message.content {
@@ -686,7 +689,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_response,
                 usage,
                 latency,
-                finish_reason: finish_reason.map(|r| r.into()),
+                finish_reason: finish_reason.map(OpenAIFinishReason::into),
             },
         ))
     }
@@ -969,8 +972,9 @@ mod tests {
         assert_eq!(
             inference_response.output[0],
             ContentBlockOutput::Thought(Thought {
-                text: "I'm thinking about the weather".to_string(),
+                text: Some("I'm thinking about the weather".to_string()),
                 signature: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
             })
         );
 

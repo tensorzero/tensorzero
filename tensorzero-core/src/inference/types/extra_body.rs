@@ -49,7 +49,7 @@ impl UnfilteredInferenceExtraBody {
     /// Filter the 'InferenceExtraBody' options by variant name
     /// If the variant name is `None`, then all variant-specific extra body options are removed
     #[must_use]
-    pub fn filter(self, variant_name: Option<&str>) -> FilteredInferenceExtraBody {
+    pub fn filter(self, variant_name: &str) -> FilteredInferenceExtraBody {
         FilteredInferenceExtraBody {
             data: self
                 .extra_body
@@ -96,16 +96,12 @@ pub enum InferenceExtraBody {
 
 impl InferenceExtraBody {
     #[must_use]
-    pub fn should_apply_variant(&self, variant_name: Option<&str>) -> bool {
-        match (self, variant_name) {
-            (InferenceExtraBody::Provider { .. }, _) => true,
-            (
-                InferenceExtraBody::Variant {
-                    variant_name: v, ..
-                },
-                Some(expected_name),
-            ) => v == expected_name,
-            (InferenceExtraBody::Variant { .. }, None) => false,
+    pub fn should_apply_variant(&self, variant_name: &str) -> bool {
+        match self {
+            InferenceExtraBody::Provider { .. } => true,
+            InferenceExtraBody::Variant {
+                variant_name: v, ..
+            } => v == variant_name,
         }
     }
 }

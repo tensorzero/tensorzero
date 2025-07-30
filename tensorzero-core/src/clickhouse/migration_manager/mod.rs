@@ -285,7 +285,7 @@ mod tests {
         }
 
         fn rollback_instructions(&self) -> String {
-            "".to_string()
+            String::new()
         }
     }
 

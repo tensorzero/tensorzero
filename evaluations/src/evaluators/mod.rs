@@ -267,9 +267,10 @@ impl<'a> EvaluatorResult {
     pub fn tags(&'a self) -> HashMap<String, String> {
         match self {
             EvaluatorResult::ExactMatch(_) => HashMap::new(),
-            EvaluatorResult::LLMJudge(value) => {
-                value.as_ref().map(|v| v.tags()).unwrap_or_default()
-            }
+            EvaluatorResult::LLMJudge(value) => value
+                .as_ref()
+                .map(LLMJudgeEvaluationResult::tags)
+                .unwrap_or_default(),
         }
     }
 }
