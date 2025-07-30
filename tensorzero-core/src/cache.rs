@@ -256,15 +256,16 @@ pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     let clickhouse_client = clickhouse_client.clone();
     let finish_reason = finish_reason.cloned();
     tokio::spawn(async move {
+        tracing::info!("Starting cache write for short_cache_key={short_cache_key} long_cache_key={long_cache_key} raw_request={raw_request} raw_response={raw_response}");
         if let Err(e) = clickhouse_client
             .write(
                 &[FullCacheRow {
                     short_cache_key,
-                    long_cache_key,
+                    long_cache_key: long_cache_key.clone(),
                     data: CacheData {
                         output,
-                        raw_request,
-                        raw_response,
+                        raw_request: raw_request.clone(),
+                        raw_response: raw_response.clone(),
                         input_tokens,
                         output_tokens,
                         finish_reason,
@@ -276,6 +277,7 @@ pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
         {
             tracing::warn!("Failed to write to cache: {e}");
         }
+        tracing::info!("Finished cache write for short_cache_key={short_cache_key} long_cache_key={long_cache_key} raw_request={raw_request} raw_response={raw_response}");
     });
     Ok(())
 }
@@ -363,12 +365,18 @@ pub async fn cache_lookup(
     request: ModelProviderRequest<'_>,
     max_age_s: Option<u32>,
 ) -> Result<Option<ModelInferenceResponse>, Error> {
+    let cache_key = request.get_cache_key()?;
+    let short_cache_key = cache_key.get_short_key()?;
+    let long_cache_key = cache_key.get_long_key();
     let result = cache_lookup_inner::<NonStreamingCacheData>(
         clickhouse_connection_info,
-        request.get_cache_key()?,
+        cache_key,
         max_age_s,
     )
     .await?;
+    tracing::info!(
+        "Cache lookup for short_cache_key={short_cache_key} long_cache_key={long_cache_key} request={request:?} result={result:?}"
+    );
     Ok(result.map(|result| {
         ModelInferenceResponse::from_cache(result, request.request, request.provider_name)
     }))

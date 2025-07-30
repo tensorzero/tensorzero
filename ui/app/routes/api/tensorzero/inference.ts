@@ -19,6 +19,7 @@ import {
 } from "~/utils/tensorzero";
 import { JSONParseError } from "~/utils/common";
 import type { Route } from "./+types/inference";
+import { getExtraInferenceOptions } from "~/utils/env.server";
 
 export async function action({ request }: Route.ActionArgs): Promise<Response> {
   const formData = await request.formData();
@@ -60,6 +61,7 @@ async function handleInferenceAction(
 
   return await getTensorZeroClient().inference({
     ...result.data,
+    ...getExtraInferenceOptions(),
     stream: false,
   });
 }

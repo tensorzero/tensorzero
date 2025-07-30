@@ -36,6 +36,7 @@ import OutputRust from "~/components/inference/NewOutputRust";
 import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
 import { safeParseInt } from "~/utils/common";
+import { getExtraInferenceOptions } from "~/utils/env.server";
 
 const DEFAULT_LIMIT = 5;
 
@@ -168,6 +169,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
     return await getTensorZeroClient().inference({
       ...result.data,
+      ...getExtraInferenceOptions(),
       stream: false,
     });
   };

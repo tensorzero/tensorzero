@@ -38,6 +38,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
+  console.log(`Launching evaluation with: ${JSON.stringify(formData)}`);
   const evaluation_name = formData.get("evaluation_name");
   const dataset_name = formData.get("dataset_name");
   const variant_name = formData.get("variant_name");
