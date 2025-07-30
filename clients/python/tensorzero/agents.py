@@ -1,6 +1,6 @@
 from . import patch_openai_client, TensorZeroGateway, Config as TensorZeroConfig
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 import contextvars
@@ -48,6 +48,13 @@ class TensorZeroAgentsError(Exception):
     pass
 
 
+class TensorZeroPromptTemplate(BaseModel):
+    system_template: Optional[str] = None
+    user_template: Optional[str] = None
+    system_schema: Optional[dict[str, Any]] = None
+    user_schema: Optional[dict[str, Any]] = None
+
+
 class TensorZeroAgentsContext(BaseModel):
     """Context object that holds TensorZero state during the patched session."""
 
@@ -56,7 +63,7 @@ class TensorZeroAgentsContext(BaseModel):
     gateway_url: Optional[str] = None
     episode_id: Optional[str] = None
     config: Optional[TensorZeroConfig] = None
-    function_variant_to_system_template_and_schema: dict[str, tuple[str, str]] = {}
+    function_variant_to_prompt_templates: dict[str, TensorZeroPromptTemplate] = {}
 
     class Config:
         arbitrary_types_allowed = True
@@ -80,19 +87,16 @@ class TensorZeroAgentsCompletions(AsyncCompletions):
             kwargs["extra_body"] = extra_body
 
         # Inject system template if it exists
-        if (
-            kwargs.get("model")
-            in tz_context.function_variant_to_system_template_and_schema
-        ):
-            system_template, system_schema = (
-                tz_context.function_variant_to_system_template_and_schema[
-                    kwargs["model"]
-                ]
-            )
+        if kwargs.get("model") in tz_context.function_variant_to_prompt_templates:
+            prompt_template = tz_context.function_variant_to_prompt_templates[
+                kwargs["model"]
+            ]
+            system_template = prompt_template.system_template
+            system_schema = prompt_template.system_schema
+            messages = kwargs.get("messages", [])
             if system_template:
-                messages = kwargs.get("messages", [])
-                arguments = {}
                 if system_schema:
+                    arguments = {}
                     metadata: dict[str, Any] = kwargs.get("metadata", {})
                     system_schema_properties: dict[str, Any] = system_schema.get(
                         "properties", {}
@@ -101,6 +105,7 @@ class TensorZeroAgentsCompletions(AsyncCompletions):
                         property_name,
                         property_schema,
                     ) in system_schema_properties.items():
+                        # TODO: We could add validation here, maybe we can generate a pydantic model from the schema
                         provided_value = metadata.get(
                             f"tensorzero::arguments::{property_name}"
                         )
@@ -114,7 +119,31 @@ class TensorZeroAgentsCompletions(AsyncCompletions):
                     messages[0]["content"] = content_object
                 else:
                     messages.insert(0, {"role": "system", "content": content_object})
-                kwargs["messages"] = messages
+            if prompt_template.user_template:
+                if prompt_template.user_schema:
+                    arguments = {}
+                    metadata: dict[str, Any] = kwargs.get("metadata", {})
+                    user_schema_properties: dict[str, Any] = (
+                        prompt_template.user_schema.get("properties", {})
+                    )
+                    for (
+                        property_name,
+                        property_schema,
+                    ) in user_schema_properties.items():
+                        provided_value = metadata.get(
+                            f"tensorzero::arguments::{property_name}"
+                        )
+                        arguments[property_name] = provided_value
+                    content_object = [
+                        {"type": "text", "tensorzero::arguments": arguments}
+                    ]
+                else:
+                    content_object = prompt_template.user_template
+                if messages and messages[1].get("role") == "user":
+                    messages[1]["content"] = content_object
+                else:
+                    messages.insert(1, {"role": "user", "content": content_object})
+            kwargs["messages"] = messages
 
         # Call the base client
         ret = await super().create(**kwargs)
@@ -202,26 +231,34 @@ async def with_tensorzero_agents_patched(
     toml_parsed_functions: dict[str, dict] = toml_parsed_config.get("functions", {})
     embedded_functions = config.functions
 
-    function_variant_to_system_template_and_schema: dict[str, tuple[str, str]] = {}
+    function_variant_to_prompt_templates: dict[str, TensorZeroPromptTemplate] = {}
 
     for function_name, toml_parsed_function in toml_parsed_functions.items():
         embedded_function_config = embedded_functions[function_name]
         system_schema = embedded_function_config.system_schema
+        user_schema = embedded_function_config.user_schema
         embedded_variants = embedded_function_config.variants
         toml_parsed_variants: dict[str, Any] = toml_parsed_function.get("variants", {})
         for variant_name, toml_parsed_variant in toml_parsed_variants.items():
             embedded_variant_config = embedded_variants[variant_name]
             system_template = embedded_variant_config.system_template
-            function_variant_to_system_template_and_schema[
-                f"tensorzero::{function_name}::{variant_name}"
-            ] = (system_template, system_schema)
+            user_template = embedded_variant_config.user_template
+            prompt_template = TensorZeroPromptTemplate(
+                system_template=system_template,
+                user_template=user_template,
+                system_schema=system_schema,
+                user_schema=user_schema,
+            )
+            function_variant_to_prompt_templates[
+                f"tensorzero::function_name::{function_name}::variant_name::{variant_name}"
+            ] = prompt_template
             if variant_name == "baseline":
-                function_variant_to_system_template_and_schema[
-                    f"tensorzero::{function_name}"
-                ] = (system_template, system_schema)
+                function_variant_to_prompt_templates[
+                    f"tensorzero::function_name::{function_name}"
+                ] = prompt_template
 
-    tz_context.function_variant_to_system_template_and_schema = (
-        function_variant_to_system_template_and_schema
+    tz_context.function_variant_to_prompt_templates = (
+        function_variant_to_prompt_templates
     )
     try:
         # Set up OpenAI client patching

@@ -22,6 +22,7 @@ def think(thought: str) -> str:
     """
     # The think tool is just for reasoning - we return empty string
     # The Agents SDK will handle this automatically
+    print(f"Thinking about {thought}")
     return ""
 
 
@@ -36,6 +37,7 @@ def search_wikipedia(query: str) -> str:
     Returns:
         Newline-separated list of Wikipedia search results.
     """
+    print(f"Searching Wikipedia for {query}")
     try:
         search_results = wikipedia.search(query)
         return "\n".join(search_results)
@@ -78,4 +80,5 @@ def answer_question(answer: str) -> str:
     Returns:
         The answer (this will be the final output of the agent).
     """
+    print(f"Answering question: {answer}")
     return answer
