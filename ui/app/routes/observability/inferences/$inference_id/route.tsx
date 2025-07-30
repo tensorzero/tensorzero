@@ -32,7 +32,7 @@ import { TagsTable } from "~/components/utils/TagsTable";
 import { ModelInferencesTable } from "./ModelInferencesTable";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import {
@@ -269,10 +269,8 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   const num_feedbacks = feedback.length;
 
-  const config = useConfig();
-  const variants = Object.keys(
-    config.functions[inference.function_name]?.variants || {},
-  );
+  const functionConfig = useFunctionConfig(inference.function_name);
+  const variants = Object.keys(functionConfig?.variants || {});
   const addToDatasetFetcher = useFetcher<typeof action>();
   const addToDatasetError =
     addToDatasetFetcher.state === "idle" && addToDatasetFetcher.data?.error

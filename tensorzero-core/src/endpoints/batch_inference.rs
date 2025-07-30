@@ -18,7 +18,7 @@ use super::inference::{
     InferenceIds, InferenceModels, InferenceParams, InferenceResponse, JsonInferenceResponse,
 };
 use crate::cache::{CacheEnabledMode, CacheOptions};
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
 use crate::function::{sample_variant, FunctionConfig};
@@ -632,7 +632,7 @@ async fn write_start_batch_inference<'a>(
     }
 
     clickhouse_connection_info
-        .write(rows.as_slice(), "BatchModelInference")
+        .write(rows.as_slice(), TableName::BatchModelInference)
         .await?;
 
     let batch_request_insert = BatchRequestRow::new(UnparsedBatchRequestRow {
@@ -663,7 +663,7 @@ pub async fn write_batch_request_row(
     batch_request: &BatchRequestRow<'_>,
 ) -> Result<(), Error> {
     clickhouse_connection_info
-        .write(&[batch_request], "BatchRequest")
+        .write(&[batch_request], TableName::BatchRequest)
         .await
 }
 
@@ -761,7 +761,7 @@ async fn write_batch_request_status_update(
         errors: vec![], // TODO (#503): add better error handling
     });
     clickhouse_connection_info
-        .write(&[batch_request_insert], "BatchRequest")
+        .write(&[batch_request_insert], TableName::BatchRequest)
         .await?;
     Ok(())
 }
@@ -919,18 +919,18 @@ pub async fn write_completed_batch_inference<'a>(
     match &**function {
         FunctionConfig::Chat(_chat_function) => {
             clickhouse_connection_info
-                .write(&inference_rows_to_write, "ChatInference")
+                .write(&inference_rows_to_write, TableName::ChatInference)
                 .await?;
         }
         FunctionConfig::Json(_json_function) => {
             clickhouse_connection_info
-                .write(&inference_rows_to_write, "JsonInference")
+                .write(&inference_rows_to_write, TableName::JsonInference)
                 .await?;
         }
     }
     // Write all the ModelInference rows to the database
     clickhouse_connection_info
-        .write(&model_inference_rows_to_write, "ModelInference")
+        .write(&model_inference_rows_to_write, TableName::ModelInference)
         .await?;
 
     Ok(inferences)

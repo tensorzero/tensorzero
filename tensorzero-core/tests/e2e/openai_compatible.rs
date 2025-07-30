@@ -489,7 +489,7 @@ async fn test_openai_compatible_route_bad_model_name() {
                 }
             }
         })
-    )
+    );
 }
 
 #[tokio::test]

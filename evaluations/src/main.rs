@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
     match &result {
         Ok(_) => info!(evaluation_run_id = %evaluation_run_id, "Evaluation completed successfully"),
         Err(e) => {
-            tracing::error!(evaluation_run_id = %evaluation_run_id, error = %e, "Evaluation failed")
+            tracing::error!(evaluation_run_id = %evaluation_run_id, error = %e, "Evaluation failed");
         }
     }
 
