@@ -114,6 +114,7 @@ Take what you need, adopt incrementally, and complement with other tools.
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/groq">Groq</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/hyperbolic">Hyperbolic</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/mistral">Mistral</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/nvidia-nim">NVIDIA NIM</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openai">OpenAI</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openrouter">OpenRouter</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/sglang">SGLang</a></b></li>
