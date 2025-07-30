@@ -9,8 +9,9 @@
 [gateway]
 bind_address = "0.0.0.0:3000"
 debug = true
-enable_template_filesystem_access = true
+template_filesystem_access.enabled = true
 export.otlp.traces.enabled = true
+unstable_error_json = true
 
 [object_storage]
 type = "disabled"
@@ -77,7 +78,7 @@ routing = ["groq"]
 
 [models."mixtral-groq".providers.groq]
 type = "groq"
-model_name = "mistral-saba-24b"
+model_name = "qwen/qwen3-32b"
 
 
 [models."mixtral-groq-dynamic"]
@@ -85,7 +86,7 @@ routing = ["groq"]
 
 [models."mixtral-groq-dynamic".providers.groq]
 type = "groq"
-model_name = "mistral-saba-24b"
+model_name = "qwen/qwen3-32b"
 api_key_location = "dynamic::groq_api_key"
 
 

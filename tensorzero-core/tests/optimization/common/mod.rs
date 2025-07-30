@@ -47,6 +47,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let optimizer_info = test_case
         .get_optimizer_info(use_mock_inference_provider())
         .load()
+        .await
         .unwrap();
     let client = reqwest::Client::new();
     let test_examples = get_examples(test_case, 10);
@@ -139,6 +140,7 @@ pub async fn run_workflow_test_case_with_tensorzero_client(
         query_variant_name: None,
         filters: None,
         output_source: InferenceOutputSource::Inference,
+        order_by: None,
         limit: Some(10),
         offset: None,
         val_fraction: None,
@@ -210,6 +212,7 @@ fn generate_text_example() -> RenderedSample {
         dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
             text: "The capital of France is Marseille.".to_string(),
         })]],
+        tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
     }
 }
 
@@ -305,6 +308,7 @@ fn generate_tool_call_example() -> RenderedSample {
         inference_id: Some(Uuid::now_v7()),
         output_schema: None,
         dispreferred_outputs: vec![],
+        tags: HashMap::new(),
     }
 }
 
@@ -349,6 +353,7 @@ fn generate_image_example() -> RenderedSample {
         dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
             text: "Blue!".to_string(),
         })]],
+        tags: HashMap::new(),
     }
 }
 

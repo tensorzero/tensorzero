@@ -29,9 +29,6 @@ export function SnippetContent({
 
   // Simple check on initial render and when content changes
   useEffect(() => {
-    // Reset expanded state when content changes
-    setExpanded(false);
-
     if (contentRef.current && maxHeight !== "Content") {
       // Simple check if content is taller than maxHeight
       const contentHeight = contentRef.current.scrollHeight;

@@ -21,6 +21,7 @@ import {
   WrapTextIcon,
   CheckCheckIcon,
   ClipboardIcon,
+  X,
 } from "lucide-react";
 import type { JsonValue } from "tensorzero-node";
 
@@ -185,14 +186,14 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
   return (
     // `min-width: 0` If within a grid parent, prevent editor from overflowing its grid cell and force horizontal scrolling
-    <div className={cn("group relative min-w-0 rounded-sm", className)}>
+    <div className={cn("group relative isolate min-w-0 rounded-sm", className)}>
       <div className="absolute top-1 right-1 z-10 flex gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
         {isCopyAvailable && (
           <Button
             variant="secondary"
             size="iconSm"
             onClick={() => copy(value)}
-            className="h-6 w-6 p-3 text-xs"
+            className="h-6 w-6 cursor-pointer p-3 text-xs"
             title={didCopy ? "Copied!" : "Copy to clipboard"}
           >
             {didCopy ? (
@@ -204,14 +205,23 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         )}
 
         <Button
-          variant={wordWrap ? "default" : "secondary"}
+          variant={"secondary"}
           size="iconSm"
           onClick={() => setWordWrap((wrap) => !wrap)}
           aria-pressed={wordWrap}
-          className="h-6 w-6 p-3 text-xs"
+          className="flex h-6 w-6 cursor-pointer items-center justify-center p-3 text-xs"
           title="Toggle word wrap"
         >
-          <WrapTextIcon className="h-2 w-2" />
+          <span className="relative flex h-full w-full items-center justify-center">
+            <WrapTextIcon className="absolute top-1/2 left-1/2 z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2" />
+            {/* If disabled, show an X icon, larger and on top of the wrap icon */}
+            {wordWrap ? null : (
+              <X
+                className="absolute top-1/2 left-1/2 z-20 !h-7 !w-7 -translate-x-1/2 -translate-y-1/2"
+                strokeWidth={1}
+              />
+            )}
+          </span>
         </Button>
 
         {allowedLanguages.length > 1 && (
@@ -271,7 +281,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             highlightActiveLine: !readOnly,
             highlightActiveLineGutter: !readOnly,
           }}
-          className="min-h-8 overflow-auto"
+          className="min-h-9 overflow-auto"
         />
       </div>
     </div>

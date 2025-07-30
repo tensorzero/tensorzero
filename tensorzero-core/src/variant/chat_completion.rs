@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
+use crate::config_parser::path::TomlRelativePath;
 use crate::config_parser::{LoadableConfig, PathWithContents};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -56,9 +57,9 @@ pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
     pub weight: Option<f64>,
     pub model: Arc<str>,
-    pub system_template: Option<PathBuf>,
-    pub user_template: Option<PathBuf>,
-    pub assistant_template: Option<PathBuf>,
+    pub system_template: Option<TomlRelativePath>,
+    pub user_template: Option<TomlRelativePath>,
+    pub assistant_template: Option<TomlRelativePath>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub max_tokens: Option<u32>,
@@ -121,6 +122,7 @@ impl ChatCompletionConfig {
         }
         .map(|x| {
             x.path
+                .path()
                 .to_str()
                 .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
         })
@@ -139,6 +141,7 @@ impl ChatCompletionConfig {
             .as_ref()
             .map(|x| {
                 x.path
+                    .path()
                     .to_str()
                     .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
             })
@@ -188,6 +191,7 @@ impl ChatCompletionConfig {
             inference_extra_body: inference_config
                 .extra_body
                 .clone()
+                .into_owned()
                 .filter(inference_config.variant_name),
         };
 
@@ -196,6 +200,7 @@ impl ChatCompletionConfig {
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
+                .into_owned()
                 .filter(inference_config.variant_name),
         };
 
@@ -600,12 +605,13 @@ pub enum TemplateKind {
 pub fn validate_template_and_schema(
     kind: TemplateKind,
     schema: Option<&StaticJSONSchema>,
-    template: Option<&PathBuf>,
+    template: Option<&TomlRelativePath>,
     templates: &TemplateConfig,
 ) -> Result<(), Error> {
     match (schema, template) {
         (None, Some(template)) => {
             let template_name = template
+                .path()
                 .to_str()
                 .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))?;
             let undeclared_vars = templates.get_undeclared_variables(template_name)?;
@@ -644,6 +650,7 @@ pub fn validate_template_and_schema(
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::path::PathBuf;
 
     use super::*;
 
@@ -763,15 +770,15 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             assistant_template: Some(PathWithContents {
                 path: assistant_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             json_mode: Some(JsonMode::On),
             ..Default::default()
@@ -859,15 +866,15 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             assistant_template: Some(PathWithContents {
                 path: assistant_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             json_mode: Some(JsonMode::On),
             ..Default::default()
@@ -985,7 +992,7 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1011,7 +1018,7 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1047,11 +1054,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1156,7 +1163,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1211,7 +1218,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1244,11 +1251,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1263,7 +1270,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1309,11 +1316,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1347,7 +1354,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1428,7 +1435,7 @@ mod tests {
             templates: &templates,
             tool_config: Some(&weather_tool_config),
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1519,7 +1526,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1587,7 +1594,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1598,11 +1605,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             extra_body: Default::default(),
             ..Default::default()
@@ -1702,7 +1709,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: Some(&output_schema),
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1713,11 +1720,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1805,7 +1812,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: Some(&output_schema),
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1816,11 +1823,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             temperature: Some(0.5),
             top_p: Some(0.9),
@@ -1966,11 +1973,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         }));
@@ -1993,7 +2000,7 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2032,11 +2039,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         }));
@@ -2057,7 +2064,7 @@ mod tests {
             templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -2164,7 +2171,7 @@ mod tests {
             templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -2273,7 +2280,7 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2349,7 +2356,7 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: Some(&dynamic_output_schema),
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
@@ -2384,7 +2391,7 @@ mod tests {
     fn test_validate_template_and_schema_both_some() {
         let templates = get_test_template_config();
         let schema = StaticJSONSchema::from_path(
-            PathBuf::from("fixtures/config/functions/templates_with_variables/system_schema.json"),
+            "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
             PathBuf::new(),
         )
         .unwrap();
@@ -2392,7 +2399,7 @@ mod tests {
         let result = validate_template_and_schema(
             TemplateKind::System,
             Some(&schema),
-            Some(&template),
+            Some(&TomlRelativePath::new_for_tests(template)),
             &templates,
         );
         assert!(result.is_ok());
@@ -2402,8 +2409,12 @@ mod tests {
     fn test_validate_template_and_schema_template_no_needs_variables() {
         let templates = get_test_template_config();
         let template = PathBuf::from("system_filled");
-        let result =
-            validate_template_and_schema(TemplateKind::System, None, Some(&template), &templates);
+        let result = validate_template_and_schema(
+            TemplateKind::System,
+            None,
+            Some(&TomlRelativePath::new_for_tests(template)),
+            &templates,
+        );
         assert!(result.is_ok());
     }
 
@@ -2411,9 +2422,13 @@ mod tests {
     fn test_validate_template_and_schema_template_needs_variables() {
         let templates = get_test_template_config(); // Template needing variables
         let template = PathBuf::from("greeting");
-        let err =
-            validate_template_and_schema(TemplateKind::System, None, Some(&template), &templates)
-                .unwrap_err();
+        let err = validate_template_and_schema(
+            TemplateKind::System,
+            None,
+            Some(&TomlRelativePath::new_for_tests(template)),
+            &templates,
+        )
+        .unwrap_err();
         let details = err.get_details();
 
         if let ErrorDetails::Config { message } = details {
@@ -2430,7 +2445,7 @@ mod tests {
     fn test_validate_template_and_schema_schema_some_template_none() {
         let templates = get_test_template_config(); // Default TemplateConfig
         let schema = StaticJSONSchema::from_path(
-            PathBuf::from("fixtures/config/functions/templates_with_variables/system_schema.json"),
+            "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
             PathBuf::new(),
         )
         .unwrap();
