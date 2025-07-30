@@ -3,6 +3,7 @@ from tensorzero.agents import with_tensorzero_agents_patched
 from tools import think, search_wikipedia, load_wikipedia_page, answer_question
 import os
 import dotenv
+from datetime import datetime
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -15,7 +16,7 @@ print(gateway_url, clickhouse_url)
 
 
 def create_rag_agent():
-    from agents import Agent, ModelSettings
+    from agents import Agent, ModelSettings, RunConfig
 
     """Create a multi-hop RAG agent using pure OpenAI Agents SDK."""
 
@@ -93,16 +94,12 @@ Remember: Your primary value is in providing accurate, well-sourced information 
         instructions=system_instructions,
         model="tensorzero::multi_hop_rag_agent_openai_v1",  # Using OpenAI directly
         tools=[think, search_wikipedia, load_wikipedia_page, answer_question],
-        model_settings=ModelSettings(
-            extra_body={
-                "tensorzero::episode_id": None  # TODO: Figure out how to extract episode_id from first response and attach it to subsequent requests
-            }
-        ),
+        model_settings=ModelSettings(extra_body={"tensorzero::episode_id": None}),
     )
 
 
 async def ask_question(question: str, verbose: bool = False) -> str:
-    from agents import Runner
+    from agents import Runner, RunConfig, ModelSettings
 
     """
     Ask a question to the multi-hop RAG agent using pure Agents SDK.
@@ -123,6 +120,13 @@ async def ask_question(question: str, verbose: bool = False) -> str:
     result = await Runner.run(
         agent,
         question,
+        run_config=RunConfig(
+            model_settings=ModelSettings(
+                metadata={
+                    "tensorzero::arguments::date": datetime.now().strftime("%Y-%m-%d")
+                }
+            )
+        ),
     )
 
     if verbose:

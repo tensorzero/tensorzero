@@ -16,19 +16,21 @@ type = "chat"
 tools = ["think", "search_wikipedia", "load_wikipedia_page", "answer_question"]
 tool_choice = "required"
 parallel_tool_calls = true
+system_schema = "functions/multi_hop_rag_agent/system_schema.json"
 
 [functions.multi_hop_rag_agent.variants.baseline]
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
-system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
+system_template = "functions/multi_hop_rag_agent/baseline/system_template.minijinja"
 
 [functions.multi_hop_rag_agent_openai_v1]
 type = "chat"
+system_schema = "functions/multi_hop_rag_agent/system_schema.json"
 
 [functions.multi_hop_rag_agent_openai_v1.variants.baseline]
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
-system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
+system_template = "functions/multi_hop_rag_agent/baseline/system_template.minijinja"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   TOOLS                                    │
