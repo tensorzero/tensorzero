@@ -368,6 +368,24 @@ type = "vllm"
 model_name = "Qwen/Qwen2.5-0.5B-Instruct"
 api_base = "https://tensorzero--vllm-inference-qwen-vllm-inference.modal.run/v1/"
 
+## Llama
+
+[models."llama-scout-llama"]
+routing = ["llama"]
+
+[models."llama-scout-llama".providers.llama]
+type = "llama"
+model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
+
+[models."llama-scout-llama-dynamic"]
+routing = ["llama"]
+
+[models."llama-scout-llama-dynamic".providers.llama]
+type = "llama"
+model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
+api_key_location = "dynamic::llama_api_key"
+
+
 [models."open-mistral-nemo-2407"]
 routing = ["mistral"]
 
@@ -1136,9 +1154,37 @@ extra_headers = [
     { name = "Authorization", value = "Bearer: invalid_openai_auth" },
 ]
 
-[functions.basic_test.variants.groq-dynamic]
+## Llama
+
+[functions.basic_test.variants.llama]
 type = "chat_completion"
-model = "mixtral-groq-dynamic"
+model = "llama-scout-llama"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.llama-shorthand]
+type = "chat_completion"
+model = "llama-scout-llama"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.llama-extra-body]
+type = "chat_completion"
+model = "llama-scout-llama"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.llama-extra-headers]
+type = "chat_completion"
+model = "llama-scout-llama"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "Bearer: invalid_openai_auth" }]
+
+[functions.basic_test.variants.llama-dynamic]
+type = "chat_completion"
+model = "llama-scout-llama-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -1875,6 +1921,33 @@ system_template = "../../fixtures/config/functions/json_success/prompt/system_te
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
 json_mode = "strict"
+
+## Llama
+
+[functions.dynamic_json.variants.llama]
+type = "chat_completion"
+model = "llama-scout-llama"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
+[functions.dynamic_json.variants.llama-strict]
+type = "chat_completion"
+model = "llama-scout-llama"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+max_tokens = 100
+json_mode = "strict"
+
+[functions.dynamic_json.variants.llama-implicit]
+type = "chat_completion"
+model = "llama-scout-llama"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+json_mode = "implicit_tool"
+max_tokens = 100
+
 [functions.json_success.variants.mistral]
 type = "chat_completion"
 model = "open-mistral-nemo-2407"
@@ -2896,6 +2969,12 @@ max_tokens = 100
 [functions.weather_helper.variants.groq]
 type = "chat_completion"
 model = "mixtral-groq"
+system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 500
+
+[functions.weather_helper.variants.llama]
+type = "chat_completion"
+model = "llama-scout-llama"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 500
 
