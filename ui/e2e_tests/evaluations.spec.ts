@@ -11,6 +11,7 @@ test("should show the evaluation result page", async ({ page }) => {
 // This test depends on model inference cache hits (within ClickHouse)
 // If it starts failing, you may need to regenerate the model inference cache
 test("push the new run button, launch an evaluation", async ({ page }) => {
+  test.setTimeout(600_000);
   await page.goto("/evaluations");
   await page.waitForTimeout(500);
   await page.getByText("New Run").click();
@@ -27,11 +28,20 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
   await page.waitForTimeout(500);
   await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
   await page.getByRole("button", { name: "Launch" }).click();
-  await page.waitForTimeout(10000);
 
   await expect(
     page.getByText("Select evaluation runs to compare..."),
   ).toBeVisible();
+  // Wait for evals to start, then wait for them to finish
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
+    "data-running",
+    "true",
+  );
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
+    "data-running",
+    "false",
+    { timeout: 500_000 },
+  );
   await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
   await expect(page.getByText("n=", { exact: false }).first()).toBeVisible();
 
@@ -44,6 +54,7 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
 test("push the new run button, launch an image evaluation", async ({
   page,
 }) => {
+  test.setTimeout(600_000);
   await page.goto("/evaluations");
   await page.waitForTimeout(500);
   await page.getByText("New Run").click();
@@ -60,11 +71,22 @@ test("push the new run button, launch an image evaluation", async ({
   await page.waitForTimeout(500);
   await page.getByRole("option", { name: "honest_answer" }).click();
   await page.getByRole("button", { name: "Launch" }).click();
-  await page.waitForTimeout(5000);
 
   await expect(
     page.getByText("Select evaluation runs to compare..."),
   ).toBeVisible();
+
+  // Wait for evals to start, then wait for them to finish
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
+    "data-running",
+    "true",
+  );
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
+    "data-running",
+    "false",
+    { timeout: 500_000 },
+  );
+
   await expect(page.getByText("matches_reference")).toBeVisible();
   await expect(page.getByText("n=", { exact: false }).first()).toBeVisible();
 
