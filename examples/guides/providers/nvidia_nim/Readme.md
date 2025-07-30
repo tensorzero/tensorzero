@@ -139,12 +139,15 @@ Before running this example, make sure you have:
 
 - Docker and Docker Compose installed
 - An NVIDIA API key from [NVIDIA Build](https://build.nvidia.com/)
-- Set your API key as an environment variable: `export NVIDIA_API_KEY=your_api_key_here`
+- Set your API key as an environment variable: (linux/macOS): `export NVIDIA_API_KEY=your_api_key_here`
+- Set your API key as an environment variable (Windows): `$env:NVIDIA_API_KEY=your_api_key_here`
+
 
 
 ## Quick Start
 - Clone or create this directory structure
-- Set your NVIDIA API key: `export NVIDIA_API_KEY=your_api_key_here`
+- Set your API key as an environment variable: (linux/macOS): `export NVIDIA_API_KEY=your_api_key_here`
+- Set your API key as an environment variable (Windows): `$env:NVIDIA_API_KEY=your_api_key_here`
 - Run `docker compose up`
 - Make inference requests to `http://localhost:3000/inference`
 
