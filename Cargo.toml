@@ -15,7 +15,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.7.4"
+version = "2025.7.5"
 rust-version = "1.86.0"
 license = "Apache-2.0"
 
@@ -82,6 +82,7 @@ panic = "deny"
 print_stderr = "deny"
 print_stdout = "deny"
 redundant_closure_for_method_calls = "deny"
+semicolon-if-nothing-returned = "deny"
 todo = "deny"
 trivially_copy_pass_by_ref = "deny"
 unimplemented = "deny"
