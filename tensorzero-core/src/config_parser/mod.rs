@@ -39,6 +39,7 @@ use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
+use toml::de::DeTable;
 
 pub mod gateway;
 pub mod path;
@@ -236,7 +237,7 @@ impl ObjectStoreInfo {
                 }
                 if let Some(allow_http) = *allow_http {
                     if allow_http {
-                        tracing::warn!("`[object_storage.allow_http]` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store")
+                        tracing::warn!("`[object_storage.allow_http]` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store");
                     }
                     builder = builder.with_allow_http(allow_http);
                 }
@@ -414,15 +415,6 @@ impl Config {
         config_path: &Path,
         validate_credentials: bool,
     ) -> Result<Config, Error> {
-        let config_table = match UninitializedConfig::read_toml_config(config_path)? {
-            Some(table) => table,
-            None => {
-                return Err(ErrorDetails::Config {
-                    message: format!("Config file not found: {config_path:?}"),
-                }
-                .into())
-            }
-        };
         let base_path = match PathBuf::from(&config_path).parent() {
             Some(base_path) => base_path.to_path_buf(),
             None => {
@@ -432,6 +424,15 @@ impl Config {
                     ),
                 }
                 .into());
+            }
+        };
+        let config_table = match UninitializedConfig::read_toml_config(config_path, &base_path)? {
+            Some(table) => table,
+            None => {
+                return Err(ErrorDetails::Config {
+                    message: format!("Config file not found: {config_path:?}"),
+                }
+                .into())
             }
         };
         let config = if cfg!(feature = "e2e_tests") || !validate_credentials {
@@ -453,7 +454,7 @@ impl Config {
 
     async fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config, Error> {
         if table.is_empty() {
-            tracing::info!("Config file is empty, so only default functions will be available.")
+            tracing::info!("Config file is empty, so only default functions will be available.");
         }
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 
@@ -462,38 +463,38 @@ impl Config {
         let functions = uninitialized_config
             .functions
             .into_iter()
-            .map(|(name, config)| config.load(&name, &base_path).map(|c| (name, Arc::new(c))))
+            .map(|(name, config)| config.load(&name).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
 
         let tools = uninitialized_config
             .tools
             .into_iter()
-            .map(|(name, config)| {
-                config
-                    .load(&base_path, name.clone())
-                    .map(|c| (name, Arc::new(c)))
-            })
+            .map(|(name, config)| config.load(name.clone()).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
 
-        let models = uninitialized_config
-            .models
-            .into_iter()
-            .map(|(name, config)| {
+        let models = try_join_all(uninitialized_config.models.into_iter().map(
+            |(name, config)| async {
                 config
                     .load(&name, &uninitialized_config.provider_types)
+                    .await
                     .map(|c| (name, c))
-            })
-            .collect::<Result<HashMap<_, _>, _>>()?;
+            },
+        ))
+        .await?
+        .into_iter()
+        .collect::<HashMap<_, _>>();
 
-        let embedding_models = uninitialized_config
-            .embedding_models
-            .into_iter()
-            .map(|(name, config)| {
+        let embedding_models = try_join_all(uninitialized_config.embedding_models.into_iter().map(
+            |(name, config)| async {
                 config
                     .load(&uninitialized_config.provider_types)
+                    .await
                     .map(|c| (name, c))
-            })
-            .collect::<Result<HashMap<_, _>, _>>()?;
+            },
+        ))
+        .await?
+        .into_iter()
+        .collect::<HashMap<_, _>>();
 
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
         let optimizers = try_join_all(
@@ -552,7 +553,7 @@ impl Config {
         let mut evaluations = HashMap::new();
         for (name, evaluation_config) in uninitialized_config.evaluations {
             let (evaluation_config, evaluation_function_configs, evaluation_metric_configs) =
-                evaluation_config.load(&config.functions, &base_path, &name)?;
+                evaluation_config.load(&config.functions, &name)?;
             evaluations.insert(name, Arc::new(EvaluationConfig::Static(evaluation_config)));
             for (evaluation_function_name, evaluation_function_config) in
                 evaluation_function_configs
@@ -832,9 +833,9 @@ impl FunctionsConfigPyClass {
     }
 }
 
-/// A trait for loading configs with a base path
+/// A trait for loading configs
 pub trait LoadableConfig<T> {
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<T, Error>;
+    fn load(self) -> Result<T, Error>;
 }
 
 /// This struct is used to deserialize the TOML config file
@@ -879,28 +880,26 @@ pub struct ProviderTypesConfig {
 
 impl UninitializedConfig {
     /// Read a file from the file system and parse it as TOML
-    fn read_toml_config(path: &Path) -> Result<Option<toml::Table>, Error> {
+    fn read_toml_config(path: &Path, base_path: &Path) -> Result<Option<toml::Table>, Error> {
         if !path.exists() {
             return Ok(None);
         }
-        Ok(Some(
-            std::fs::read_to_string(path)
-                .map_err(|_| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!("Failed to read config file: {}", path.to_string_lossy()),
-                    })
-                })?
-                .parse::<toml::Table>()
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Failed to parse config file `{}` as valid TOML: {}",
-                            path.to_string_lossy(),
-                            e
-                        ),
-                    })
-                })?,
-        ))
+        let contents = std::fs::read_to_string(path).map_err(|_| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Failed to read config file: {}", path.to_string_lossy()),
+            })
+        })?;
+        let table = DeTable::parse(&contents).map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Failed to parse config file `{}` as valid TOML: {}",
+                    path.to_string_lossy(),
+                    e
+                ),
+            })
+        })?;
+        let table = path::resolve_toml_relative_paths(table.into_inner(), base_path)?;
+        Ok(Some(table))
     }
 }
 
@@ -960,29 +959,25 @@ struct UninitializedFunctionConfigJson {
 }
 
 impl UninitializedFunctionConfig {
-    pub fn load<P: AsRef<Path>>(
-        self,
-        function_name: &str,
-        base_path: P,
-    ) -> Result<FunctionConfig, Error> {
+    pub fn load(self, function_name: &str) -> Result<FunctionConfig, Error> {
         match self {
             UninitializedFunctionConfig::Chat(params) => {
                 let system_schema = params
                     .system_schema
-                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
+                    .map(StaticJSONSchema::from_path)
                     .transpose()?;
                 let user_schema = params
                     .user_schema
-                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
+                    .map(StaticJSONSchema::from_path)
                     .transpose()?;
                 let assistant_schema = params
                     .assistant_schema
-                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
+                    .map(StaticJSONSchema::from_path)
                     .transpose()?;
                 let variants = params
                     .variants
                     .into_iter()
-                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, Arc::new(v))))
+                    .map(|(name, variant)| variant.load().map(|v| (name, Arc::new(v))))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
                 for (name, variant) in variants.iter() {
                     if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
@@ -1010,18 +1005,18 @@ impl UninitializedFunctionConfig {
             UninitializedFunctionConfig::Json(params) => {
                 let system_schema = params
                     .system_schema
-                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
+                    .map(StaticJSONSchema::from_path)
                     .transpose()?;
                 let user_schema = params
                     .user_schema
-                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
+                    .map(StaticJSONSchema::from_path)
                     .transpose()?;
                 let assistant_schema = params
                     .assistant_schema
-                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
+                    .map(StaticJSONSchema::from_path)
                     .transpose()?;
                 let output_schema = match params.output_schema {
-                    Some(path) => StaticJSONSchema::from_path(path, base_path.as_ref())?,
+                    Some(path) => StaticJSONSchema::from_path(path)?,
                     None => StaticJSONSchema::default(),
                 };
                 let implicit_tool_call_config =
@@ -1029,7 +1024,7 @@ impl UninitializedFunctionConfig {
                 let variants = params
                     .variants
                     .into_iter()
-                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, Arc::new(v))))
+                    .map(|(name, variant)| variant.load().map(|v| (name, Arc::new(v))))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
 
                 for (name, variant) in variants.iter() {
@@ -1107,22 +1102,20 @@ pub enum UninitializedVariantConfig {
 }
 
 impl UninitializedVariantInfo {
-    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<VariantInfo, Error> {
+    pub fn load(self) -> Result<VariantInfo, Error> {
         let inner = match self.inner {
             UninitializedVariantConfig::ChatCompletion(params) => {
-                VariantConfig::ChatCompletion(params.load(base_path)?)
+                VariantConfig::ChatCompletion(params.load()?)
             }
             UninitializedVariantConfig::BestOfNSampling(params) => {
-                VariantConfig::BestOfNSampling(params.load(base_path)?)
+                VariantConfig::BestOfNSampling(params.load()?)
             }
-            UninitializedVariantConfig::Dicl(params) => {
-                VariantConfig::Dicl(params.load(base_path)?)
-            }
+            UninitializedVariantConfig::Dicl(params) => VariantConfig::Dicl(params.load()?),
             UninitializedVariantConfig::MixtureOfN(params) => {
-                VariantConfig::MixtureOfN(params.load(base_path)?)
+                VariantConfig::MixtureOfN(params.load()?)
             }
             UninitializedVariantConfig::ChainOfThought(params) => {
-                VariantConfig::ChainOfThought(params.load(base_path)?)
+                VariantConfig::ChainOfThought(params.load()?)
             }
         };
         Ok(VariantInfo {
@@ -1143,12 +1136,8 @@ pub struct UninitializedToolConfig {
 }
 
 impl UninitializedToolConfig {
-    pub fn load<P: AsRef<Path>>(
-        self,
-        base_path: P,
-        name: String,
-    ) -> Result<StaticToolConfig, Error> {
-        let parameters = StaticJSONSchema::from_path(self.parameters, base_path.as_ref())?;
+    pub fn load(self, name: String) -> Result<StaticToolConfig, Error> {
+        let parameters = StaticJSONSchema::from_path(self.parameters)?;
         Ok(StaticToolConfig {
             name: self.name.unwrap_or(name),
             description: self.description,
@@ -1168,15 +1157,8 @@ pub struct PathWithContents {
 }
 
 impl PathWithContents {
-    pub fn from_path<P: AsRef<Path>>(
-        path: TomlRelativePath,
-        base_path: Option<P>,
-    ) -> Result<Self, Error> {
-        let full_path = if let Some(base_path) = base_path.as_ref() {
-            &base_path.as_ref().join(path.path())
-        } else {
-            path.path()
-        };
+    pub fn from_path(path: TomlRelativePath) -> Result<Self, Error> {
+        let full_path = path.path();
         let contents = std::fs::read_to_string(full_path).map_err(|e| {
             Error::new(ErrorDetails::Config {
                 message: format!(
