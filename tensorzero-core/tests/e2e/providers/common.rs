@@ -3992,7 +3992,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         assert_eq!(chunk_episode_id, episode_id);
 
         let blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        for block in blocks.iter() {
+        for block in blocks {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -8469,7 +8469,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         assert_eq!(chunk_episode_id, episode_id);
 
         let blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        for block in blocks.iter() {
+        for block in blocks {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
