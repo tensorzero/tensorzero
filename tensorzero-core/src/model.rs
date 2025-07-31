@@ -1,3 +1,4 @@
+use futures::future::try_join_all;
 use futures::StreamExt;
 use reqwest::Client;
 use secrecy::SecretString;
@@ -81,7 +82,7 @@ pub struct UninitializedModelConfig {
 }
 
 impl UninitializedModelConfig {
-    pub fn load(
+    pub async fn load(
         self,
         model_name: &str,
         provider_types: &ProviderTypesConfig,
@@ -89,15 +90,13 @@ impl UninitializedModelConfig {
         // We want `ModelProvider` to know its own name (from the 'providers' config section).
         // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
         // build `ModelProvider`s using the name keys from the map.
-        let providers = self
-            .providers
-            .into_iter()
-            .map(|(name, provider)| {
-                Ok((
+        let providers = try_join_all(self.providers.into_iter().map(
+            |(name, provider)| async move {
+                Ok::<_, Error>((
                     name.clone(),
                     ModelProvider {
                         name: name.clone(),
-                        config: provider.config.load(provider_types).map_err(|e| {
+                        config: provider.config.load(provider_types).await.map_err(|e| {
                             Error::new(ErrorDetails::Config {
                                 message: format!("models.{model_name}.providers.{name}: {e}"),
                             })
@@ -108,8 +107,11 @@ impl UninitializedModelConfig {
                         discard_unknown_chunks: provider.discard_unknown_chunks,
                     },
                 ))
-            })
-            .collect::<Result<HashMap<_, _>, Error>>()?;
+            },
+        ))
+        .await?
+        .into_iter()
+        .collect::<HashMap<_, _>>();
         Ok(ModelConfig {
             routing: self.routing,
             providers,
@@ -180,7 +182,6 @@ pub fn fully_qualified_name(model_name: &str, provider_name: &str) -> String {
 
 impl ModelConfig {
     fn filter_content_blocks<'a>(
-        &self,
         request: &'a ModelInferenceRequest<'a>,
         model_name: &str,
         provider: &ModelProvider,
@@ -391,7 +392,7 @@ impl ModelConfig {
                         provider_name: provider_name.to_string(),
                     })
                 })?;
-                let request = self.filter_content_blocks(request, model_name, provider);
+                let request = Self::filter_content_blocks(request, model_name, provider);
                 let model_provider_request = ModelProviderRequest {
                     request: &request,
                     model_name,
@@ -483,7 +484,7 @@ impl ModelConfig {
                         provider_name: provider_name.to_string(),
                     })
                 })?;
-                let request = self.filter_content_blocks(request, model_name, provider);
+                let request = Self::filter_content_blocks(request, model_name, provider);
                 let model_provider_request = ModelProviderRequest {
                     request: &request,
                     model_name,
@@ -994,7 +995,7 @@ pub enum UninitializedProviderConfig {
 }
 
 impl UninitializedProviderConfig {
-    pub fn load(self, provider_types: &ProviderTypesConfig) -> Result<ProviderConfig, Error> {
+    pub async fn load(self, provider_types: &ProviderTypesConfig) -> Result<ProviderConfig, Error> {
         Ok(match self {
             UninitializedProviderConfig::Anthropic {
                 model_name,
@@ -1010,14 +1011,7 @@ impl UninitializedProviderConfig {
                     return Err(Error::new(ErrorDetails::Config { message: "AWS bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
                 }
 
-                // NB: We need to make an async call here to initialize the AWS Bedrock client.
-
-                let provider = tokio::task::block_in_place(move || {
-                    tokio::runtime::Handle::current()
-                        .block_on(async { AWSBedrockProvider::new(model_id, region).await })
-                })?;
-
-                ProviderConfig::AWSBedrock(provider)
+                ProviderConfig::AWSBedrock(AWSBedrockProvider::new(model_id, region).await?)
             }
             UninitializedProviderConfig::AWSSagemaker {
                 endpoint_name,
@@ -1045,15 +1039,10 @@ impl UninitializedProviderConfig {
                             Some(CredentialLocation::None),
                         )?),
                     };
-                // NB: We need to make an async call here to initialize the AWS Sagemaker client.
 
-                let provider = tokio::task::block_in_place(move || {
-                    tokio::runtime::Handle::current().block_on(async {
-                        AWSSagemakerProvider::new(endpoint_name, self_hosted, region).await
-                    })
-                })?;
-
-                ProviderConfig::AWSSagemaker(provider)
+                ProviderConfig::AWSSagemaker(
+                    AWSSagemakerProvider::new(endpoint_name, self_hosted, region).await?,
+                )
             }
             UninitializedProviderConfig::Azure {
                 deployment_id,
@@ -1078,36 +1067,27 @@ impl UninitializedProviderConfig {
                 location,
                 project_id,
                 credential_location: api_key_location,
-            } => ProviderConfig::GCPVertexAnthropic(tokio::task::block_in_place(move || {
-                tokio::runtime::Handle::current().block_on(async {
-                    GCPVertexAnthropicProvider::new(
-                        model_id,
-                        location,
-                        project_id,
-                        api_key_location,
-                    )
-                    .await
-                })
-            })?),
+            } => ProviderConfig::GCPVertexAnthropic(
+                GCPVertexAnthropicProvider::new(model_id, location, project_id, api_key_location)
+                    .await?,
+            ),
             UninitializedProviderConfig::GCPVertexGemini {
                 model_id,
                 endpoint_id,
                 location,
                 project_id,
                 credential_location: api_key_location,
-            } => ProviderConfig::GCPVertexGemini(tokio::task::block_in_place(move || {
-                tokio::runtime::Handle::current().block_on(async {
-                    GCPVertexGeminiProvider::new(
-                        model_id,
-                        endpoint_id,
-                        location,
-                        project_id,
-                        api_key_location,
-                        provider_types,
-                    )
-                    .await
-                })
-            })?),
+            } => ProviderConfig::GCPVertexGemini(
+                GCPVertexGeminiProvider::new(
+                    model_id,
+                    endpoint_id,
+                    location,
+                    project_id,
+                    api_key_location,
+                    provider_types,
+                )
+                .await?,
+            ),
             UninitializedProviderConfig::GoogleAIStudioGemini {
                 model_name,
                 api_key_location,

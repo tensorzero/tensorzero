@@ -25,6 +25,9 @@ pub struct UninitializedGatewayConfig {
     // If set, all of the HTTP endpoints will have this path prepended.
     // E.g. a base path of `/custom/prefix` will cause the inference endpoint to become `/custom/prefix/inference`.
     pub base_path: Option<String>,
+    // If set to `true`, disables validation on feedback queries (read from ClickHouse to check that the target is valid)
+    #[serde(default)]
+    pub unstable_disable_feedback_target_validation: bool,
     /// If enabled, adds an `error_json` field alongside the human-readable `error` field
     /// in HTTP error responses. This contains a JSON-serialized version of the error.
     /// While `error_json` will always be valid JSON when present, the exact contents is unstable,
@@ -63,6 +66,8 @@ impl UninitializedGatewayConfig {
             export: self.export,
             base_path: self.base_path,
             unstable_error_json: self.unstable_error_json,
+            unstable_disable_feedback_target_validation: self
+                .unstable_disable_feedback_target_validation,
         })
     }
 }
@@ -80,6 +85,7 @@ pub struct GatewayConfig {
     // E.g. a base path of `/custom/prefix` will cause the inference endpoint to become `/custom/prefix/inference`.
     pub base_path: Option<String>,
     pub unstable_error_json: bool,
+    pub unstable_disable_feedback_target_validation: bool,
 }
 
 fn serialize_optional_socket_addr<S>(

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::{EmbeddingRequest, EmbeddingResponse};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::file::serialize_with_file_data;
@@ -270,7 +270,7 @@ pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
                         finish_reason,
                     },
                 }],
-                "ModelInferenceCache",
+                TableName::ModelInferenceCache,
             )
             .await
         {
@@ -337,7 +337,7 @@ pub fn start_cache_write_streaming(
                         finish_reason,
                     },
                 }],
-                "ModelInferenceCache",
+                TableName::ModelInferenceCache,
             )
             .await
     });

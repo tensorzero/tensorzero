@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::Path;
 use std::sync::Arc;
 
 use serde::Deserialize;
@@ -395,7 +394,7 @@ impl DiclConfig {
     /// The second message is an Assistant message with the output as native output blocks
     ///   - For chat messages, this is a simple vector of `ContentBlocks`
     ///   - For JSON messages, this is a single JSON output block (as Text)
-    fn prepare_message(&self, example: &Example) -> Result<Vec<RequestMessage>, Error> {
+    fn prepare_message(example: &Example) -> Result<Vec<RequestMessage>, Error> {
         let mut messages = Vec::new();
         let input = match example {
             Example::Chat(chat_example) => chat_example.input.clone(),
@@ -437,7 +436,7 @@ impl DiclConfig {
         Ok(messages)
     }
 
-    fn prepare_input_message(&self, input: &ResolvedInput) -> Result<RequestMessage, Error> {
+    fn prepare_input_message(input: &ResolvedInput) -> Result<RequestMessage, Error> {
         let content = vec![serde_json::to_string(&input)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
@@ -489,11 +488,11 @@ impl DiclConfig {
         }
         let messages = examples
             .iter()
-            .map(|example| self.prepare_message(example))
+            .map(Self::prepare_message)
             .collect::<Result<Vec<Vec<RequestMessage>>, _>>()?
             .into_iter()
             .flatten()
-            .chain(std::iter::once(self.prepare_input_message(input)?))
+            .chain(std::iter::once(Self::prepare_input_message(input)?))
             .collect::<Vec<_>>();
 
         let system = Some(self.system_instructions.clone());
@@ -605,16 +604,13 @@ pub fn default_system_instructions() -> String {
 }
 
 impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
-    /// Since the system instructions are optional and may be a path to a file,
-    /// we need to load them here so that we can use the `base_path` to resolve
-    /// any relative paths.
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<DiclConfig, Error> {
+    fn load(self) -> Result<DiclConfig, Error> {
         let system_instructions = match self.system_instructions {
             Some(path) => {
-                let path = base_path.as_ref().join(path.path());
+                let path = path.path();
                 fs::read_to_string(path).map_err(|e| {
                     Error::new(ErrorDetails::Config {
-                        message: format!("Failed to read system instructions: {e}"),
+                        message: format!("Failed to read system instructions from `{path:?}`: {e}"),
                     })
                 })?
             }
@@ -658,9 +654,6 @@ mod tests {
 
     #[test]
     fn test_prepare_message() {
-        // Create an instance of DiclConfig (assuming default implementation is available)
-        let dicl_config = DiclConfig::default();
-
         // ---------- Test with ChatExample ----------
 
         // Mock Input data
@@ -701,7 +694,7 @@ mod tests {
             output: chat_output.clone(),
         });
 
-        let chat_messages = dicl_config.prepare_message(&chat_example).unwrap();
+        let chat_messages = DiclConfig::prepare_message(&chat_example).unwrap();
 
         assert_eq!(chat_messages.len(), 2);
 
@@ -737,7 +730,7 @@ mod tests {
             output: json_output.clone(),
         });
 
-        let json_messages = dicl_config.prepare_message(&json_example).unwrap();
+        let json_messages = DiclConfig::prepare_message(&json_example).unwrap();
 
         // Assertions for JsonExample
         assert_eq!(json_messages.len(), 2);
@@ -762,9 +755,6 @@ mod tests {
 
     #[test]
     fn test_prepare_input_message() {
-        // Create an instance of DiclConfig (assuming default implementation is available)
-        let dicl_config = DiclConfig::default();
-
         // Mock Input data
         let input_data = ResolvedInput {
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
@@ -792,7 +782,7 @@ mod tests {
         };
 
         // Call the prepare_input_message function
-        let request_message = dicl_config.prepare_input_message(&input_data).unwrap();
+        let request_message = DiclConfig::prepare_input_message(&input_data).unwrap();
 
         // The role should be User
         assert_eq!(request_message.role, Role::User);

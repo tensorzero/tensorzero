@@ -278,6 +278,7 @@ mod tests {
             export: Default::default(),
             base_path: None,
             unstable_error_json: false,
+            unstable_disable_feedback_target_validation: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -332,6 +333,7 @@ mod tests {
             export: Default::default(),
             base_path: None,
             unstable_error_json: false,
+            unstable_disable_feedback_target_validation: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -356,6 +358,7 @@ mod tests {
             export: Default::default(),
             base_path: None,
             unstable_error_json: false,
+            unstable_disable_feedback_target_validation: false,
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -382,6 +385,7 @@ mod tests {
             export: Default::default(),
             base_path: None,
             unstable_error_json: false,
+            unstable_disable_feedback_target_validation: false,
         };
         let config = Config {
             gateway: gateway_config,

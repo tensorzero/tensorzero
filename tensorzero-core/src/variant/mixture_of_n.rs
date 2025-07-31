@@ -1,5 +1,4 @@
 use std::fmt;
-use std::path::Path;
 
 use futures::future::join_all;
 use rand::Rng;
@@ -80,13 +79,13 @@ pub struct UninitializedFuserConfig {
 }
 
 impl LoadableConfig<MixtureOfNConfig> for UninitializedMixtureOfNConfig {
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<MixtureOfNConfig, Error> {
+    fn load(self) -> Result<MixtureOfNConfig, Error> {
         Ok(MixtureOfNConfig {
             weight: self.weight,
             timeout_s: self.timeout_s,
             candidates: self.candidates,
             fuser: FuserConfig {
-                inner: self.fuser.inner.load(base_path)?,
+                inner: self.fuser.inner.load()?,
             },
         })
     }
@@ -193,7 +192,7 @@ impl Variant for MixtureOfNConfig {
                     variant_name: variant_name.to_string(),
                     message: e.to_string(),
                 })
-            })?
+            })?;
         }
         // Validate the evaluator variant
         self.fuser
@@ -439,7 +438,7 @@ impl MixtureOfNConfig {
             match result {
                 Ok(inner_result) => {
                     if let Ok(res) = inner_result {
-                        successful_results.push(res)
+                        successful_results.push(res);
                     }
                 }
                 Err(_timeout_error) => {
@@ -698,7 +697,6 @@ impl FuserConfig {
     ///
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
     fn prepare_candidate_message(
-        &self,
         templates: &TemplateConfig,
         candidates: &[InferenceResult],
     ) -> Result<(RequestMessage, Vec<usize>), Error> {
@@ -769,7 +767,7 @@ impl FuserConfig {
     {
         // Do this before we prepare the system message so we can use the correct max index in the system message
         let (candidate_message, included_indices) =
-            self.prepare_candidate_message(inference_config.templates, candidates)?;
+            Self::prepare_candidate_message(inference_config.templates, candidates)?;
         let max_index = included_indices.len().saturating_sub(1);
         let system = Some(self.prepare_system_message(
             inference_config.templates,
@@ -1014,15 +1012,6 @@ mod tests {
     async fn test_prepare_candidate_message() {
         let templates = get_test_template_config();
 
-        // Create an FuserConfig
-        let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
-                model: "dummy".into(),
-                weight: Some(1.0),
-                ..Default::default()
-            },
-        };
-
         // Prepare some candidate InferenceResults
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -1093,7 +1082,7 @@ mod tests {
         let candidates = vec![candidate1, candidate2];
 
         // Call prepare_candidate_message
-        let result = fuser_config.prepare_candidate_message(&templates, &candidates);
+        let result = FuserConfig::prepare_candidate_message(&templates, &candidates);
         assert!(result.is_ok());
         let (request_message, included_indices) = result.unwrap();
         assert_eq!(included_indices, vec![0, 1]);
@@ -1107,15 +1096,6 @@ mod tests {
     #[tokio::test]
     async fn test_prepare_candidate_message_json() {
         let templates = get_test_template_config();
-
-        // Create a FuserConfig
-        let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
-                model: "dummy_json".into(),
-                weight: Some(1.0),
-                ..Default::default()
-            },
-        };
 
         // Prepare some candidate InferenceResults - some valid, some malformed
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
@@ -1189,7 +1169,7 @@ mod tests {
         let candidates = vec![candidate1, candidate2];
 
         // Call prepare_candidate_message
-        let result = fuser_config.prepare_candidate_message(&templates, &candidates);
+        let result = FuserConfig::prepare_candidate_message(&templates, &candidates);
         assert!(result.is_ok());
         let (request_message, included_indices) = result.unwrap();
 

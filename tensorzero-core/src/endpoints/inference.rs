@@ -21,7 +21,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::config_parser::{Config, ObjectStoreInfo};
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
@@ -843,7 +843,7 @@ async fn write_inference(
         // Write the model responses to the ModelInference table
         for response in model_responses {
             let _ = clickhouse_connection_info
-                .write(&[response], "ModelInference")
+                .write(&[response], TableName::ModelInference)
                 .await;
         }
         // Write the inference to the Inference table
@@ -852,14 +852,14 @@ async fn write_inference(
                 let chat_inference =
                     ChatInferenceDatabaseInsert::new(result, input.clone(), metadata);
                 let _ = clickhouse_connection_info
-                    .write(&[chat_inference], "ChatInference")
+                    .write(&[chat_inference], TableName::ChatInference)
                     .await;
             }
             InferenceResult::Json(result) => {
                 let json_inference =
                     JsonInferenceDatabaseInsert::new(result, input.clone(), metadata);
                 let _ = clickhouse_connection_info
-                    .write(&[json_inference], "JsonInference")
+                    .write(&[json_inference], TableName::JsonInference)
                     .await;
             }
         }
