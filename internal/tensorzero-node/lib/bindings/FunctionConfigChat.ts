@@ -3,4 +3,13 @@ import type { StaticJSONSchema } from "./StaticJSONSchema";
 import type { ToolChoice } from "./ToolChoice";
 import type { VariantInfo } from "./VariantInfo";
 
-export type FunctionConfigChat = { variants: { [key in string]?: VariantInfo }, system_schema: StaticJSONSchema | null, user_schema: StaticJSONSchema | null, assistant_schema: StaticJSONSchema | null, tools: Array<string>, tool_choice: ToolChoice, parallel_tool_calls: boolean | null, description: string | null, };
+export type FunctionConfigChat = {
+  variants: { [key in string]?: VariantInfo };
+  system_schema: StaticJSONSchema | null;
+  user_schema: StaticJSONSchema | null;
+  assistant_schema: StaticJSONSchema | null;
+  tools: Array<string>;
+  tool_choice: ToolChoice;
+  parallel_tool_calls: boolean | null;
+  description: string | null;
+};

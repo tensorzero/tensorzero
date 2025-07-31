@@ -3,4 +3,18 @@ import type { ContentBlockChatOutput } from "./ContentBlockChatOutput";
 import type { ResolvedInput } from "./ResolvedInput";
 import type { ToolCallConfigDatabaseInsert } from "./ToolCallConfigDatabaseInsert";
 
-export type ChatInferenceDatapoint = { dataset_name: string, function_name: string, id: string, episode_id: string | null, input: ResolvedInput, output?: Array<ContentBlockChatOutput> | null, tool_params?: ToolCallConfigDatabaseInsert | null, tags?: { [key in string]?: string } | null, auxiliary?: string, is_deleted: boolean, is_custom: boolean, source_inference_id?: string | null, staled_at?: string | null, };
+export type ChatInferenceDatapoint = {
+  dataset_name: string;
+  function_name: string;
+  id: string;
+  episode_id: string | null;
+  input: ResolvedInput;
+  output?: Array<ContentBlockChatOutput> | null;
+  tool_params?: ToolCallConfigDatabaseInsert | null;
+  tags?: { [key in string]?: string } | null;
+  auxiliary?: string;
+  is_deleted: boolean;
+  is_custom: boolean;
+  source_inference_id?: string | null;
+  staled_at?: string | null;
+};

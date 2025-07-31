@@ -4,4 +4,9 @@ import type { StaticJSONSchema } from "./StaticJSONSchema";
 /**
  * Contains the configuration information for a specific tool
  */
-export type StaticToolConfig = { description: string, parameters: StaticJSONSchema, name: string, strict: boolean, };
+export type StaticToolConfig = {
+  description: string;
+  parameters: StaticJSONSchema;
+  name: string;
+  strict: boolean;
+};
