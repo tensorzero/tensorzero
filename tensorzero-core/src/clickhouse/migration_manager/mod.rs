@@ -3,7 +3,7 @@ pub mod migrations;
 
 use std::time::{Duration, Instant};
 
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails};
 use crate::serde_util::deserialize_u64;
@@ -36,11 +36,12 @@ use migrations::migration_0030::Migration0030;
 use migrations::migration_0031::Migration0031;
 use migrations::migration_0032::Migration0032;
 use migrations::migration_0033::Migration0033;
+use migrations::migration_0034::Migration0034;
 use serde::{Deserialize, Serialize};
 
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
 /// will panic if they don't match.
-pub const NUM_MIGRATIONS: usize = 27;
+pub const NUM_MIGRATIONS: usize = 28;
 const RUN_MIGRATIONS_DOCKER_COMMAND: &str = "docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway --run-migrations";
 
 /// Constructs (but does not run) a vector of all our database migrations.
@@ -90,6 +91,7 @@ pub fn make_all_migrations<'a>(
         Box::new(Migration0031 { clickhouse }),
         Box::new(Migration0032 { clickhouse }),
         Box::new(Migration0033 { clickhouse }),
+        Box::new(Migration0034 { clickhouse }),
     ];
     assert_eq!(
         migrations.len(),
@@ -257,7 +259,7 @@ async fn insert_migration_record(
                 execution_time_ms: execution_time.as_millis() as u64,
                 applied_at: None,
             }],
-            "TensorZeroMigration",
+            TableName::TensorZeroMigration,
         )
         .await?;
     Ok(())

@@ -52,6 +52,47 @@ pub fn make_clickhouse_http_client() -> Result<Client, Error> {
         })
 }
 
+/// Defines all of the ClickHouse tables that we write to from Rust
+/// This will be used to implement per-table ClickHouse write batching.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TableName {
+    BatchModelInference,
+    BatchRequest,
+    ChatInference,
+    ChatInferenceDatapoint,
+    JsonInference,
+    JsonInferenceDatapoint,
+    ModelInference,
+    ModelInferenceCache,
+    DeploymentID,
+    TensorZeroMigration,
+    BooleanMetricFeedback,
+    FloatMetricFeedback,
+    DemonstrationFeedback,
+    CommentFeedback,
+}
+
+impl TableName {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TableName::BatchModelInference => "BatchModelInference",
+            TableName::BatchRequest => "BatchRequest",
+            TableName::ChatInference => "ChatInference",
+            TableName::ChatInferenceDatapoint => "ChatInferenceDatapoint",
+            TableName::JsonInference => "JsonInference",
+            TableName::JsonInferenceDatapoint => "JsonInferenceDatapoint",
+            TableName::ModelInference => "ModelInference",
+            TableName::ModelInferenceCache => "ModelInferenceCache",
+            TableName::DeploymentID => "DeploymentID",
+            TableName::TensorZeroMigration => "TensorZeroMigration",
+            TableName::BooleanMetricFeedback => "BooleanMetricFeedback",
+            TableName::FloatMetricFeedback => "FloatMetricFeedback",
+            TableName::DemonstrationFeedback => "DemonstrationFeedback",
+            TableName::CommentFeedback => "CommentFeedback",
+        }
+    }
+}
+
 impl ClickHouseConnectionInfo {
     /// Create a new ClickHouse connection info from a database URL.
     /// You should always use this function in production code or generic integration tests that
@@ -135,18 +176,18 @@ impl ClickHouseConnectionInfo {
     pub async fn write(
         &self,
         rows: &[impl Serialize + Send + Sync],
-        table: &str,
+        table: TableName,
     ) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
             Self::Mock { mock_data, .. } => {
-                write_mock(rows, table, &mut mock_data.write().await).await
+                write_mock(rows, table.as_str(), &mut mock_data.write().await).await
             }
             Self::Production {
                 database_url,
                 client,
                 ..
-            } => write_production(database_url, client, rows, table).await,
+            } => write_production(database_url, client, rows, table.as_str()).await,
         }
     }
 
@@ -855,6 +896,7 @@ pub struct ExternalDataInfo {
     pub data: String,      // Must be valid ClickHouse data in the given format
 }
 
+#[derive(Debug)]
 pub struct ClickHouseResponse {
     pub response: String,
     pub metadata: ClickHouseResponseMetadata,

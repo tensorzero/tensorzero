@@ -1,7 +1,9 @@
 use super::check_table_exists;
 use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::migration_manager::migrations::table_is_nonempty;
-use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
+use crate::clickhouse::{
+    ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs, TableName,
+};
 use crate::error::Error;
 use async_trait::async_trait;
 use uuid::Uuid;
@@ -66,7 +68,7 @@ impl Migration for Migration0033<'_> {
                 &[serde_json::json!({
                     "deployment_id": deployment_id,
                 })],
-                "DeploymentID",
+                TableName::DeploymentID,
             )
             .await?;
 
