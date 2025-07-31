@@ -4876,6 +4876,7 @@ dependencies = [
  "eventsource-stream",
  "futures",
  "futures-core",
+ "glob",
  "google-cloud-auth",
  "hex",
  "http 1.3.1",

@@ -11,15 +11,17 @@ use pyo3::IntoPyObjectExt;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 
 use crate::config_parser::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config_parser::path::TomlRelativePath;
+use crate::config_parser::span_map::SpanMap;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
@@ -39,10 +41,10 @@ use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
-use toml::de::DeTable;
 
 pub mod gateway;
 pub mod path;
+mod span_map;
 #[cfg(test)]
 mod tests;
 
@@ -415,32 +417,16 @@ impl Config {
         config_path: &Path,
         validate_credentials: bool,
     ) -> Result<Config, Error> {
-        let base_path = match PathBuf::from(&config_path).parent() {
-            Some(base_path) => base_path.to_path_buf(),
-            None => {
-                return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Failed to get parent directory of config file: {config_path:?}"
-                    ),
-                }
-                .into());
-            }
-        };
-        let config_table = match UninitializedConfig::read_toml_config(config_path, &base_path)? {
-            Some(table) => table,
-            None => {
-                return Err(ErrorDetails::Config {
-                    message: format!("Config file not found: {config_path:?}"),
-                }
-                .into())
-            }
-        };
+        let globbed_config = UninitializedConfig::read_toml_config(config_path)?;
         let config = if cfg!(feature = "e2e_tests") || !validate_credentials {
             SKIP_CREDENTIAL_VALIDATION
-                .scope((), Self::load_from_toml(config_table, base_path))
+                .scope(
+                    (),
+                    Self::load_from_toml(globbed_config.table, &globbed_config.span_map),
+                )
                 .await?
         } else {
-            Self::load_from_toml(config_table, base_path).await?
+            Self::load_from_toml(globbed_config.table, &globbed_config.span_map).await?
         };
 
         if validate_credentials {
@@ -452,7 +438,7 @@ impl Config {
         Ok(config)
     }
 
-    async fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config, Error> {
+    async fn load_from_toml(table: toml::Table, span_map: &SpanMap) -> Result<Config, Error> {
         if table.is_empty() {
             tracing::info!("Config file is empty, so only default functions will be available.");
         }
@@ -531,20 +517,42 @@ impl Config {
 
         // Initialize the templates
         let template_paths = config.get_templates();
-        config.templates.initialize(
-            template_paths,
-            config.gateway.template_filesystem_access.enabled.then_some(
-                config
-                    .gateway
-                    .template_filesystem_access
-                    .base_path
-                    .clone()
-                    .as_ref()
-                    .map(path::TomlRelativePath::get_real_path)
-                    .transpose()?
-                    .unwrap_or(&base_path),
-            ),
-        )?;
+        let template_fs_base_path = if config.gateway.template_filesystem_access.enabled {
+            if let Some(base_path) = &config.gateway.template_filesystem_access.base_path {
+                Some(base_path.get_real_path().map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Failed to get real path for base path: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                    })
+                })?.to_owned())
+            } else if let Some(single_file) = span_map.get_single_file() {
+                tracing::warn!("Deprecation warning: `[gateway.template_filesystem_access.base_path]` is not set, using config file base path. Please specify `[gateway.template_filesystem_access.base_path]`");
+                Some(
+                    single_file
+                        .parent()
+                        .ok_or_else(|| {
+                            Error::new(ErrorDetails::Config {
+                                message: format!(
+                                    "Failed to determine base path for config file `{}`",
+                                    single_file.to_string_lossy()
+                                ),
+                            })
+                        })?
+                        .to_owned(),
+                )
+            } else {
+                return Err(ErrorDetails::Config {
+                    message: 
+                        "`[gateway.template_filesystem_access]` is enabled, but `[gateway.template_filesystem_access.base_path]` is not set.".to_string()
+                    
+                }
+                .into());
+            }
+        } else {
+            None
+        };
+        config
+            .templates
+            .initialize(template_paths, template_fs_base_path.as_deref())?;
 
         // Validate the config
         config.validate().await?;
@@ -876,28 +884,16 @@ pub struct ProviderTypesConfig {
     pub gcp_vertex_gemini: Option<GCPProviderTypeConfig>,
 }
 
+struct UninitializedGlobbedConfig {
+    table: toml::Table,
+    span_map: SpanMap,
+}
+
 impl UninitializedConfig {
     /// Read a file from the file system and parse it as TOML
-    fn read_toml_config(path: &Path, base_path: &Path) -> Result<Option<toml::Table>, Error> {
-        if !path.exists() {
-            return Ok(None);
-        }
-        let contents = std::fs::read_to_string(path).map_err(|_| {
-            Error::new(ErrorDetails::Config {
-                message: format!("Failed to read config file: {}", path.to_string_lossy()),
-            })
-        })?;
-        let table = DeTable::parse(&contents).map_err(|e| {
-            Error::new(ErrorDetails::Config {
-                message: format!(
-                    "Failed to parse config file `{}` as valid TOML: {}",
-                    path.to_string_lossy(),
-                    e
-                ),
-            })
-        })?;
-        let table = path::resolve_toml_relative_paths(table.into_inner(), base_path)?;
-        Ok(Some(table))
+    fn read_toml_config(path: &Path) -> Result<UninitializedGlobbedConfig, Error> {
+        let (span_map, table) = SpanMap::from_glob(path.to_string_lossy().as_ref())?;
+        Ok(UninitializedGlobbedConfig { table, span_map })
     }
 }
 

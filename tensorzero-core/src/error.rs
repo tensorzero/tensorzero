@@ -188,6 +188,10 @@ pub enum ErrorDetails {
     Cache {
         message: String,
     },
+    Glob {
+        glob: String,
+        message: String,
+    },
     ChannelWrite {
         message: String,
     },
@@ -528,6 +532,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidBatchParams { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
+            ErrorDetails::Glob { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidClientMode { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDatasetName { .. } => tracing::Level::WARN,
@@ -595,6 +600,7 @@ impl ErrorDetails {
         match self {
             ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
             ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::Glob { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ExtraBodyReplacement { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -795,6 +801,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Error replacing extra body: `{message}` with pointer: `{pointer}`"
                 )
+            }
+            ErrorDetails::Glob { glob, message } => {
+                write!(f, "Error using glob: `{glob}`: {message}")
             }
             ErrorDetails::ApiKeyMissing { provider_name } => {
                 write!(f, "API key missing for provider: {provider_name}")
