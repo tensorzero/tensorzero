@@ -50,8 +50,10 @@ pub struct ChatCompletionConfig {
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
     pub weight: Option<f64>,
@@ -119,14 +121,14 @@ impl ChatCompletionConfig {
             Role::User => self.user_template.as_ref(),
             Role::Assistant => self.assistant_template.as_ref(),
         }
-        .map(|x| {
-            x.path
-                .path()
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
-        })
-        .transpose()?;
-        prepare_request_message(message, templates, template_path, template_schema_info)
+        .map(|x| x.path.get_template_key());
+
+        prepare_request_message(
+            message,
+            templates,
+            template_path.as_deref(),
+            template_schema_info,
+        )
     }
 
     pub fn prepare_system_message(
@@ -138,24 +140,26 @@ impl ChatCompletionConfig {
         let template_path = self
             .system_template
             .as_ref()
-            .map(|x| {
-                x.path
-                    .path()
-                    .to_str()
-                    .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
-            })
-            .transpose()?;
-        prepare_system_message(system, templates, template_path, template_schema_info)
+            .map(|x| x.path.get_template_key());
+        prepare_system_message(
+            system,
+            templates,
+            template_path.as_deref(),
+            template_schema_info,
+        )
     }
 
     fn prepare_request<'a, 'request>(
         &'a self,
         input: &ResolvedInput,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         stream: bool,
         inference_params: &mut InferenceParams,
-    ) -> Result<ModelInferenceRequest<'request>, Error> {
+    ) -> Result<ModelInferenceRequest<'request>, Error>
+    where
+        'a: 'request,
+    {
         let messages = input
             .messages
             .iter()
@@ -381,7 +385,7 @@ impl Variant for ChatCompletionConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -416,7 +420,7 @@ impl Variant for ChatCompletionConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -537,7 +541,7 @@ impl Variant for ChatCompletionConfig {
         inputs: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_configs: &'a [InferenceConfig<'a, 'a>],
+        inference_configs: &'a [InferenceConfig<'a>],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -609,11 +613,8 @@ pub fn validate_template_and_schema(
 ) -> Result<(), Error> {
     match (schema, template) {
         (None, Some(template)) => {
-            let template_name = template
-                .path()
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))?;
-            let undeclared_vars = templates.get_undeclared_variables(template_name)?;
+            let template_name = template.get_template_key();
+            let undeclared_vars = templates.get_undeclared_variables(&template_name)?;
             let allowed_var = match kind {
                 TemplateKind::System => SYSTEM_TEXT_TEMPLATE_VAR,
                 TemplateKind::User => USER_TEXT_TEMPLATE_VAR,
@@ -2375,13 +2376,14 @@ mod tests {
         let templates = get_test_template_config();
         let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
+            None,
         ))
         .unwrap();
         let template = PathBuf::from("test_validate_template_and_schema_both_some");
         let result = validate_template_and_schema(
             TemplateKind::System,
             Some(&schema),
-            Some(&TomlRelativePath::new_for_tests(template)),
+            Some(&TomlRelativePath::new_for_tests(template, None)),
             &templates,
         );
         assert!(result.is_ok());
@@ -2394,7 +2396,7 @@ mod tests {
         let result = validate_template_and_schema(
             TemplateKind::System,
             None,
-            Some(&TomlRelativePath::new_for_tests(template)),
+            Some(&TomlRelativePath::new_for_tests(template, None)),
             &templates,
         );
         assert!(result.is_ok());
@@ -2407,7 +2409,7 @@ mod tests {
         let err = validate_template_and_schema(
             TemplateKind::System,
             None,
-            Some(&TomlRelativePath::new_for_tests(template)),
+            Some(&TomlRelativePath::new_for_tests(template, None)),
             &templates,
         )
         .unwrap_err();
@@ -2428,6 +2430,7 @@ mod tests {
         let templates = get_test_template_config(); // Default TemplateConfig
         let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
+            None,
         ))
         .unwrap();
         let err =

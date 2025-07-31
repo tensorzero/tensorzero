@@ -416,6 +416,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         internal: true,
         extra_body: Default::default(),
         extra_headers: Default::default(),
+        internal_dynamic_variant_config: None,
     };
     debug!("Making inference request");
     let inference_result = clients.tensorzero_client.inference(params).await?;

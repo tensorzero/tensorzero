@@ -297,7 +297,6 @@ pub async fn start_batch_inference_handler(
             &inference_configs,
         )
         .await?;
-
         return Ok(Json(PrepareBatchInferenceOutput {
             batch_id,
             inference_ids,
@@ -562,7 +561,7 @@ async fn write_start_batch_inference<'a>(
     result: StartBatchModelInferenceWithMetadata<'a>,
     metadata: BatchInferenceDatabaseInsertMetadata<'a>,
     tool_configs: &[Option<ToolCallConfig>],
-    inference_configs: &[InferenceConfig<'a, 'a>],
+    inference_configs: &[InferenceConfig<'a>],
 ) -> Result<(Uuid, Vec<Uuid>), Error> {
     // Collect all the data into BatchInferenceRow structs
     let inference_rows = izip!(

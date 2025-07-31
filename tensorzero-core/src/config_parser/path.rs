@@ -21,28 +21,65 @@ use crate::error::{Error, ErrorDetails};
 #[cfg_attr(test, ts(export))]
 pub struct TomlRelativePath {
     __tensorzero_remapped_path: PathBuf,
+    /// This should be set for dynamic variants to indicate what the file contents would have been at this remapped path.
+    #[serde(default)]
+    __data: Option<String>,
 }
 
 impl TomlRelativePath {
     /// Creates a new 'fake path' - this is currently used to construct
     /// `tensorzero::llm_judge` template paths for evaluators
-    pub fn new_fake_path(fake_path: String) -> Self {
+    pub fn new_fake_path(fake_path: String, data: String) -> Self {
         Self {
             __tensorzero_remapped_path: PathBuf::from(fake_path),
+            __data: Some(data),
         }
     }
 
-    /// Obtains the absolute path (which was constructed using the source TOML file as the base path)
-    pub fn path(&self) -> &Path {
-        &self.__tensorzero_remapped_path
+    /// Obtains the key for templating purposes (may not be a real path)
+    pub fn get_template_key(&self) -> String {
+        self.__tensorzero_remapped_path.display().to_string()
+    }
+
+    /// Obtains the real path for this path, if it is a real path.
+    /// If it is a fake path, like those passed in from the dynamic variant config
+    /// this returns an error.
+    pub fn get_real_path(&self) -> Result<&Path, Error> {
+        if self.__data.is_some() {
+            return Err(ErrorDetails::InternalError {
+                message: "Attempted to get real path for a fake path with data".to_string(),
+            }
+            .into());
+        }
+        Ok(self.__tensorzero_remapped_path.as_ref())
+    }
+
+    /// Obtains the data that this path contains.
+    /// For a real path this will read from the file system.
+    /// For a fake path this will return the data that was passed in.
+    pub fn read(&self) -> Result<String, Error> {
+        if let Some(data) = &self.__data {
+            Ok(data.clone())
+        } else {
+            std::fs::read_to_string(&self.__tensorzero_remapped_path).map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Failed to read file at {}: {}",
+                        self.__tensorzero_remapped_path.to_string_lossy(),
+                        e
+                    ),
+                })
+            })
+        }
     }
 
     /// Test-only method for unit tests.
     /// This allows constructing a `TomlRelativePath` outside of deserializing from a toml file
     #[cfg(any(test, feature = "e2e_tests"))]
-    pub fn new_for_tests(buf: PathBuf) -> Self {
+    pub fn new_for_tests(buf: PathBuf, data: Option<String>) -> Self {
         Self {
             __tensorzero_remapped_path: buf,
+            __data: data,
         }
     }
 }
@@ -52,6 +89,7 @@ impl From<&str> for TomlRelativePath {
     fn from(path: &str) -> Self {
         TomlRelativePath {
             __tensorzero_remapped_path: PathBuf::from(path),
+            __data: None,
         }
     }
 }
