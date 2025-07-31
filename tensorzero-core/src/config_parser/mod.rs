@@ -541,9 +541,7 @@ impl Config {
                 )
             } else {
                 return Err(ErrorDetails::Config {
-                    message: 
-                        "`[gateway.template_filesystem_access]` is enabled, but `[gateway.template_filesystem_access.base_path]` is not set.".to_string()
-                    
+                    message: "`[gateway.template_filesystem_access]` is enabled, but `[gateway.template_filesystem_access.base_path]` is not set.".to_string()
                 }
                 .into());
             }
