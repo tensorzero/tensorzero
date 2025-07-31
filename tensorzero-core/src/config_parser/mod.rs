@@ -57,7 +57,7 @@ tokio::task_local! {
 pub fn skip_credential_validation() -> bool {
     // tokio::task_local doesn't have an 'is_set' method, so we call 'try_with'
     // (which returns an `Err` if the task-local is not set)
-    SKIP_CREDENTIAL_VALIDATION.try_with(|_| ()).is_ok()
+    SKIP_CREDENTIAL_VALIDATION.try_with(|()| ()).is_ok()
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -78,7 +78,7 @@ pub struct Config {
     pub optimizers: HashMap<String, OptimizerInfo>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -88,7 +88,7 @@ pub struct NonStreamingTimeouts {
     pub total_ms: Option<u64>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -100,7 +100,7 @@ pub struct StreamingTimeouts {
 
 /// Configures the timeouts for both streaming and non-streaming requests.
 /// This can be attached to various other configs (e.g. variants, models, model providers)
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[serde(deny_unknown_fields)]
@@ -540,7 +540,8 @@ impl Config {
                     .base_path
                     .clone()
                     .as_ref()
-                    .map(path::TomlRelativePath::path)
+                    .map(path::TomlRelativePath::get_real_path)
+                    .transpose()?
                     .unwrap_or(&base_path),
             ),
         )?;
@@ -569,8 +570,8 @@ impl Config {
                 for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
                         config.templates.add_template(
-                            template.path.path().to_string_lossy().as_ref(),
-                            &template.contents,
+                            template.path.get_template_key(),
+                            template.contents.clone(),
                         )?;
                     }
                 }
@@ -745,7 +746,7 @@ impl Config {
     /// Get all templates from the config
     /// The HashMap returned is a mapping from the path as given in the TOML file
     /// (relative to the directory containing the TOML file) to the file contents.
-    /// The former path is used as the name of the template for retrievaluation by variants later.
+    /// The former path is used as the name of the template for retrieval by variants later.
     pub fn get_templates(&self) -> HashMap<String, String> {
         let mut templates = HashMap::new();
 
@@ -753,10 +754,7 @@ impl Config {
             for variant in function.variants().values() {
                 let variant_template_paths = variant.get_all_template_paths();
                 for path in variant_template_paths {
-                    templates.insert(
-                        path.path.path().to_string_lossy().to_string(),
-                        path.contents.clone(),
-                    );
+                    templates.insert(path.path.get_template_key(), path.contents.clone());
                 }
             }
         }
@@ -1074,8 +1072,10 @@ impl UninitializedFunctionConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 // We don't use `#[serde(deny_unknown_fields)]` here - it needs to go on 'UninitializedVariantConfig',
 // since we use `#[serde(flatten)]` on the `inner` field.
 pub struct UninitializedVariantInfo {
@@ -1085,10 +1085,12 @@ pub struct UninitializedVariantInfo {
     pub timeouts: Option<TimeoutsConfig>,
 }
 
-#[derive(Debug, TensorZeroDeserialize)]
+#[derive(Clone, Debug, TensorZeroDeserialize, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum UninitializedVariantConfig {
     ChatCompletion(UninitializedChatCompletionConfig),
     #[serde(rename = "experimental_best_of_n_sampling")]
@@ -1158,19 +1160,7 @@ pub struct PathWithContents {
 
 impl PathWithContents {
     pub fn from_path(path: TomlRelativePath) -> Result<Self, Error> {
-        let full_path = path.path();
-        let contents = std::fs::read_to_string(full_path).map_err(|e| {
-            Error::new(ErrorDetails::Config {
-                message: format!(
-                    "Failed to read file at {}: {}",
-                    full_path.to_string_lossy(),
-                    e
-                ),
-            })
-        })?;
-        Ok(Self {
-            path: path.to_owned(),
-            contents,
-        })
+        let contents = path.read()?;
+        Ok(Self { path, contents })
     }
 }

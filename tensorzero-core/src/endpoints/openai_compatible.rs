@@ -26,6 +26,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cache::CacheParamsOptions;
+use crate::config_parser::UninitializedVariantInfo;
 use crate::endpoints::inference::{
     inference, ChatCompletionInferenceParams, InferenceParams, Params,
 };
@@ -301,6 +302,8 @@ pub struct OpenAICompatibleParams {
     tensorzero_deny_unknown_fields: bool,
     #[serde(default, rename = "tensorzero::credentials")]
     tensorzero_credentials: InferenceCredentials,
+    #[serde(rename = "tensorzero::internal_dynamic_variant_config")]
+    tensorzero_internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
     #[serde(flatten)]
     unknown_fields: HashMap<String, Value>,
 }
@@ -547,6 +550,8 @@ impl Params {
             include_original_response: false,
             extra_body: openai_compatible_params.tensorzero_extra_body,
             extra_headers: openai_compatible_params.tensorzero_extra_headers,
+            internal_dynamic_variant_config: openai_compatible_params
+                .tensorzero_internal_dynamic_variant_config,
         })
     }
 }
@@ -1259,6 +1264,7 @@ mod tests {
                 unknown_fields: Default::default(),
                 stream_options: None,
                 stop: None,
+                tensorzero_internal_dynamic_variant_config: None,
             },
         )
         .unwrap();
@@ -1736,6 +1742,7 @@ mod tests {
                 stream_options: None,
                 stop: None,
                 tensorzero_deny_unknown_fields: false,
+                tensorzero_internal_dynamic_variant_config: None,
             },
         )
         .unwrap();
@@ -1776,6 +1783,7 @@ mod tests {
                 stream_options: None,
                 stop: None,
                 tensorzero_deny_unknown_fields: false,
+                tensorzero_internal_dynamic_variant_config: None,
             },
         )
         .unwrap();
@@ -1822,6 +1830,7 @@ mod tests {
                 stream_options: None,
                 stop: None,
                 tensorzero_deny_unknown_fields: false,
+                tensorzero_internal_dynamic_variant_config: None,
             },
         )
         .unwrap();
@@ -1868,6 +1877,7 @@ mod tests {
                 stream_options: None,
                 stop: None,
                 tensorzero_deny_unknown_fields: false,
+                tensorzero_internal_dynamic_variant_config: None,
             },
         )
         .unwrap();
