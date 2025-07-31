@@ -280,7 +280,7 @@ impl BestOfNSamplingConfig {
 
         // Start the inference tasks (we keep the names around for logging)
         let mut inference_futures = Vec::new();
-        for (candidate_name, candidate_variant, config) in candidate_variants.iter() {
+        for (candidate_name, candidate_variant, config) in &candidate_variants {
             inference_futures.push((
                 candidate_name.clone(),
                 timeout(
