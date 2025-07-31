@@ -131,7 +131,6 @@ impl Migration for Migration0006<'_> {
             ORDER BY (inference_id)
         ",
         );
-        println!("BatchIdByInferenceId query: {}", query);
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
