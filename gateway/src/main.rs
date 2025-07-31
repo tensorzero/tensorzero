@@ -128,7 +128,11 @@ async fn main() {
                 Config::load_and_verify_from_path(&glob)
                     .await
                     .ok() // Don't print the error here, since it was already printed when it was constructed
-                    .expect_pretty("Failed to load config"),
+                    .expect_pretty(&format!(
+                        "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
+                        glob.glob,
+                        glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
+                    )),
             ),
             Some(glob),
         )
