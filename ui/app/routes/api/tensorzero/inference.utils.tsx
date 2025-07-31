@@ -1,7 +1,16 @@
 import * as React from "react";
 import { useFetcher, type FetcherFormProps } from "react-router";
 import type { SubmitTarget, FetcherSubmitOptions } from "react-router";
+import type { DisplayInputMessage } from "~/utils/clickhouse/common";
 import type {
+  InputMessageContent as TensorZeroContent,
+  ImageContent as TensorZeroImage,
+  InputMessage as TensorZeroMessage,
+  Input as TensorZeroInput,
+} from "~/utils/tensorzero";
+import type {
+  ResolvedFileContent,
+  DisplayInputMessageContent,
   ContentBlockOutput,
   DisplayInput,
   JsonInferenceOutput,
@@ -10,7 +19,6 @@ import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import type { InferenceResponse } from "~/utils/tensorzero";
-import { resolvedInputToTensorZeroInput } from "./inference";
 import { logger } from "~/utils/logger";
 import type {
   JsonValue,
@@ -349,4 +357,67 @@ function prepareDefaultFunctionRequest(
 export interface VariantResponseInfo {
   output?: JsonInferenceOutput | ContentBlockOutput[];
   usage?: InferenceUsage;
+}
+
+export function resolvedInputToTensorZeroInput(
+  input: DisplayInput,
+): TensorZeroInput {
+  return {
+    ...input,
+    messages: input.messages.map(resolvedInputMessageToTensorZeroMessage),
+  };
+}
+
+function resolvedInputMessageToTensorZeroMessage(
+  message: DisplayInputMessage,
+): TensorZeroMessage {
+  return {
+    ...message,
+    content: message.content.map(
+      resolvedInputMessageContentToTensorZeroContent,
+    ),
+  };
+}
+
+function resolvedInputMessageContentToTensorZeroContent(
+  content: DisplayInputMessageContent,
+): TensorZeroContent {
+  switch (content.type) {
+    case "structured_text":
+      return {
+        type: "text",
+        arguments: content.arguments,
+      };
+    case "unstructured_text":
+      return {
+        type: "text",
+        text: content.text,
+      };
+    case "missing_function_text":
+      return {
+        type: "text",
+        text: content.value,
+      };
+    case "raw_text":
+    case "tool_call":
+    case "tool_result":
+    case "thought":
+    case "unknown":
+      return content;
+    case "file":
+      return resolvedFileContentToTensorZeroFile(content);
+    case "file_error":
+      throw new Error("Can't convert image error to tensorzero content");
+  }
+}
+
+function resolvedFileContentToTensorZeroFile(
+  content: ResolvedFileContent,
+): TensorZeroImage {
+  const data = content.file.dataUrl.split(",")[1];
+  return {
+    type: "image",
+    mime_type: content.file.mime_type,
+    data,
+  };
 }
