@@ -18,38 +18,85 @@
         "tab": "Guides",
         "groups": [
           {
-            "group": "Getting started",
-            "pages": ["index", "quickstart", "development"]
-          },
-          {
             "group": "Inference",
-            "pages": ["guides/inference/overview"]
-          },
-          {
-            "group": "Customization",
-            "pages": ["essentials/settings", "essentials/navigation"]
-          },
-          {
-            "group": "Writing content",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "guides/inference/call-any-llm-provider",
+              {
+                "group": "Model Providers",
+                "pages": [
+                  "guides/inference/model-providers/index",
+                  "guides/inference/model-providers/anthropic",
+                  "guides/inference/model-providers/aws-bedrock",
+                  "guides/inference/model-providers/aws-sagemaker",
+                  "guides/inference/model-providers/azure",
+                  "guides/inference/model-providers/deepseek",
+                  "guides/inference/model-providers/fireworks",
+                  "guides/inference/model-providers/gcp-vertex-ai-anthropic",
+                  "guides/inference/model-providers/gcp-vertex-ai-gemini",
+                  "guides/inference/model-providers/google-ai-studio-gemini",
+                  "guides/inference/model-providers/groq",
+                  "guides/inference/model-providers/hyperbolic",
+                  "guides/inference/model-providers/index",
+                  "guides/inference/model-providers/mistral",
+                  "guides/inference/model-providers/openai-compatible",
+                  "guides/inference/model-providers/openai",
+                  "guides/inference/model-providers/openrouter",
+                  "guides/inference/model-providers/sglang",
+                  "guides/inference/model-providers/tgi",
+                  "guides/inference/model-providers/together",
+                  "guides/inference/model-providers/vllm",
+                  "guides/inference/model-providers/xai"
+                ]
+              }
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Observability",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "guides/observability/log-inferences",
+              "guides/observability/log-episodes",
+              "guides/observability/log-feedback",
+              "guides/observability/export-otlp-opentelemetry"
+            ]
+          },
+          {
+            "group": "Optimization",
+            "pages": ["guides/optimization/overview"]
+          },
+          {
+            "group": "Evaluation",
+            "pages": [
+              "guides/evaluation/evaluate-individual-inferences",
+              "guides/evaluation/evaluate-end-to-end-workflows"
+            ]
+          },
+          {
+            "group": "Experimentation",
+            "pages": ["guides/experimentation/compare-variants-ab-testing"]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "guides/deployment/gateway",
+              "guides/deployment/ui",
+              "guides/deployment/clickhouse",
+              "guides/deployment/object-storage"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "guides/advanced/benchmarks",
+              "guides/advanced/clients",
+              "guides/advanced/data-model",
+              "guides/advanced/integrations",
+              "guides/advanced/tutorial"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
             "group": "API documentation",
@@ -65,6 +112,10 @@
             ]
           }
         ]
+      },
+      {
+        "tab": "Configuration Reference",
+        "pages": ["configuration-reference/index"]
       }
     ],
     "global": {

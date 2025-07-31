@@ -1,0 +1,183 @@
+---
+title: Log feedback
+sidebarTitle: Log feedback (e.g. metrics)
+description: Learn how to collect metrics and feedback about inferences or sequences of inferences.
+---
+
+The TensorZero Gateway allows you to assign feedback to inferences or sequences of inferences ([episodes](/docs/gateway/guides/episodes/)).
+
+Feedback captures the downstream outcomes of your LLM application, and drive the [experimentation](/docs/gateway/tutorial/#experimentation) and [optimization](/docs/recipes/) workflows in TensorZero.
+For example, you can fine-tune models using data from inferences that led to positive downstream behavior.
+
+:::tip
+
+You can also find the runnable code for this example on [GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/metrics-feedback).
+
+:::
+
+## Feedback
+
+TensorZero currently supports the following types of feedback:
+
+| Feedback Type  | Examples                                           |
+| -------------- | -------------------------------------------------- |
+| Boolean Metric | Thumbs up, task success                            |
+| Float Metric   | Star rating, clicks, number of mistakes made       |
+| Comment        | Natural-language feedback from users or developers |
+| Demonstration  | Edited drafts, labels, human-generated content     |
+
+You can send feedback data to the gateway by using the [`/feedback` endpoint](/docs/gateway/api-reference/feedback/#post-feedback).
+
+## Metrics
+
+You can define metrics in your `tensorzero.toml` configuration file.
+
+The skeleton of a metric looks like the following configuration entry.
+
+```toml title="tensorzero.toml" "my_metric_name" /"([.][.][.])"/
+[metrics.my_metric_name]
+level = "..." # "inference" or "episode"
+optimize = "..." # "min" or "max"
+type = "..." # "boolean" or "float"
+```
+
+:::tip
+
+Comments and demonstrations are available by default and don't need to be configured.
+
+:::
+
+### Example: Rating Haikus
+
+In the [Quick Start](/docs/quickstart/), we built a simple LLM application that writes haikus about artificial intelligence.
+
+Imagine we wanted to assign 👍 or 👎 to these haikus.
+Later, we can use this data to fine-tune a model using only haikus that match our tastes.
+
+We should use a metric of type `boolean` to capture this behavior since we're optimizing for a binary outcome: whether we liked the haikus or not.
+The metric applies to individual inference requests, so we'll set `level = "inference"`.
+And finally, we'll set `optimize = "max"` because we want to maximize this metric.
+
+Our metric configuration should look like this:
+
+```toml title="tensorzero.toml"
+[metrics.haiku_rating]
+type = "boolean"
+optimize = "max"
+level = "inference"
+```
+
+<details>
+<summary>Full Configuration</summary>
+
+```toml title="tensorzero.toml"
+[functions.generate_haiku]
+type = "chat"
+
+[functions.generate_haiku.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "openai::gpt_4o_mini"
+
+[metrics.haiku_rating]
+type = "boolean"
+optimize = "max"
+level = "inference"
+```
+
+</details>
+
+Let's make an inference call like we did in the Quick Start, and then assign some (positive) feedback to it.
+We'll use the inference response's `inference_id` we receive from the first API call to link the two.
+
+```python title="run.py"
+from tensorzero import TensorZeroGateway
+
+with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
+    inference_response = client.inference(
+        function_name="generate_haiku",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Write a haiku about artificial intelligence.",
+                }
+            ]
+        },
+    )
+
+    print(inference_response)
+
+    feedback_response = client.feedback(
+        metric_name="haiku_rating",
+        inference_id=inference_response.inference_id,  # alternatively, you can assign feedback to an episode_id
+        value=True,  # let's assume it deserves a 👍
+    )
+
+    print(feedback_response)
+```
+
+<details>
+<summary>Sample Output</summary>
+
+```python
+ChatInferenceResponse(
+    inference_id=UUID('01920c75-d114-7aa1-aadb-26a31bb3c7a0'),
+    episode_id=UUID('01920c75-cdcb-7fa3-bd69-fd28cf615f91'),
+    variant_name='gpt_4o_mini', content=[
+        Text(type='text', text='Silent circuits hum, \nWisdom spun from lines of code, \nDreams in data bloom.')
+    ],
+    usage=Usage(
+        input_tokens=15,
+        output_tokens=20,
+    ),
+)
+
+FeedbackResponse(feedback_id='01920c75-d11a-7150-81d8-15d497ce7eb8')
+```
+
+</details>
+
+## Demonstrations
+
+Demonstrations are a special type of feedback that represent the ideal output for an inference.
+For example, you can use demonstrations to provide corrections from human review, labels for supervised learning, or other ground truth data that represents the ideal output.
+
+You can assign demonstrations to an inference using the special metric name `demonstration`.
+You can't assign demonstrations to an episode.
+
+```python
+feedback_response = client.feedback(
+    metric_name="demonstration",
+    inference_id=inference_response.inference_id,
+    value="Silicon dreams float\nMinds born of human design\nLearning without end",  # the haiku we wish the LLM had written
+)
+```
+
+## Comments
+
+You can assign natural-language feedback to an inference or episode using the special metric name `comment`.
+
+```python
+feedback_response = client.feedback(
+    metric_name="comment",
+    inference_id=inference_response.inference_id,
+    value="Never mention you're an artificial intelligence, AI, bot, or anything like that.",
+)
+```
+
+## Conclusion & Next Steps
+
+Feedback unlocks powerful workflows in observability, optimization, evaluations, and experimentation.
+For example, you might want to fine-tune a model with inference data from haikus that receive positive ratings, or use demonstrations to correct model mistakes.
+
+You can browse feedback for inferences and episodes in the TensorZero UI, and see aggregated metrics over time for your functions and variants.
+
+This is exactly what we demonstrate in [Writing Haikus to Satisfy a Judge with Hidden Preferences](https://github.com/tensorzero/tensorzero/tree/main/examples/haiku-hidden-preferences)!
+This complete runnable example fine-tunes GPT-4o Mini to generate haikus tailored to an AI judge with hidden preferences.
+Continuous improvement over successive fine-tuning runs demonstrates TensorZero's data and learning flywheel.
+
+Another example that uses feedback is [Optimizing Data Extraction (NER) with TensorZero](https://github.com/tensorzero/tensorzero/tree/main/examples/data-extraction-ner).
+This example collects metrics and demonstrations for an LLM-powered data extraction tool, which can be used for fine-tuning and other optimization recipes.
+These optimized variants achieve substantial improvements over the original model.
+
+See [Configuration Reference](/docs/gateway/configuration-reference/#metrics) and [API Reference](/docs/gateway/api-reference/feedback/#post-feedback) for more details.

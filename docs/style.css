@@ -14,3 +14,7 @@
   padding-left: 2rem;
 }
 */
+
+#page-title {
+  text-wrap: balance;
+}
