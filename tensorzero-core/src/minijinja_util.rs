@@ -7,7 +7,7 @@ use std::{
 
 use crate::error::{Error, ErrorDetails};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TemplateConfig<'c> {
     env: minijinja::Environment<'c>,
 }
@@ -55,11 +55,11 @@ impl TemplateConfig<'_> {
 
     pub fn add_template(
         &mut self,
-        template_name: &str,
-        template_content: &str,
+        template_name: String,
+        template_content: String,
     ) -> Result<(), Error> {
         self.env
-            .add_template_owned(template_name.to_string(), template_content.to_string())
+            .add_template_owned(template_name.clone(), template_content)
             .map_err(|e| {
                 Error::new(ErrorDetails::MiniJinjaTemplate {
                     template_name: template_name.to_string(),
@@ -106,6 +106,10 @@ impl TemplateConfig<'_> {
     // Checks if a template needs any variables (i.e. needs a schema)
     pub fn template_needs_variables(&self, template_name: &str) -> Result<bool, Error> {
         Ok(!self.get_undeclared_variables(template_name)?.is_empty())
+    }
+
+    pub fn contains_template(&self, template_name: &str) -> bool {
+        self.env.get_template(template_name).is_ok()
     }
 
     pub fn add_hardcoded_templates(&mut self) -> Result<(), Error> {
