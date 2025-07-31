@@ -1505,7 +1505,7 @@ async fn test_config_load_shorthand_models_only() {
 async fn test_empty_config() {
     let tempfile = NamedTempFile::new().unwrap();
     write!(&tempfile, "").unwrap();
-    Config::load_and_verify_from_path(tempfile.path())
+    Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(tempfile.path()).unwrap())
         .await
         .unwrap();
     assert!(logs_contain(
@@ -1526,10 +1526,11 @@ async fn test_invalid_toml() {
     let tmpfile = NamedTempFile::new().unwrap();
     std::fs::write(tmpfile.path(), config_str).unwrap();
 
-    let err = Config::load_and_verify_from_path(tmpfile.path())
-        .await
-        .unwrap_err()
-        .to_string();
+    let err =
+        Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(tmpfile.path()).unwrap())
+            .await
+            .unwrap_err()
+            .to_string();
 
     assert!(
         err.contains("duplicate key"),
@@ -1680,10 +1681,12 @@ async fn test_bedrock_region_and_allow_auto() {
 #[traced_test]
 #[tokio::test]
 async fn test_config_load_no_config_file() {
-    let err = Config::load_and_verify_from_path(Path::new("nonexistent.toml"))
-        .await
-        .unwrap_err()
-        .to_string();
+    let err = Config::load_and_verify_from_path(
+        &ConfigFileGlob::new_from_path(Path::new("nonexistent.toml")).unwrap(),
+    )
+    .await
+    .unwrap_err()
+    .to_string();
     assert!(
         err.contains("Error using glob: `nonexistent.toml`: No config files matched glob"),
         "Unexpected error message: {err}"
@@ -1704,10 +1707,11 @@ async fn test_config_missing_filesystem_object_store() {
             [functions]"#
     )
     .unwrap();
-    let err = Config::load_and_verify_from_path(tempfile.path())
-        .await
-        .unwrap_err()
-        .to_string();
+    let err =
+        Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(tempfile.path()).unwrap())
+            .await
+            .unwrap_err()
+            .to_string();
     assert!(
             err.contains("Failed to create filesystem object store: path does not exist: /fake-tensorzero-path/other-path"),
             "Unexpected error message: {err}"
@@ -1754,10 +1758,11 @@ async fn test_config_load_invalid_s3_creds() {
             [functions]"#
     )
     .unwrap();
-    let err = Config::load_and_verify_from_path(tempfile.path())
-        .await
-        .unwrap_err()
-        .to_string();
+    let err =
+        Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(tempfile.path()).unwrap())
+            .await
+            .unwrap_err()
+            .to_string();
     assert!(
         err.contains("Failed to write `.tensorzero-validate` to object store."),
         "Unexpected error message: {err}"
@@ -1783,10 +1788,11 @@ async fn test_config_blocked_s3_http_endpoint_default() {
             [functions]"#
     )
     .unwrap();
-    let err = Config::load_and_verify_from_path(tempfile.path())
-        .await
-        .unwrap_err()
-        .to_string();
+    let err =
+        Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(tempfile.path()).unwrap())
+            .await
+            .unwrap_err()
+            .to_string();
     assert!(
         err.contains("Failed to write `.tensorzero-validate` to object store."),
         "Unexpected error message: {err}"
@@ -1857,7 +1863,7 @@ async fn test_config_s3_allow_http_config() {
             [functions]"#
     )
     .unwrap();
-    let err = Config::load_and_verify_from_path(tempfile.path())
+    let err = Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(tempfile.path()).unwrap())
         .await
         .unwrap_err()
         .to_string();
@@ -1897,7 +1903,7 @@ async fn test_config_s3_allow_http_env_var() {
             [functions]"#
     )
     .unwrap();
-    let err = Config::load_and_verify_from_path(tempfile.path())
+    let err = Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(tempfile.path()).unwrap())
         .await
         .unwrap_err()
         .to_string();
@@ -2013,7 +2019,7 @@ async fn test_config_load_optional_credentials_validation() {
     let tmpfile = NamedTempFile::new().unwrap();
     std::fs::write(tmpfile.path(), config_str).unwrap();
 
-    let res = Config::load_from_path_optional_verify_credentials(tmpfile.path(), true).await;
+    let res = Config::load_from_path_optional_verify_credentials(&ConfigFileGlob::new_from_path(tmpfile.path()).unwrap(), true).await;
     if cfg!(feature = "e2e_tests") {
         assert!(res.is_ok());
     } else {
@@ -2021,7 +2027,7 @@ async fn test_config_load_optional_credentials_validation() {
     }
 
     // Should not fail since validation is disabled
-    Config::load_from_path_optional_verify_credentials(tmpfile.path(), false)
+    Config::load_from_path_optional_verify_credentials(&ConfigFileGlob::new_from_path(tmpfile.path()).unwrap(), false)
         .await
         .expect("Failed to load config");
 }
@@ -2079,7 +2085,10 @@ async fn test_config_invalid_template_no_schema() {
         )
         .unwrap();
 
-    let config = UninitializedConfig::read_toml_config(temp_file.path()).unwrap();
+    let config = UninitializedConfig::read_toml_config(
+        &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+    )
+    .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
         .await
         .expect_err("Config should fail to load");

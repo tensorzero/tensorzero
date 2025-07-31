@@ -867,7 +867,7 @@ mod tests {
     async fn get_e2e_config() -> Config {
         // Read the e2e config file
         Config::load_from_path_optional_verify_credentials(
-            Path::new("tests/e2e/tensorzero.toml"),
+            &ConfigFileGlob::new_from_path(Path::new("tests/e2e/tensorzero.toml")).unwrap(),
             false,
         )
         .await

@@ -4,6 +4,7 @@ use toml::de::DeTable;
 use toml::Table;
 
 use crate::config_parser::path::{merge_tomls, resolve_toml_relative_paths};
+use crate::config_parser::ConfigFileGlob;
 use crate::error::{Error, ErrorDetails};
 
 pub struct SpanMap {
@@ -42,28 +43,16 @@ impl SpanMap {
     /// As a result, almost all consumers of the returned `Table` shouldn't need to care
     /// about globbing (the exception being the fallback logic for `[gateway.template_filesystem_access]`,
     /// which needs to check if we globbed exactly one file)
-    pub fn from_glob(glob: &str) -> Result<(Self, Table), Error> {
+    pub fn from_glob(glob: &ConfigFileGlob) -> Result<(Self, Table), Error> {
         let mut found_file = false;
         let mut range_to_file = Vec::new();
         let mut previous_range_end: usize = 0;
-        let glob_iter = glob::glob(glob).map_err(|e| {
-            Error::new(ErrorDetails::Glob {
-                glob: glob.to_string(),
-                message: e.to_string(),
-            })
-        })?;
         // Due to lifetime restriction from `toml::de::DeTable`, we need all of the globbed config
         // contents to have the same lifetime. This increases peak memory usage during config loading,
         // but all of these temporary allocations get freed before we construct our final loaded `Config`
         let mut padded_strs = Vec::new();
-        for file in glob_iter {
+        for file in &glob.paths {
             found_file = true;
-            let file = file.map_err(|e| {
-                Error::new(ErrorDetails::Glob {
-                    glob: glob.to_string(),
-                    message: e.to_string(),
-                })
-            })?;
             let base_path = file
                 .parent()
                 .ok_or_else(|| {
@@ -75,7 +64,7 @@ impl SpanMap {
                     })
                 })?
                 .to_owned();
-            let contents = std::fs::read_to_string(&file).map_err(|e| {
+            let contents = std::fs::read_to_string(file).map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!(
                         "Failed to read config file `{}`: {e}",
@@ -97,7 +86,7 @@ impl SpanMap {
             range_to_file.push((
                 previous_range_end..whitespace_file_len,
                 TomlFile {
-                    path: file,
+                    path: file.clone(),
                     base_path,
                 },
             ));
@@ -105,7 +94,7 @@ impl SpanMap {
         }
         if !found_file {
             return Err(ErrorDetails::Glob {
-                glob: glob.to_string(),
+                glob: glob.glob.to_string(),
                 message: "No config files matched glob".to_string(),
             }
             .into());

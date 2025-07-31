@@ -11,7 +11,7 @@ use pyo3::IntoPyObjectExt;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
@@ -408,16 +408,54 @@ impl MetricConfigLevel {
     }
 }
 
+/// A glob pattern together with the config file paths it resolves it
+/// We eagerly resolve the glob pattern so that we can include all of the matched
+/// config file paths in error messages.
+pub struct ConfigFileGlob {
+    pub glob: String,
+    pub paths: Vec<PathBuf>,
+}
+
+impl ConfigFileGlob {
+    /// Interprets a path as a glob pattern
+    pub fn new_from_path(path: &Path) -> Result<Self, Error> {
+        Self::new(path.display().to_string())
+    }
+
+    pub fn new(glob: String) -> Result<Self, Error> {
+        let glob_paths = glob::glob(&glob)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Glob {
+                    glob: glob.to_string(),
+                    message: e.to_string(),
+                })
+            })?
+            .map(|path_res| {
+                path_res.map_err(|e| {
+                    Error::new(ErrorDetails::Glob {
+                        glob: glob.to_string(),
+                        message: format!("Error processing globbed path: `{e}`"),
+                    })
+                })
+            })
+            .collect::<Result<Vec<PathBuf>, Error>>();
+        Ok(Self {
+            glob,
+            paths: glob_paths?,
+        })
+    }
+}
+
 impl Config {
-    pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config, Error> {
-        Self::load_from_path_optional_verify_credentials(config_path, true).await
+    pub async fn load_and_verify_from_path(config_glob: &ConfigFileGlob) -> Result<Config, Error> {
+        Self::load_from_path_optional_verify_credentials(config_glob, true).await
     }
 
     pub async fn load_from_path_optional_verify_credentials(
-        config_path: &Path,
+        config_glob: &ConfigFileGlob,
         validate_credentials: bool,
     ) -> Result<Config, Error> {
-        let globbed_config = UninitializedConfig::read_toml_config(config_path)?;
+        let globbed_config = UninitializedConfig::read_toml_config(config_glob)?;
         let config = if cfg!(feature = "e2e_tests") || !validate_credentials {
             SKIP_CREDENTIAL_VALIDATION
                 .scope(
@@ -882,15 +920,17 @@ pub struct ProviderTypesConfig {
     pub gcp_vertex_gemini: Option<GCPProviderTypeConfig>,
 }
 
+/// The result of parsing all of the globbed config files,
+/// and merging them into a single `toml::Table`
 struct UninitializedGlobbedConfig {
     table: toml::Table,
     span_map: SpanMap,
 }
 
 impl UninitializedConfig {
-    /// Read a file from the file system and parse it as TOML
-    fn read_toml_config(path: &Path) -> Result<UninitializedGlobbedConfig, Error> {
-        let (span_map, table) = SpanMap::from_glob(path.to_string_lossy().as_ref())?;
+    /// Read all of the globbed config file sfrom disk, and merge them into a single `UninitializedGlobbedConfig`
+    fn read_toml_config(glob: &ConfigFileGlob) -> Result<UninitializedGlobbedConfig, Error> {
+        let (span_map, table) = SpanMap::from_glob(glob)?;
         Ok(UninitializedGlobbedConfig { table, span_map })
     }
 }

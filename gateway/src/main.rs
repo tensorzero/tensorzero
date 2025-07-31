@@ -9,7 +9,7 @@ use mimalloc::MiMalloc;
 use std::fmt::Display;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tensorzero_core::howdy::setup_howdy;
 use tokio::signal;
@@ -17,7 +17,7 @@ use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
 
 use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
-use tensorzero_core::config_parser::Config;
+use tensorzero_core::config_parser::{Config, ConfigFileGlob};
 use tensorzero_core::endpoints;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error;
@@ -121,8 +121,11 @@ async fn main() {
     }
 
     let config = if let Some(path) = &config_path {
+        // TODO - print this in some nice way
+        let glob =
+            ConfigFileGlob::new_from_path(path).expect_pretty("Failed to process config file glob");
         Arc::new(
-            Config::load_and_verify_from_path(Path::new(&path))
+            Config::load_and_verify_from_path(&glob)
                 .await
                 .ok() // Don't print the error here, since it was already printed when it was constructed
                 .expect_pretty("Failed to load config"),
