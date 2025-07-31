@@ -120,19 +120,21 @@ async fn main() {
         tracing::warn!("Running the gateway without any config-related arguments is deprecated. Use `--default-config` to start the gateway with the default config.");
     }
 
-    let config = if let Some(path) = &config_path {
-        // TODO - print this in some nice way
+    let (config, glob) = if let Some(path) = &config_path {
         let glob =
             ConfigFileGlob::new_from_path(path).expect_pretty("Failed to process config file glob");
-        Arc::new(
-            Config::load_and_verify_from_path(&glob)
-                .await
-                .ok() // Don't print the error here, since it was already printed when it was constructed
-                .expect_pretty("Failed to load config"),
+        (
+            Arc::new(
+                Config::load_and_verify_from_path(&glob)
+                    .await
+                    .ok() // Don't print the error here, since it was already printed when it was constructed
+                    .expect_pretty("Failed to load config"),
+            ),
+            Some(glob),
         )
     } else {
         tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
-        Arc::new(Config::default())
+        (Arc::new(Config::default()), None)
     };
 
     if config.gateway.debug {
@@ -343,8 +345,11 @@ async fn main() {
     }
 
     // Print the configuration being used
-    if let Some(path) = &config_path {
-        tracing::info!("├ Configuration: {}", path.to_string_lossy());
+    if let Some(glob) = &glob {
+        tracing::info!("├ Configuration: glob `{}` resolved to:", glob.glob);
+        for path in &glob.paths {
+            tracing::info!("│  ├ {}", path.to_string_lossy());
+        }
     } else {
         tracing::info!("├ Configuration: default");
     }

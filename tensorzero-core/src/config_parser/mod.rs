@@ -423,7 +423,7 @@ impl ConfigFileGlob {
     }
 
     pub fn new(glob: String) -> Result<Self, Error> {
-        let glob_paths = glob::glob(&glob)
+        let mut glob_paths = glob::glob(&glob)
             .map_err(|e| {
                 Error::new(ErrorDetails::Glob {
                     glob: glob.to_string(),
@@ -438,10 +438,15 @@ impl ConfigFileGlob {
                     })
                 })
             })
-            .collect::<Result<Vec<PathBuf>, Error>>();
+            .collect::<Result<Vec<PathBuf>, Error>>()?;
+        // Sort the paths to avoid depending on the filesystem iteration order
+        // when we merge configs. This should only the precise error message we display,
+        // not whether or not the config parses successfully (or the final `Config`
+        // that we resolve)
+        glob_paths.sort_by_key(|path| path.display().to_string());
         Ok(Self {
             glob,
-            paths: glob_paths?,
+            paths: glob_paths,
         })
     }
 }
