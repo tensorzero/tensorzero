@@ -524,7 +524,7 @@ jobs:
 
   # Test that the ui e2e tests still pass after we regenerate the model inference cache
   ui-tests-e2e-regen-model-inference-cache:
-    uses: ./.github/workflows/ui-tests-e2e-model-cache.yml
+    uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
     with:
       regen_cache: true
     secrets:
