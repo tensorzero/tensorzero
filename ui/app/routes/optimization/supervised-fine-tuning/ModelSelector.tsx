@@ -39,10 +39,8 @@ export function ModelSelector({
       const newModels = [...initialModels];
 
       // Pick all providers from the schema
-      // TODO: remove mistral filter once we support it.
-      const providers = (
-        ModelOptionSchema.shape.provider.options as ModelOption["provider"][]
-      ).filter((provider) => provider !== "mistral");
+      const providers = ModelOptionSchema.shape.provider
+        .options as ModelOption["provider"][];
 
       providers.forEach((provider) => {
         const modelExists = initialModels.some(
