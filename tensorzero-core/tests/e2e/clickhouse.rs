@@ -874,12 +874,12 @@ async fn test_deployment_id_oldest() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_concurrent_clickhouse_migrations() {
-    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    let clickhouse = Arc::new(clickhouse);
-    if clickhouse.is_cluster_configured() {
+    if std::env::var("TENSORZERO_CLICKHOUSE_CLUSTER_NAME").is_ok() {
         // We can't run concurrent migrations on a cluster.
         return;
     }
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    let clickhouse = Arc::new(clickhouse);
     let num_concurrent_starts = 50;
     let mut handles = Vec::with_capacity(num_concurrent_starts);
     for _ in 0..num_concurrent_starts {
