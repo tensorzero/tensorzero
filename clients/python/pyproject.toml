@@ -59,6 +59,9 @@ dev = [
     "pytest",
     "openai",
 ]
+agents = [
+    "openai-agents>=0.1.0",
+]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
