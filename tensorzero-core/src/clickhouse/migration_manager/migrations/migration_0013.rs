@@ -440,18 +440,20 @@ impl Migration for Migration0013<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the materialized views */\
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            "/* Drop the materialized views */\
             DROP VIEW IF EXISTS ChatInferenceByIdView;
             DROP VIEW IF EXISTS JsonInferenceByIdView;
             DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView;
             DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView;
             /* Drop the function */\
-            DROP FUNCTION IF EXISTS uint_to_uuid;
+            DROP FUNCTION IF EXISTS uint_to_uuid ON CLUSTER{on_cluster_name};
             /* Drop the tables */\
-            DROP TABLE IF EXISTS InferenceById;
-            DROP TABLE IF EXISTS InferenceByEpisodeId;
+            DROP TABLE IF EXISTS InferenceById ON CLUSTER{on_cluster_name};
+            DROP TABLE IF EXISTS InferenceByEpisodeId ON CLUSTER{on_cluster_name};
             "
-        .to_string()
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

@@ -383,12 +383,14 @@ impl Migration for Migration0028<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r"
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            r"
         DROP VIEW IF EXISTS StaticEvaluationFloatHumanFeedbackView;
         DROP VIEW IF EXISTS StaticEvaluationBooleanHumanFeedbackView;
-        DROP TABLE IF EXISTS StaticEvaluationHumanFeedback;
+        DROP TABLE IF EXISTS StaticEvaluationHumanFeedback{on_cluster_name};
         "
-        .to_string()
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

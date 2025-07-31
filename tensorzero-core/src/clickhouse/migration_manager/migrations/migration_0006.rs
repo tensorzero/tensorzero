@@ -161,13 +161,15 @@ impl Migration for Migration0006<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the materialized views */\
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            "/* Drop the materialized views */\
             DROP VIEW IF EXISTS BatchIdByInferenceIdView;
             /* Drop the tables */\
-            DROP TABLE IF EXISTS BatchIdByInferenceId;
-            DROP TABLE IF EXISTS BatchRequest;
-            DROP TABLE IF EXISTS BatchModelInference;
+            DROP TABLE IF EXISTS BatchIdByInferenceId{on_cluster_name};
+            DROP TABLE IF EXISTS BatchRequest{on_cluster_name};
+            DROP TABLE IF EXISTS BatchModelInference{on_cluster_name};
         "
-        .to_string()
+        )
     }
 }

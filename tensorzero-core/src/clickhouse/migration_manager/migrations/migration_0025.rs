@@ -90,8 +90,13 @@ impl Migration for Migration0025<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "DROP TABLE IF EXISTS DynamicEvaluationRun\nDROP TABLE IF EXISTS DynamicEvaluationRunEpisode"
-            .to_string()
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            r"
+            DROP TABLE IF EXISTS DynamicEvaluationRunEpisode{on_cluster_name};
+            DROP TABLE IF EXISTS DynamicEvaluationRun{on_cluster_name};
+        "
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

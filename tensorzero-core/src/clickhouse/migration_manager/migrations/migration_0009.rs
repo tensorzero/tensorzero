@@ -353,18 +353,20 @@ impl Migration for Migration0009<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the materialized views */\
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            "/* Drop the materialized views */\
             DROP VIEW IF EXISTS BooleanMetricFeedbackByTargetIdView;
             DROP VIEW IF EXISTS CommentFeedbackByTargetIdView;
             DROP VIEW IF EXISTS DemonstrationFeedbackByInferenceIdView;
             DROP VIEW IF EXISTS FloatMetricFeedbackByTargetIdView;
             /* Drop the tables */\
-            DROP TABLE IF EXISTS BooleanMetricFeedbackByTargetId;
-            DROP TABLE IF EXISTS CommentFeedbackByTargetId;
-            DROP TABLE IF EXISTS DemonstrationFeedbackByInferenceId;
-            DROP TABLE IF EXISTS FloatMetricFeedbackByTargetId;
+            DROP TABLE IF EXISTS BooleanMetricFeedbackByTargetId{on_cluster_name};
+            DROP TABLE IF EXISTS CommentFeedbackByTargetId{on_cluster_name};
+            DROP TABLE IF EXISTS DemonstrationFeedbackByInferenceId{on_cluster_name};
+            DROP TABLE IF EXISTS FloatMetricFeedbackByTargetId{on_cluster_name};
             "
-        .to_string()
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

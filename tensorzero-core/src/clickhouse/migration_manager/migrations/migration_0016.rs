@@ -158,11 +158,13 @@ impl Migration for Migration0016<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the tables */\
-            DROP TABLE IF EXISTS ChatInferenceDatapoint;
-            DROP TABLE IF EXISTS JsonInferenceDatapoint;
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            "/* Drop the tables */\
+            DROP TABLE IF EXISTS ChatInferenceDatapoint{on_cluster_name};
+            DROP TABLE IF EXISTS JsonInferenceDatapoint{on_cluster_name};
             "
-        .to_string()
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

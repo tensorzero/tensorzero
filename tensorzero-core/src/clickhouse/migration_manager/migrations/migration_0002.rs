@@ -64,9 +64,11 @@ impl Migration for Migration0002<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the table */\
-            DROP TABLE IF EXISTS DynamicInContextLearningExample;"
-            .to_string()
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            "/* Drop the table */\
+            DROP TABLE IF EXISTS DynamicInContextLearningExample{on_cluster_name};"
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

@@ -178,16 +178,18 @@ impl Migration for Migration0005<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the materialized views */\
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            "/* Drop the materialized views */\
             DROP VIEW IF EXISTS ChatInferenceTagView;
             DROP VIEW IF EXISTS JsonInferenceTagView;
             /* Drop the `InferenceTag` table */\
-            DROP TABLE IF EXISTS InferenceTag;
+            DROP TABLE IF EXISTS InferenceTag{on_cluster_name};
             /* Drop the `tags` column from the original inference tables */\
             ALTER TABLE ChatInference DROP COLUMN tags;
             ALTER TABLE JsonInference DROP COLUMN tags;
         "
-        .to_string()
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

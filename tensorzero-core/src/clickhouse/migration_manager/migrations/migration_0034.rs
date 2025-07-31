@@ -170,10 +170,12 @@ impl Migration for Migration0034<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r"
-        DROP TABLE CumulativeUsageView;
-        DROP TABLE CumulativeUsage;"
-            .to_string()
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            r"
+        DROP TABLE IF EXISTS CumulativeUsageView;
+        DROP TABLE IF EXISTS CumulativeUsage{on_cluster_name};"
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

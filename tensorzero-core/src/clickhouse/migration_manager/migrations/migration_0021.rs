@@ -286,20 +286,20 @@ impl Migration for Migration0021<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the materialized views */\
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!("/* Drop the materialized views */\
         DROP VIEW IF EXISTS TagChatInferenceView;
         DROP VIEW IF EXISTS TagJsonInferenceView;
         \n
         /* Drop the `TagInference` table */\
-        DROP TABLE IF EXISTS TagInference;
+        DROP TABLE IF EXISTS TagInference{on_cluster_name};
         /* Drop the `staled_at` column in the datapoint tables */\
         ALTER TABLE ChatInferenceDatapoint DROP COLUMN staled_at;
         ALTER TABLE JsonInferenceDatapoint DROP COLUMN staled_at;
         /* Revert the change to the default of `updated_at` in the datapoint tables */\
         ALTER TABLE ChatInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now();
         ALTER TABLE JsonInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now();
-    "
-        .to_string()
+    ")
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

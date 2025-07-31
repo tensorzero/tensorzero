@@ -255,11 +255,23 @@ impl Migration for Migration0000<'_> {
 
     fn rollback_instructions(&self) -> String {
         let database = self.clickhouse.database();
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
 
         format!(
             "/* **CAREFUL: THIS WILL DELETE ALL DATA** */\
+            /* Drop each table first (this seems to be required for replicated setups) */
+            DROP TABLE IF EXISTS BooleanMetricFeedback{on_cluster_name};
+            DROP TABLE IF EXISTS CommentFeedback{on_cluster_name};
+            DROP TABLE IF EXISTS DemonstrationFeedback{on_cluster_name};
+            DROP TABLE IF EXISTS FloatMetricFeedback{on_cluster_name};
+            DROP TABLE IF EXISTS ChatInference{on_cluster_name};
+            DROP TABLE IF EXISTS JsonInference{on_cluster_name};
+            DROP TABLE IF EXISTS ModelInference{on_cluster_name};
+            // Even though this is created elsewhere we should
+            // drop it here to ensure a truly clean start.
+            DROP TABLE IF EXISTS TensorZeroMigration{on_cluster_name};
             /* Drop the database */\
-            DROP DATABASE IF EXISTS {database};\
+            DROP DATABASE IF EXISTS {database}{on_cluster_name};\
             /* **CAREFUL: THIS WILL DELETE ALL DATA** */"
         )
     }

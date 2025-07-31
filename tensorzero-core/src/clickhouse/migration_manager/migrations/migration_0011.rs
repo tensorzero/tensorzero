@@ -80,12 +80,14 @@ impl Migration for Migration0011<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the table */\
-            DROP TABLE IF EXISTS ModelInferenceCache;
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            "/* Drop the table */\
+                DROP TABLE IF EXISTS ModelInferenceCache{on_cluster_name};
             /* Drop the `cached` column from ModelInference */\
             ALTER TABLE ModelInference DROP COLUMN cached;
             "
-        .to_string()
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

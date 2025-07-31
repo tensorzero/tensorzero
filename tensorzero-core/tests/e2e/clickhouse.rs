@@ -3,6 +3,7 @@
 use std::cell::Cell;
 use std::future::Future;
 use std::sync::Arc;
+use std::time::Duration;
 
 use paste::paste;
 use secrecy::{ExposeSecret, SecretString};
@@ -11,6 +12,7 @@ use tensorzero_core::clickhouse::migration_manager::migration_trait::Migration;
 use tensorzero_core::clickhouse::migration_manager::RunMigrationArgs;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tokio::runtime::Handle;
+use tokio::time::sleep;
 use tracing_test::traced_test;
 use uuid::Uuid;
 
@@ -543,6 +545,7 @@ async fn test_rollback_apply_rollback() {
 
         // This migration drops the entire database during rollback, so we need to re-create it
         if migration.name() == "Migration0000" {
+            sleep(Duration::from_millis(500)).await;
             clickhouse.create_database().await.unwrap();
         }
 
@@ -847,7 +850,7 @@ async fn test_clean_clickhouse_start() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_deployment_id_oldest() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    migration_manager::run(&clickhouse, false).await.unwrap();
+    migration_manager::run(&clickhouse, true).await.unwrap();
     // Add a row to the DeploymentID table and make sure that it isn't returned
     let new_deployment_id = "foo";
     clickhouse

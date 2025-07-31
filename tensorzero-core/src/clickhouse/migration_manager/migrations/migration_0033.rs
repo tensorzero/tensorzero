@@ -76,7 +76,12 @@ impl Migration for Migration0033<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r"DROP TABLE DeploymentID;".to_string()
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            r"
+        DROP TABLE IF EXISTS DeploymentID{on_cluster_name};
+        "
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

@@ -247,19 +247,21 @@ impl Migration for Migration0003<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the materialized views */\
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            "/* Drop the materialized views */\
             DROP VIEW IF EXISTS BooleanMetricFeedbackTagView;
             DROP VIEW IF EXISTS CommentFeedbackTagView;
             DROP VIEW IF EXISTS DemonstrationFeedbackTagView;
             DROP VIEW IF EXISTS FloatMetricFeedbackTagView;
             /* Drop the table */\
-            DROP TABLE IF EXISTS FeedbackTag;
+            DROP TABLE IF EXISTS FeedbackTag{on_cluster_name};
             /* Drop the columns */\
             ALTER TABLE BooleanMetricFeedback DROP COLUMN tags;
             ALTER TABLE CommentFeedback DROP COLUMN tags;
             ALTER TABLE DemonstrationFeedback DROP COLUMN tags;
             ALTER TABLE FloatMetricFeedback DROP COLUMN tags;"
-            .to_string()
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

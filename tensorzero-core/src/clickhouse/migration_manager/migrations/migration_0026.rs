@@ -155,14 +155,16 @@ impl Migration for Migration0026<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the materialized views */\
-        DROP VIEW IF EXISTS DynamicEvaluationRunEpisodeByRunIdView;
-        DROP VIEW IF EXISTS DynamicEvaluationRunByProjectNameView;
-        /* Drop the tables */\
-        DROP TABLE IF EXISTS DynamicEvaluationRunEpisodeByRunId;\n\
-        DROP TABLE IF EXISTS DynamicEvaluationRunByProjectName;
-        "
-        .to_string()
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            "/* Drop the materialized views */\
+            DROP VIEW IF EXISTS DynamicEvaluationRunEpisodeByRunIdView;
+            DROP VIEW IF EXISTS DynamicEvaluationRunByProjectNameView;
+            /* Drop the tables */\
+            DROP TABLE IF EXISTS DynamicEvaluationRunEpisodeByRunId{on_cluster_name};
+            DROP TABLE IF EXISTS DynamicEvaluationRunByProjectName{on_cluster_name};
+            "
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {
