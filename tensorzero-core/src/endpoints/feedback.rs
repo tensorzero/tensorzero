@@ -828,7 +828,7 @@ mod tests {
     use crate::config_parser::{Config, MetricConfig, MetricConfigOptimize};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
-    use crate::testing::get_unit_test_app_state_data;
+    use crate::testing::get_unit_test_gateway_handle;
     use crate::tool::{StaticToolConfig, ToolCallOutput, ToolChoice, ToolConfig};
 
     #[tokio::test]
@@ -1008,7 +1008,7 @@ mod tests {
         let config = Arc::new(Config {
             ..Default::default()
         });
-        let app_state_data = get_unit_test_app_state_data(config, true);
+        let gateway_handle = get_unit_test_gateway_handle(config, true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test comment");
@@ -1021,8 +1021,11 @@ mod tests {
             internal: false,
             dryrun: Some(false),
         };
-        let response =
-            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await;
         let details = response.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1037,7 +1040,7 @@ mod tests {
         let config = Arc::new(Config {
             ..Default::default()
         });
-        let app_state_data = get_unit_test_app_state_data(config, true);
+        let gateway_handle = get_unit_test_gateway_handle(config, true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test demonstration");
@@ -1052,9 +1055,12 @@ mod tests {
             dryrun: Some(false),
             internal: false,
         };
-        let response = feedback_handler(State(app_state_data.clone()), StructuredJson(params))
-            .await
-            .unwrap_err();
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await
+        .unwrap_err();
         let details = response.get_owned_details();
         assert_eq!(
             details,
@@ -1075,8 +1081,11 @@ mod tests {
             dryrun: Some(false),
             internal: false,
         };
-        let response =
-            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await;
         let details = response.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1101,7 +1110,7 @@ mod tests {
             metrics,
             ..Default::default()
         });
-        let app_state_data = get_unit_test_app_state_data(config.clone(), true);
+        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
         let value = json!(4.5);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
@@ -1117,9 +1126,12 @@ mod tests {
             dryrun: Some(false),
             internal: false,
         };
-        let response = feedback_handler(State(app_state_data.clone()), StructuredJson(params))
-            .await
-            .unwrap_err();
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await
+        .unwrap_err();
         let details = response.get_owned_details();
         assert_eq!(
             details,
@@ -1138,8 +1150,11 @@ mod tests {
             dryrun: Some(false),
             internal: false,
         };
-        let response =
-            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await;
         let details = response.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1164,7 +1179,7 @@ mod tests {
             metrics,
             ..Default::default()
         });
-        let app_state_data = get_unit_test_app_state_data(config.clone(), true);
+        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
         let value = json!(true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
@@ -1177,8 +1192,11 @@ mod tests {
             dryrun: None,
             internal: false,
         };
-        let response =
-            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await;
         let details = response.unwrap_err().get_owned_details();
         assert_eq!(
             details,
