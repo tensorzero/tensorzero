@@ -1489,7 +1489,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub function_name: &'b str,
     pub variant_name: &'b str,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
-    pub templates: &'a TemplateConfig<'a>,
+    pub templates: &'b TemplateConfig<'a>,
     pub tool_config: Option<&'b ToolCallConfig>,
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
