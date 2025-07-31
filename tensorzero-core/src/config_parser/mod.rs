@@ -57,7 +57,7 @@ tokio::task_local! {
 pub fn skip_credential_validation() -> bool {
     // tokio::task_local doesn't have an 'is_set' method, so we call 'try_with'
     // (which returns an `Err` if the task-local is not set)
-    SKIP_CREDENTIAL_VALIDATION.try_with(|_| ()).is_ok()
+    SKIP_CREDENTIAL_VALIDATION.try_with(|()| ()).is_ok()
 }
 
 #[derive(Debug, Default, Serialize)]
