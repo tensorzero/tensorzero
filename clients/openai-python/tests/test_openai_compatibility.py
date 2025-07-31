@@ -1678,3 +1678,47 @@ async def test_async_json_function_multiple_text_blocks(async_client):
         ],
     )
     assert result.model == "tensorzero::model_name::dummy::multiple-text-blocks"
+
+
+@pytest.mark.asyncio
+async def test_async_inference_tensorzero_raw_text(async_client):
+    """
+    Test that chat inference with a tensorzero::raw_text block works correctly
+    """
+    episode_id = str(uuid7())
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ]
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tensorzero::raw_text",
+                    "value": "What is the capital of Japan?"
+                }
+            ],
+        },
+    ]
+
+    response = await async_client.chat.completions.create(
+        extra_body={"tensorzero::episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::function_name::json_success",
+    )
+
+    content = response.choices[0].message.content
+
+    assert isinstance(content, str)
+
+    assert content == '{"answer":"Hello"}'
+    assert response.model == "tensorzero::function_name::json_success::variant_name::test"
+    assert response.episode_id == episode_id
+    assert response.usage.prompt_tokens == 10
+    assert response.usage.completion_tokens == 1
