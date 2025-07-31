@@ -8,4 +8,5 @@ The steps are:
  - Upload the file to our CloudFlare R2 bucket `tensorzero-helm-charts`.
  - Generate a new `index.yaml` file by running `helm repo index . --url https://helm.tensorzero.com --merge index.yaml`
  - Upload the `index.yaml` file to our CloudFlare R2 bucket `tensorzero-helm-charts`.
+
 At this point, ArtifactHub should scan the bucket within minutes and update the listing.
