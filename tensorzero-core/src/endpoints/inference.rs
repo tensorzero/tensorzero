@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::config_parser::{Config, ObjectStoreInfo};
+use crate::config_parser::{Config, ObjectStoreInfo, UninitializedVariantInfo};
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -41,9 +41,11 @@ use crate::inference::types::{
     ResolvedInputMessageContent, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
+use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::variant::chat_completion::ChatCompletionConfig;
+use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
 use super::dynamic_evaluation_run::validate_inference_episode_id_and_apply_dynamic_evaluation_run;
@@ -107,6 +109,8 @@ pub struct Params {
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    #[serde(default)]
+    pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
 }
 
 #[derive(Clone, Debug)]
@@ -252,33 +256,28 @@ pub async fn inference(
     // Validate the input
     function.validate_inference_params(&params)?;
 
-    let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
-
-    // If a variant is pinned, only that variant should be attempted
-    if let Some(ref variant_name) = params.variant_name {
-        candidate_variants.retain(|k, _| k == variant_name);
-
-        // If the pinned variant doesn't exist, return an error
-        if candidate_variants.is_empty() {
-            return Err(ErrorDetails::UnknownVariant {
-                name: variant_name.to_string(),
-            }
-            .into());
-        }
-        params.tags.insert(
-            "tensorzero::variant_pinned".to_string(),
-            variant_name.to_string(),
-        );
-    } else {
-        // Remove all zero-weight variants - these can only be used if explicitly pinned above
-        candidate_variants.retain(|_, variant| {
-            // Retain 'None' and positive-weight variants, discarding zero-weight variants
-            variant.inner.weight().is_none_or(|w| w > 0.0)
-        });
-    }
-
     // Should we store the results?
     let dryrun = params.dryrun.unwrap_or(false);
+    if params.internal_dynamic_variant_config.is_some() && !dryrun {
+        return Err(ErrorDetails::InvalidRequest {
+            message:
+                "If `internal_dynamic_variant_config` is used, `dryrun` must also be set to true"
+                    .to_string(),
+        }
+        .into());
+    }
+
+    let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
+    let mut templates = Cow::Borrowed(&config.templates);
+
+    prepare_candidate_variants(
+        &mut candidate_variants,
+        &mut params.tags,
+        params.variant_name.as_deref(),
+        params.internal_dynamic_variant_config,
+        &mut templates,
+    )?;
+    let templates = &*templates;
 
     // Increment the request count if we're not in dryrun mode
     if !dryrun {
@@ -329,7 +328,7 @@ pub async fn inference(
         let inference_config = InferenceConfig {
             function_name: &function_name,
             variant_name: &variant_name,
-            templates: &config.templates,
+            templates,
             tool_config: tool_config.as_ref(),
             dynamic_output_schema: output_schema.as_ref(),
             ids: InferenceIds {
@@ -491,13 +490,17 @@ pub async fn inference(
 /// If `model_name` is specified, then we use the special 'default' function
 /// Returns the function config and the function name
 fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig>, String), Error> {
-    match (&params.function_name, &params.model_name) {
+    match (
+        &params.function_name,
+        &params.model_name,
+        &params.internal_dynamic_variant_config,
+    ) {
         // Get the function config or return an error if it doesn't exist
-        (Some(function_name), None) => Ok((
+        (Some(function_name), None, _) => Ok((
             config.get_function(function_name)?.into_owned(),
             function_name.to_string(),
         )),
-        (None, Some(model_name)) => {
+        (None, Some(model_name), None) => {
             if params.variant_name.is_some() {
                 return Err(ErrorDetails::InvalidInferenceTarget {
                     message: "`variant_name` cannot be provided when using `model_name`"
@@ -537,12 +540,17 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))
         }
-        (Some(_), Some(_)) => Err(ErrorDetails::InvalidInferenceTarget {
+        (Some(_), Some(_), None) => Err(ErrorDetails::InvalidInferenceTarget {
             message: "Only one of `function_name` or `model_name` can be provided".to_string(),
         }
         .into()),
-        (None, None) => Err(ErrorDetails::InvalidInferenceTarget {
+        (None, None, None) => Err(ErrorDetails::InvalidInferenceTarget {
             message: "Either `function_name` or `model_name` must be provided".to_string(),
+        }
+        .into()),
+        (_, _, Some(_)) => Err(ErrorDetails::InvalidInferenceTarget {
+            message: "If a dynamic variant config is passed, `function_name` must be specified."
+                .to_string(),
         }
         .into()),
     }
@@ -643,7 +651,7 @@ fn create_stream(
             let config = config.clone();
             let async_write = config.gateway.observability.async_writes;
             let write_future = async move {
-                let templates = &config.templates;
+                let templates = Cow::Borrowed(&config.templates);
                 let collect_chunks_args = CollectChunksArgs {
                     value: buffer,
                     inference_id,
@@ -659,7 +667,7 @@ fn create_stream(
                     function_name: &function_name,
                     variant_name: &variant_name,
                     dynamic_output_schema,
-                    templates,
+                    templates: &templates,
                     tool_config: tool_config.as_ref(),
                     cached,
                     extra_body: extra_body.clone(),
@@ -1189,6 +1197,73 @@ impl ChatCompletionInferenceParams {
             self.stop_sequences = stop_sequences;
         }
     }
+}
+
+fn prepare_candidate_variants(
+    candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+    tags: &mut HashMap<String, String>,
+    pinned_variant_name: Option<&str>,
+    dynamic_variant_config: Option<UninitializedVariantInfo>,
+    template_config: &mut Cow<'_, TemplateConfig>,
+) -> Result<(), Error> {
+    match (pinned_variant_name, dynamic_variant_config) {
+        // If a variant is pinned, only that variant should be attempted
+        (Some(variant_name), None) => {
+            candidate_variants.retain(|k, _| k == variant_name);
+
+            // If the pinned variant doesn't exist, return an error
+            if candidate_variants.is_empty() {
+                return Err(ErrorDetails::UnknownVariant {
+                    name: variant_name.to_string(),
+                }
+                .into());
+            }
+            tags.insert(
+                "tensorzero::variant_pinned".to_string(),
+                variant_name.to_string(),
+            );
+        }
+        (None, Some(dynamic_variant_config)) => {
+            // Replace the variant config with just the dynamic variant
+            let candidate_variant_info = load_dynamic_variant_info(dynamic_variant_config)?;
+
+            // Replace templates in the template config with the ones passed in
+            // We Clone here so that we can still reference the old templates that don't conflict
+            let mut dynamic_template_config: TemplateConfig = template_config.clone().into_owned();
+            for path_with_contents in candidate_variant_info.get_all_template_paths() {
+                let template_name = path_with_contents.path.get_template_key();
+                if dynamic_template_config.contains_template(&template_name) {
+                    return Err(ErrorDetails::InvalidDynamicTemplatePath {
+                        name: template_name,
+                    }
+                    .into());
+                }
+                dynamic_template_config
+                    .add_template(template_name, path_with_contents.contents.clone())?;
+            }
+            *template_config = Cow::Owned(dynamic_template_config);
+            candidate_variants.clear();
+            candidate_variants.insert(
+                "tensorzero::dynamic_variant".to_string(),
+                Arc::new(candidate_variant_info),
+            );
+        }
+        (None, None) => {
+            // Remove all zero-weight variants - these can only be used if explicitly pinned above
+            candidate_variants.retain(|_, variant| {
+                // Retain 'None' and positive-weight variants, discarding zero-weight variants
+                variant.inner.weight().is_none_or(|w| w > 0.0)
+            });
+        }
+        _ => {
+            return Err(ErrorDetails::InvalidRequest {
+                message: "`variant_name` and `internal_dynamic_variant_config` cannot both be set."
+                    .to_string(),
+            }
+            .into())
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
