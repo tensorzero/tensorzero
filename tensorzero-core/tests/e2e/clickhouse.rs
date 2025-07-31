@@ -802,6 +802,7 @@ async fn test_bad_clickhouse_write() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clean_clickhouse_start() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    let database = clickhouse.database();
     let is_manual = clickhouse.is_cluster_configured();
     migration_manager::run(&clickhouse, is_manual)
         .await
@@ -829,16 +830,16 @@ async fn test_clean_clickhouse_start() {
             continue;
         }
         let engine_is_replicated = create_table_info.contains("Replicated");
-        let created_on_cluster = create_table_info.contains("ON CLUSTER");
+        let replica_info = clickhouse.run_query_synchronous_no_params(format!(
+            "SELECT total_replicas FROM system.replicas WHERE database = '{database}' AND table = '{table}'"
+        )).await.unwrap();
         if clickhouse.is_cluster_configured() {
             assert!(
                 engine_is_replicated,
                 "Table {table} is not replicated but ClickHouse is configured for replication."
             );
-            assert!(
-                created_on_cluster,
-                "Table {table} is not created on cluster but ClickHouse is configured for clustering",
-            );
+            let replica_count: u8 = replica_info.response.trim().parse().unwrap();
+            assert_eq!(replica_count, 2);
         }
     }
 }
