@@ -1,3 +1,4 @@
+use crate::clickhouse::TableName;
 use crate::function::FunctionConfigType;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
@@ -1088,10 +1089,10 @@ pub enum DatapointKind {
 }
 
 impl DatapointKind {
-    pub fn table_name(&self) -> &'static str {
+    pub fn table_name(&self) -> TableName {
         match self {
-            DatapointKind::Chat => "ChatInferenceDatapoint",
-            DatapointKind::Json => "JsonInferenceDatapoint",
+            DatapointKind::Chat => TableName::ChatInferenceDatapoint,
+            DatapointKind::Json => TableName::JsonInferenceDatapoint,
         }
     }
 }
