@@ -11,4 +11,15 @@ import type { OptimizerInfo } from "./OptimizerInfo";
 import type { ProviderTypesConfig } from "./ProviderTypesConfig";
 import type { StaticToolConfig } from "./StaticToolConfig";
 
-export type Config = { gateway: GatewayConfig, models: BaseModelTable<ModelConfig>, embedding_models: BaseModelTable<EmbeddingModelConfig>, functions: { [key in string]?: FunctionConfig }, metrics: { [key in string]?: MetricConfig }, tools: { [key in string]?: StaticToolConfig }, evaluations: { [key in string]?: EvaluationConfig }, object_store_info: ObjectStoreInfo | null, provider_types: ProviderTypesConfig, optimizers: { [key in string]?: OptimizerInfo }, };
+export type Config = {
+  gateway: GatewayConfig;
+  models: BaseModelTable<ModelConfig>;
+  embedding_models: BaseModelTable<EmbeddingModelConfig>;
+  functions: { [key in string]?: FunctionConfig };
+  metrics: { [key in string]?: MetricConfig };
+  tools: { [key in string]?: StaticToolConfig };
+  evaluations: { [key in string]?: EvaluationConfig };
+  object_store_info: ObjectStoreInfo | null;
+  provider_types: ProviderTypesConfig;
+  optimizers: { [key in string]?: OptimizerInfo };
+};

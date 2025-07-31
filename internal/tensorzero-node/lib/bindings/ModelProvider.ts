@@ -4,8 +4,14 @@ import type { ExtraHeadersConfig } from "./ExtraHeadersConfig";
 import type { ProviderConfig } from "./ProviderConfig";
 import type { TimeoutsConfig } from "./TimeoutsConfig";
 
-export type ModelProvider = { name: string, config: ProviderConfig, extra_headers: ExtraHeadersConfig | null, extra_body: ExtraBodyConfig | null, timeouts: TimeoutsConfig | null, 
-/**
- * See `UninitializedModelProvider.discard_unknown_chunks`.
- */
-discard_unknown_chunks: boolean, };
+export type ModelProvider = {
+  name: string;
+  config: ProviderConfig;
+  extra_headers: ExtraHeadersConfig | null;
+  extra_body: ExtraBodyConfig | null;
+  timeouts: TimeoutsConfig | null;
+  /**
+   * See `UninitializedModelProvider.discard_unknown_chunks`.
+   */
+  discard_unknown_chunks: boolean;
+};

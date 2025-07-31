@@ -5,4 +5,9 @@ import type { ChatCompletionConfig } from "./ChatCompletionConfig";
 import type { DiclConfig } from "./DiclConfig";
 import type { MixtureOfNConfig } from "./MixtureOfNConfig";
 
-export type VariantConfig = { "type": "chat_completion" } & ChatCompletionConfig | { "type": "best_of_n_sampling" } & BestOfNSamplingConfig | { "type": "dicl" } & DiclConfig | { "type": "mixture_of_n" } & MixtureOfNConfig | { "type": "chain_of_thought" } & ChainOfThoughtConfig;
+export type VariantConfig =
+  | ({ type: "chat_completion" } & ChatCompletionConfig)
+  | ({ type: "best_of_n_sampling" } & BestOfNSamplingConfig)
+  | ({ type: "dicl" } & DiclConfig)
+  | ({ type: "mixture_of_n" } & MixtureOfNConfig)
+  | ({ type: "chain_of_thought" } & ChainOfThoughtConfig);
