@@ -1,5 +1,7 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
+use crate::clickhouse::migration_manager::migrations::create_cluster_clause;
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
 
 use super::{check_column_exists, check_table_exists, get_column_type};
@@ -15,6 +17,7 @@ use async_trait::async_trait;
 /// debugging and observability of batch requests.
 pub struct Migration0008<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub config: &'a Config,
 }
 
 #[async_trait]
@@ -99,51 +102,57 @@ impl Migration for Migration0008<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        
         // Add a `raw_request` column, a `raw_response` column, a `function_name` column and a `variant_name` column
         // to the `BatchRequest` table
-        let query = r"
-            ALTER TABLE BatchRequest
+        let query = format!(
+            "ALTER TABLE BatchRequest {cluster_clause}
             ADD COLUMN IF NOT EXISTS raw_request String,
             ADD COLUMN IF NOT EXISTS raw_response String,
             ADD COLUMN IF NOT EXISTS function_name LowCardinality(String),
             ADD COLUMN IF NOT EXISTS variant_name LowCardinality(String),
-            MODIFY COLUMN errors Array(String);";
+            MODIFY COLUMN errors Array(String);"
+        );
         // NOTE: this MODIFY COLUMN errors statement would convert data in bad ways
         // HOWEVER, TensorZero at the point of writing has never actually written any errors to the errors column
         // so this is safe to do.
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Alter the `response_time_ms` column of `ModelInference` to be a nullable column
-        let query = r"
-            ALTER TABLE ModelInference
-            MODIFY COLUMN response_time_ms Nullable(UInt32)
-        ";
+        let query = format!(
+            "ALTER TABLE ModelInference {cluster_clause}
+            MODIFY COLUMN response_time_ms Nullable(UInt32)"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Alter the `processing_time_ms` column of `ChatInference` to be a nullable column
-        let query = r"
-            ALTER TABLE ChatInference
-            MODIFY COLUMN processing_time_ms Nullable(UInt32)
-        ";
+        let query = format!(
+            "ALTER TABLE ChatInference {cluster_clause}
+            MODIFY COLUMN processing_time_ms Nullable(UInt32)"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Alter the `processing_time_ms` column of `JsonInference` to be a nullable column
-        let query = r"
-            ALTER TABLE JsonInference
-            MODIFY COLUMN processing_time_ms Nullable(UInt32)
-        ";
+        let query = format!(
+            "ALTER TABLE JsonInference {cluster_clause}
+            MODIFY COLUMN processing_time_ms Nullable(UInt32)"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         Ok(())
@@ -156,21 +165,25 @@ impl Migration for Migration0008<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
         // NOTE - we do not try to roll back the 'BatchRequest.errors' column, as
         // ALTER TABLE MODIFY COLUMN' cannot change an array back into a Map
         // There shouldn't be anything in the database when this runs, so this is fine -
         // re-applying the migration after a rollback will just leave the 'errors' column unchanged
-        "/* Change the timing columns back to non-nullable types */\
-            ALTER TABLE ModelInference MODIFY COLUMN response_time_ms UInt32;
-            ALTER TABLE ChatInference MODIFY COLUMN processing_time_ms UInt32;
-            ALTER TABLE JsonInference MODIFY COLUMN processing_time_ms UInt32;
+        format!(
+            "/* Change the timing columns back to non-nullable types */\
+            ALTER TABLE ModelInference {cluster_clause} MODIFY COLUMN response_time_ms UInt32;
+            ALTER TABLE ChatInference {cluster_clause} MODIFY COLUMN processing_time_ms UInt32;
+            ALTER TABLE JsonInference {cluster_clause} MODIFY COLUMN processing_time_ms UInt32;
             /* Drop the columns */\
-            ALTER TABLE BatchRequest \
+            ALTER TABLE BatchRequest {cluster_clause} \
             DROP COLUMN raw_request,\
             DROP COLUMN raw_response,\
             DROP COLUMN function_name,\
-            DROP COLUMN variant_name;
-        "
-        .to_string()
+            DROP COLUMN variant_name;"
+        )
     }
 }

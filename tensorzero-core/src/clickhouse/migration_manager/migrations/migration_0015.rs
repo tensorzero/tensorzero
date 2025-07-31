@@ -1,5 +1,7 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
+use crate::clickhouse::migration_manager::migrations::create_cluster_clause;
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::Error;
 use async_trait::async_trait;
 
@@ -8,6 +10,7 @@ use super::get_column_type;
 /// This migration is used to mark the `input_tokens` and `output_tokens` columns as nullable in the `ModelInference` table.
 pub struct Migration0015<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub config: &'a Config,
 }
 
 #[async_trait]
@@ -36,35 +39,44 @@ impl Migration for Migration0015<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        
         // Alter the `input_tokens` column of `ModelInference` to be a nullable column
-        let query = r"
-            ALTER TABLE ModelInference
-            MODIFY COLUMN input_tokens Nullable(UInt32)
-        ";
+        let query = format!(
+            "ALTER TABLE ModelInference {cluster_clause}
+            MODIFY COLUMN input_tokens Nullable(UInt32)"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Alter the `output_tokens` column of `ModelInference` to be a nullable column
-        let query = r"
-            ALTER TABLE ModelInference
-            MODIFY COLUMN output_tokens Nullable(UInt32)
-        ";
+        let query = format!(
+            "ALTER TABLE ModelInference {cluster_clause}
+            MODIFY COLUMN output_tokens Nullable(UInt32)"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Change the columns back to non-nullable types */\
-            ALTER TABLE ModelInference MODIFY COLUMN input_tokens UInt32;
-            ALTER TABLE ModelInference MODIFY COLUMN output_tokens UInt32;
-            "
-        .to_string()
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        format!(
+            "/* Change the columns back to non-nullable types */\
+            ALTER TABLE ModelInference {cluster_clause} MODIFY COLUMN input_tokens UInt32;
+            ALTER TABLE ModelInference {cluster_clause} MODIFY COLUMN output_tokens UInt32;"
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

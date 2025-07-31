@@ -66,7 +66,7 @@ pub fn make_all_migrations<'a>(
         Box::new(Migration0006 { clickhouse, config }),
         // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0013
         // Box::new(Migration0007 { clickhouse }),
-        Box::new(Migration0008 { clickhouse }),
+        Box::new(Migration0008 { clickhouse, config }),
         Box::new(Migration0009 { clickhouse, config }),
         // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0013
         // Box::new(Migration0010 { clickhouse }),
@@ -77,7 +77,7 @@ pub fn make_all_migrations<'a>(
         // Box::new(Migration0013 { clickhouse }),
         // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0016
         // Box::new(Migration0014 { clickhouse }),
-        Box::new(Migration0015 { clickhouse }),
+        Box::new(Migration0015 { clickhouse, config }),
         Box::new(Migration0016 { clickhouse, config }),
         Box::new(Migration0017 { clickhouse }),
         Box::new(Migration0018 { clickhouse }),
@@ -92,8 +92,8 @@ pub fn make_all_migrations<'a>(
         Box::new(Migration0028 { clickhouse, config }),
         Box::new(Migration0029 { clickhouse }),
         Box::new(Migration0030 { clickhouse }),
-        Box::new(Migration0031 { clickhouse }),
-        Box::new(Migration0032 { clickhouse }),
+        Box::new(Migration0031 { clickhouse, config }),
+        Box::new(Migration0032 { clickhouse, config }),
         Box::new(Migration0033 { clickhouse, config }),
         Box::new(Migration0034 { clickhouse, config }),
     ];

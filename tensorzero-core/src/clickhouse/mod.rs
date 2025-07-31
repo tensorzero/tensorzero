@@ -487,21 +487,82 @@ impl ClickHouseConnectionInfo {
             "MergeTree()".to_string()
         };
         
-        let migration_table_query = format!(
-            r"CREATE TABLE TensorZeroMigration {cluster_clause} (
-                migration_id UInt32,
-                migration_name String,
-                gateway_version String,
-                gateway_git_sha String,
-                applied_at DateTime64(6, 'UTC') DEFAULT now(),
-                execution_time_ms UInt64,
-                extra_data Nullable(String)
-            )
-            ENGINE = {engine}
-            PRIMARY KEY (migration_id)"
+        // Check if TensorZeroMigration table already exists
+        let table_exists_query = format!(
+            "SELECT COUNT(*) FROM system.tables WHERE database = '{}' AND name = 'TensorZeroMigration'",
+            self.database()
         );
+        let table_exists_response = self.run_query_synchronous_no_params(table_exists_query).await?;
+        let table_exists: u64 = table_exists_response.response.trim().parse().unwrap_or(0);
         
-        self.run_query_synchronous_no_params(migration_table_query).await?;
+        if table_exists > 0 {
+            // Table exists, check if we need to convert from non-replicated to replicated
+            if config.clickhouse.replication_enabled {
+                let engine_query = format!(
+                    "SELECT engine FROM system.tables WHERE database = '{}' AND name = 'TensorZeroMigration'",
+                    self.database()
+                );
+                let engine_response = self.run_query_synchronous_no_params(engine_query).await?;
+                let current_engine = engine_response.response.trim();
+                
+                // If table exists but is not replicated, we need to convert it
+                if !current_engine.starts_with("Replicated") {
+                    tracing::info!("Converting TensorZeroMigration table from non-replicated to replicated engine");
+                    
+                    let temp_table_name = "TensorZeroMigration_replicated_temp";
+                    
+                    // Clean up any existing temp table from previous failed runs
+                    let cleanup_query = format!("DROP TABLE IF EXISTS {temp_table_name}");
+                    let _ = self.run_query_synchronous_no_params(cleanup_query).await; // Ignore errors
+                    
+                    // Create temporary replicated table (without ON CLUSTER for temp table)
+                    let temp_table_query = format!(
+                        r"CREATE TABLE {temp_table_name} (
+                            migration_id UInt32,
+                            migration_name String,
+                            gateway_version String,
+                            gateway_git_sha String,
+                            applied_at DateTime64(6, 'UTC') DEFAULT now(),
+                            execution_time_ms UInt64,
+                            extra_data Nullable(String)
+                        )
+                        ENGINE = {engine}
+                        PRIMARY KEY (migration_id)"
+                    );
+                    self.run_query_synchronous_no_params(temp_table_query).await?;
+                    
+                    // Copy data from original table to temporary table
+                    let copy_query = format!("INSERT INTO {temp_table_name} SELECT * FROM TensorZeroMigration");
+                    self.run_query_synchronous_no_params(copy_query).await?;
+                    
+                    // Drop original table
+                    let drop_query = "DROP TABLE TensorZeroMigration".to_string();
+                    self.run_query_synchronous_no_params(drop_query).await?;
+                    
+                    // Rename temporary table to original name
+                    let rename_query = format!("RENAME TABLE {temp_table_name} TO TensorZeroMigration");
+                    self.run_query_synchronous_no_params(rename_query).await?;
+                    
+                    tracing::info!("Successfully converted TensorZeroMigration table to replicated engine");
+                }
+            }
+        } else {
+            // Table doesn't exist, create it with IF NOT EXISTS for safety in cluster mode
+            let migration_table_query = format!(
+                r"CREATE TABLE IF NOT EXISTS TensorZeroMigration {cluster_clause} (
+                    migration_id UInt32,
+                    migration_name String,
+                    gateway_version String,
+                    gateway_git_sha String,
+                    applied_at DateTime64(6, 'UTC') DEFAULT now(),
+                    execution_time_ms UInt64,
+                    extra_data Nullable(String)
+                )
+                ENGINE = {engine}
+                PRIMARY KEY (migration_id)"
+            );
+            self.run_query_synchronous_no_params(migration_table_query).await?;
+        }
         Ok(())
     }
 

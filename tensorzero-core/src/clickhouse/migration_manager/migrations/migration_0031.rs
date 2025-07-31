@@ -1,5 +1,7 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
+use crate::clickhouse::migration_manager::migrations::create_cluster_clause;
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::Error;
 use async_trait::async_trait;
 
@@ -8,6 +10,7 @@ use super::check_column_exists;
 /// This migration adds a `ttft_ms` column to the `ChatInference` and `JsonInference` tables.
 pub struct Migration0031<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub config: &'a Config,
 }
 
 const MIGRATION_ID: &str = "0031";
@@ -28,16 +31,19 @@ impl Migration for Migration0031<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        
         self.clickhouse
             .run_query_synchronous_no_params(
-                r"ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS ttft_ms Nullable(UInt32);"
-                    .to_string(),
+                format!("ALTER TABLE ChatInference {cluster_clause} ADD COLUMN IF NOT EXISTS ttft_ms Nullable(UInt32);")
             )
             .await?;
         self.clickhouse
             .run_query_synchronous_no_params(
-                r"ALTER TABLE JsonInference ADD COLUMN IF NOT EXISTS ttft_ms Nullable(UInt32);"
-                    .to_string(),
+                format!("ALTER TABLE JsonInference {cluster_clause} ADD COLUMN IF NOT EXISTS ttft_ms Nullable(UInt32);")
             )
             .await?;
 
@@ -45,9 +51,14 @@ impl Migration for Migration0031<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r"ALTER TABLE ChatInference DROP COLUMN ttft_ms;
-        ALTER TABLE JsonInference DROP COLUMN ttft_ms;"
-            .to_string()
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        format!(
+            "ALTER TABLE ChatInference {cluster_clause} DROP COLUMN ttft_ms;
+        ALTER TABLE JsonInference {cluster_clause} DROP COLUMN ttft_ms;"
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

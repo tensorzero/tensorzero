@@ -139,47 +139,51 @@ impl Migration for Migration0003<'_> {
             .await?;
 
         // Add a column `tags` to the `BooleanMetricFeedback` table
-        let query = r"
-            ALTER TABLE BooleanMetricFeedback
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
+        let query = format!(
+            "ALTER TABLE BooleanMetricFeedback {cluster_clause}
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Add a column `tags` to the `CommentFeedback` table
-        let query = r"
-            ALTER TABLE CommentFeedback
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
+        let query = format!(
+            "ALTER TABLE CommentFeedback {cluster_clause}
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Add a column `tags` to the `DemonstrationFeedback` table
-        let query = r"
-            ALTER TABLE DemonstrationFeedback
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
+        let query = format!(
+            "ALTER TABLE DemonstrationFeedback {cluster_clause}
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Add a column `tags` to the `FloatMetricFeedback` table
-        let query = r"
-            ALTER TABLE FloatMetricFeedback
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
+        let query = format!(
+            "ALTER TABLE FloatMetricFeedback {cluster_clause}
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // In the following few queries we create the materialized views that map the tags from the original tables to the new `FeedbackTag` table
         // We do not need to handle the case where there are already tags in the table since we created those columns just now.
         // So, we don't worry about timestamps for cutting over to the materialized views.
         // Create the materialized view for the `FeedbackTag` table from BooleanMetricFeedback
-        let query = r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackTagView
+        let query = format!(
+            "CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackTagView {cluster_clause}
             TO FeedbackTag
             AS
                 SELECT
@@ -188,16 +192,16 @@ impl Migration for Migration0003<'_> {
                     tags[key] as value,
                     id as feedback_id
                 FROM BooleanMetricFeedback
-                ARRAY JOIN mapKeys(tags) as key
-            ";
+                ARRAY JOIN mapKeys(tags) as key"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from CommentFeedback
-        let query = r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS CommentFeedbackTagView
+        let query = format!(
+            "CREATE MATERIALIZED VIEW IF NOT EXISTS CommentFeedbackTagView {cluster_clause}
             TO FeedbackTag
             AS
                 SELECT
@@ -206,16 +210,16 @@ impl Migration for Migration0003<'_> {
                     tags[key] as value,
                     id as feedback_id
                 FROM CommentFeedback
-                ARRAY JOIN mapKeys(tags) as key
-            ";
+                ARRAY JOIN mapKeys(tags) as key"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from DemonstrationFeedback
-        let query = r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS DemonstrationFeedbackTagView
+        let query = format!(
+            "CREATE MATERIALIZED VIEW IF NOT EXISTS DemonstrationFeedbackTagView {cluster_clause}
             TO FeedbackTag
             AS
                 SELECT
@@ -224,16 +228,16 @@ impl Migration for Migration0003<'_> {
                     tags[key] as value,
                     id as feedback_id
                 FROM DemonstrationFeedback
-                ARRAY JOIN mapKeys(tags) as key
-            ";
+                ARRAY JOIN mapKeys(tags) as key"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from FloatMetricFeedback
-        let query = r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackTagView
+        let query = format!(
+            "CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackTagView {cluster_clause}
             TO FeedbackTag
             AS
                 SELECT
@@ -242,30 +246,35 @@ impl Migration for Migration0003<'_> {
                     tags[key] as value,
                     id as feedback_id
                 FROM FloatMetricFeedback
-                ARRAY JOIN mapKeys(tags) as key
-            ";
+                ARRAY JOIN mapKeys(tags) as key"
+        );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS BooleanMetricFeedbackTagView;
-            DROP VIEW IF EXISTS CommentFeedbackTagView;
-            DROP VIEW IF EXISTS DemonstrationFeedbackTagView;
-            DROP VIEW IF EXISTS FloatMetricFeedbackTagView;
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        format!(
+            "/* Drop the materialized views */\
+            DROP VIEW IF EXISTS BooleanMetricFeedbackTagView {cluster_clause};
+            DROP VIEW IF EXISTS CommentFeedbackTagView {cluster_clause};
+            DROP VIEW IF EXISTS DemonstrationFeedbackTagView {cluster_clause};
+            DROP VIEW IF EXISTS FloatMetricFeedbackTagView {cluster_clause};
             /* Drop the table */\
-            DROP TABLE IF EXISTS FeedbackTag;
+            DROP TABLE IF EXISTS FeedbackTag {cluster_clause};
             /* Drop the columns */\
-            ALTER TABLE BooleanMetricFeedback DROP COLUMN tags;
-            ALTER TABLE CommentFeedback DROP COLUMN tags;
-            ALTER TABLE DemonstrationFeedback DROP COLUMN tags;
-            ALTER TABLE FloatMetricFeedback DROP COLUMN tags;"
-            .to_string()
+            ALTER TABLE BooleanMetricFeedback {cluster_clause} DROP COLUMN tags;
+            ALTER TABLE CommentFeedback {cluster_clause} DROP COLUMN tags;
+            ALTER TABLE DemonstrationFeedback {cluster_clause} DROP COLUMN tags;
+            ALTER TABLE FloatMetricFeedback {cluster_clause} DROP COLUMN tags;"
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

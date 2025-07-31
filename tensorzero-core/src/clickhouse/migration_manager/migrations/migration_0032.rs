@@ -1,5 +1,7 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
+use crate::clickhouse::migration_manager::migrations::create_cluster_clause;
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::Error;
 use async_trait::async_trait;
 
@@ -12,6 +14,7 @@ use super::check_column_exists;
 /// This is used to determine whether the datapoint is a custom datapoint or not for the purposes of deduplication.
 pub struct Migration0032<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub config: &'a Config,
 }
 
 const MIGRATION_ID: &str = "0032";
@@ -42,16 +45,19 @@ impl Migration for Migration0032<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        
         self.clickhouse
             .run_query_synchronous_no_params(
-                r"ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS is_custom Bool DEFAULT false;"
-                    .to_string(),
+                format!("ALTER TABLE ChatInferenceDatapoint {cluster_clause} ADD COLUMN IF NOT EXISTS is_custom Bool DEFAULT false;")
             )
             .await?;
         self.clickhouse
             .run_query_synchronous_no_params(
-                r"ALTER TABLE JsonInferenceDatapoint ADD COLUMN IF NOT EXISTS is_custom Bool DEFAULT false;"
-                    .to_string(),
+                format!("ALTER TABLE JsonInferenceDatapoint {cluster_clause} ADD COLUMN IF NOT EXISTS is_custom Bool DEFAULT false;")
             )
             .await?;
 
@@ -59,9 +65,14 @@ impl Migration for Migration0032<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r"ALTER TABLE ChatInferenceDatapoint DROP COLUMN is_custom;
-        ALTER TABLE JsonInferenceDatapoint DROP COLUMN is_custom;"
-            .to_string()
+        let cluster_clause = create_cluster_clause(
+            self.config.clickhouse.replication_enabled, 
+            &self.config.clickhouse.cluster_name
+        );
+        format!(
+            "ALTER TABLE ChatInferenceDatapoint {cluster_clause} DROP COLUMN is_custom;
+        ALTER TABLE JsonInferenceDatapoint {cluster_clause} DROP COLUMN is_custom;"
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

@@ -817,27 +817,34 @@ async fn test_migration_0013_old_table() {
         }),
         Box::new(Migration0002 {
             clickhouse: &clickhouse,
+            config: &default_config,
         }),
         Box::new(Migration0003 {
             clickhouse: &clickhouse,
+            config: &default_config,
         }),
         Box::new(Migration0004 {
             clickhouse: &clickhouse,
         }),
         Box::new(Migration0005 {
             clickhouse: &clickhouse,
+            config: &default_config,
         }),
         Box::new(Migration0006 {
             clickhouse: &clickhouse,
+            config: &default_config,
         }),
         Box::new(Migration0008 {
             clickhouse: &clickhouse,
+            config: &default_config,
         }),
         Box::new(Migration0009 {
             clickhouse: &clickhouse,
+            config: &default_config,
         }),
         Box::new(Migration0011 {
             clickhouse: &clickhouse,
+            config: &default_config,
         }),
     ];
 
@@ -896,27 +903,34 @@ async fn test_migration_0013_data_no_table() {
         }),
         Box::new(Migration0002 {
             clickhouse: &clickhouse,
+            config: &default_config,
         }),
         Box::new(Migration0003 {
             clickhouse: &clickhouse,
+            config: &default_config,
         }),
         Box::new(Migration0004 {
             clickhouse: &clickhouse,
         }),
         Box::new(Migration0005 {
             clickhouse: &clickhouse,
+            config: &default_config,
         }),
         Box::new(Migration0006 {
             clickhouse: &clickhouse,
+            config: &default_config,
         }),
         Box::new(Migration0008 {
             clickhouse: &clickhouse,
+            config: &default_config,
         }),
         Box::new(Migration0009 {
             clickhouse: &clickhouse,
+            config: &default_config,
         }),
         Box::new(Migration0011 {
             clickhouse: &clickhouse,
+            config: &default_config,
         }),
     ];
 
