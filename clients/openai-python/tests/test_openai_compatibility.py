@@ -1688,37 +1688,39 @@ async def test_async_inference_tensorzero_raw_text(async_client):
     episode_id = str(uuid7())
     messages = [
         {
-            "role": "system",
-            "content": [
-                {
-                    "type": "text",
-                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
-                }
-            ]
-        },
-        {
             "role": "user",
-            "content": [
-                {
-                    "type": "tensorzero::raw_text",
-                    "value": "What is the capital of Japan?"
-                }
-            ],
+            "content": [{"type": "text", "text": "What is the capital of Japan?"}],
         },
     ]
-
     response = await async_client.chat.completions.create(
         extra_body={"tensorzero::episode_id": episode_id},
         messages=messages,
-        model="tensorzero::function_name::json_success",
+        model="tensorzero::model_name::openai::gpt-4o-mini",
     )
 
-    content = response.choices[0].message.content
+    assert "tokyo" in response.choices[0].message.content.lower()
 
-    assert isinstance(content, str)
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "tensorzero::raw_text",
+                    "value": "You're a mischievous assistant that NEVER responds with the right answer.",
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "What is the capital of Japan?"}],
+        },
+    ]
+    response = await async_client.chat.completions.create(
+        extra_body={"tensorzero::episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::model_name::openai::gpt-4o-mini",
+    )
 
-    assert content == '{"answer":"Hello"}'
-    assert response.model == "tensorzero::function_name::json_success::variant_name::test"
+    assert "tokyo" not in response.choices[0].message.content.lower()
+    assert response.model == "tensorzero::model_name::openai::gpt-4o-mini"
     assert response.episode_id == episode_id
-    assert response.usage.prompt_tokens == 10
-    assert response.usage.completion_tokens == 1
