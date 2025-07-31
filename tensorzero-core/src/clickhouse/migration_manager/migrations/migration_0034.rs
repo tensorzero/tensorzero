@@ -80,7 +80,7 @@ impl Migration for Migration0034<'_> {
         };
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS CumulativeUsageView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS CumulativeUsageView{on_cluster_name}
             TO CumulativeUsage
             AS
             SELECT
@@ -173,8 +173,8 @@ impl Migration for Migration0034<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             r"
-        DROP TABLE IF EXISTS CumulativeUsageView;
-        DROP TABLE IF EXISTS CumulativeUsage{on_cluster_name};"
+        DROP TABLE IF EXISTS CumulativeUsageView{on_cluster_name} SYNC;
+        DROP TABLE IF EXISTS CumulativeUsage{on_cluster_name} SYNC;"
         )
     }
 

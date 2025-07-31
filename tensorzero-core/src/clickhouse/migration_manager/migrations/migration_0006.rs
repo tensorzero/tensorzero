@@ -138,15 +138,17 @@ impl Migration for Migration0006<'_> {
             .await?;
 
         // Create the materialized view for the BatchIdByInferenceId table
-        let query = r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS BatchIdByInferenceIdView
+        let query = format!(
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS BatchIdByInferenceIdView{on_cluster_name}
             TO BatchIdByInferenceId
             AS
                 SELECT
                     inference_id,
                     batch_id
                 FROM BatchModelInference
-            ";
+            "
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -164,11 +166,11 @@ impl Migration for Migration0006<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS BatchIdByInferenceIdView;
+            DROP VIEW IF EXISTS BatchIdByInferenceIdView{on_cluster_name};
             /* Drop the tables */\
-            DROP TABLE IF EXISTS BatchIdByInferenceId{on_cluster_name};
-            DROP TABLE IF EXISTS BatchRequest{on_cluster_name};
-            DROP TABLE IF EXISTS BatchModelInference{on_cluster_name};
+            DROP TABLE IF EXISTS BatchIdByInferenceId{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS BatchRequest{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS BatchModelInference{on_cluster_name} SYNC;
         "
         )
     }

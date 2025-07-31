@@ -259,17 +259,17 @@ impl Migration for Migration0000<'_> {
 
         format!(
             "/* **CAREFUL: THIS WILL DELETE ALL DATA** */\
-            /* Drop each table first (this seems to be required for replicated setups) */
-            DROP TABLE IF EXISTS BooleanMetricFeedback{on_cluster_name};
-            DROP TABLE IF EXISTS CommentFeedback{on_cluster_name};
-            DROP TABLE IF EXISTS DemonstrationFeedback{on_cluster_name};
-            DROP TABLE IF EXISTS FloatMetricFeedback{on_cluster_name};
-            DROP TABLE IF EXISTS ChatInference{on_cluster_name};
-            DROP TABLE IF EXISTS JsonInference{on_cluster_name};
-            DROP TABLE IF EXISTS ModelInference{on_cluster_name};
-            // Even though this is created elsewhere we should
-            // drop it here to ensure a truly clean start.
-            DROP TABLE IF EXISTS TensorZeroMigration{on_cluster_name};
+            /* Drop each table first (this seems to be required for replicated setups) */\
+            DROP TABLE IF EXISTS BooleanMetricFeedback{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS CommentFeedback{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS DemonstrationFeedback{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS FloatMetricFeedback{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS ChatInference{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS JsonInference{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS ModelInference{on_cluster_name} SYNC;
+            /* Even though this is created elsewhere we should */\
+            /* drop it here to ensure a truly clean start.*/\
+            DROP TABLE IF EXISTS TensorZeroMigration{on_cluster_name} SYNC;
             /* Drop the database */\
             DROP DATABASE IF EXISTS {database}{on_cluster_name};\
             /* **CAREFUL: THIS WILL DELETE ALL DATA** */"

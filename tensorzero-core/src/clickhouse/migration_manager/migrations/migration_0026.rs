@@ -100,13 +100,15 @@ impl Migration for Migration0026<'_> {
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
-        let query = r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS DynamicEvaluationRunEpisodeByRunIdView
+        let query = format!(
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS DynamicEvaluationRunEpisodeByRunIdView{on_cluster_name}
                 TO DynamicEvaluationRunEpisodeByRunId
                 AS
                 SELECT * EXCEPT run_id, toUInt128(run_id) AS run_id_uint FROM DynamicEvaluationRunEpisode
                 ORDER BY run_id_uint, episode_id_uint;
-        ";
+        "
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -139,14 +141,16 @@ impl Migration for Migration0026<'_> {
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
-        let query = r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS DynamicEvaluationRunByProjectNameView
+        let query = format!(
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS DynamicEvaluationRunByProjectNameView{on_cluster_name}
                 TO DynamicEvaluationRunByProjectName
                 AS
                 SELECT * FROM DynamicEvaluationRun
                 WHERE project_name IS NOT NULL
                 ORDER BY project_name, run_id_uint;
-        ";
+        "
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -158,11 +162,11 @@ impl Migration for Migration0026<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS DynamicEvaluationRunEpisodeByRunIdView;
-            DROP VIEW IF EXISTS DynamicEvaluationRunByProjectNameView;
+            DROP VIEW IF EXISTS DynamicEvaluationRunEpisodeByRunIdView{on_cluster_name};
+            DROP VIEW IF EXISTS DynamicEvaluationRunByProjectNameView{on_cluster_name};
             /* Drop the tables */\
-            DROP TABLE IF EXISTS DynamicEvaluationRunEpisodeByRunId{on_cluster_name};
-            DROP TABLE IF EXISTS DynamicEvaluationRunByProjectName{on_cluster_name};
+            DROP TABLE IF EXISTS DynamicEvaluationRunEpisodeByRunId{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS DynamicEvaluationRunByProjectName{on_cluster_name} SYNC;
             "
         )
     }

@@ -79,7 +79,7 @@ impl Migration for Migration0033<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             r"
-        DROP TABLE IF EXISTS DeploymentID{on_cluster_name};
+        DROP TABLE IF EXISTS DeploymentID{on_cluster_name} SYNC;
         "
         )
     }

@@ -67,7 +67,7 @@ impl Migration for Migration0002<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             "/* Drop the table */\
-            DROP TABLE IF EXISTS DynamicInContextLearningExample{on_cluster_name};"
+            DROP TABLE IF EXISTS DynamicInContextLearningExample{on_cluster_name} SYNC;"
         )
     }
 

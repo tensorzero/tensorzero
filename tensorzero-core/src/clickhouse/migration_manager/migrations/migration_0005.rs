@@ -140,8 +140,9 @@ impl Migration for Migration0005<'_> {
         // We do not need to handle the case where there are already tags in the table since we created those columns just now.
         // So, we don't worry about timestamps for cutting over to the materialized views.
         // Create the materialized view for the `InferenceTag` table from ChatInference
-        let query = r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceTagView
+        let query = format!(
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceTagView{on_cluster_name}
             TO InferenceTag
             AS
                 SELECT
@@ -151,15 +152,17 @@ impl Migration for Migration0005<'_> {
                     id as inference_id
                 FROM ChatInference
                 ARRAY JOIN mapKeys(tags) as key
-            ";
+            "
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `InferenceTag` table from JsonInference
-        let query = r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceTagView
+        let query = format!(
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceTagView{on_cluster_name}
             TO InferenceTag
             AS
                 SELECT
@@ -169,7 +172,8 @@ impl Migration for Migration0005<'_> {
                     id as inference_id
                 FROM JsonInference
                 ARRAY JOIN mapKeys(tags) as key
-            ";
+            "
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -181,10 +185,10 @@ impl Migration for Migration0005<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS ChatInferenceTagView;
-            DROP VIEW IF EXISTS JsonInferenceTagView;
+            DROP VIEW IF EXISTS ChatInferenceTagView{on_cluster_name};
+            DROP VIEW IF EXISTS JsonInferenceTagView{on_cluster_name};
             /* Drop the `InferenceTag` table */\
-            DROP TABLE IF EXISTS InferenceTag{on_cluster_name};
+            DROP TABLE IF EXISTS InferenceTag{on_cluster_name} SYNC;
             /* Drop the `tags` column from the original inference tables */\
             ALTER TABLE ChatInference DROP COLUMN tags;
             ALTER TABLE JsonInference DROP COLUMN tags;

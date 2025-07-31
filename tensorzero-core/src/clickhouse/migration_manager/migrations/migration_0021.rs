@@ -187,7 +187,7 @@ impl Migration for Migration0021<'_> {
 
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS TagChatInferenceView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS TagChatInferenceView{on_cluster_name}
             TO TagInference
             AS
                 SELECT
@@ -210,7 +210,7 @@ impl Migration for Migration0021<'_> {
 
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS TagJsonInferenceView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS TagJsonInferenceView{on_cluster_name}
             TO TagInference
             AS
                 SELECT
@@ -288,11 +288,11 @@ impl Migration for Migration0021<'_> {
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!("/* Drop the materialized views */\
-        DROP VIEW IF EXISTS TagChatInferenceView;
-        DROP VIEW IF EXISTS TagJsonInferenceView;
+        DROP VIEW IF EXISTS TagChatInferenceView{on_cluster_name};
+        DROP VIEW IF EXISTS TagJsonInferenceView{on_cluster_name};
         \n
         /* Drop the `TagInference` table */\
-        DROP TABLE IF EXISTS TagInference{on_cluster_name};
+        DROP TABLE IF EXISTS TagInference{on_cluster_name} SYNC;
         /* Drop the `staled_at` column in the datapoint tables */\
         ALTER TABLE ChatInferenceDatapoint DROP COLUMN staled_at;
         ALTER TABLE JsonInferenceDatapoint DROP COLUMN staled_at;

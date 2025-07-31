@@ -83,7 +83,7 @@ impl Migration for Migration0011<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             "/* Drop the table */\
-                DROP TABLE IF EXISTS ModelInferenceCache{on_cluster_name};
+                DROP TABLE IF EXISTS ModelInferenceCache{on_cluster_name} SYNC;
             /* Drop the `cached` column from ModelInference */\
             ALTER TABLE ModelInference DROP COLUMN cached;
             "

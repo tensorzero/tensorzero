@@ -270,7 +270,7 @@ impl Migration for Migration0020<'_> {
         // IMPORTANT: The function_type column is now correctly set to 'chat'
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByIdView{on_cluster_name}
             TO InferenceById
             AS
                 SELECT
@@ -291,7 +291,7 @@ impl Migration for Migration0020<'_> {
         // IMPORTANT: The function_type column is now correctly set to 'json'
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByIdView{on_cluster_name}
             TO InferenceById
             AS
                 SELECT
@@ -313,7 +313,7 @@ impl Migration for Migration0020<'_> {
         // IMPORTANT: The function_type column is now correctly set to 'chat'
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByEpisodeIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByEpisodeIdView{on_cluster_name}
             TO InferenceByEpisodeId
             AS
                 SELECT
@@ -335,7 +335,7 @@ impl Migration for Migration0020<'_> {
         // IMPORTANT: The function_type column is now correctly set to 'json'
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByEpisodeIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByEpisodeIdView{on_cluster_name}
             TO InferenceByEpisodeId
             AS
                 SELECT
@@ -437,15 +437,15 @@ impl Migration for Migration0020<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS ChatInferenceByIdView;
-            DROP VIEW IF EXISTS JsonInferenceByIdView;
-            DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView;
-            DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView;
+            DROP VIEW IF EXISTS ChatInferenceByIdView{on_cluster_name};
+            DROP VIEW IF EXISTS JsonInferenceByIdView{on_cluster_name};
+            DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView{on_cluster_name};
+            DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView{on_cluster_name};
             /* Drop the function */\
             DROP FUNCTION IF EXISTS uint_to_uuid{on_cluster_name};
             /* Drop the tables */\
-            DROP TABLE IF EXISTS InferenceById{on_cluster_name};
-            DROP TABLE IF EXISTS InferenceByEpisodeId{on_cluster_name};
+            DROP TABLE IF EXISTS InferenceById{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS InferenceByEpisodeId{on_cluster_name} SYNC;
             "
         )
         .to_string()

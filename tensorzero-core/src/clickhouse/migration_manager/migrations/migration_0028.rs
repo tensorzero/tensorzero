@@ -130,7 +130,7 @@ impl Migration for Migration0028<'_> {
         // Create the materialized view for FloatMetricFeedback
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS StaticEvaluationFloatHumanFeedbackView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS StaticEvaluationFloatHumanFeedbackView{on_cluster_name}
             TO StaticEvaluationHumanFeedback
             AS
                 WITH float_human_feedback AS (
@@ -203,7 +203,7 @@ impl Migration for Migration0028<'_> {
         // Create the materialized view for BooleanMetricFeedback
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS StaticEvaluationBooleanHumanFeedbackView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS StaticEvaluationBooleanHumanFeedbackView{on_cluster_name}
             TO StaticEvaluationHumanFeedback
             AS
                 WITH boolean_human_feedback AS (
@@ -386,9 +386,9 @@ impl Migration for Migration0028<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             r"
-        DROP VIEW IF EXISTS StaticEvaluationFloatHumanFeedbackView;
-        DROP VIEW IF EXISTS StaticEvaluationBooleanHumanFeedbackView;
-        DROP TABLE IF EXISTS StaticEvaluationHumanFeedback{on_cluster_name};
+        DROP VIEW IF EXISTS StaticEvaluationFloatHumanFeedbackView{on_cluster_name};
+        DROP VIEW IF EXISTS StaticEvaluationBooleanHumanFeedbackView{on_cluster_name};
+        DROP TABLE IF EXISTS StaticEvaluationHumanFeedback{on_cluster_name} SYNC;
         "
         )
     }

@@ -172,8 +172,9 @@ impl Migration for Migration0003<'_> {
         // We do not need to handle the case where there are already tags in the table since we created those columns just now.
         // So, we don't worry about timestamps for cutting over to the materialized views.
         // Create the materialized view for the `FeedbackTag` table from BooleanMetricFeedback
-        let query = r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackTagView
+        let query = format!(
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackTagView{on_cluster_name}
             TO FeedbackTag
             AS
                 SELECT
@@ -183,15 +184,17 @@ impl Migration for Migration0003<'_> {
                     id as feedback_id
                 FROM BooleanMetricFeedback
                 ARRAY JOIN mapKeys(tags) as key
-            ";
+            "
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from CommentFeedback
-        let query = r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS CommentFeedbackTagView
+        let query = format!(
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS CommentFeedbackTagView{on_cluster_name}
             TO FeedbackTag
             AS
                 SELECT
@@ -201,15 +204,17 @@ impl Migration for Migration0003<'_> {
                     id as feedback_id
                 FROM CommentFeedback
                 ARRAY JOIN mapKeys(tags) as key
-            ";
+            "
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from DemonstrationFeedback
-        let query = r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS DemonstrationFeedbackTagView
+        let query = format!(
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS DemonstrationFeedbackTagView{on_cluster_name}
             TO FeedbackTag
             AS
                 SELECT
@@ -219,15 +224,17 @@ impl Migration for Migration0003<'_> {
                     id as feedback_id
                 FROM DemonstrationFeedback
                 ARRAY JOIN mapKeys(tags) as key
-            ";
+            "
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from FloatMetricFeedback
-        let query = r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackTagView
+        let query = format!(
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackTagView{on_cluster_name}
             TO FeedbackTag
             AS
                 SELECT
@@ -237,7 +244,8 @@ impl Migration for Migration0003<'_> {
                     id as feedback_id
                 FROM FloatMetricFeedback
                 ARRAY JOIN mapKeys(tags) as key
-            ";
+            "
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -250,12 +258,12 @@ impl Migration for Migration0003<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS BooleanMetricFeedbackTagView;
-            DROP VIEW IF EXISTS CommentFeedbackTagView;
-            DROP VIEW IF EXISTS DemonstrationFeedbackTagView;
-            DROP VIEW IF EXISTS FloatMetricFeedbackTagView;
+            DROP VIEW IF EXISTS BooleanMetricFeedbackTagView{on_cluster_name};
+            DROP VIEW IF EXISTS CommentFeedbackTagView{on_cluster_name};
+            DROP VIEW IF EXISTS DemonstrationFeedbackTagView{on_cluster_name};
+            DROP VIEW IF EXISTS FloatMetricFeedbackTagView{on_cluster_name};
             /* Drop the table */\
-            DROP TABLE IF EXISTS FeedbackTag{on_cluster_name};
+            DROP TABLE IF EXISTS FeedbackTag{on_cluster_name} SYNC;
             /* Drop the columns */\
             ALTER TABLE BooleanMetricFeedback DROP COLUMN tags;
             ALTER TABLE CommentFeedback DROP COLUMN tags;

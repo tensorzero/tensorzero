@@ -161,8 +161,8 @@ impl Migration for Migration0016<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             "/* Drop the tables */\
-            DROP TABLE IF EXISTS ChatInferenceDatapoint{on_cluster_name};
-            DROP TABLE IF EXISTS JsonInferenceDatapoint{on_cluster_name};
+            DROP TABLE IF EXISTS ChatInferenceDatapoint{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS JsonInferenceDatapoint{on_cluster_name} SYNC;
             "
         )
     }

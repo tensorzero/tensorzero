@@ -105,7 +105,7 @@ impl Migration for Migration0009<'_> {
         };
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackByTargetIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackByTargetIdView{on_cluster_name}
             TO BooleanMetricFeedbackByTargetId
             AS
                 SELECT
@@ -153,7 +153,7 @@ impl Migration for Migration0009<'_> {
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS CommentFeedbackByTargetIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS CommentFeedbackByTargetIdView{on_cluster_name}
             TO CommentFeedbackByTargetId
             AS
                 SELECT
@@ -200,7 +200,7 @@ impl Migration for Migration0009<'_> {
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS DemonstrationFeedbackByInferenceIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS DemonstrationFeedbackByInferenceIdView{on_cluster_name}
             TO DemonstrationFeedbackByInferenceId
             AS
                 SELECT
@@ -252,7 +252,7 @@ impl Migration for Migration0009<'_> {
         };
         let query = format!(
             r"
-           CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackByTargetIdView
+           CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackByTargetIdView{on_cluster_name}
            TO FloatMetricFeedbackByTargetId
            AS
                SELECT
@@ -356,15 +356,15 @@ impl Migration for Migration0009<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS BooleanMetricFeedbackByTargetIdView;
-            DROP VIEW IF EXISTS CommentFeedbackByTargetIdView;
-            DROP VIEW IF EXISTS DemonstrationFeedbackByInferenceIdView;
-            DROP VIEW IF EXISTS FloatMetricFeedbackByTargetIdView;
+            DROP VIEW IF EXISTS BooleanMetricFeedbackByTargetIdView{on_cluster_name};
+            DROP VIEW IF EXISTS CommentFeedbackByTargetIdView{on_cluster_name};
+            DROP VIEW IF EXISTS DemonstrationFeedbackByInferenceIdView{on_cluster_name};
+            DROP VIEW IF EXISTS FloatMetricFeedbackByTargetIdView{on_cluster_name};
             /* Drop the tables */\
-            DROP TABLE IF EXISTS BooleanMetricFeedbackByTargetId{on_cluster_name};
-            DROP TABLE IF EXISTS CommentFeedbackByTargetId{on_cluster_name};
-            DROP TABLE IF EXISTS DemonstrationFeedbackByInferenceId{on_cluster_name};
-            DROP TABLE IF EXISTS FloatMetricFeedbackByTargetId{on_cluster_name};
+            DROP TABLE IF EXISTS BooleanMetricFeedbackByTargetId{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS CommentFeedbackByTargetId{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS DemonstrationFeedbackByInferenceId{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS FloatMetricFeedbackByTargetId{on_cluster_name} SYNC;
             "
         )
     }

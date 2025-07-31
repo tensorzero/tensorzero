@@ -93,8 +93,8 @@ impl Migration for Migration0025<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             r"
-            DROP TABLE IF EXISTS DynamicEvaluationRunEpisode{on_cluster_name};
-            DROP TABLE IF EXISTS DynamicEvaluationRun{on_cluster_name};
+            DROP TABLE IF EXISTS DynamicEvaluationRunEpisode{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS DynamicEvaluationRun{on_cluster_name} SYNC;
         "
         )
     }
