@@ -26,7 +26,7 @@ use tensorzero_core::{
         validate_tags,
     },
     error::{Error, ErrorDetails},
-    gateway_util::{setup_clickhouse, setup_http_client, AppStateData, GatewayHandle},
+    gateway_util::{setup_clickhouse, setup_http_client, GatewayHandle},
 };
 use thiserror::Error;
 use tokio::{sync::Mutex, time::error::Elapsed};
@@ -1163,7 +1163,7 @@ impl Client {
     }
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
-    pub fn get_app_state_data(&self) -> Option<&AppStateData> {
+    pub fn get_app_state_data(&self) -> Option<&tensorzero_core::gateway_util::AppStateData> {
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.handle.app_state),
             _ => None,
