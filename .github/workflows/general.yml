@@ -364,7 +364,7 @@ jobs:
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
     # the main 'validate' job)
-    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-8x16' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-32x64' || 'ubuntu-latest' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     strategy:
       matrix:
@@ -477,7 +477,7 @@ jobs:
         if: matrix.replicated == true
         env:
           TENSORZERO_CLICKHOUSE_CLUSTER_NAME: "tensorzero_e2e_tests_cluster"
-        run: cargo test-e2e-no-creds -j 2
+        run: cargo test-e2e-no-creds
 
       - name: Print e2e logs
         if: always()
