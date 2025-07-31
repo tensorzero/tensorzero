@@ -587,6 +587,7 @@ impl TensorZeroGateway {
     }
 
     // TODO - implement closing the 'reqwest' connection pool: https://github.com/tensorzero/tensorzero/issues/857
+    #[expect(clippy::unnecessary_wraps)]
     fn __exit__(
         _this: Py<Self>,
         _exc_type: Py<PyAny>,
