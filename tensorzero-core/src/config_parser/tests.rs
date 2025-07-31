@@ -1490,7 +1490,10 @@ async fn test_config_load_shorthand_models_only() {
         )
         .unwrap();
 
-    let config = UninitializedConfig::read_toml_config(temp_file.path()).unwrap();
+    let config = UninitializedConfig::read_toml_config(
+        &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+    )
+    .unwrap();
     env::set_var("OPENAI_API_KEY", "sk-something");
     env::set_var("ANTHROPIC_API_KEY", "sk-something");
     env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
@@ -1732,9 +1735,12 @@ async fn test_config_no_verify_creds_missing_filesystem_object_store() {
             [functions]"#
     )
     .unwrap();
-    let config = Config::load_from_path_optional_verify_credentials(tempfile.path(), false)
-        .await
-        .unwrap();
+    let config = Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new_from_path(tempfile.path()).unwrap(),
+        false,
+    )
+    .await
+    .unwrap();
     assert!(config.object_store_info.is_none());
     assert!(logs_contain("Filesystem object store path does not exist: /fake-tensorzero-path/other-path. Treating object store as unconfigured"));
 }
@@ -1825,10 +1831,11 @@ async fn test_config_blocked_s3_http_endpoint_override() {
             [functions]"#
     )
     .unwrap();
-    let err = Config::load_and_verify_from_path(tempfile.path())
-        .await
-        .unwrap_err()
-        .to_string();
+    let err =
+        Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(tempfile.path()).unwrap())
+            .await
+            .unwrap_err()
+            .to_string();
     assert!(
         err.contains("Failed to write `.tensorzero-validate` to object store."),
         "Unexpected error message: {err}"
@@ -1863,10 +1870,11 @@ async fn test_config_s3_allow_http_config() {
             [functions]"#
     )
     .unwrap();
-    let err = Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(tempfile.path()).unwrap())
-        .await
-        .unwrap_err()
-        .to_string();
+    let err =
+        Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(tempfile.path()).unwrap())
+            .await
+            .unwrap_err()
+            .to_string();
     assert!(
         err.contains("Failed to write `.tensorzero-validate` to object store."),
         "Unexpected error message: {err}"
@@ -1903,10 +1911,11 @@ async fn test_config_s3_allow_http_env_var() {
             [functions]"#
     )
     .unwrap();
-    let err = Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(tempfile.path()).unwrap())
-        .await
-        .unwrap_err()
-        .to_string();
+    let err =
+        Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(tempfile.path()).unwrap())
+            .await
+            .unwrap_err()
+            .to_string();
     assert!(
         err.contains("Failed to write `.tensorzero-validate` to object store."),
         "Unexpected error message: {err}"
@@ -2019,7 +2028,11 @@ async fn test_config_load_optional_credentials_validation() {
     let tmpfile = NamedTempFile::new().unwrap();
     std::fs::write(tmpfile.path(), config_str).unwrap();
 
-    let res = Config::load_from_path_optional_verify_credentials(&ConfigFileGlob::new_from_path(tmpfile.path()).unwrap(), true).await;
+    let res = Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new_from_path(tmpfile.path()).unwrap(),
+        true,
+    )
+    .await;
     if cfg!(feature = "e2e_tests") {
         assert!(res.is_ok());
     } else {
@@ -2027,9 +2040,12 @@ async fn test_config_load_optional_credentials_validation() {
     }
 
     // Should not fail since validation is disabled
-    Config::load_from_path_optional_verify_credentials(&ConfigFileGlob::new_from_path(tmpfile.path()).unwrap(), false)
-        .await
-        .expect("Failed to load config");
+    Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new_from_path(tmpfile.path()).unwrap(),
+        false,
+    )
+    .await
+    .expect("Failed to load config");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -2204,9 +2220,11 @@ async fn test_glob_relative_path() {
     )
     .unwrap();
 
-    let config = Config::load_and_verify_from_path(&temp_dir.path().join("**/*.toml"))
-        .await
-        .unwrap();
+    let config = Config::load_and_verify_from_path(
+        &ConfigFileGlob::new_from_path(temp_dir.path().join("**/*.toml").as_path()).unwrap(),
+    )
+    .await
+    .unwrap();
 
     let function = config.get_function("no_schema").unwrap();
     let FunctionConfig::Chat(function) = &**function else {
