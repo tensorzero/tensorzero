@@ -1,17 +1,15 @@
 use super::{deserialize_delete, serialize_delete};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(transparent)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct ExtraHeadersConfig {
     pub data: Vec<ExtraHeader>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ExtraHeader {
     pub name: String,
     #[serde(flatten)]
@@ -20,8 +18,8 @@ pub struct ExtraHeader {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum ExtraHeaderKind {
     Value(String),
     // We only allow `"delete": true` to be set - deserializing `"delete": false` will error
@@ -34,7 +32,8 @@ pub enum ExtraHeaderKind {
 
 /// The 'InferenceExtraHeaders' options provided directly in an inference request
 /// These have not yet been filtered by variant name
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(transparent)]
 pub struct UnfilteredInferenceExtraHeaders {
     pub headers: Vec<InferenceExtraHeader>,
@@ -72,7 +71,8 @@ pub struct FullExtraHeadersConfig {
     pub inference_extra_headers: FilteredInferenceExtraHeaders,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(untagged)]
 pub enum InferenceExtraHeader {
     Provider {

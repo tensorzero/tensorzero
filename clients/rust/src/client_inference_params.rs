@@ -21,7 +21,8 @@ use crate::client_input::{test_client_input_to_input, ClientInput};
 // This is a copy-paste of the `Params` struct from `tensorzero_core::endpoints::inference::Params`.
 // with just the `credentials` field adjusted to allow serialization.
 /// The expected payload is a JSON object with the following fields:
-#[derive(Clone, Debug, Serialize, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default, ts_rs::TS)]
+#[ts(export)]
 pub struct ClientInferenceParams {
     // The function name. Exactly one of `function_name` or `model_name` must be provided.
     pub function_name: Option<String>,
@@ -61,6 +62,7 @@ pub struct ClientInferenceParams {
     // If provided for a JSON inference, the inference will use the specified output schema instead of the
     // configured one. We only lazily validate this schema.
     pub output_schema: Option<Value>,
+    #[ts(type = "Map<string, string>")]
     pub credentials: HashMap<String, ClientSecretString>,
     pub cache_options: CacheParamsOptions,
     /// If `true`, add an `original_response` field to the response, containing the raw string response from the model.

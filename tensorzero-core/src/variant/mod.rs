@@ -114,8 +114,8 @@ pub struct ChainOfThoughtConfigPyClass {
 /// This is represented as a tool config in the
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum JsonMode {
     Off,
     On,
@@ -750,9 +750,8 @@ async fn infer_model_request_stream<'request>(
     Ok((Box::pin(stream), model_used_info))
 }
 
-#[derive(Debug, Deserialize, Copy, Clone, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct RetryConfig {
     pub num_retries: usize,
     pub max_delay_s: f32,

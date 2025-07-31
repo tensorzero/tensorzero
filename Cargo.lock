@@ -4846,6 +4846,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tracing-test",
+ "ts-rs",
  "url",
  "uuid",
 ]
