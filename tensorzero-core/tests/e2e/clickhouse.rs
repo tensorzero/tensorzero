@@ -28,7 +28,9 @@ use tensorzero_core::clickhouse::migration_manager::{
     self, make_all_migrations, MigrationRecordDatabaseInsert,
 };
 use tensorzero_core::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
-use tensorzero_core::clickhouse::{make_clickhouse_http_client, ClickHouseConnectionInfo};
+use tensorzero_core::clickhouse::{
+    make_clickhouse_http_client, ClickHouseConnectionInfo, TableName,
+};
 
 pub struct DeleteDbOnDrop {
     database: String,
@@ -752,7 +754,7 @@ async fn test_bad_clickhouse_write() {
     let payload =
         json!({"target_id": Uuid::now_v7(), "value": true, "name": "test", "id": Uuid::now_v7()});
     let err = clickhouse
-        .write(&[payload], "BooleanMetricFeedback")
+        .write(&[payload], TableName::BooleanMetricFeedback)
         .await
         .unwrap_err();
     assert!(
@@ -779,7 +781,7 @@ async fn test_deployment_id_oldest() {
             &[serde_json::json!({
                 "deployment_id": new_deployment_id,
             })],
-            "DeploymentID",
+            TableName::DeploymentID,
         )
         .await
         .unwrap();
@@ -855,7 +857,7 @@ async fn test_migration_0013_old_table() {
     ];
 
     // Run migrations up to right before 0013
-    for migration in migrations.iter() {
+    for migration in &migrations {
         migration_manager::run_migration(&clickhouse, migration.as_ref(), true)
             .await
             .unwrap();
@@ -933,7 +935,7 @@ async fn test_migration_0013_data_no_table() {
     ];
 
     // Run migrations up to right before 0013
-    for migration in migrations.iter() {
+    for migration in &migrations {
         migration_manager::run_migration(&clickhouse, migration.as_ref(), true)
             .await
             .unwrap();

@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use std::collections::HashSet;
 use tensorzero_core::{
     clickhouse::{
-        test_helpers::select_batch_model_inferences_clickhouse, ClickHouseConnectionInfo,
+        test_helpers::select_batch_model_inferences_clickhouse, ClickHouseConnectionInfo, TableName,
     },
     endpoints::batch_inference::PollPathParams,
     inference::types::{
@@ -610,7 +610,7 @@ async fn insert_fake_pending_batch_inference_data(
     }
     let new_batch_id = Uuid::now_v7();
     batch_request.batch_id = new_batch_id;
-    for inference in batch_inferences.iter_mut() {
+    for inference in &mut batch_inferences {
         inference.batch_id = new_batch_id;
         inference.tags = HashMap::from([(
             "fake_pending".to_string(),
@@ -627,11 +627,11 @@ async fn insert_fake_pending_batch_inference_data(
     }
 
     clickhouse
-        .write(batch_inferences.as_slice(), "BatchModelInference")
+        .write(batch_inferences.as_slice(), TableName::BatchModelInference)
         .await
         .unwrap();
     clickhouse
-        .write(&[batch_request], "BatchRequest")
+        .write(&[batch_request], TableName::BatchRequest)
         .await
         .unwrap();
 

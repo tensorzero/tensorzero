@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde_json::json;
-use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::clickhouse::{ClickHouseConnectionInfo, TableName};
 use tensorzero_core::config_parser::Config;
 /// End-to-end tests for particular internal functionality in the batch inference endpoint
 /// These are not tests of the public API (those should go in tests/e2e/providers/batch.rs)
@@ -103,7 +103,7 @@ async fn test_get_batch_request() {
     };
     let rows = vec![row];
     clickhouse
-        .write(&rows, "BatchModelInference")
+        .write(&rows, TableName::BatchModelInference)
         .await
         .unwrap();
     // Sleep a bit to ensure the write has propagated
@@ -261,7 +261,7 @@ async fn write_2_batch_model_inference_rows(
     };
     let rows = vec![row1, row2];
     clickhouse
-        .write(&rows, "BatchModelInference")
+        .write(&rows, TableName::BatchModelInference)
         .await
         .unwrap();
     rows
