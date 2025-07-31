@@ -1878,7 +1878,7 @@ pub fn prepare_gcp_vertex_gemini_messages<'a>(
     provider_type: &str,
 ) -> Result<Vec<GCPVertexGeminiContent<'a>>, Error> {
     let mut gcp_vertex_gemini_messages = Vec::with_capacity(messages.len());
-    for message in messages.iter() {
+    for message in messages {
         gcp_vertex_gemini_messages.push(tensorzero_to_gcp_vertex_gemini_content(
             message.role.into(),
             Cow::Borrowed(&message.content),
@@ -2093,6 +2093,7 @@ pub fn tensorzero_to_gcp_vertex_gemini_content<'a>(
     Ok(message)
 }
 
+#[expect(clippy::unnecessary_wraps)]
 pub(crate) fn process_output_schema(output_schema: &Value) -> Result<Value, Error> {
     let mut schema = output_schema.clone();
 
