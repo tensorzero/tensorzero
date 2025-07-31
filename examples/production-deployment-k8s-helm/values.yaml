@@ -11,7 +11,7 @@ gateway:
 
   image:
     repository: tensorzero/gateway
-    tag: 2025.7.4
+    tag: 2025.7.5
     pullPolicy: IfNotPresent
 
   service:
@@ -45,7 +45,8 @@ gateway:
   ingress:
     enabled: true
     className: ""
-    annotations: {}
+    annotations:
+      {}
       # kubernetes.io/tls-acme: "true"
       # cert-manager.io/cluster-issuer: letsencrypt-prod
     hosts:
@@ -64,7 +65,7 @@ ui:
   replicaCount: 1
   image:
     repository: tensorzero/ui
-    tag: 2025.7.4
+    tag: 2025.7.5
     pullPolicy: IfNotPresent
 
   service:
@@ -96,7 +97,8 @@ ui:
   ingress:
     enabled: true
     className: ""
-    annotations: {}
+    annotations:
+      {}
       # kubernetes.io/tls-acme: "true"
       # cert-manager.io/cluster-issuer: letsencrypt-prod
     hosts:
