@@ -26,7 +26,7 @@ minijinja = { version = "2.11.0", features = ["loader"] }
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
 # code size when deploying.
 console_error_panic_hook = { version = "0.1.6", optional = true }
-serde_json = { version = "1.0.134", features = ["preserve_order"] }
+serde_json = { version = "1.0.142", features = ["preserve_order"] }
 serde-wasm-bindgen = "0.6.5"
 serde = { version = "1.0.204", features = ["derive"] }
 
