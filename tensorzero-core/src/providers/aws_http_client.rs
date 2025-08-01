@@ -153,7 +153,7 @@ impl HttpConnector for ReqwestConnector {
             );
             // Copy the header, body, and timeout.
             let parts = request.into_parts();
-            for (name, value) in parts.headers.iter() {
+            for (name, value) in &parts.headers {
                 let name = name.to_owned();
                 let value = value.as_bytes().to_owned();
                 req_builder = req_builder.header(name, value);

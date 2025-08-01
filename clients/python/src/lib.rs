@@ -587,6 +587,7 @@ impl TensorZeroGateway {
     }
 
     // TODO - implement closing the 'reqwest' connection pool: https://github.com/tensorzero/tensorzero/issues/857
+    #[expect(clippy::unnecessary_wraps)]
     fn __exit__(
         _this: Py<Self>,
         _exc_type: Py<PyAny>,
@@ -1573,7 +1574,7 @@ impl AsyncTensorZeroGateway {
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.delete_datapoint(dataset_name, datapoint_id).await;
             Python::with_gil(|py| match res {
-                Ok(_) => Ok(()),
+                Ok(()) => Ok(()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })

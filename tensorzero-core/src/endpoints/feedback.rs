@@ -476,7 +476,11 @@ async fn get_function_name(
         MetricConfigLevel::Episode => "episode_id_uint",
     };
     let query = format!(
-        "SELECT function_name FROM {table_name} FINAL WHERE {identifier_key} = toUInt128(toUUID('{target_id}'))"
+        "SELECT function_name
+         FROM {table_name}
+         WHERE {identifier_key} = toUInt128(toUUID('{target_id}'))
+         LIMIT 1
+         SETTINGS max_threads=1"
     );
     let function_name = connection_info
         .run_query_synchronous_no_params(query)

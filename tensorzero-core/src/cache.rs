@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::{EmbeddingRequest, EmbeddingResponse};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{warn_discarded_cache_write, Error, ErrorDetails};
 use crate::inference::types::file::serialize_with_file_data;
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
@@ -13,7 +13,7 @@ use crate::model::StreamResponse;
 use crate::serde_util::deserialize_json_string;
 use blake3::Hash;
 use clap::ValueEnum;
-use serde::de::DeserializeOwned;
+use serde::de::{DeserializeOwned, IgnoredAny};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -210,11 +210,39 @@ pub struct CacheData<T: CacheOutput> {
 /// to/from ClickHouse
 /// We use a marker trait rather than an enum so that the expected type can be enforced by the caller
 /// (e.g. `infer_stream` will never try to deserialize a `NonStreamingCacheData`)
-pub trait CacheOutput {}
+pub trait CacheOutput {
+    /// If this return `false`, then we'll log a warning and skip writing this entry to the cache
+    fn should_write_to_cache(&self) -> bool;
+}
 
-impl CacheOutput for StreamingCacheData {}
-impl CacheOutput for NonStreamingCacheData {}
-impl CacheOutput for EmbeddingCacheData {}
+impl CacheOutput for StreamingCacheData {
+    fn should_write_to_cache(&self) -> bool {
+        true
+    }
+}
+impl CacheOutput for NonStreamingCacheData {
+    fn should_write_to_cache(&self) -> bool {
+        for block in &self.blocks {
+            if let ContentBlockOutput::ToolCall(tool_call) = block {
+                // We skip writing to the cache if the tool call arguments are not valid JSON
+                // We're assuming that it's almost never useful to have an invalid tool call cached
+                // (in particular, tensorzero is not being used with a provider/model that only ever
+                // emits invalid json for its tool call arguments).
+                // The invalid tool call will still be returned to the user, but we won't create a
+                // cache entry, even if the user turned on caching.
+                if serde_json::from_str::<IgnoredAny>(&tool_call.arguments).is_err() {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+}
+impl CacheOutput for EmbeddingCacheData {
+    fn should_write_to_cache(&self) -> bool {
+        true
+    }
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
@@ -237,6 +265,24 @@ pub struct StreamingCacheData {
     pub chunks: Vec<CachedProviderInferenceResponseChunk>,
 }
 
+fn spawn_maybe_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
+    row: FullCacheRow<T>,
+    clickhouse_client: ClickHouseConnectionInfo,
+) {
+    tokio::spawn(async move {
+        if row.data.output.should_write_to_cache() {
+            if let Err(e) = clickhouse_client
+                .write(&[row], TableName::ModelInferenceCache)
+                .await
+            {
+                tracing::warn!("Failed to write to cache: {e}");
+            }
+        } else {
+            warn_discarded_cache_write(&row.data.raw_response);
+        }
+    });
+}
+
 // This doesn't block
 pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     clickhouse_client: &ClickHouseConnectionInfo,
@@ -255,28 +301,21 @@ pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     let output_tokens = usage.output_tokens;
     let clickhouse_client = clickhouse_client.clone();
     let finish_reason = finish_reason.cloned();
-    tokio::spawn(async move {
-        if let Err(e) = clickhouse_client
-            .write(
-                &[FullCacheRow {
-                    short_cache_key,
-                    long_cache_key,
-                    data: CacheData {
-                        output,
-                        raw_request,
-                        raw_response,
-                        input_tokens,
-                        output_tokens,
-                        finish_reason,
-                    },
-                }],
-                TableName::ModelInferenceCache,
-            )
-            .await
-        {
-            tracing::warn!("Failed to write to cache: {e}");
-        }
-    });
+    spawn_maybe_cache_write(
+        FullCacheRow {
+            short_cache_key,
+            long_cache_key,
+            data: CacheData {
+                output,
+                raw_request,
+                raw_response,
+                input_tokens,
+                output_tokens,
+                finish_reason,
+            },
+        },
+        clickhouse_client,
+    );
     Ok(())
 }
 
@@ -322,25 +361,21 @@ pub fn start_cache_write_streaming(
     };
     let raw_request = raw_request.to_string();
     let clickhouse_client = clickhouse_client.clone();
-    tokio::spawn(async move {
-        clickhouse_client
-            .write(
-                &[FullCacheRow {
-                    short_cache_key,
-                    long_cache_key,
-                    data: CacheData {
-                        output,
-                        raw_request,
-                        raw_response: String::new(),
-                        input_tokens,
-                        output_tokens,
-                        finish_reason,
-                    },
-                }],
-                TableName::ModelInferenceCache,
-            )
-            .await
-    });
+    spawn_maybe_cache_write(
+        FullCacheRow {
+            short_cache_key,
+            long_cache_key,
+            data: CacheData {
+                output,
+                raw_request,
+                raw_response: String::new(),
+                input_tokens,
+                output_tokens,
+                finish_reason,
+            },
+        },
+        clickhouse_client,
+    );
     Ok(())
 }
 

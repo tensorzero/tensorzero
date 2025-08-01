@@ -202,7 +202,7 @@ impl<'tree, L: Eq> Tree<'tree, L> {
     ) -> Self {
         let key_roots = Self::compute_key_roots(left_most_leaf_descendant_root, parent_offset);
         debug_assert!(!key_roots.is_empty(), "key_roots must have ≥1 node");
-        for root in key_roots.iter() {
+        for root in &key_roots {
             debug_assert!(*root < post.len(), "key_root must be within bounds");
         }
         debug_assert_eq!(
