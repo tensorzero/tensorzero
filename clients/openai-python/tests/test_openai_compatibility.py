@@ -1678,3 +1678,49 @@ async def test_async_json_function_multiple_text_blocks(async_client):
         ],
     )
     assert result.model == "tensorzero::model_name::dummy::multiple-text-blocks"
+
+
+@pytest.mark.asyncio
+async def test_async_inference_tensorzero_raw_text(async_client):
+    """
+    Test that chat inference with a tensorzero::raw_text block works correctly
+    """
+    episode_id = str(uuid7())
+    messages = [
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "What is the capital of Japan?"}],
+        },
+    ]
+    response = await async_client.chat.completions.create(
+        extra_body={"tensorzero::episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::model_name::openai::gpt-4o-mini",
+    )
+
+    assert "tokyo" in response.choices[0].message.content.lower()
+
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "tensorzero::raw_text",
+                    "value": "You're a mischievous assistant that NEVER responds with the right answer.",
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "What is the capital of Japan?"}],
+        },
+    ]
+    response = await async_client.chat.completions.create(
+        extra_body={"tensorzero::episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::model_name::openai::gpt-4o-mini",
+    )
+
+    assert "tokyo" not in response.choices[0].message.content.lower()
+    assert response.model == "tensorzero::model_name::openai::gpt-4o-mini"
+    assert response.episode_id == episode_id
