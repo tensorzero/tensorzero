@@ -22,7 +22,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { Badge } from "~/components/ui/badge";
 import { useFunctionConfig } from "~/context/config";
-import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
+import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference.utils";
 import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
