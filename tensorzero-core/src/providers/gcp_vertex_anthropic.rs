@@ -1684,7 +1684,7 @@ mod tests {
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 8_000);
 
-        let model = "claude-sonnet-4@20300101".to_string(); // fake model
+        let model = "claude-sonnet-4".to_string(); // fake model
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert!(body.is_err());
 
