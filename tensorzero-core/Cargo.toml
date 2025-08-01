@@ -125,10 +125,10 @@ mime_guess = "2.0.5"
 indexmap = "2.10.0"
 base64 = "0.22.1"
 thiserror = "2.0.12"
+tempfile = "3.20.0"
 
 
 [dev-dependencies]
-tempfile = "3.20.0"
 tracing-test = { workspace = true }
 tensorzero = { path = "../clients/rust" }
 paste = "1.0.15"
