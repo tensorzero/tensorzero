@@ -79,6 +79,7 @@ export * from "./ModelConfig";
 export * from "./ModelInput";
 export * from "./ModelProvider";
 export * from "./NonStreamingTimeouts";
+export * from "./NvidiaNimProvider";
 export * from "./ObjectStoreInfo";
 export * from "./ObservabilityConfig";
 export * from "./OpenAIProvider";

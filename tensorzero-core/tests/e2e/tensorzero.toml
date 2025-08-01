@@ -383,6 +383,21 @@ type = "mistral"
 model_name = "open-mistral-nemo-2407"
 api_key_location = "dynamic::mistral_api_key"
 
+[models."meta/llama-3.1-8b-instruct"]
+routing = ["nvidia_nim"]
+
+[models."meta/llama-3.1-8b-instruct".providers.nvidia_nim]
+type = "nvidia_nim"
+model_name = "meta/llama-3.1-8b-instruct"
+
+[models."meta/llama-3.1-8b-instruct-dynamic"]
+routing = ["nvidia_nim"]
+
+[models."meta/llama-3.1-8b-instruct-dynamic".providers.nvidia_nim]
+type = "nvidia_nim"
+model_name = "meta/llama-3.1-8b-instruct"
+api_key_location = "dynamic::nvidia_api_key"
+
 [models.o4-mini]
 routing = ["openai"]
 
@@ -1174,6 +1189,37 @@ model = "mistral::open-mistral-nemo-2407"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.nvidia_nim]
+type = "chat_completion"
+model = "meta/llama-3.1-8b-instruct"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.nvidia-nim-extra-body]
+type = "chat_completion"
+model = "meta/llama-3.1-8b-instruct"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.nvidia-nim-extra-headers]
+type = "chat_completion"
+model = "meta/llama-3.1-8b-instruct"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "Bearer invalid_nvidia_auth" }]
+
+[functions.basic_test.variants.nvidia-nim-dynamic]
+type = "chat_completion"
+model = "meta/llama-3.1-8b-instruct-dynamic"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.nvidia-nim-shorthand]
+type = "chat_completion"
+model = "nvidia_nim::meta/llama-3.1-8b-instruct"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
 
 [functions.basic_test.variants.openai]
 type = "chat_completion"
@@ -1851,6 +1897,22 @@ system_template = "../../fixtures/config/functions/json_success/prompt/system_te
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
 max_tokens = 500
+
+[functions.json_success.variants.nvidia_nim]
+type = "chat_completion"
+model = "meta/llama-3.1-8b-instruct"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
+[functions.json_success.variants.nvidia-nim-strict]
+type = "chat_completion"
+model = "meta/llama-3.1-8b-instruct"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+max_tokens = 100
+json_mode = "strict"
 
 [functions.json_success.variants.groq-implicit]
 type = "chat_completion"

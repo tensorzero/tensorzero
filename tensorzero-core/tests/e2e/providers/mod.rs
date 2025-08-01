@@ -15,6 +15,7 @@ mod groq;
 mod helpers;
 mod hyperbolic;
 mod mistral;
+mod nvidia_nim;
 mod openai;
 mod openrouter;
 mod reasoning;
