@@ -18,6 +18,10 @@
         "tab": "Guides",
         "groups": [
           {
+            "group": "Get started",
+            "pages": ["index", "quickstart"]
+          },
+          {
             "group": "Inference",
             "pages": [
               "guides/inference/call-any-llm-provider",

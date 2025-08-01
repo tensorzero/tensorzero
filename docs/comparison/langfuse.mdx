@@ -1,0 +1,81 @@
+---
+title: "Comparison: TensorZero vs. Langfuse"
+description: "TensorZero is an open-source alternative to Langfuse featuring an LLM gateway, observability, optimization, evaluations, and experimentation."
+---
+
+TensorZero and Langfuse both provide open-source tools that streamline LLM engineering workflows.
+TensorZero focuses on inference and optimization, while Langfuse specializes in powerful interfaces for observability and evals.
+That said, **you can get the best of both worlds by using TensorZero alongside Langfuse**.
+
+## Similarities
+
+- **Open Source & Self-Hosted.**
+  Both TensorZero and Langfuse are open source and self-hosted.
+  Your data never leaves your infrastructure, and you don't risk downtime by relying on external APIs.
+  TensorZero is fully open-source, whereas Langfuse gates some of its features behind a paid license.
+
+- **Built-in Observability.**
+  Both TensorZero and Langfuse offer built-in observability features, collecting inference in your own database.
+  Langfuse offers a broader set of advanced observability features, including application-level tracing.
+  TensorZero focuses more on structured data collection for optimization, including downstream metrics and feedback.
+
+- **Built-in Evaluations.**
+  Both TensorZero and Langfuse offer built-in evaluations features, enabling you to sanity check and benchmark the performance of your prompts, models, and more — using heuristics and LLM judges.
+  TensorZero LLM judges are also TensorZero functions, which means you can optimize them using TensorZero's optimization recipes.
+  Langfuse offers a broader set of built-in heuristics and UI features for evaluations.<br />
+  [→ TensorZero Evaluations Overview](/guides/evaluation/evaluate-individual-inferences)
+
+## Key Differences
+
+### TensorZero
+
+- **Unified Inference API.**
+  TensorZero offers a unified inference API that allows you to access LLMs from most major model providers with a single integration, with support for structured outputs, tool use, streaming, and more.
+  Langfuse doesn't provide a built-in LLM gateway.<br />
+  [→ TensorZero Gateway Quick Start](/quickstart)
+
+- **Built-in Inference-Time Optimizations.**
+  TensorZero offers built-in inference-time optimizations (e.g. dynamic in-context learning), allowing you to optimize your inference performance.
+  Langfuse doesn't offer any inference-time optimizations.<br />
+  [→ Inference-Time Optimizations with TensorZero](/guides/optimization/overview)
+
+- **Optimization Recipes.**
+  TensorZero offers optimization recipes (e.g. supervised fine-tuning, RLHF, MIPRO) that leverage your own data to improve your LLM's performance.
+  Langfuse doesn't offer built-in features like this.<br />
+  [→ Optimization Recipes with TensorZero](/recipes)
+
+- **Automatic Fallbacks for Higher Reliability.**
+  TensorZero offers automatic fallbacks to increase reliability.
+  Langfuse doesn't offer any such features.<br />
+  [→ Retries & Fallbacks with TensorZero](/guides/gateway/call-any-llm-provider)
+
+- **Built-in Experimentation (A/B Testing).**
+  TensorZero offers built-in experimentation features, allowing you to run experiments on your prompts, models, and inference strategies.
+  Langfuse doesn't offer any experimentation features.<br />
+  [→ Experimentation (A/B Testing) with TensorZero](/guides/experimentation/compare-variants-ab-testing)
+
+### Langfuse
+
+- **Advanced Observability & Evaluations.**
+  While both TensorZero and Langfuse offer observability and evaluations features, Langfuse takes it further with advanced observability features.
+  Additionally, Langfuse offers a prompt playground, which TensorZero doesn't offer (coming soon!).
+
+- **Access Controls.**
+  Langfuse offers access controls, which TensorZero doesn't offer.
+  That said, some of Langfuse's access control features (e.g. SSO) are only available in their paid plans.
+
+- **Managed Service.**
+  Langfuse offers a paid managed (hosted) service in addition to the open-source version.
+  TensorZero is fully open-source and self-hosted.
+
+<Tip>
+**Feedback**
+
+Is TensorZero missing any features that are really important to you? Let us know on [GitHub Discussions](https://github.com/tensorzero/tensorzero/discussions), [Slack](https://www.tensorzero.com/slack), or [Discord](https://www.tensorzero.com/discord).
+</Tip>
+
+## Combining TensorZero and Langfuse
+
+You can combine TensorZero and Langfuse to get the best of both worlds.
+
+A leading voice agent startup uses TensorZero for inference and optimization, alongside Langfuse for more advanced observability and evals.
