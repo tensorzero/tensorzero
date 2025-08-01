@@ -1,15 +1,17 @@
 import { z } from "zod";
 import {
-  contentBlockOutputSchema,
+  contentBlockChatOutputSchema,
   inputSchema,
   jsonInferenceOutputSchema,
   displayInputSchema,
-  type ContentBlockOutput,
-  type JsonInferenceOutput,
   displayModelInferenceInputMessageSchema,
   modelInferenceOutputContentBlockSchema,
 } from "./common";
 import { JsonValueSchema } from "../tensorzero";
+import type {
+  JsonInferenceOutput,
+  ContentBlockChatOutput,
+} from "tensorzero-node";
 
 // Zod schemas for ToolCallConfigDatabaseInsert
 export const toolSchema = z.object({
@@ -140,7 +142,7 @@ export const parsedChatInferenceRowSchema = chatInferenceRowSchema
   })
   .extend({
     input: inputSchema,
-    output: z.array(contentBlockOutputSchema),
+    output: z.array(contentBlockChatOutputSchema),
     inference_params: z.record(z.string(), z.unknown()),
     tool_params: toolCallConfigDatabaseInsertSchema.nullable(),
     extra_body: z.array(inferenceExtraBodySchema).nullable(),
@@ -185,10 +187,10 @@ export type ParsedInferenceRow = z.infer<typeof parsedInferenceRowSchema>;
 
 export function parseInferenceOutput(
   output: string,
-): ContentBlockOutput[] | JsonInferenceOutput {
+): ContentBlockChatOutput[] | JsonInferenceOutput {
   const parsed = JSON.parse(output);
   if (Array.isArray(parsed)) {
-    return z.array(contentBlockOutputSchema).parse(parsed);
+    return z.array(contentBlockChatOutputSchema).parse(parsed);
   }
   return jsonInferenceOutputSchema.parse(parsed);
 }

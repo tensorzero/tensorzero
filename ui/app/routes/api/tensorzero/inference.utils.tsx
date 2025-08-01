@@ -17,9 +17,7 @@ import type {
 import type {
   ResolvedFileContent,
   DisplayInputMessageContent,
-  ContentBlockOutput,
   DisplayInput,
-  JsonInferenceOutput,
 } from "~/utils/clickhouse/common";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
@@ -32,6 +30,8 @@ import type {
   ResolvedInputMessage as TensorZeroResolvedInputMessage,
   ResolvedInputMessageContent as TensorZeroResolvedInputMessageContent,
   ToolCallConfigDatabaseInsert,
+  ContentBlockChatOutput,
+  JsonInferenceOutput,
 } from "tensorzero-node";
 import type {
   Input,
@@ -230,6 +230,7 @@ function tensorZeroResolvedContentToInputContent(
       return {
         type: "thought",
         text: content.text,
+        _internal_provider_type: content._internal_provider_type,
         signature: content.signature,
       };
     case "file": {
@@ -420,7 +421,7 @@ function prepareDefaultFunctionRequest(
 }
 
 export interface VariantResponseInfo {
-  output?: JsonInferenceOutput | ContentBlockOutput[];
+  output?: JsonInferenceOutput | ContentBlockChatOutput[];
   usage?: InferenceUsage;
 }
 

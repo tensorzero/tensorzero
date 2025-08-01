@@ -1,7 +1,5 @@
 import {
-  type ContentBlockOutput,
   CountSchema,
-  type JsonInferenceOutput,
   modelInferenceInputMessageSchema,
   type TableBounds,
   type TableBoundsWithCount,
@@ -13,7 +11,11 @@ import {
   inputSchema,
 } from "./common";
 import { data } from "react-router";
-import type { FunctionConfig } from "tensorzero-node";
+import type {
+  FunctionConfig,
+  JsonInferenceOutput,
+  ContentBlockChatOutput,
+} from "tensorzero-node";
 import { getClickhouseClient } from "./client.server";
 import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
 import {
@@ -522,7 +524,7 @@ async function parseInferenceRow(
     return {
       ...row,
       input: resolvedInput,
-      output: parseInferenceOutput(row.output) as ContentBlockOutput[],
+      output: parseInferenceOutput(row.output) as ContentBlockChatOutput[],
       inference_params: z
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.inference_params)),

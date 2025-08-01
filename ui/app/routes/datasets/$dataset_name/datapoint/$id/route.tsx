@@ -44,6 +44,10 @@ import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import { DatapointActions } from "./DatapointActions";
 import DatapointBasicInfo from "./DatapointBasicInfo";
+import type {
+  JsonInferenceOutput,
+  ContentBlockChatOutput,
+} from "tensorzero-node";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -204,9 +208,12 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
   const [originalInput] = useState(datapoint.input);
   const [originalOutput] = useState(datapoint.output);
-  const [output, setOutput] = useState<typeof datapoint.output>(
-    datapoint.output,
-  );
+  const [output, setOutput] = useState<
+    ContentBlockChatOutput[] | JsonInferenceOutput | null
+  >(datapoint.output ?? null);
+  // const [output, setOutput] = useState<typeof datapoint.output>(
+  //   datapoint.output,
+  // );
   const [isEditing, setIsEditing] = useState(false);
 
   const canSave = useMemo(() => {
@@ -223,7 +230,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
   const handleReset = () => {
     setInput(datapoint.input);
-    setOutput(datapoint.output);
+    setOutput(datapoint.output ?? null);
   };
 
   const handleSystemChange = (system: string | object) =>
@@ -351,7 +358,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             <Output
               output={output}
               isEditing={isEditing}
-              onOutputChange={(output) => setOutput(output ?? undefined)}
+              onOutputChange={(output) => setOutput(output)}
             />
           </SectionLayout>
         )}
@@ -446,6 +453,9 @@ function transformOutputForTensorZero(
   if (output === null || output === undefined) {
     return null;
   } else if ("raw" in output) {
+    if (output.raw === null) {
+      return null;
+    }
     return JSON.parse(output.raw);
   } else if (typeof output === "object") {
     return JSON.parse(JSON.stringify(output));

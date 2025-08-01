@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  contentBlockOutputSchema,
+  contentBlockChatOutputSchema,
   jsonInferenceOutputSchema,
   displayInputSchema,
 } from "./common";
@@ -72,7 +72,7 @@ export const ParsedChatInferenceDatapointRowSchema =
     tool_params: true,
   }).extend({
     input: displayInputSchema,
-    output: z.array(contentBlockOutputSchema).optional(),
+    output: z.array(contentBlockChatOutputSchema).optional(),
     tool_params: z.record(z.string(), JsonValueSchema).optional(),
     is_custom: z.boolean(),
     tags: z.record(z.string(), z.string()),

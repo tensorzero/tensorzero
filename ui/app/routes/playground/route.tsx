@@ -13,7 +13,7 @@ import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import { useFunctionConfig, useAllFunctionConfigs } from "~/context/config";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
-import { getTensorZeroClient, listDatapoints } from "~/utils/tensorzero.server";
+import { listDatapoints } from "~/utils/tensorzero.server";
 import { VariantFilter } from "~/components/function/variant/variant-filter";
 import {
   prepareInferenceActionRequest,
@@ -24,10 +24,6 @@ import { X } from "lucide-react";
 import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 import type { DisplayInput } from "~/utils/clickhouse/common";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  InferenceRequestSchema,
-  type InferenceResponse,
-} from "~/utils/tensorzero";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
 import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.server";
@@ -36,6 +32,8 @@ import OutputRust from "~/components/inference/NewOutputRust";
 import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
 import { safeParseInt } from "~/utils/common";
+import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
+import type { InferenceResponse } from "tensorzero-node";
 
 const DEFAULT_LIMIT = 5;
 
@@ -162,14 +160,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       output_schema:
         datapoint?.type === "json" ? datapoint.output_schema : null,
     });
-    const result = InferenceRequestSchema.safeParse(request);
-    if (!result.success) {
-      throw new Error("Invalid request");
-    }
-    return await getTensorZeroClient().inference({
-      ...result.data,
-      stream: false,
-    });
+    const nativeClient = await getNativeTensorZeroClient();
+    return await nativeClient.inference(request);
   };
   // Do not block on all the server inferences, just return the promises
   // Create a map of maps of promises, one for each datapoint/variant combination

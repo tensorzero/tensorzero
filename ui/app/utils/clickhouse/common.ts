@@ -1,5 +1,10 @@
 import { z } from "zod";
-import type { FunctionConfig } from "tensorzero-node";
+import type {
+  FunctionConfig,
+  JsonInferenceOutput,
+  ContentBlockChatOutput,
+  Thought,
+} from "tensorzero-node";
 import { JsonValueSchema } from "../tensorzero";
 
 export const roleSchema = z.enum(["user", "assistant"]);
@@ -57,8 +62,8 @@ export const thoughtSchema = z.object({
   type: z.literal("thought"),
   text: z.string().nullable(),
   signature: z.string().nullable(),
-});
-export type Thought = z.infer<typeof thoughtSchema>;
+  _internal_provider_type: z.string().nullable(),
+}) satisfies z.ZodType<Thought>;
 
 export const unknownSchema = z.object({
   type: z.literal("unknown"),
@@ -319,18 +324,16 @@ export const requestMessageSchema = z.object({
 export type RequestMessage = z.infer<typeof requestMessageSchema>;
 
 export const jsonInferenceOutputSchema = z.object({
-  raw: z.string().default(""),
+  raw: z.string().nullable(),
   parsed: JsonValueSchema,
-});
-
-export type JsonInferenceOutput = z.infer<typeof jsonInferenceOutputSchema>;
+}) satisfies z.ZodType<JsonInferenceOutput>;
 
 export const toolCallOutputSchema = z
   .object({
     type: z.literal("tool_call"),
-    arguments: z.any().nullable().default(null),
+    arguments: JsonValueSchema.nullable(),
     id: z.string(),
-    name: z.string().nullable().default(null),
+    name: z.string().nullable(),
     raw_arguments: z.string(),
     raw_name: z.string(),
   })
@@ -338,12 +341,12 @@ export const toolCallOutputSchema = z
 
 export type ToolCallOutput = z.infer<typeof toolCallOutputSchema>;
 
-export const contentBlockOutputSchema = z.discriminatedUnion("type", [
+export const contentBlockChatOutputSchema = z.discriminatedUnion("type", [
   textContentSchema,
   toolCallOutputSchema,
-]);
-
-export type ContentBlockOutput = z.infer<typeof contentBlockOutputSchema>;
+  thoughtSchema,
+  unknownSchema,
+]) satisfies z.ZodType<ContentBlockChatOutput>;
 
 export const modelInferenceOutputContentBlockSchema = z.discriminatedUnion(
   "type",

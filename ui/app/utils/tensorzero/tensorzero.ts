@@ -4,7 +4,8 @@ TensorZero Client (for internal use only for now)
 
 import { z } from "zod";
 import {
-  contentBlockOutputSchema,
+  contentBlockChatOutputSchema,
+  thoughtSchema,
   type StoragePath,
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
@@ -97,16 +98,6 @@ export const ImageContentSchema = z
 export type ImageContent = z.infer<typeof ImageContentSchema>;
 
 /**
- * Thought content for Chain of Thought reasoning
- */
-export const ThoughtContentSchema = z.object({
-  type: z.literal("thought"),
-  text: z.string().nullable(),
-  signature: z.string().nullable().optional(),
-});
-export type ThoughtContent = z.infer<typeof ThoughtContentSchema>;
-
-/**
  * Unknown content type for model-specific content
  */
 export const UnknownContentSchema = z.object({
@@ -123,7 +114,7 @@ export const InputMessageContentSchema = z.union([
   ToolCallContentSchema,
   ToolResultContentSchema,
   ImageContentSchema,
-  ThoughtContentSchema,
+  thoughtSchema,
   UnknownContentSchema,
 ]);
 
@@ -210,7 +201,7 @@ export const ChatInferenceResponseSchema = z.object({
   inference_id: z.string(),
   episode_id: z.string(),
   variant_name: z.string(),
-  content: z.array(contentBlockOutputSchema),
+  content: z.array(contentBlockChatOutputSchema),
   usage: z
     .object({
       input_tokens: z.number(),

@@ -1,6 +1,8 @@
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import type { InferenceResponse } from "~/utils/tensorzero";
-import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
+import type {
+  Datapoint as TensorZeroDatapoint,
+  InferenceResponse,
+} from "tensorzero-node";
 import { prepareInferenceActionRequest } from "../api/tensorzero/inference.utils";
 
 export function refreshClientInference(

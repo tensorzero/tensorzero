@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { MetricConfigOptimize } from "tensorzero-node";
 import {
-  contentBlockOutputSchema,
+  contentBlockChatOutputSchema,
   CountSchema,
   getInferenceTableName,
   InferenceJoinKey,
@@ -9,9 +9,8 @@ import {
   inputSchema,
   jsonInferenceOutputSchema,
 } from "./common";
-import type { JsonInferenceOutput } from "./common";
 import { getClickhouseClient } from "./client.server";
-import type { FunctionConfig } from "tensorzero-node";
+import type { FunctionConfig, JsonInferenceOutput } from "tensorzero-node";
 import { getComparisonOperator, type FeedbackConfig } from "../config/feedback";
 import {
   getInferenceJoinKey,
@@ -390,7 +389,9 @@ function parseInferenceExamples(
     const processedRows = rows.map((row) => ({
       ...row,
       input: inputSchema.parse(JSON.parse(row.input)),
-      output: z.array(contentBlockOutputSchema).parse(JSON.parse(row.output)),
+      output: z
+        .array(contentBlockChatOutputSchema)
+        .parse(JSON.parse(row.output)),
     })) as ParsedChatInferenceExample[];
     const parsedRows = processedRows.map((row) =>
       parsedChatExampleSchema.parse(row),
