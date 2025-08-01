@@ -779,6 +779,7 @@ struct ConverseOutputWithMetadata<'a> {
     json_mode: &'a ModelInferenceRequestJsonMode,
 }
 
+#[expect(clippy::unnecessary_wraps)]
 fn aws_stop_reason_to_tensorzero_finish_reason(stop_reason: StopReason) -> Option<FinishReason> {
     match stop_reason {
         StopReason::ContentFiltered | StopReason::GuardrailIntervened => {

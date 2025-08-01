@@ -141,7 +141,7 @@ pub fn validate_variant_pins(
     variant_pins: &HashMap<String, String>,
     config: &Config,
 ) -> Result<(), Error> {
-    for (function_name, variant_name) in variant_pins.iter() {
+    for (function_name, variant_name) in variant_pins {
         let function_config = config.get_function(function_name)?;
         function_config
             .variants()

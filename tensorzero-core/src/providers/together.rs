@@ -1,6 +1,7 @@
 use std::{borrow::Cow, sync::OnceLock, time::Duration};
 
 use crate::inference::types::RequestMessage;
+use crate::providers::openai::OpenAIToolChoiceString;
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_eventsource::{Event, EventSource};
@@ -365,10 +366,14 @@ impl<'a> TogetherRequest<'a> {
             .as_ref()
             .map(|config| &config.tool_choice);
 
-        let (tools, tool_choice, parallel_tool_calls) = match tool_choice {
+        let (tools, mut tool_choice, parallel_tool_calls) = match tool_choice {
             Some(&ToolChoice::None) => (None, None, None),
             _ => prepare_openai_tools(request),
         };
+        // Together AI doesn't seem to support `tool_choice="required"`, so we convert it to `tool_choice="auto"`
+        if let Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Required)) = tool_choice {
+            tool_choice = Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Auto));
+        }
 
         Ok(TogetherRequest {
             messages,
@@ -394,7 +399,7 @@ pub fn prepare_together_messages<'a>(
     request_messages: &'a [RequestMessage],
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request_messages.len());
-    for message in request_messages.iter() {
+    for message in request_messages {
         messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
     }
 

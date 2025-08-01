@@ -52,6 +52,14 @@ pub fn set_unstable_error_json(unstable_error_json: bool) -> Result<(), Error> {
     })
 }
 
+pub fn warn_discarded_cache_write(raw_response: &str) {
+    if *DEBUG.get().unwrap_or(&false) {
+        tracing::warn!("Skipping cache write due to invalid output:\nRaw response: {raw_response}");
+    } else {
+        tracing::warn!("Skipping cache write due to invalid output");
+    }
+}
+
 pub fn warn_discarded_thought_block(provider_type: &str, thought: &Thought) {
     if *DEBUG.get().unwrap_or(&false) {
         tracing::warn!("Provider type `{provider_type}` does not support input thought blocks, discarding: {thought:?}");
@@ -254,6 +262,9 @@ pub enum ErrorDetails {
     InvalidClientMode {
         mode: String,
         message: String,
+    },
+    InvalidDynamicTemplatePath {
+        name: String,
     },
     InvalidEncodedJobHandle,
     InvalidJobHandle {
@@ -552,6 +563,7 @@ impl ErrorDetails {
             | ErrorDetails::InferenceTimeout { .. }
             | ErrorDetails::InputValidation { .. }
             | ErrorDetails::InvalidDatasetName { .. }
+            | ErrorDetails::InvalidDynamicTemplatePath { .. }
             | ErrorDetails::InvalidEncodedJobHandle
             | ErrorDetails::InvalidInferenceOutputSource { .. }
             | ErrorDetails::InvalidInferenceTarget { .. }
@@ -600,6 +612,7 @@ impl ErrorDetails {
             | ErrorDetails::InvalidClientMode { .. }
             | ErrorDetails::InvalidDatasetName { .. }
             | ErrorDetails::InvalidDynamicEvaluationRun { .. }
+            | ErrorDetails::InvalidDynamicTemplatePath { .. }
             | ErrorDetails::InvalidEncodedJobHandle
             | ErrorDetails::InvalidInferenceOutputSource { .. }
             | ErrorDetails::InvalidInferenceTarget { .. }
@@ -952,6 +965,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Dynamic evaluation run not found for episode id: {episode_id}",
                 )
+            }
+            ErrorDetails::InvalidDynamicTemplatePath { name } => {
+                write!(f, "Invalid dynamic template path: {name}. There is likely a duplicate template in the config.")
             }
             ErrorDetails::InvalidEncodedJobHandle => {
                 write!(

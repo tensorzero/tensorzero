@@ -1725,24 +1725,24 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                     .as_str()
                     .is_some_and(|e| e.contains("401 Authorization")),
                 "Unexpected error: {res}"
-            )
+            );
         }
         "together" => {
             assert!(
                 res["error"].as_str().unwrap().contains("Invalid API key"),
                 "Unexpected error: {res}"
-            )
+            );
         }
         "vllm" => {
             // vLLM returns different errors if you mess with the request headers,
             // so we just check that an error occurs
-            assert!(res["error"].as_str().is_some(), "Unexpected error: {res}")
+            assert!(res["error"].as_str().is_some(), "Unexpected error: {res}");
         }
         "xai" => {
             assert!(
                 res["error"].as_str().unwrap().contains("Incorrect"),
                 "Unexpected error: {res}"
-            )
+            );
         }
         _ => {
             panic!("Got error: {res}");
@@ -3971,7 +3971,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         assert_eq!(chunk_episode_id, episode_id);
 
         let blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        for block in blocks.iter() {
+        for block in blocks {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -4914,7 +4914,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
         // OpenAI occasionally emits a tool call with an empty object for `arguments`
         assert!(arguments.len() <= 2);
         if let Some(location) = arguments.get("location") {
-            assert!(location.as_str().is_some())
+            assert!(location.as_str().is_some());
         }
         if arguments.len() == 2 {
             let units = arguments.get("units").unwrap().as_str().unwrap();
@@ -8025,8 +8025,6 @@ pub async fn test_stop_sequences_inference_request_with_provider(
                 "deepseek",
                 "openrouter",
                 "openai",
-                "sglang",
-                "mistral",
                 "azure",
                 "groq",
                 "hyperbolic",
@@ -8442,7 +8440,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         assert_eq!(chunk_episode_id, episode_id);
 
         let blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        for block in blocks.iter() {
+        for block in blocks {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -10666,7 +10664,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
                     "name": "get_temperature",
                     "result": "70",
                 }
-            ))
+            ));
         } else if content_block.get("name").unwrap().as_str().unwrap() == "get_humidity" {
             tool_results.push(json!(
                 {
@@ -10675,7 +10673,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
                     "name": "get_humidity",
                     "result": "30",
                 }
-            ))
+            ));
         } else {
             panic!(
                 "Unknown tool call: {}",
@@ -10958,7 +10956,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
                     "name": "get_temperature",
                     "result": "70",
                 }
-            ))
+            ));
         } else if content_block.get("name").unwrap().as_str().unwrap() == "get_humidity" {
             tool_results.push(json!(
                 {
@@ -10967,7 +10965,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
                     "name": "get_humidity",
                     "result": "30",
                 }
-            ))
+            ));
         } else {
             panic!(
                 "Unknown tool call: {}",
