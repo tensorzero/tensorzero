@@ -1,6 +1,7 @@
 pub mod migration_trait;
 pub mod migrations;
 
+use std::env;
 use std::time::{Duration, Instant};
 
 use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
@@ -42,7 +43,10 @@ use serde::{Deserialize, Serialize};
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
 /// will panic if they don't match.
 pub const NUM_MIGRATIONS: usize = 28;
-const RUN_MIGRATIONS_DOCKER_COMMAND: &str = "docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway --run-migrations";
+fn get_run_migrations_command() -> String {
+    let version = env!("CARGO_PKG_VERSION");
+    format!("docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-migrations-only")
+}
 
 /// Constructs (but does not run) a vector of all our database migrations.
 /// This is the single source of truth for all migration - it's used during startup to migrate
@@ -107,8 +111,9 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo, manual_run: bool) -> Res
     if !database_exists {
         if clickhouse.is_cluster_configured() && !manual_run {
             let database = clickhouse.database();
+            let run_migrations_command = get_run_migrations_command();
             return Err(ErrorDetails::ClickHouseConfiguration {
-                message: format!("Database {database} does not exist. We do not automatically run migrations to create and set it up when replication is configured. Please run `{RUN_MIGRATIONS_DOCKER_COMMAND}`."),
+                message: format!("Database {database} does not exist. We do not automatically run migrations to create and set it up when replication is configured. Please run `{run_migrations_command}`."),
             }.into());
         } else {
             // This is a no-op if the database already exists
@@ -306,7 +311,8 @@ pub async fn run_migration(
         let migration_name = migration.name();
 
         if is_replicated && !manual_run {
-            return Err(ErrorDetails::ClickHouseMigration { id: migration_name, message: format!("Migrations must be run manually if using a replicated ClickHouse cluster. Please run `{RUN_MIGRATIONS_DOCKER_COMMAND}`.") }.into());
+            let run_migrations_command = get_run_migrations_command();
+            return Err(ErrorDetails::ClickHouseMigration { id: migration_name, message: format!("Migrations must be run manually if using a replicated ClickHouse cluster. Please run `{run_migrations_command}`.") }.into());
         }
 
         tracing::info!("Applying migration: {migration_name} with clean_start: {clean_start}");

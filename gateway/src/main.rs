@@ -52,7 +52,7 @@ struct Args {
 
     /// Run database migrations manually then exit.
     #[arg(long)]
-    run_migrations: bool,
+    run_migrations_only: bool,
 
     /// Deprecated: use `--config-file` instead
     tensorzero_toml: Option<PathBuf>,
@@ -94,7 +94,7 @@ async fn main() {
         .expect_pretty("Failed to set up logs");
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
-    if args.run_migrations {
+    if args.run_migrations_only {
         manual_run_migrations()
             .await
             .expect_pretty("Failed to run migrations");
