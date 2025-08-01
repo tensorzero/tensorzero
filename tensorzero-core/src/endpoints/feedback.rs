@@ -12,7 +12,7 @@ use tokio::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -274,7 +274,9 @@ async fn write_comment(
     });
     if !dryrun {
         tokio::spawn(async move {
-            let _ = connection_info.write(&[payload], "CommentFeedback").await;
+            let _ = connection_info
+                .write(&[payload], TableName::CommentFeedback)
+                .await;
         });
     }
     Ok(())
@@ -314,7 +316,7 @@ async fn write_demonstration(
     if !dryrun {
         tokio::spawn(async move {
             let _ = connection_info
-                .write(&[payload], "DemonstrationFeedback")
+                .write(&[payload], TableName::DemonstrationFeedback)
                 .await;
         });
     }
@@ -353,7 +355,7 @@ async fn write_float(
     if !dryrun {
         tokio::spawn(async move {
             let _ = connection_info
-                .write(&[payload], "FloatMetricFeedback")
+                .write(&[payload], TableName::FloatMetricFeedback)
                 .await;
         });
     }
@@ -390,7 +392,7 @@ async fn write_boolean(
     if !dryrun {
         tokio::spawn(async move {
             let _ = connection_info
-                .write(&[payload], "BooleanMetricFeedback")
+                .write(&[payload], TableName::BooleanMetricFeedback)
                 .await;
         });
     }
@@ -474,7 +476,11 @@ async fn get_function_name(
         MetricConfigLevel::Episode => "episode_id_uint",
     };
     let query = format!(
-        "SELECT function_name FROM {table_name} FINAL WHERE {identifier_key} = toUInt128(toUUID('{target_id}'))"
+        "SELECT function_name
+         FROM {table_name}
+         WHERE {identifier_key} = toUInt128(toUUID('{target_id}'))
+         LIMIT 1
+         SETTINGS max_threads=1"
     );
     let function_name = connection_info
         .run_query_synchronous_no_params(query)

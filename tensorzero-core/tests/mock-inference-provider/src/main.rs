@@ -84,13 +84,13 @@ pub async fn shutdown_signal() {
     let hangup = std::future::pending::<()>();
 
     tokio::select! {
-        _ = ctrl_c => {
+        () = ctrl_c => {
             tracing::info!("Received Ctrl+C signal");
         }
-        _ = terminate => {
+        () = terminate => {
             tracing::info!("Received SIGTERM signal");
         }
-        _ = hangup => {
+        () = hangup => {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             tracing::info!("Received SIGHUP signal");
         }
@@ -264,13 +264,13 @@ async fn create_openai_file(mut form: Multipart) -> Result<Json<serde_json::Valu
                     let result = serde_json::from_str::<OpenAIFineTuningRow>(line);
                     match result {
                         Ok(row) => {
-                            for message in row.messages.iter() {
+                            for message in &row.messages {
                                 let Some(content_array) =
                                     message.content.as_ref().and_then(|v| v.as_array())
                                 else {
                                     continue;
                                 };
-                                for content in content_array.iter() {
+                                for content in content_array {
                                     let object = content.as_object().unwrap();
                                     let content_type = object.get("type").unwrap();
                                     if content_type == "image_url" {
