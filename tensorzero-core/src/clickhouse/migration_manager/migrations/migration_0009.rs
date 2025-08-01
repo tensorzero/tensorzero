@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 
 use super::check_table_exists;
@@ -70,18 +70,28 @@ impl Migration for Migration0009<'_> {
             + view_offset)
             .as_secs();
 
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "BooleanMetricFeedbackByTargetId",
+                engine_args: &[],
+            },
+        );
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
         // Create the `BooleanMetricFeedbackByTargetId` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS BooleanMetricFeedbackByTargetId
+        let query = format!(
+            r"
+            CREATE TABLE IF NOT EXISTS BooleanMetricFeedbackByTargetId{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
                 target_id UUID, -- must be a UUIDv7
                 metric_name LowCardinality(String),
                 value Bool,
                 tags Map(String, String)
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY target_id;
-        ";
+        ",
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -95,7 +105,7 @@ impl Migration for Migration0009<'_> {
         };
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackByTargetIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackByTargetIdView{on_cluster_name}
             TO BooleanMetricFeedbackByTargetId
             AS
                 SELECT
@@ -114,17 +124,26 @@ impl Migration for Migration0009<'_> {
             .await?;
 
         // Create the `CommentFeedbackByTargetId` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS CommentFeedbackByTargetId
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "CommentFeedbackByTargetId",
+                engine_args: &[],
+            },
+        );
+        let query = format!(
+            r"
+            CREATE TABLE IF NOT EXISTS CommentFeedbackByTargetId{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
                 target_id UUID, -- must be a UUIDv7
                 target_type Enum('inference' = 1, 'episode' = 2),
                 value String,
                 tags Map(String, String)
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY target_id;
-        ";
+        ",
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -134,7 +153,7 @@ impl Migration for Migration0009<'_> {
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS CommentFeedbackByTargetIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS CommentFeedbackByTargetIdView{on_cluster_name}
             TO CommentFeedbackByTargetId
             AS
                 SELECT
@@ -153,16 +172,25 @@ impl Migration for Migration0009<'_> {
             .await?;
 
         // Create the `DemonstrationFeedbackByInferenceId` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS DemonstrationFeedbackByInferenceId
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "DemonstrationFeedbackByInferenceId",
+                engine_args: &[],
+            },
+        );
+        let query = format!(
+            r"
+            CREATE TABLE IF NOT EXISTS DemonstrationFeedbackByInferenceId{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
                 inference_id UUID, -- must be a UUIDv7
                 value String,
                 tags Map(String, String)
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY inference_id;
-        ";
+        ",
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -172,7 +200,7 @@ impl Migration for Migration0009<'_> {
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS DemonstrationFeedbackByInferenceIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS DemonstrationFeedbackByInferenceIdView{on_cluster_name}
             TO DemonstrationFeedbackByInferenceId
             AS
                 SELECT
@@ -190,17 +218,26 @@ impl Migration for Migration0009<'_> {
             .await?;
 
         // Create the `FloatMetricFeedbackByTargetId` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS FloatMetricFeedbackByTargetId
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "FloatMetricFeedbackByTargetId",
+                engine_args: &[],
+            },
+        );
+        let query = format!(
+            r"
+            CREATE TABLE IF NOT EXISTS FloatMetricFeedbackByTargetId{on_cluster_name}
            (
                id UUID, -- must be a UUIDv7
                target_id UUID, -- must be a UUIDv7
                metric_name LowCardinality(String),
                value Float32,
                tags Map(String, String)
-           ) ENGINE = MergeTree()
+           ) ENGINE = {table_engine_name}
            ORDER BY target_id;
-       ";
+       ",
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -215,7 +252,7 @@ impl Migration for Migration0009<'_> {
         };
         let query = format!(
             r"
-           CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackByTargetIdView
+           CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackByTargetIdView{on_cluster_name}
            TO FloatMetricFeedbackByTargetId
            AS
                SELECT
@@ -316,18 +353,20 @@ impl Migration for Migration0009<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS BooleanMetricFeedbackByTargetIdView;
-            DROP VIEW IF EXISTS CommentFeedbackByTargetIdView;
-            DROP VIEW IF EXISTS DemonstrationFeedbackByInferenceIdView;
-            DROP VIEW IF EXISTS FloatMetricFeedbackByTargetIdView;
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            "/* Drop the materialized views */\
+            DROP VIEW IF EXISTS BooleanMetricFeedbackByTargetIdView{on_cluster_name};
+            DROP VIEW IF EXISTS CommentFeedbackByTargetIdView{on_cluster_name};
+            DROP VIEW IF EXISTS DemonstrationFeedbackByInferenceIdView{on_cluster_name};
+            DROP VIEW IF EXISTS FloatMetricFeedbackByTargetIdView{on_cluster_name};
             /* Drop the tables */\
-            DROP TABLE IF EXISTS BooleanMetricFeedbackByTargetId;
-            DROP TABLE IF EXISTS CommentFeedbackByTargetId;
-            DROP TABLE IF EXISTS DemonstrationFeedbackByInferenceId;
-            DROP TABLE IF EXISTS FloatMetricFeedbackByTargetId;
+            DROP TABLE IF EXISTS BooleanMetricFeedbackByTargetId{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS CommentFeedbackByTargetId{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS DemonstrationFeedbackByInferenceId{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS FloatMetricFeedbackByTargetId{on_cluster_name} SYNC;
             "
-        .to_string()
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

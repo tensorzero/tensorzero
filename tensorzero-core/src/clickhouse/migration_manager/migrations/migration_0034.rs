@@ -1,6 +1,6 @@
 use super::check_table_exists;
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 use crate::serde_util::deserialize_u64;
 use async_trait::async_trait;
@@ -51,16 +51,23 @@ impl Migration for Migration0034<'_> {
             })?
             + view_offset)
             .as_nanos();
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_name: "CumulativeUsage",
+                table_engine_name: "SummingMergeTree",
+                engine_args: &[],
+            },
+        );
         self.clickhouse
-            .run_query_synchronous_no_params(
-                r"CREATE TABLE IF NOT EXISTS CumulativeUsage (
+            .run_query_synchronous_no_params(format!(
+                r"CREATE TABLE IF NOT EXISTS CumulativeUsage{on_cluster_name} (
                         type LowCardinality(String),
                         count UInt64,
                     )
-                    ENGINE = SummingMergeTree
+                    ENGINE = {table_engine_name}
                     ORDER BY type;"
-                    .to_string(),
-            )
+            ))
             .await?;
 
         // Create the materialized view for the CumulativeUsage table from ModelInference
@@ -73,7 +80,7 @@ impl Migration for Migration0034<'_> {
         };
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS CumulativeUsageView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS CumulativeUsageView{on_cluster_name}
             TO CumulativeUsage
             AS
             SELECT
@@ -163,10 +170,12 @@ impl Migration for Migration0034<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r"
-        DROP TABLE CumulativeUsageView;
-        DROP TABLE CumulativeUsage;"
-            .to_string()
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            r"
+        DROP TABLE IF EXISTS CumulativeUsageView{on_cluster_name} SYNC;
+        DROP TABLE IF EXISTS CumulativeUsage{on_cluster_name} SYNC;"
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {
