@@ -174,8 +174,8 @@ impl<'a> BatchInferenceConfig<'a> {
                     episode_id: *episode_id,
                 },
                 // Not yet supported for batch inference requests
-                extra_body: Default::default(),
-                extra_headers: Default::default(),
+                extra_body: Cow::Owned(UnfilteredInferenceExtraBody::default()),
+                extra_headers: Cow::Owned(UnfilteredInferenceExtraHeaders::default()),
                 extra_cache_key: None,
             },
         )
@@ -848,6 +848,8 @@ mod tests {
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::error::ErrorDetails;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
+    use crate::inference::types::extra_body::ExtraBodyConfig;
+    use crate::inference::types::extra_headers::ExtraHeadersConfig;
     use crate::inference::types::{
         ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role, Usage,
     };
@@ -888,8 +890,8 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::Owned(UnfilteredInferenceExtraBody::default()),
+            extra_headers: Cow::Owned(UnfilteredInferenceExtraHeaders::default()),
             extra_cache_key: None,
         };
 
@@ -941,8 +943,8 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
-            Default::default(),
-            Default::default(),
+            FullExtraBodyConfig::default(),
+            FullExtraHeadersConfig::default(),
         )
         .unwrap();
 
@@ -991,8 +993,8 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
-            Default::default(),
-            Default::default(),
+            FullExtraBodyConfig::default(),
+            FullExtraHeadersConfig::default(),
         )
         .unwrap();
 
@@ -1026,8 +1028,8 @@ mod tests {
             function_name: "test_function",
             variant_name: "test_variant",
             dynamic_output_schema: Some(&dynamic_output_schema),
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::Owned(UnfilteredInferenceExtraBody::default()),
+            extra_headers: Cow::Owned(UnfilteredInferenceExtraHeaders::default()),
             extra_cache_key: None,
         };
         let json_mode = JsonMode::ImplicitTool;
@@ -1040,8 +1042,8 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
-            Default::default(),
-            Default::default(),
+            FullExtraBodyConfig::default(),
+            FullExtraHeadersConfig::default(),
         )
         .unwrap();
 
@@ -1064,8 +1066,8 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
-            Default::default(),
-            Default::default(),
+            FullExtraBodyConfig::default(),
+            FullExtraHeadersConfig::default(),
         )
         .unwrap();
 
@@ -1084,8 +1086,8 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
-            Default::default(),
-            Default::default(),
+            FullExtraBodyConfig::default(),
+            FullExtraHeadersConfig::default(),
         )
         .unwrap();
 
@@ -1121,8 +1123,8 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::Owned(UnfilteredInferenceExtraBody::default()),
+            extra_headers: Cow::Owned(UnfilteredInferenceExtraHeaders::default()),
             extra_cache_key: None,
         };
 
@@ -1159,8 +1161,8 @@ mod tests {
             output_schema: None,
             tool_config: None,
             function_type: FunctionType::Chat,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
+            extra_headers: FullExtraHeadersConfig::default(),
             ..Default::default()
         };
 
@@ -1178,13 +1180,13 @@ mod tests {
                 ModelProvider {
                     name: model_name.into(),
                     config: dummy_provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Some(ExtraBodyConfig::default()),
+                    extra_headers: Some(ExtraHeadersConfig::default()),
+                    timeouts: Some(TimeoutsConfig::default()),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1276,8 +1278,8 @@ mod tests {
             output_schema: Some(&output_schema),
             tool_config: None,
             function_type: FunctionType::Json,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
+            extra_headers: FullExtraHeadersConfig::default(),
             ..Default::default()
         };
 
@@ -1294,13 +1296,13 @@ mod tests {
                 ModelProvider {
                     name: model_name_json.into(),
                     config: dummy_provider_config_json,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Some(ExtraBodyConfig::default()),
+                    extra_headers: Some(ExtraHeadersConfig::default()),
+                    timeouts: Some(TimeoutsConfig::default()),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
 
         // Create the arguments struct
@@ -1360,13 +1362,13 @@ mod tests {
                 ModelProvider {
                     name: error_model_name.into(),
                     config: error_provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Some(ExtraBodyConfig::default()),
+                    extra_headers: Some(ExtraHeadersConfig::default()),
+                    timeouts: Some(TimeoutsConfig::default()),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
 
         // Create the arguments struct
@@ -1420,8 +1422,8 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::Owned(UnfilteredInferenceExtraBody::default()),
+            extra_headers: Cow::Owned(UnfilteredInferenceExtraHeaders::default()),
             extra_cache_key: None,
         };
 
@@ -1458,8 +1460,8 @@ mod tests {
             output_schema: None,
             tool_config: None,
             function_type: FunctionType::Chat,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
+            extra_headers: FullExtraHeadersConfig::default(),
             ..Default::default()
         };
 
@@ -1484,9 +1486,9 @@ mod tests {
                     ModelProvider {
                         name: error_model_name.into(),
                         config: error_provider_config,
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
+                        extra_body: Some(ExtraBodyConfig::default()),
+                        extra_headers: Some(ExtraHeadersConfig::default()),
+                        timeouts: Some(TimeoutsConfig::default()),
                         discard_unknown_chunks: false,
                     },
                 ),
@@ -1495,14 +1497,14 @@ mod tests {
                     ModelProvider {
                         name: model_name.into(),
                         config: dummy_provider_config,
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
+                        extra_body: Some(ExtraBodyConfig::default()),
+                        extra_headers: Some(ExtraHeadersConfig::default()),
+                        timeouts: Some(TimeoutsConfig::default()),
                         discard_unknown_chunks: false,
                     },
                 ),
             ]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1601,13 +1603,13 @@ mod tests {
                 ModelProvider {
                     name: "good_provider".into(),
                     config: dummy_provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Some(ExtraBodyConfig::default()),
+                    extra_headers: Some(ExtraHeadersConfig::default()),
+                    timeouts: Some(TimeoutsConfig::default()),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         }));
 
         // Prepare the model inference request
@@ -1626,8 +1628,8 @@ mod tests {
             seed: None,
             tool_config: None,
             function_type: FunctionType::Chat,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
+            extra_headers: FullExtraHeadersConfig::default(),
             ..Default::default()
         };
 
@@ -1749,8 +1751,8 @@ mod tests {
             output_schema: None,
             tool_config: None,
             function_type: FunctionType::Chat,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
+            extra_headers: FullExtraHeadersConfig::default(),
             ..Default::default()
         };
 
@@ -1775,9 +1777,9 @@ mod tests {
                     ModelProvider {
                         name: error_model_name.into(),
                         config: error_provider_config,
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
+                        extra_body: Some(ExtraBodyConfig::default()),
+                        extra_headers: Some(ExtraHeadersConfig::default()),
+                        timeouts: Some(TimeoutsConfig::default()),
                         discard_unknown_chunks: false,
                     },
                 ),
@@ -1786,14 +1788,14 @@ mod tests {
                     ModelProvider {
                         name: model_name.into(),
                         config: dummy_provider_config,
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
+                        extra_body: Some(ExtraBodyConfig::default()),
+                        extra_headers: Some(ExtraHeadersConfig::default()),
+                        timeouts: Some(TimeoutsConfig::default()),
                         discard_unknown_chunks: false,
                     },
                 ),
             ]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         }));
         let retry_config = RetryConfig::default();
 

@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::config_parser::{Config, ObjectStoreInfo, UninitializedVariantInfo};
+use crate::config_parser::{Config, ObjectStoreInfo, TimeoutsConfig, UninitializedVariantInfo};
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -520,7 +520,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     variants: [(
                         model_name.clone(),
                         Arc::new(VariantInfo {
-                            timeouts: Default::default(),
+                            timeouts: TimeoutsConfig::default(),
                             inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
                                 model: (&**model_name).into(),
                                 ..Default::default()
@@ -1318,8 +1318,8 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
             include_original_response: false,
         };
 
@@ -1371,8 +1371,8 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
             include_original_response: false,
         };
 

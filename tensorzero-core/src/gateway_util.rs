@@ -261,7 +261,9 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
-    use crate::config_parser::{gateway::GatewayConfig, ObservabilityConfig};
+    use crate::config_parser::{
+        gateway::GatewayConfig, ExportConfig, ObservabilityConfig, TemplateFilesystemAccess,
+    };
 
     #[tokio::test]
     #[traced_test]
@@ -274,8 +276,8 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            template_filesystem_access: Default::default(),
-            export: Default::default(),
+            template_filesystem_access: TemplateFilesystemAccess::default(),
+            export: ExportConfig::default(),
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
@@ -329,8 +331,8 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            template_filesystem_access: Default::default(),
-            export: Default::default(),
+            template_filesystem_access: TemplateFilesystemAccess::default(),
+            export: ExportConfig::default(),
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
@@ -354,8 +356,8 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            template_filesystem_access: Default::default(),
-            export: Default::default(),
+            template_filesystem_access: TemplateFilesystemAccess::default(),
+            export: ExportConfig::default(),
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
@@ -381,8 +383,8 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            template_filesystem_access: Default::default(),
-            export: Default::default(),
+            template_filesystem_access: TemplateFilesystemAccess::default(),
+            export: ExportConfig::default(),
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,

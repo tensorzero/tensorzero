@@ -1845,13 +1845,13 @@ impl ShorthandModelConfig for ModelConfig {
                 ModelProvider {
                     name: provider_type.into(),
                     config: provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Some(ExtraBodyConfig::default()),
+                    extra_headers: Some(ExtraHeadersConfig::default()),
+                    timeouts: Some(TimeoutsConfig::default()),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         })
     }
 
@@ -1911,6 +1911,7 @@ mod tests {
 
     use crate::cache::CacheEnabledMode;
     use crate::config_parser::SKIP_CREDENTIAL_VALIDATION;
+    use crate::inference::types::extra_body::FullExtraBodyConfig;
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         cache::CacheOptions,
@@ -1948,13 +1949,13 @@ mod tests {
                 ModelProvider {
                     name: "good_provider".into(),
                     config: good_provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Some(ExtraBodyConfig::default()),
+                    extra_headers: Some(ExtraHeadersConfig::default()),
+                    timeouts: Some(TimeoutsConfig::default()),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -1990,7 +1991,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let model_name = "test model";
@@ -2023,13 +2024,13 @@ mod tests {
                 ModelProvider {
                     name: "error".into(),
                     config: bad_provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Some(ExtraBodyConfig::default()),
+                    extra_headers: Some(ExtraHeadersConfig::default()),
+                    timeouts: Some(TimeoutsConfig::default()),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -2096,7 +2097,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -2111,9 +2112,9 @@ mod tests {
                     ModelProvider {
                         name: "error_provider".into(),
                         config: bad_provider_config,
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
+                        extra_body: Some(ExtraBodyConfig::default()),
+                        extra_headers: Some(ExtraHeadersConfig::default()),
+                        timeouts: Some(TimeoutsConfig::default()),
                         discard_unknown_chunks: false,
                     },
                 ),
@@ -2122,14 +2123,14 @@ mod tests {
                     ModelProvider {
                         name: "good_provider".into(),
                         config: good_provider_config,
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
+                        extra_body: Some(ExtraBodyConfig::default()),
+                        extra_headers: Some(ExtraHeadersConfig::default()),
+                        timeouts: Some(TimeoutsConfig::default()),
                         discard_unknown_chunks: false,
                     },
                 ),
             ]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
 
         let model_name = "test model";
@@ -2185,7 +2186,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -2197,13 +2198,13 @@ mod tests {
                 ModelProvider {
                     name: "good_provider".into(),
                     config: good_provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Some(ExtraBodyConfig::default()),
+                    extra_headers: Some(ExtraHeadersConfig::default()),
+                    timeouts: Some(TimeoutsConfig::default()),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         let StreamResponseAndMessages {
             response:
@@ -2270,13 +2271,13 @@ mod tests {
                 ModelProvider {
                     name: "error".to_string().into(),
                     config: bad_provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Some(ExtraBodyConfig::default()),
+                    extra_headers: Some(ExtraHeadersConfig::default()),
+                    timeouts: Some(TimeoutsConfig::default()),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         let response = model_config
             .infer_stream(
@@ -2347,7 +2348,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -2360,9 +2361,9 @@ mod tests {
                     ModelProvider {
                         name: "error_provider".to_string().into(),
                         config: bad_provider_config,
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
+                        extra_body: Some(ExtraBodyConfig::default()),
+                        extra_headers: Some(ExtraHeadersConfig::default()),
+                        timeouts: Some(TimeoutsConfig::default()),
                         discard_unknown_chunks: false,
                     },
                 ),
@@ -2371,14 +2372,14 @@ mod tests {
                     ModelProvider {
                         name: "good_provider".to_string().into(),
                         config: good_provider_config,
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
+                        extra_body: Some(ExtraBodyConfig::default()),
+                        extra_headers: Some(ExtraHeadersConfig::default()),
+                        timeouts: Some(TimeoutsConfig::default()),
                         discard_unknown_chunks: false,
                     },
                 ),
             ]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         let StreamResponseAndMessages {
             response:
@@ -2453,13 +2454,13 @@ mod tests {
                 ModelProvider {
                     name: "model".into(),
                     config: provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Some(ExtraBodyConfig::default()),
+                    extra_headers: Some(ExtraHeadersConfig::default()),
+                    timeouts: Some(TimeoutsConfig::default()),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -2494,7 +2495,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let model_name = "test model";
@@ -2562,13 +2563,13 @@ mod tests {
                 ModelProvider {
                     name: "model".to_string().into(),
                     config: provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Some(ExtraBodyConfig::default()),
+                    extra_headers: Some(ExtraHeadersConfig::default()),
+                    timeouts: Some(TimeoutsConfig::default()),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -2603,7 +2604,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let error = model_config
@@ -2687,13 +2688,13 @@ mod tests {
                 ModelProvider {
                     name: "anthropic".into(),
                     config: anthropic_provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Some(ExtraBodyConfig::default()),
+                    extra_headers: Some(ExtraHeadersConfig::default()),
+                    timeouts: Some(TimeoutsConfig::default()),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         let model_table: ModelTable = HashMap::from([("claude".into(), anthropic_model_config)])
             .try_into()
