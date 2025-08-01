@@ -28,6 +28,7 @@ import {
   useInferenceActionFetcher,
 } from "~/routes/api/tensorzero/inference.utils";
 import type { DisplayInputMessage } from "~/utils/clickhouse/common";
+
 import {
   ParsedDatasetRowSchema,
   type ParsedDatasetRow,
@@ -120,28 +121,33 @@ export async function action({ request }: ActionFunctionArgs) {
       // For future reference:
       // These two calls would be a transaction but ClickHouse doesn't support
 
-      const datapoint = {
+      const baseDatapoint = {
         function_name: parsedFormData.function_name,
         input: transformedInput,
         output: transformedOutput,
         tags: parsedFormData.tags || {},
         auxiliary: parsedFormData.auxiliary,
         is_custom: true, // we're saving it after an edit, so it's custom
-        ...(functionType === "json"
-          ? {
-              output_schema:
-                parsedFormData["output_schema" as keyof typeof parsedFormData],
-            }
-          : {}),
-        ...(functionType === "chat" && "tool_params" in parsedFormData
-          ? {
-              tool_params:
-                parsedFormData["tool_params" as keyof typeof parsedFormData],
-            }
-          : {}),
         source_inference_id: parsedFormData.source_inference_id,
         id: uuid(), // We generate a new ID here because we want old evaluation runs to be able to point to the correct data.
       };
+
+      let datapoint;
+      if (functionType === "json" && "output_schema" in parsedFormData) {
+        datapoint = {
+          ...baseDatapoint,
+          output_schema: parsedFormData.output_schema,
+        };
+      } else if (functionType === "chat" && "tool_params" in parsedFormData) {
+        datapoint = {
+          ...baseDatapoint,
+          tool_params: parsedFormData.tool_params,
+        };
+      } else {
+        throw new Error(
+          `Unexpected function type "${functionType}" or missing required properties on datapoint`,
+        );
+      }
       const { id } = await getTensorZeroClient().updateDatapoint(
         parsedFormData.dataset_name,
         datapoint,

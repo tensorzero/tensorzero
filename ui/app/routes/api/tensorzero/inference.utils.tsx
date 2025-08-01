@@ -3,6 +3,12 @@ import { useFetcher, type FetcherFormProps } from "react-router";
 import type { SubmitTarget, FetcherSubmitOptions } from "react-router";
 import type { DisplayInputMessage } from "~/utils/clickhouse/common";
 import type {
+  ClientInput,
+  ClientInputMessage,
+  ClientInputMessageContent,
+  JsonValue,
+} from "tensorzero-node";
+import type {
   InputMessageContent as TensorZeroContent,
   ImageContent as TensorZeroImage,
   InputMessage as TensorZeroMessage,
@@ -21,7 +27,7 @@ import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { logger } from "~/utils/logger";
 import type {
-  JsonValue,
+  ClientInferenceParams,
   ResolvedInput as TensorZeroResolvedInput,
   ResolvedInputMessage as TensorZeroResolvedInputMessage,
   ResolvedInputMessageContent as TensorZeroResolvedInputMessageContent,
@@ -289,53 +295,105 @@ export function prepareInferenceActionRequest(
     | InferenceActionArgs
     | DatapointActionArgs
     | ClickHouseDatapointActionArgs,
-) {
+): ClientInferenceParams {
+  // Create base ClientInferenceParams with default values
+  const baseParams: ClientInferenceParams = {
+    function_name: null,
+    model_name: null,
+    episode_id: null,
+    input: { system: null, messages: [] },
+    stream: null,
+    params: {
+      chat_completion: {
+        temperature: null,
+        max_tokens: null,
+        seed: null,
+        top_p: null,
+        presence_penalty: null,
+        frequency_penalty: null,
+        json_mode: null,
+        stop_sequences: null,
+      },
+    },
+    variant_name: null,
+    dryrun: null,
+    internal: false,
+    tags: {},
+    output_schema: null,
+    credentials: new Map(),
+    cache_options: {
+      max_age_s: null,
+      enabled: "on",
+    },
+    include_original_response: false,
+    extra_body: {
+      extra_body: [],
+    },
+    extra_headers: {
+      headers: [],
+    },
+    internal_dynamic_variant_config: null,
+    allowed_tools: null,
+    additional_tools: null,
+    tool_choice: null,
+    parallel_tool_calls: null,
+  };
+
   // Prepare request based on source and function type
-  let request;
   if (
     args.source === "inference" &&
     args.resource.function_name === "tensorzero::default"
   ) {
-    request = prepareDefaultFunctionRequest(args.resource, args.variant);
+    const defaultRequest = prepareDefaultFunctionRequest(
+      args.resource,
+      args.variant,
+    );
+    return { ...baseParams, ...defaultRequest };
   } else if (args.source === "clickhouse_datapoint") {
-    // Convert TensorZero's ResolvedInput to our Input type first
+    // Extract tool parameters from the ClickHouse datapoint args
+    const tool_choice = args.tool_params?.tool_choice;
+    const parallel_tool_calls = args.tool_params?.parallel_tool_calls;
+    const tools_available = args.tool_params?.tools_available;
 
-    request = {
+    return {
+      ...baseParams,
       function_name: args.functionName,
-      input: resolvedInputToTensorZeroInput(args.input),
+      input: resolvedInputToClientInput(args.input),
       variant_name: args.variant,
-      tool_params: args.tool_params,
-      output_schema: args.output_schema,
+      output_schema: args.output_schema || null,
+      tool_choice: tool_choice || null,
+      parallel_tool_calls: parallel_tool_calls || null,
+      additional_tools: tools_available || null,
     };
   } else {
     // For other sources, the input is already a DisplayInput
-    const tensorZeroInput = resolvedInputToTensorZeroInput(args.resource.input);
+    const clientInput = resolvedInputToClientInput(args.resource.input);
     const extra_body =
       args.source === "inference" ? args.resource.extra_body : undefined;
-    request = {
+
+    return {
+      ...baseParams,
       function_name: args.resource.function_name,
-      input: tensorZeroInput,
+      input: clientInput,
       variant_name: args.variant,
       dryrun: true,
-      extra_body,
+      extra_body: extra_body ? { extra_body: extra_body } : { extra_body: [] },
     };
   }
-
-  return request;
 }
 
 function prepareDefaultFunctionRequest(
   inference: ParsedInferenceRow,
   selectedVariant: string,
-) {
-  const tensorZeroInput = resolvedInputToTensorZeroInput(inference.input);
+): Partial<ClientInferenceParams> {
+  const clientInput = resolvedInputToClientInput(inference.input);
   if (inference.function_type === "chat") {
     const tool_choice = inference.tool_params?.tool_choice;
     const parallel_tool_calls = inference.tool_params?.parallel_tool_calls;
     const tools_available = inference.tool_params?.tools_available;
     return {
       model_name: selectedVariant,
-      input: tensorZeroInput,
+      input: clientInput,
       dryrun: true,
       tool_choice: tool_choice,
       parallel_tool_calls: parallel_tool_calls,
@@ -347,16 +405,30 @@ function prepareDefaultFunctionRequest(
     const output_schema = inference.output_schema;
     return {
       model_name: selectedVariant,
-      input: tensorZeroInput,
+      input: clientInput,
       dryrun: true,
-      output_schema: output_schema,
+      output_schema: output_schema || null,
     };
   }
+
+  // Fallback case
+  return {
+    model_name: selectedVariant,
+    input: clientInput,
+    dryrun: true,
+  };
 }
 
 export interface VariantResponseInfo {
   output?: JsonInferenceOutput | ContentBlockOutput[];
   usage?: InferenceUsage;
+}
+
+export function resolvedInputToClientInput(input: DisplayInput): ClientInput {
+  return {
+    system: input.system || null,
+    messages: input.messages.map(resolvedInputMessageToClientInputMessage),
+  };
 }
 
 export function resolvedInputToTensorZeroInput(
@@ -419,5 +491,94 @@ function resolvedFileContentToTensorZeroFile(
     type: "image",
     mime_type: content.file.mime_type,
     data,
+  };
+}
+
+function resolvedInputMessageToClientInputMessage(
+  message: DisplayInputMessage,
+): ClientInputMessage {
+  return {
+    role: message.role,
+    content: message.content.map(
+      resolvedInputMessageContentToClientInputMessageContent,
+    ),
+  };
+}
+
+function resolvedInputMessageContentToClientInputMessageContent(
+  content: DisplayInputMessageContent,
+): ClientInputMessageContent {
+  switch (content.type) {
+    case "structured_text":
+      return {
+        type: "text",
+        arguments: content.arguments,
+      };
+    case "unstructured_text":
+      return {
+        type: "text",
+        text: content.text,
+      };
+    case "missing_function_text":
+      return {
+        type: "text",
+        text: content.value,
+      };
+    case "raw_text":
+      return {
+        type: "raw_text",
+        value: content.value,
+      };
+    case "tool_call": {
+      let parsedArguments;
+      try {
+        parsedArguments = JSON.parse(content.arguments);
+      } catch {
+        parsedArguments = content.arguments;
+      }
+      return {
+        type: "tool_call",
+        id: content.id,
+        name: content.name,
+        arguments: parsedArguments,
+        raw_arguments: content.arguments,
+        raw_name: content.name,
+      };
+    }
+    case "tool_result":
+      return {
+        type: "tool_result",
+        id: content.id,
+        name: content.name,
+        result: content.result,
+      };
+    case "thought":
+      return {
+        type: "thought",
+        text: content.text,
+        signature: content.signature || null,
+        _internal_provider_type: null,
+      };
+    case "unknown":
+      return {
+        type: "unknown",
+        data: content.data,
+        model_provider_name: content.model_provider_name || null,
+      };
+    case "file":
+      return resolvedFileContentToClientFile(content);
+    case "file_error":
+      throw new Error("Can't convert image error to client content");
+  }
+}
+
+function resolvedFileContentToClientFile(
+  content: ResolvedFileContent,
+): ClientInputMessageContent {
+  const data = content.file.dataUrl.split(",")[1];
+  return {
+    type: "file",
+    mime_type: content.file.mime_type,
+    data: data,
   };
 }

@@ -30,10 +30,12 @@ import {
   type ModelInferenceRow,
   type ParsedInferenceRow,
   type ParsedModelInferenceRow,
+  toolCallConfigDatabaseInsertSchema,
 } from "./inference";
 import { z } from "zod";
 import { logger } from "~/utils/logger";
 import { getConfig, getFunctionConfig } from "../config/index.server";
+import { JsonValueSchema } from "../tensorzero";
 
 /**
  * Query a table of at most `page_size` Inferences from ChatInference or JsonInference that are
@@ -513,6 +515,10 @@ async function parseInferenceRow(
   const resolvedInput = await resolveInput(input, functionConfig);
   const extra_body = row.extra_body ? JSON.parse(row.extra_body) : undefined;
   if (row.function_type === "chat") {
+    const tool_params =
+      row.tool_params === ""
+        ? null
+        : toolCallConfigDatabaseInsertSchema.parse(JSON.parse(row.tool_params));
     return {
       ...row,
       input: resolvedInput,
@@ -520,12 +526,7 @@ async function parseInferenceRow(
       inference_params: z
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.inference_params)),
-      tool_params:
-        row.tool_params === ""
-          ? {}
-          : z
-              .record(z.string(), z.unknown())
-              .parse(JSON.parse(row.tool_params)),
+      tool_params: tool_params,
       extra_body,
     };
   } else {
@@ -536,9 +537,7 @@ async function parseInferenceRow(
       inference_params: z
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.inference_params)),
-      output_schema: z
-        .record(z.string(), z.unknown())
-        .parse(JSON.parse(row.output_schema)),
+      output_schema: JsonValueSchema.parse(JSON.parse(row.output_schema)),
       extra_body,
     };
   }

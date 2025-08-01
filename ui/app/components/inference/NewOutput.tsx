@@ -15,6 +15,7 @@ import {
   ToolCallMessage,
 } from "~/components/layout/SnippetContent";
 import { CodeEditor } from "../ui/code-editor";
+import type { JsonValue } from "tensorzero-node";
 
 // IMPORTANT: THIS VERSION HAS `maxHeight` IN THE PROPS WHICH THE OTHER VERSIONS DO NOT HAVE
 
@@ -26,7 +27,7 @@ import { CodeEditor } from "../ui/code-editor";
 export type ChatInferenceOutputRenderingData = ContentBlockOutput[];
 
 export interface JsonInferenceOutputRenderingData extends JsonInferenceOutput {
-  schema?: Record<string, unknown>;
+  schema?: JsonValue;
 }
 
 interface OutputProps {

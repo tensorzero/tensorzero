@@ -4,6 +4,7 @@ import {
   jsonInferenceOutputSchema,
   displayInputSchema,
 } from "./common";
+import { JsonValueSchema } from "../tensorzero";
 
 /**
  * Schema representing a fully-qualified row in the Chat Inference dataset.
@@ -72,7 +73,7 @@ export const ParsedChatInferenceDatapointRowSchema =
   }).extend({
     input: displayInputSchema,
     output: z.array(contentBlockOutputSchema).optional(),
-    tool_params: z.record(z.string(), z.unknown()).optional(),
+    tool_params: z.record(z.string(), JsonValueSchema).optional(),
     is_custom: z.boolean(),
     tags: z.record(z.string(), z.string()),
   });
@@ -88,7 +89,7 @@ export const ParsedJsonInferenceDatapointRowSchema =
   }).extend({
     input: displayInputSchema,
     output: jsonInferenceOutputSchema.optional(),
-    output_schema: z.record(z.string(), z.unknown()),
+    output_schema: JsonValueSchema,
     is_custom: z.boolean(),
   });
 export type ParsedJsonInferenceDatapointRow = z.infer<

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { FunctionConfig } from "tensorzero-node";
+import { JsonValueSchema } from "../tensorzero";
 
 export const roleSchema = z.enum(["user", "assistant"]);
 export type Role = z.infer<typeof roleSchema>;
@@ -61,7 +62,7 @@ export type Thought = z.infer<typeof thoughtSchema>;
 
 export const unknownSchema = z.object({
   type: z.literal("unknown"),
-  data: z.any(),
+  data: JsonValueSchema,
   model_provider_name: z.string().nullable(),
 });
 export type Unknown = z.infer<typeof unknownSchema>;
@@ -319,7 +320,7 @@ export type RequestMessage = z.infer<typeof requestMessageSchema>;
 
 export const jsonInferenceOutputSchema = z.object({
   raw: z.string().default(""),
-  parsed: z.any().nullable(),
+  parsed: JsonValueSchema,
 });
 
 export type JsonInferenceOutput = z.infer<typeof jsonInferenceOutputSchema>;

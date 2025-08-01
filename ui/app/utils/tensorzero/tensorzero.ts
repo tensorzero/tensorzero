@@ -10,25 +10,20 @@ import {
 import { TensorZeroServerError } from "./errors";
 import { logger } from "~/utils/logger";
 import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
+import type { JsonValue } from "tensorzero-node";
 
 /**
  * JSON types.
  */
-export type JSONValue =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: JSONValue }
-  | JSONValue[];
-export const JSONValueSchema: z.ZodType = z.lazy(() =>
+
+export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
     z.string(),
     z.number(),
     z.boolean(),
     z.null(),
-    z.record(JSONValueSchema),
-    z.array(JSONValueSchema),
+    z.record(JsonValueSchema),
+    z.array(JsonValueSchema),
   ]),
 );
 
@@ -66,7 +61,7 @@ export const TextContentSchema = z.object({
 
 export const TextArgumentsContentSchema = z.object({
   type: z.literal("text"),
-  arguments: JSONValueSchema,
+  arguments: JsonValueSchema,
 });
 
 export const RawTextContentSchema = z.object({
@@ -116,7 +111,7 @@ export type ThoughtContent = z.infer<typeof ThoughtContentSchema>;
  */
 export const UnknownContentSchema = z.object({
   type: z.literal("unknown"),
-  data: JSONValueSchema,
+  data: JsonValueSchema,
   model_provider_name: z.string().nullable(),
 });
 export type UnknownContent = z.infer<typeof UnknownContentSchema>;
@@ -147,7 +142,7 @@ export type InputMessage = z.infer<typeof InputMessageSchema>;
  * The inference input object.
  */
 export const InputSchema = z.object({
-  system: JSONValueSchema.optional(),
+  system: JsonValueSchema.optional(),
   messages: z.array(InputMessageSchema),
 });
 export type Input = z.infer<typeof InputSchema>;
@@ -157,7 +152,7 @@ export type Input = z.infer<typeof InputSchema>;
  */
 export const ToolSchema = z.object({
   description: z.string(),
-  parameters: JSONValueSchema,
+  parameters: JsonValueSchema,
   name: z.string(),
   strict: z.boolean().optional(),
 });
@@ -180,7 +175,7 @@ export type ToolChoice = z.infer<typeof ToolChoiceSchema>;
 /**
  * Inference parameters allow runtime overrides for a given variant.
  */
-export const InferenceParamsSchema = z.record(z.record(JSONValueSchema));
+export const InferenceParamsSchema = z.record(z.record(JsonValueSchema));
 export type InferenceParams = z.infer<typeof InferenceParamsSchema>;
 
 /**
@@ -203,7 +198,7 @@ export const InferenceRequestSchema = z.object({
   additional_tools: z.array(ToolSchema).optional(),
   tool_choice: ToolChoiceSchema.optional(),
   parallel_tool_calls: z.boolean().optional(),
-  output_schema: JSONValueSchema.optional(),
+  output_schema: JsonValueSchema.optional(),
   credentials: z.record(z.string()).optional(),
 });
 export type InferenceRequest = z.infer<typeof InferenceRequestSchema>;
@@ -231,7 +226,7 @@ export const JSONInferenceResponseSchema = z.object({
   variant_name: z.string(),
   output: z.object({
     raw: z.string(),
-    parsed: JSONValueSchema.nullable(),
+    parsed: JsonValueSchema.nullable(),
   }),
   usage: z
     .object({
@@ -260,7 +255,7 @@ export const FeedbackRequestSchema = z.object({
   inference_id: z.string().nullable(),
   metric_name: z.string(),
   tags: z.record(z.string()).optional(),
-  value: JSONValueSchema,
+  value: JsonValueSchema,
   internal: z.boolean().optional(),
 });
 export type FeedbackRequest = z.infer<typeof FeedbackRequestSchema>;
@@ -273,7 +268,7 @@ export type FeedbackResponse = z.infer<typeof FeedbackResponseSchema>;
 /**
  * Schema for tool parameters in a datapoint
  */
-export const ToolParamsSchema = z.record(JSONValueSchema);
+export const ToolParamsSchema = z.record(JsonValueSchema);
 export type ToolParams = z.infer<typeof ToolParamsSchema>;
 
 /**
@@ -283,7 +278,7 @@ const BaseDatapointSchema = z.object({
   id: z.string().uuid(),
   function_name: z.string(),
   input: InputSchema,
-  output: JSONValueSchema,
+  output: JsonValueSchema,
   tags: z.record(z.string()).optional(),
   auxiliary: z.string().optional(),
   is_custom: z.boolean(),
@@ -304,7 +299,7 @@ export type ChatInferenceDatapoint = z.infer<
  * Schema for JSON inference datapoints
  */
 export const JsonInferenceDatapointSchema = BaseDatapointSchema.extend({
-  output_schema: JSONValueSchema,
+  output_schema: JsonValueSchema,
 });
 export type JsonInferenceDatapoint = z.infer<
   typeof JsonInferenceDatapointSchema
