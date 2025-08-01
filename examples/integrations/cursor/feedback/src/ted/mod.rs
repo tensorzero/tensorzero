@@ -23,6 +23,7 @@ pub struct TedInfo {
     pub size: usize,
 }
 
+#[must_use]
 pub fn minimum_ted(
     needle: &Node,
     needle_src: &[u8],

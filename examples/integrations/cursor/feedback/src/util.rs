@@ -22,7 +22,8 @@ pub struct NormalizedInferenceTreeInfo {
     pub src: Vec<u8>,
 }
 
-/// Generates the maximum UUIDv7 for a given timestamp.
+/// Generates the maximum `UUIDv7` for a given timestamp.
+#[must_use]
 pub fn get_max_uuidv7(timestamp: DateTime<Utc>) -> Uuid {
     // Create a byte array of 255s
     let bytes: [u8; 10] = [255; 10];
@@ -34,7 +35,8 @@ pub fn get_max_uuidv7(timestamp: DateTime<Utc>) -> Uuid {
     builder.into_uuid()
 }
 
-/// Generates the minimum UUIDv7 for a given timestamp.
+/// Generates the minimum `UUIDv7` for a given timestamp.
+#[must_use]
 pub fn get_min_uuidv7(timestamp: DateTime<Utc>) -> Uuid {
     // Create a byte array of 0s
     let bytes: [u8; 10] = [0; 10];

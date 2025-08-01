@@ -65,6 +65,7 @@ impl AzureProvider {
         })
     }
 
+    #[must_use]
     pub fn deployment_id(&self) -> &str {
         &self.deployment_id
     }

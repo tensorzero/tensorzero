@@ -62,6 +62,7 @@ pub struct TogetherProvider {
     parse_think_blocks: bool,
 }
 
+#[must_use]
 pub fn default_parse_think_blocks() -> bool {
     true
 }
@@ -87,11 +88,13 @@ impl TogetherProvider {
         })
     }
 
+    #[must_use]
     pub fn model_name(&self) -> &str {
         &self.model_name
     }
 }
 
+#[must_use]
 pub fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("TOGETHER_API_KEY".to_string())
 }

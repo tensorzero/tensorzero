@@ -29,6 +29,7 @@ pub struct TomlRelativePath {
 impl TomlRelativePath {
     /// Creates a new 'fake path' - this is currently used to construct
     /// `tensorzero::llm_judge` template paths for evaluators
+    #[must_use]
     pub fn new_fake_path(fake_path: String, data: String) -> Self {
         Self {
             __tensorzero_remapped_path: PathBuf::from(fake_path),
@@ -37,6 +38,7 @@ impl TomlRelativePath {
     }
 
     /// Obtains the key for templating purposes (may not be a real path)
+    #[must_use]
     pub fn get_template_key(&self) -> String {
         self.__tensorzero_remapped_path.display().to_string()
     }
@@ -76,6 +78,7 @@ impl TomlRelativePath {
     /// Test-only method for unit tests.
     /// This allows constructing a `TomlRelativePath` outside of deserializing from a toml file
     #[cfg(any(test, feature = "e2e_tests"))]
+    #[must_use]
     pub fn new_for_tests(buf: PathBuf, data: Option<String>) -> Self {
         Self {
             __tensorzero_remapped_path: buf,

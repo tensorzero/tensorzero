@@ -60,6 +60,7 @@ pub enum FloatComparisonOperator {
 }
 
 impl FloatComparisonOperator {
+    #[must_use]
     pub fn to_clickhouse_operator(&self) -> &str {
         match self {
             FloatComparisonOperator::LessThan => "<",
@@ -91,6 +92,7 @@ pub enum TimeComparisonOperator {
 }
 
 impl TimeComparisonOperator {
+    #[must_use]
     pub fn to_clickhouse_operator(&self) -> &str {
         match self {
             TimeComparisonOperator::LessThan => "<",
@@ -114,6 +116,7 @@ pub enum TagComparisonOperator {
 }
 
 impl TagComparisonOperator {
+    #[must_use]
     pub fn to_clickhouse_operator(&self) -> &str {
         match self {
             TagComparisonOperator::Equal => "=",
@@ -132,6 +135,7 @@ pub enum OrderDirection {
 }
 
 impl OrderDirection {
+    #[must_use]
     pub fn to_clickhouse_direction(&self) -> &str {
         match self {
             OrderDirection::Asc => "ASC",

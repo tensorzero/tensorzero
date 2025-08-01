@@ -152,11 +152,13 @@ impl StoredInference {
         }
     }
 
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
 
     #[getter]
+    #[must_use]
     pub fn get_function_name(&self) -> String {
         match self {
             StoredInference::Chat(example) => example.function_name.clone(),
@@ -165,6 +167,7 @@ impl StoredInference {
     }
 
     #[getter]
+    #[must_use]
     pub fn get_variant_name(&self) -> String {
         match self {
             StoredInference::Chat(example) => example.variant_name.clone(),
@@ -173,6 +176,7 @@ impl StoredInference {
     }
 
     #[getter]
+    #[must_use]
     pub fn get_input(&self) -> ResolvedInput {
         match self {
             StoredInference::Chat(example) => example.input.clone(),
@@ -253,6 +257,7 @@ impl StoredInference {
     }
 
     #[getter]
+    #[must_use]
     pub fn get_type(&self) -> String {
         match self {
             StoredInference::Chat(_) => "chat".to_string(),
@@ -261,6 +266,7 @@ impl StoredInference {
     }
 
     #[getter]
+    #[must_use]
     pub fn get_tags(&self) -> HashMap<String, String> {
         match self {
             StoredInference::Chat(example) => example.tags.clone(),
@@ -269,6 +275,7 @@ impl StoredInference {
     }
 
     #[getter]
+    #[must_use]
     pub fn get_timestamp(&self) -> String {
         match self {
             StoredInference::Chat(example) => example.timestamp.to_rfc3339(),
@@ -305,6 +312,7 @@ impl std::fmt::Display for StoredChatInference {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl StoredChatInference {
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -337,6 +345,7 @@ impl std::fmt::Display for StoredJsonInference {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl StoredJsonInference {
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -428,11 +437,13 @@ pub struct RenderedSample {
 #[pymethods]
 impl RenderedSample {
     #[getter]
+    #[must_use]
     pub fn get_function_name(&self) -> &str {
         &self.function_name
     }
 
     #[getter]
+    #[must_use]
     pub fn get_input(&self) -> ModelInput {
         self.input.clone()
     }
@@ -465,6 +476,7 @@ impl RenderedSample {
     }
 
     #[getter]
+    #[must_use]
     pub fn get_tool_params(&self) -> Option<ToolCallConfigDatabaseInsert> {
         self.tool_params.clone()
     }
@@ -490,11 +502,13 @@ impl RenderedSample {
         }
     }
 
+    #[must_use]
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
 
     #[getter]
+    #[must_use]
     pub fn get_tags(&self) -> HashMap<String, String> {
         self.tags.clone()
     }
