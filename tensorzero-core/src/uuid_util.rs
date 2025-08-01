@@ -93,7 +93,7 @@ const DYNAMIC_EVALUATION_OFFSET_S: u64 = 10_000_000_000;
 pub const DYNAMIC_EVALUATION_OFFSET: Duration = Duration::from_secs(DYNAMIC_EVALUATION_OFFSET_S);
 
 /// The threshold for generation of dynamic evaluation run IDs.
-/// This will seed the UUIDv7 with current time + 10 billion seconds.
+/// This will seed the `UUIDv7` with current time + 10 billion seconds.
 /// We ignore nanoseconds, sequence number, and usable bits.
 pub const DYNAMIC_EVALUATION_THRESHOLD: Timestamp = Timestamp::from_unix_time(
     DYNAMIC_EVALUATION_OFFSET_S,

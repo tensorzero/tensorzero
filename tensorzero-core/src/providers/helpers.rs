@@ -180,8 +180,8 @@ pub async fn inject_extra_request_data_and_send_eventsource(
     ))
 }
 
-/// A helper method to inject extra_body fields into a request, and
-/// construct the `HeaderMap` for the applicable extra_headers.
+/// A helper method to inject `extra_body` fields into a request, and
+/// construct the `HeaderMap` for the applicable `extra_headers`.
 ///
 /// You should almost always use
 /// `inject_extra_request_data_and_send` and `inject_extra_request_data_and_send_eventsource`
@@ -614,9 +614,9 @@ pub async fn peek_first_chunk<
 /// For providers that return the tool call name in every chunk, we only want to send the name when it changes.
 /// Gemini & Mistral do this.
 /// If the tool call name changes, we return the new name.
-/// We also update the last_tool_name to the new name.
+/// We also update the `last_tool_name` to the new name.
 /// If the tool call name does not change, we return None.
-/// We do not update the last_tool_name in this case.
+/// We do not update the `last_tool_name` in this case.
 pub(crate) fn check_new_tool_call_name(
     new_name: String,
     last_tool_name: &mut Option<String>,

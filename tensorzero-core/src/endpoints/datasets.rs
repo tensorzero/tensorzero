@@ -482,14 +482,14 @@ pub async fn update_datapoint_handler(
     }))
 }
 
-/// Note: This type should be a Vec<Enum<ChatDatapointInsert, JsonDatapointInsert>>,
+/// Note: This type should be a `Vec<Enum<ChatDatapointInsert, JsonDatapointInsert>>`,
 /// however, since the required fields don't distinguish these two types serde will fail to disambiguate them
 /// as it deserializes.
 ///
 /// We can disambiguate them by checking the config for the `function_name` that
 /// the datapoint is for and then deserializing it as the correct type.
 ///
-/// For the OpenAPI spec we will have to manually create the type for this.
+/// For the `OpenAPI` spec we will have to manually create the type for this.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct InsertDatapointParams {
@@ -1227,7 +1227,7 @@ impl std::fmt::Display for Datapoint {
 /// These input datapoints are used as input types by the `insert_datapoint` endpoint
 /// The distinction here is that they do not include the `dataset_name` field,
 /// which is instead specified as a path parameter.
-/// We also use Input rather than ResolvedInput because the input is not resolved
+/// We also use Input rather than `ResolvedInput` because the input is not resolved
 /// when created.
 /// We also do not allow users to specify the `id` or `episode_id` fields.
 #[derive(Debug, Deserialize, Serialize)]
@@ -1390,8 +1390,8 @@ impl StoredSample for Datapoint {
 }
 
 /// If the input is None then we should return None
-/// If the input is Value::Null we should return None
-/// If the input is some other Value::* we should return it.
+/// If the input is `Value::Null` we should return None
+/// If the input is some other `Value::*` we should return it.
 fn deserialize_optional_json_value<'de, D>(
     deserializer: D,
 ) -> Result<Option<serde_json::Value>, D::Error>

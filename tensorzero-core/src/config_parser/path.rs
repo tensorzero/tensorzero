@@ -110,7 +110,7 @@ enum PathComponent {
 ///
 /// During config loading, we pre-process the `toml::de::DeTable`, and convert all entries located at
 /// `TARGET_PATH_COMPONENTS` (which should be strings) into absolute paths, using the source TOML file
-/// as the base path. For example, `functions.my_function.system_schema = "some/relative/schema_path.json"
+/// as the base path. For example, `functions.my_function.system_schema = "some/relative/schema_path.json"`
 /// will become `functions.my_function.system_schema = { __tensorzero_remapped_path = "base/directory/some/relative/schema_path.json" }`
 ///
 /// This allows us to abstract over config file globbing, and allow almost all of the codebase to work with
@@ -410,7 +410,7 @@ pub(super) fn de_value_to_value(value: DeValue<'_>) -> Result<toml::Value, Error
 }
 
 struct TargetData<'a, 'b> {
-    /// The current PathComponent we're visiting
+    /// The current `PathComponent` we're visiting
     component: PathComponent,
     /// The remaining components in our path
     tail: &'b [PathComponent],

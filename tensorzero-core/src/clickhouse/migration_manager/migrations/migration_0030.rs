@@ -4,7 +4,7 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
 use async_trait::async_trait;
 
-/// This migration adds a 'stop_sequence variant to the 'finish_reason enum on ModelInference/ModelInferenceCache
+/// This migration adds a `stop_sequence` variant to the `finish_reason` enum on `ModelInference/ModelInferenceCache`
 pub struct Migration0030<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }

@@ -10,12 +10,12 @@ use async_trait::async_trait;
 /// This migration reinitializes the `InferenceById` and `InferenceByEpisodeId` tables and
 /// their associated materialized views.
 ///
-/// As ClickHouse stores UUIDs big-endian which for UUIDv7 gives a sorting order that
+/// As ClickHouse stores `UUID`s big-endian which for `UUIDv7` gives a sorting order that
 /// ignores the embedded timestamps. To rectify this we should sort by
-/// id_uint (the id converted to a UInt128), which correctly handles the timestamp.
+/// `id_uint` (the id converted to a `UInt128`), which correctly handles the timestamp.
 ///
-/// This migration also installs a user-defined function `uint_to_uuid` which converts a UInt128 to a UUID
-/// assuming the UInt128 was created from toUInt128(uuid).
+/// This migration also installs a user-defined function `uint_to_uuid` which converts a `UInt128` to a `UUID`
+/// assuming the `UInt128` was created from `toUInt128(uuid)`.
 ///
 /// This migration should subsume migrations 0007 and 0010.
 /// They should have been removed from the binary upon merging of this migration.

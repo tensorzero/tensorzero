@@ -7,15 +7,15 @@ use async_trait::async_trait;
 
 use super::check_table_exists;
 
-/// NOTE: This migration supersedes migration_0023.
+/// NOTE: This migration supersedes `migration_0023`.
 /// Migration 0023 was inefficient due to its use of joins.
-/// In this migration, we create the same table StaticEvaluationHumanFeedback if it doesn't exist.
+/// In this migration, we create the same table `StaticEvaluationHumanFeedback` if it doesn't exist.
 /// We then drop the old materialized view and create new ones that are more efficient.
-/// This migration adds a table StaticEvaluationHumanFeedback that stores human feedback in an easy-to-reference format.
+/// This migration adds a table `StaticEvaluationHumanFeedback` that stores human feedback in an easy-to-reference format.
 /// This is technically an auxiliary table as the primary store is still the various feedback tables.
-/// We also create two materialized views that automatically write to StaticEvaluationHumanFeedback when
-/// FloatMetricFeedback and BooleanMetricFeedback are updated with new feedback that contains both
-/// tensorzero::datapoint_id and tensorzero::human_feedback tags.
+/// We also create two materialized views that automatically write to `StaticEvaluationHumanFeedback` when
+/// `FloatMetricFeedback` and `BooleanMetricFeedback` are updated with new feedback that contains both
+/// `tensorzero::datapoint_id` and `tensorzero::human_feedback` tags.
 ///
 /// In particular, since we don't care if there are duplicate rows and we need the migration to work with concurrent gateways,
 /// we do a full cutover to the new view, meaning that if we determine that this migration needs to run and we're not clean starting,
@@ -27,8 +27,8 @@ use super::check_table_exists;
 ///   5. Insert the data from the missing 10 seconds into the new table.
 ///
 ///
-/// NOTE: The views created by this migration are StaticEvaluationFloatHumanFeedbackView and StaticEvaluationBooleanHumanFeedbackView.
-/// The views created by Migration 0023 are StaticEvaluationHumanFeedbackFloatView and StaticEvaluationHumanFeedbackBooleanView.s
+/// NOTE: The views created by this migration are `StaticEvaluationFloatHumanFeedbackView` and `StaticEvaluationBooleanHumanFeedbackView`.
+/// The views created by Migration 0023 are `StaticEvaluationHumanFeedbackFloatView` and `StaticEvaluationHumanFeedbackBooleanView`.
 ///
 /// NOTE: The two views created by this migration are required to be separate as ClickHouse only triggers materialized views
 /// on the first table to appear.

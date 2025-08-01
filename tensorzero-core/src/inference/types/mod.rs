@@ -173,7 +173,7 @@ impl InputMessageContent {
     }
 }
 
-/// InputMessage and Role are our representation of the input sent by the client
+/// `InputMessage` and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -196,7 +196,7 @@ pub enum InputMessageContent {
     #[serde(alias = "image")]
     File(File),
     /// An unknown content block type, used to allow passing provider-specific
-    /// content blocks (e.g. Anthropic's "redacted_thinking") in and out
+    /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
     /// of TensorZero.
     /// The 'data' field hold the original content block from the provider,
     /// without any validation or transformation by TensorZero.
@@ -332,6 +332,7 @@ pub struct Thought {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[expect(clippy::doc_markdown)]
 pub enum ContentBlock {
     Text(Text),
     ToolCall(ToolCall),
@@ -493,7 +494,7 @@ pub struct ModelInferenceRequest<'a> {
     pub extra_body: FullExtraBodyConfig,
     pub extra_headers: FullExtraHeadersConfig,
     /// Optional arbitrary data, only used when constructing the cache key.
-    /// This is used by best_of_n/mixture_of_n to force different sub-variants
+    /// This is used by `best_of_n`/`mixture_of_n` to force different sub-variants
     /// to have different cache keys.
     pub extra_cache_key: Option<String>,
 }
@@ -540,12 +541,12 @@ pub enum FinishReason {
     Unknown,
 }
 
-/// Each provider transforms a ModelInferenceRequest into a provider-specific (private) inference request type
+/// Each provider transforms a `ModelInferenceRequest` into a provider-specific (private) inference request type
 /// that is suitable for serialization directly into a request to the provider.
 ///
-/// In both non-streaming and streaming inference, each ModelProvider receives data from the provider in a
-/// a (private) provider-specific format that is then transformed into a ProviderInferenceResponse (non-streaming)
-/// or a stream of ProviderInferenceResponseChunks (streaming).
+/// In both non-streaming and streaming inference, each `ModelProvider` receives data from the provider in a
+/// a (private) provider-specific format that is then transformed into a `ProviderInferenceResponse` (non-streaming)
+/// or a stream of `ProviderInferenceResponseChunks` (streaming).
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ProviderInferenceResponse {
@@ -580,8 +581,8 @@ pub enum Latency {
     Batch,
 }
 
-/// After a ProviderInferenceResponse is returned to the Model,
-/// it is converted into a ModelInferenceResponse that includes additional metadata (such as the model provider name).
+/// After a `ProviderInferenceResponse` is returned to the Model,
+/// it is converted into a `ModelInferenceResponse` that includes additional metadata (such as the model provider name).
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ModelInferenceResponse {
     pub id: Uuid,
@@ -598,7 +599,7 @@ pub struct ModelInferenceResponse {
     pub finish_reason: Option<FinishReason>,
 }
 
-/// Finally, in the Variant we convert the ModelInferenceResponse into a ModelInferenceResponseWithMetadata
+/// Finally, in the Variant we convert the `ModelInferenceResponse` into a `ModelInferenceResponseWithMetadata`
 /// that includes additional metadata (such as the model name).
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ModelInferenceResponseWithMetadata {
@@ -714,9 +715,9 @@ pub struct InternalJsonInferenceOutput {
     pub json_block_index: Option<usize>,
 }
 
-/// In the streaming case we convert ProviderInferenceResponseChunks into a InferenceResultChunk, which is then
-/// converted into an InferenceResponseChunk and sent to the client.
-/// We then collect all the InferenceResultChunks into an InferenceResult for validation and storage after the fact.
+/// In the streaming case we convert `ProviderInferenceResponseChunks` into a `InferenceResultChunk`, which is then
+/// converted into an `InferenceResponseChunk` and sent to the client.
+/// We then collect all the `InferenceResultChunks` into an `InferenceResult` for validation and storage after the fact.
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ProviderInferenceResponseChunk {
@@ -786,7 +787,7 @@ pub enum InferenceResultChunk {
 }
 
 /// Alongside the response, we also store information about what happened during the request.
-/// For this we convert the InferenceResult into a ChatInferenceDatabaseInsert or JsonInferenceDatabaseInsert and ModelInferenceDatabaseInserts,
+/// For this we convert the `InferenceResult` into a `ChatInferenceDatabaseInsert` or `JsonInferenceDatabaseInsert` and `ModelInferenceDatabaseInserts`,
 /// which are written to ClickHouse tables of the same name asynchronously.
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1438,7 +1439,7 @@ impl From<ContentBlockChatOutput> for ContentBlockOutput {
 }
 
 /// We use best-effort to reconstruct the raw response for JSON functions
-/// They might either return a ToolCallChunk or a TextChunk
+/// They might either return a `ToolCallChunk` or a `TextChunk`
 /// We take the string from either of these (from the last block if there are multiple)
 /// and use that as the raw response.
 impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
@@ -1480,7 +1481,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     /// We may sometimes construct a fake stream from a non-streaming response
     /// (e.g. in `mixture_of_n` if we have a successful non-streaming candidate, but
     /// a streaming fuser request fails).
-    /// In this case, we want to store the original 'raw_response', instead of building
+    /// In this case, we want to store the original `raw_response`, instead of building
     /// it up from the chunks.
     pub raw_response: Option<String>,
     pub inference_params: InferenceParams,
