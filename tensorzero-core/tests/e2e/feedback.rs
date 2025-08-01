@@ -6,7 +6,7 @@ use tensorzero_core::{
         Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
     },
     endpoints::feedback::{feedback, Params},
-    gateway_util::AppStateData,
+    gateway_util::GatewayHandle,
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
 };
 use tokio::time::{sleep, Duration};
@@ -180,7 +180,7 @@ async fn e2e_test_comment_feedback_validation_disabled() {
     let mut config = Config::default();
     let clickhouse = get_clickhouse().await;
     config.gateway.unstable_disable_feedback_target_validation = true;
-    let state = AppStateData::new_with_clickhouse_and_http_client(
+    let handle = GatewayHandle::new_with_clickhouse_and_http_client(
         config.into(),
         clickhouse.clone(),
         reqwest::Client::new(),
@@ -192,7 +192,7 @@ async fn e2e_test_comment_feedback_validation_disabled() {
         value: json!("foo bar"),
         ..Default::default()
     };
-    let val = feedback(state, params).await.unwrap();
+    let val = feedback(handle.app_state, params).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Check that this was correctly written to ClickHouse
@@ -1211,7 +1211,7 @@ async fn e2e_test_float_feedback_validation_disabled() {
         .insert("user_score".to_string(), metric_config);
     let clickhouse = get_clickhouse().await;
     config.gateway.unstable_disable_feedback_target_validation = true;
-    let state = AppStateData::new_with_clickhouse_and_http_client(
+    let handle = GatewayHandle::new_with_clickhouse_and_http_client(
         config.into(),
         clickhouse.clone(),
         reqwest::Client::new(),
@@ -1223,7 +1223,7 @@ async fn e2e_test_float_feedback_validation_disabled() {
         value: json!(3.1),
         ..Default::default()
     };
-    let val = feedback(state, params).await.unwrap();
+    let val = feedback(handle.app_state, params).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Check that this was correctly written to ClickHouse
@@ -1445,7 +1445,7 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
         .insert("task_success".to_string(), metric_config);
     let clickhouse = get_clickhouse().await;
     config.gateway.unstable_disable_feedback_target_validation = true;
-    let state = AppStateData::new_with_clickhouse_and_http_client(
+    let handle = GatewayHandle::new_with_clickhouse_and_http_client(
         config.into(),
         clickhouse.clone(),
         reqwest::Client::new(),
@@ -1457,7 +1457,7 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
         value: json!(true),
         ..Default::default()
     };
-    let val = feedback(state, params).await.unwrap();
+    let val = feedback(handle.app_state, params).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Check that this was correctly written to ClickHouse

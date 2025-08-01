@@ -48,22 +48,22 @@ mod tests {
     use std::sync::Arc;
 
     use crate::config_parser::Config;
-    use crate::testing::get_unit_test_app_state_data;
+    use crate::testing::get_unit_test_gateway_handle;
 
     use super::*;
 
     #[tokio::test]
     async fn test_health_handler() {
         let config = Arc::new(Config::default());
-        let app_state_data = get_unit_test_app_state_data(config.clone(), true);
-        let response = health_handler(State(app_state_data)).await;
+        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
+        let response = health_handler(State(gateway_handle.app_state.clone())).await;
         assert!(response.is_ok());
         let response_value = response.unwrap();
         assert_eq!(response_value.get("gateway").unwrap(), "ok");
         assert_eq!(response_value.get("clickhouse").unwrap(), "ok");
 
-        let app_state_data = get_unit_test_app_state_data(config, false);
-        let response = health_handler(State(app_state_data)).await;
+        let gateway_handle = get_unit_test_gateway_handle(config, false);
+        let response = health_handler(State(gateway_handle.app_state.clone())).await;
         assert!(response.is_err());
         let (status_code, error_json) = response.unwrap_err();
         assert_eq!(status_code, StatusCode::SERVICE_UNAVAILABLE);
