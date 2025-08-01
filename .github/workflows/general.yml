@@ -402,6 +402,10 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Set ClickHouse replicated cluster name
+        if: matrix.replicated == true
+        run: echo "TENSORZERO_CLICKHOUSE_CLUSTER_NAME=tensorzero_e2e_tests_cluster" >> $GITHUB_ENV
+
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
 
@@ -451,8 +455,6 @@ jobs:
 
       - name: Launch the gateway for E2E tests (configured for replication)
         if: matrix.replicated == true
-        env:
-          TENSORZERO_CLICKHOUSE_CLUSTER_NAME: "tensorzero_e2e_tests_cluster"
         run: |
           cargo run-e2e --run-migrations &&
           cargo run-e2e > e2e_logs.txt 2>&1 &
@@ -469,14 +471,7 @@ jobs:
             done
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
-      - name: Test (Rust, not replicated)
-        if: matrix.replicated == false
-        run: cargo test-e2e-no-creds
-
-      - name: Test (Rust, replicated)
-        if: matrix.replicated == true
-        env:
-          TENSORZERO_CLICKHOUSE_CLUSTER_NAME: "tensorzero_e2e_tests_cluster"
+      - name: Test (Rust)
         run: cargo test-e2e-no-creds
 
       - name: Print e2e logs
