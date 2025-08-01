@@ -709,19 +709,17 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
 /// GCP Anthropic requires that the user provides `max_tokens`, but the value depends on the model.
 /// We maintain a library of known maximum values, and ask the user to hardcode it if it's unknown.
 fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
-    if model_id.starts_with("claude-3-haiku@") || model_id.starts_with("claude-3-opus@") {
-        Ok(4_096)
-    } else if model_id.starts_with("claude-3-5-haiku@")
+    if model_id.starts_with("claude-3-haiku@")
+        || model_id.starts_with("claude-3-5-haiku@")
         || model_id.starts_with("claude-3-5-sonnet@")
         || model_id.starts_with("claude-3-5-sonnet-v2@")
     {
-        Ok(8_192)
-    } else if model_id.starts_with("claude-3-7-sonnet@")
-        || model_id.starts_with("claude-sonnet-4@")
-        || model_id == "claude-sonnet-4-0"
-    {
+        Ok(8_000)
+    } else if model_id.starts_with("claude-3-7-sonnet@") {
+        Ok(128_000)
+    } else if model_id.starts_with("claude-sonnet-4@") {
         Ok(64_000)
-    } else if model_id.starts_with("claude-opus-4@") || model_id == "claude-opus-4-0" {
+    } else if model_id.starts_with("claude-opus-4@") {
         Ok(32_000)
     } else {
         Err(Error::new(ErrorDetails::InferenceClient {
@@ -1668,23 +1666,23 @@ mod tests {
 
         let model = "claude-3-7-sonnet@20250219".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
-        assert_eq!(body.unwrap().max_tokens, 64_000);
+        assert_eq!(body.unwrap().max_tokens, 128_000);
 
         let model = "claude-3-5-sonnet-v2@20240222".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
-        assert_eq!(body.unwrap().max_tokens, 8_192);
+        assert_eq!(body.unwrap().max_tokens, 8_000);
 
         let model = "claude-3-5-sonnet@20240229".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
-        assert_eq!(body.unwrap().max_tokens, 8_192);
+        assert_eq!(body.unwrap().max_tokens, 8_000);
 
         let model = "claude-3-5-haiku@20240307".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
-        assert_eq!(body.unwrap().max_tokens, 8_192);
+        assert_eq!(body.unwrap().max_tokens, 8_000);
 
         let model = "claude-3-haiku@20240307".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
-        assert_eq!(body.unwrap().max_tokens, 4_096);
+        assert_eq!(body.unwrap().max_tokens, 8_000);
 
         let model = "claude-3-5-ballad-latest".to_string(); // fake model
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
