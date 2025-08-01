@@ -1848,6 +1848,10 @@ mod tests {
         let body = AnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 4_096);
 
+        let model = "claude-3-5-ballad-latest".to_string(); // fake model
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert!(body.is_err());
+
         let model = "claude-4-5-haiku-20260101".to_string(); // fake model
         let body = AnthropicRequestBody::new(&model, &request);
         assert!(body.is_err());
