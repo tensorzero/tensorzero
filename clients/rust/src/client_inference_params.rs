@@ -5,11 +5,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero_core::{
     cache::CacheParamsOptions,
+    config_parser::UninitializedVariantInfo,
     endpoints::inference::{InferenceParams, Params},
     error::Error,
-    inference::types::extra_body::UnfilteredInferenceExtraBody,
-    inference::types::extra_headers::UnfilteredInferenceExtraHeaders,
-    inference::types::{Input, InputMessage, InputMessageContent},
+    inference::types::{
+        extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
+        Input, InputMessage, InputMessageContent,
+    },
     tool::DynamicToolParams,
 };
 use uuid::Uuid;
@@ -70,6 +72,7 @@ pub struct ClientInferenceParams {
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
 }
 
 impl TryFrom<ClientInferenceParams> for Params {
@@ -112,6 +115,7 @@ impl TryFrom<ClientInferenceParams> for Params {
             include_original_response: this.include_original_response,
             extra_body: this.extra_body,
             extra_headers: this.extra_headers,
+            internal_dynamic_variant_config: this.internal_dynamic_variant_config,
         })
     }
 }
@@ -139,6 +143,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         include_original_response,
         extra_body,
         extra_headers,
+        internal_dynamic_variant_config,
     } = client_params;
     let _ = Params {
         function_name,
@@ -158,6 +163,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         include_original_response,
         extra_body,
         extra_headers,
+        internal_dynamic_variant_config,
     };
 }
 

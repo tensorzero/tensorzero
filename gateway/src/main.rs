@@ -393,13 +393,13 @@ pub async fn shutdown_signal() {
     let hangup = std::future::pending::<()>();
 
     tokio::select! {
-        _ = ctrl_c => {
+        () = ctrl_c => {
             tracing::info!("Received Ctrl+C signal");
         }
-        _ = terminate => {
+        () = terminate => {
             tracing::info!("Received SIGTERM signal");
         }
-        _ = hangup => {
+        () = hangup => {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             tracing::info!("Received SIGHUP signal");
         }

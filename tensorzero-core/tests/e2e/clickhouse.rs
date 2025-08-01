@@ -28,7 +28,9 @@ use tensorzero_core::clickhouse::migration_manager::{
     self, make_all_migrations, MigrationRecordDatabaseInsert,
 };
 use tensorzero_core::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
-use tensorzero_core::clickhouse::{make_clickhouse_http_client, ClickHouseConnectionInfo};
+use tensorzero_core::clickhouse::{
+    make_clickhouse_http_client, ClickHouseConnectionInfo, TableName,
+};
 
 pub struct DeleteDbOnDrop {
     database: String,
@@ -58,7 +60,7 @@ impl Drop for DeleteDbOnDrop {
                         .unwrap();
                 }
                 eprintln!("Database dropped: {database}");
-            })
+            });
         });
     }
 }
@@ -186,6 +188,8 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     let insert_futures = [
         ("large_chat_inference_v2.parquet", "ChatInference"),
         ("large_json_inference_v2.parquet", "JsonInference"),
+        ("large_chat_model_inference_v2.parquet", "ModelInference"),
+        ("large_json_model_inference_v2.parquet", "ModelInference"),
         (
             "large_chat_boolean_feedback.parquet",
             "BooleanMetricFeedback",
@@ -492,7 +496,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26
+        25, 26, 27
     ]
 );
 
@@ -574,6 +578,8 @@ async fn test_clickhouse_migration_manager() {
                     "Migration {name} should not have succeeded (because it wasn't applied)"
                 );
             }
+            assert!(!logs_contain("Materialized view `CumulativeUsageView` was not written because it was recently created"),
+                "CumulativeUsage backfilling failed.");
 
             let run_migration = || async {
                 migration_manager::run_migration(
@@ -665,7 +671,7 @@ async fn test_clickhouse_migration_manager() {
         // for each element in the array.
         [
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 26
+            24, 25, 26, 27
         ]
     );
     let rows = get_all_migration_records(&clickhouse).await;
@@ -700,6 +706,23 @@ async fn test_clickhouse_migration_manager() {
     }
     run_all(&clickhouse, &migrations).await;
     let new_rows = get_all_migration_records(&clickhouse).await;
+
+    let response = clickhouse
+        .run_query_synchronous_no_params(
+            "SELECT count FROM CumulativeUsage FINAL WHERE type='input_tokens'".to_string(),
+        )
+        .await
+        .unwrap();
+    let input_token_total: u64 = response.response.trim().parse().unwrap();
+    assert_eq!(input_token_total, 200000000);
+    let response = clickhouse
+        .run_query_synchronous_no_params(
+            "SELECT count FROM CumulativeUsage FINAL WHERE type='output_tokens'".to_string(),
+        )
+        .await
+        .unwrap();
+    let output_token_total: u64 = response.response.trim().parse().unwrap();
+    assert_eq!(output_token_total, 200000000);
     // Since we've already ran all of the migrations, we shouldn't have written any new records
 
     assert_eq!(new_rows, rows);
@@ -731,7 +754,7 @@ async fn test_bad_clickhouse_write() {
     let payload =
         json!({"target_id": Uuid::now_v7(), "value": true, "name": "test", "id": Uuid::now_v7()});
     let err = clickhouse
-        .write(&[payload], "BooleanMetricFeedback")
+        .write(&[payload], TableName::BooleanMetricFeedback)
         .await
         .unwrap_err();
     assert!(
@@ -758,7 +781,7 @@ async fn test_deployment_id_oldest() {
             &[serde_json::json!({
                 "deployment_id": new_deployment_id,
             })],
-            "DeploymentID",
+            TableName::DeploymentID,
         )
         .await
         .unwrap();
@@ -834,7 +857,7 @@ async fn test_migration_0013_old_table() {
     ];
 
     // Run migrations up to right before 0013
-    for migration in migrations.iter() {
+    for migration in &migrations {
         migration_manager::run_migration(&clickhouse, migration.as_ref(), true)
             .await
             .unwrap();
@@ -912,7 +935,7 @@ async fn test_migration_0013_data_no_table() {
     ];
 
     // Run migrations up to right before 0013
-    for migration in migrations.iter() {
+    for migration in &migrations {
         migration_manager::run_migration(&clickhouse, migration.as_ref(), true)
             .await
             .unwrap();
