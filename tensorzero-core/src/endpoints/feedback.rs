@@ -1013,7 +1013,7 @@ mod tests {
             ..Default::default()
         });
         let app_state_data = get_unit_test_app_state_data(config, true);
-        let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
+        let timestamp = uuid::Timestamp::from_unix_time(1_579_751_960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test comment");
         let params = Params {
@@ -1042,7 +1042,7 @@ mod tests {
             ..Default::default()
         });
         let app_state_data = get_unit_test_app_state_data(config, true);
-        let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
+        let timestamp = uuid::Timestamp::from_unix_time(1_579_751_960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test demonstration");
 
@@ -1107,7 +1107,7 @@ mod tests {
         });
         let app_state_data = get_unit_test_app_state_data(config.clone(), true);
         let value = json!(4.5);
-        let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
+        let timestamp = uuid::Timestamp::from_unix_time(1_579_751_960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
         let episode_id = Uuid::new_v7(timestamp);
 
@@ -1170,7 +1170,7 @@ mod tests {
         });
         let app_state_data = get_unit_test_app_state_data(config.clone(), true);
         let value = json!(true);
-        let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
+        let timestamp = uuid::Timestamp::from_unix_time(1_579_751_960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
         let params = Params {
             episode_id: None,

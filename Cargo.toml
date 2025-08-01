@@ -91,6 +91,7 @@ unimplemented = "deny"
 uninlined_format_args = "deny"
 unnecessary_wraps = "deny"
 unreachable = "deny"
+unreadable_literal = "deny"
 unused_self = "deny"
 unwrap_used = "deny"
 

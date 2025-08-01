@@ -1936,6 +1936,7 @@ mod tests {
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::TemplateConfig;
     use crate::providers::test_helpers::get_temperature_tool_config;
+    use crate::testing::ALL_DIGITS;
     use crate::tool::ToolConfig;
     use crate::tool::{DynamicToolConfig, ToolChoice};
     use serde_json::json;
@@ -3971,7 +3972,7 @@ mod tests {
                 raw_arguments: "{\"key\": \"value\"}".to_string(),
                 raw_name: Some("test_tool".to_string()),
             })],
-            created: 1234567890,
+            created: ALL_DIGITS,
             usage: Some(Usage {
                 input_tokens: 10,
                 output_tokens: 20,
@@ -3984,7 +3985,7 @@ mod tests {
         let result = JsonInferenceResultChunk::from(tool_chunk);
         assert_eq!(result.raw, Some("{\"key\": \"value\"}".to_string()));
         assert_eq!(result.thought, None);
-        assert_eq!(result.created, 1234567890);
+        assert_eq!(result.created, ALL_DIGITS);
         assert_eq!(result.raw_response, "raw response");
         assert_eq!(result.latency, Duration::from_secs(1));
         assert_eq!(
@@ -4001,7 +4002,7 @@ mod tests {
                 id: "123".to_string(),
                 text: "some text".to_string(),
             })],
-            created: 1234567890,
+            created: ALL_DIGITS,
             usage: None,
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
@@ -4020,7 +4021,7 @@ mod tests {
                 signature: None,
                 provider_type: None,
             })],
-            created: 1234567890,
+            created: ALL_DIGITS,
             usage: None,
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
@@ -4050,7 +4051,7 @@ mod tests {
                     provider_type: None,
                 }),
             ],
-            created: 1234567890,
+            created: ALL_DIGITS,
             usage: None,
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
@@ -4064,7 +4065,7 @@ mod tests {
         // Test case for empty content
         let empty_chunk = ProviderInferenceResponseChunk {
             content: vec![],
-            created: 1234567890,
+            created: ALL_DIGITS,
             usage: None,
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
