@@ -1,5 +1,3 @@
-use std::fs;
-use std::path::Path;
 use std::sync::Arc;
 
 use serde::Deserialize;
@@ -62,8 +60,10 @@ pub struct DiclConfig {
     pub retries: RetryConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct UninitializedDiclConfig {
     #[serde(default)]
     pub weight: Option<f64>,
@@ -93,7 +93,7 @@ impl Variant for DiclConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -155,7 +155,7 @@ impl Variant for DiclConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -263,7 +263,7 @@ impl Variant for DiclConfig {
         _input: &[ResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
-        _inference_configs: &'a [InferenceConfig<'a, 'a>],
+        _inference_configs: &'a [InferenceConfig<'a>],
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -458,7 +458,7 @@ impl DiclConfig {
         input: &ResolvedInput,
         examples: &[Example],
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         stream: bool,
         inference_params: &mut InferenceParams,
     ) -> Result<ModelInferenceRequest<'request>, Error>
@@ -605,19 +605,9 @@ pub fn default_system_instructions() -> String {
 }
 
 impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
-    /// Since the system instructions are optional and may be a path to a file,
-    /// we need to load them here so that we can use the base_path to resolve
-    /// any relative paths.
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<DiclConfig, Error> {
+    fn load(self) -> Result<DiclConfig, Error> {
         let system_instructions = match self.system_instructions {
-            Some(path) => {
-                let path = base_path.as_ref().join(path.path());
-                fs::read_to_string(path).map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!("Failed to read system instructions: {e}"),
-                    })
-                })?
-            }
+            Some(path) => path.read()?,
             None => default_system_instructions(),
         };
 

@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::path::Path;
 
 use backon::Retryable;
 use futures::future::join_all;
@@ -47,8 +46,10 @@ pub struct BestOfNSamplingConfig {
     pub evaluator: BestOfNEvaluatorConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct UninitializedBestOfNSamplingConfig {
     #[serde(default)]
     pub weight: Option<f64>,
@@ -70,21 +71,23 @@ pub struct BestOfNEvaluatorConfig {
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct UninitializedBestOfNEvaluatorConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,
 }
 
 impl LoadableConfig<BestOfNSamplingConfig> for UninitializedBestOfNSamplingConfig {
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<BestOfNSamplingConfig, Error> {
+    fn load(self) -> Result<BestOfNSamplingConfig, Error> {
         Ok(BestOfNSamplingConfig {
             weight: self.weight,
             timeout_s: self.timeout_s,
             candidates: self.candidates,
             evaluator: BestOfNEvaluatorConfig {
-                inner: self.evaluator.inner.load(base_path)?,
+                inner: self.evaluator.inner.load()?,
             },
         })
     }
@@ -119,7 +122,7 @@ impl Variant for BestOfNSamplingConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -142,7 +145,7 @@ impl Variant for BestOfNSamplingConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -196,7 +199,7 @@ impl Variant for BestOfNSamplingConfig {
                     variant_name: variant_name.to_string(),
                     message: e.to_string(),
                 })
-            })?
+            })?;
         }
         // Validate the evaluator variant
         self.evaluator
@@ -225,7 +228,7 @@ impl Variant for BestOfNSamplingConfig {
         _input: &[ResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
-        _inference_configs: &'a [InferenceConfig<'a, 'a>],
+        _inference_configs: &'a [InferenceConfig<'a>],
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -240,7 +243,7 @@ impl BestOfNSamplingConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult>, Error> {
         // Get all the variants we are going to infer
@@ -277,7 +280,7 @@ impl BestOfNSamplingConfig {
 
         // Start the inference tasks (we keep the names around for logging)
         let mut inference_futures = Vec::new();
-        for (candidate_name, candidate_variant, config) in candidate_variants.iter() {
+        for (candidate_name, candidate_variant, config) in &candidate_variants {
             inference_futures.push((
                 candidate_name.clone(),
                 timeout(
@@ -308,7 +311,7 @@ impl BestOfNSamplingConfig {
             match result {
                 Ok(inner_result) => {
                     if let Ok(res) = inner_result {
-                        successful_results.push(res)
+                        successful_results.push(res);
                     }
                 }
                 Err(_timeout_error) => {
@@ -331,7 +334,7 @@ impl BestOfNSamplingConfig {
         &'a self,
         input: &ResolvedInput,
         models: &ModelTable,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         candidates: Vec<InferenceResult>,
         function: &'a FunctionConfig,
@@ -420,7 +423,7 @@ async fn inner_select_best_candidate<'a, 'request>(
     evaluator: &'a BestOfNEvaluatorConfig,
     input: &'request ResolvedInput,
     models: &'a ModelTable,
-    inference_config: &'request InferenceConfig<'a, 'request>,
+    inference_config: &'request InferenceConfig<'request>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult],
     function: &'a FunctionConfig,
@@ -641,7 +644,7 @@ impl BestOfNEvaluatorConfig {
     fn prepare_request<'a>(
         &self,
         input: &ResolvedInput,
-        inference_config: &InferenceConfig<'_, '_>,
+        inference_config: &InferenceConfig<'_>,
         candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
         function: &FunctionConfig,
