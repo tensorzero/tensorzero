@@ -655,7 +655,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
         ) && matches!(request.function_type, FunctionType::Json)
         {
-            prefill_json_message(&mut messages)
+            prefill_json_message(&mut messages);
         }
 
         // Workaround for GCP Vertex AI Anthropic API limitation: they don't support explicitly specifying "none"
@@ -721,7 +721,7 @@ fn prepare_messages(
                 consolidated_messages.push(message);
             }
         }
-        last_role = Some(this_role)
+        last_role = Some(this_role);
     }
     // Anthropic also requires that there is at least one message and it is a User message.
     // If it's not we will prepend a default User message.

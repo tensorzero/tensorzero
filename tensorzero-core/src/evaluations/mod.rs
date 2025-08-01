@@ -1,10 +1,4 @@
-use std::{
-    collections::HashMap,
-    fs::File,
-    io::{BufReader, Read},
-    path::Path,
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
@@ -173,15 +167,15 @@ pub enum UninitializedEvaluationConfig {
 }
 
 impl UninitializedEvaluationConfig {
-    pub fn load<P: AsRef<Path>>(
+    pub fn load(
         self,
         functions: &HashMap<String, Arc<FunctionConfig>>,
-        base_path: P,
+
         evaluation_name: &str,
     ) -> EvaluationLoadResult {
         match self {
             UninitializedEvaluationConfig::Static(config) => {
-                config.load(functions, base_path, evaluation_name)
+                config.load(functions, evaluation_name)
             }
         }
     }
@@ -203,10 +197,9 @@ type EvaluationLoadResult = Result<
 >;
 
 impl UninitializedStaticEvaluationConfig {
-    pub fn load<P: AsRef<Path>>(
+    pub fn load(
         self,
         functions: &HashMap<String, Arc<FunctionConfig>>,
-        base_path: P,
         evaluation_name: &str,
     ) -> EvaluationLoadResult {
         if !functions.contains_key(&self.function_name) {
@@ -232,7 +225,7 @@ impl UninitializedStaticEvaluationConfig {
             .evaluators
             .into_iter()
             .map(|(name, config)| {
-                config.load(&base_path, evaluation_name, &name).map(
+                config.load(evaluation_name, &name).map(
                     |(evaluation_config, func_config, metric_config)| {
                         (name, evaluation_config, func_config, metric_config)
                     },
@@ -297,9 +290,8 @@ struct UninitializedLLMJudgeConfig {
 }
 
 impl UninitializedEvaluatorConfig {
-    pub fn load<P: AsRef<Path>>(
+    pub fn load(
         self,
-        base_path: &P,
         evaluation_name: &str,
         evaluator_name: &str,
     ) -> Result<(EvaluatorConfig, Option<FunctionConfig>, MetricConfig), Error> {
@@ -328,13 +320,7 @@ impl UninitializedEvaluatorConfig {
                     .into_iter()
                     .map(|(name, variant)| {
                         variant
-                            .load(
-                                base_path,
-                                evaluation_name,
-                                evaluator_name,
-                                &params.input_format,
-                                &name,
-                            )
+                            .load(evaluation_name, evaluator_name, &params.input_format, &name)
                             .map(|v| (name, v))
                     })
                     .collect::<Result<HashMap<_, _>, Error>>()?;
@@ -488,33 +474,34 @@ struct UninitializedLLMJudgeChatCompletionVariantConfig {
 /// Converts a chat completion judge variant config to a chat completion config.
 /// This is factored out so that both the chain of thought and chat completion judges
 /// can use the same implementation.
-fn convert_chat_completion_judge_to_variant<P: AsRef<Path>>(
-    base_path: &P,
+fn convert_chat_completion_judge_to_variant(
     evaluation_name: &str,
     evaluator_name: &str,
     variant_name: &str,
     input_format: &LLMJudgeInputFormat,
     params: UninitializedLLMJudgeChatCompletionVariantConfig,
 ) -> Result<ChatCompletionConfig, Error> {
-    let system_instructions = read_system_instructions(&params.system_instructions, base_path)?;
+    let system_instructions = &params.system_instructions.read()?;
     let templated_system_instructions = format!(
         include_str!("llm_judge_system_instructions.txt"),
         system_instructions = system_instructions,
     );
-    let system_template_path =
-        get_template_path(evaluation_name, evaluator_name, variant_name, "system");
-    let system_template = PathWithContents {
-        // Not a real path but this is used as the handle everywhere as the content is already provided below
-        path: system_template_path.clone(),
-        contents: templated_system_instructions,
-    };
-    let user_template_path =
-        get_template_path(evaluation_name, evaluator_name, variant_name, "user");
+    let system_template_path = get_template_path(
+        evaluation_name,
+        evaluator_name,
+        variant_name,
+        "system",
+        templated_system_instructions,
+    );
+    let system_template = PathWithContents::from_path(system_template_path)?;
     let user_template = match input_format {
-        LLMJudgeInputFormat::Serialized => Some(PathWithContents {
-            path: user_template_path.clone(),
-            contents: include_str!("llm_judge_user_template.minijinja").to_string(),
-        }),
+        LLMJudgeInputFormat::Serialized => Some(PathWithContents::from_path(get_template_path(
+            evaluation_name,
+            evaluator_name,
+            variant_name,
+            "user",
+            include_str!("llm_judge_user_template.minijinja").to_string(),
+        ))?),
         LLMJudgeInputFormat::Messages => None,
     };
     Ok(ChatCompletionConfig {
@@ -598,10 +585,11 @@ fn get_template_path(
     evaluator_name: &str,
     variant_name: &str,
     template_name: &str,
+    data: String,
 ) -> TomlRelativePath {
     TomlRelativePath::new_fake_path(format!(
         "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::{variant_name}::{template_name}"
-    ))
+    ), data)
 }
 
 fn get_weight(active: Option<bool>) -> Option<f64> {
@@ -618,9 +606,8 @@ fn get_weight(active: Option<bool>) -> Option<f64> {
 }
 
 impl UninitializedLLMJudgeVariantInfo {
-    pub fn load<P: AsRef<Path>>(
+    pub fn load(
         self,
-        base_path: &P,
         evaluation_name: &str,
         evaluator_name: &str,
         input_format: &LLMJudgeInputFormat,
@@ -629,7 +616,6 @@ impl UninitializedLLMJudgeVariantInfo {
         let inner = match self.inner {
             UninitializedLLMJudgeVariantConfig::ChatCompletion(params) => {
                 VariantConfig::ChatCompletion(convert_chat_completion_judge_to_variant(
-                    base_path,
                     evaluation_name,
                     evaluator_name,
                     variant_name,
@@ -638,31 +624,28 @@ impl UninitializedLLMJudgeVariantInfo {
                 )?)
             }
             UninitializedLLMJudgeVariantConfig::BestOfNSampling(params) => {
-                let evaluator_system_instructions =
-                    read_system_instructions(&params.evaluator.system_instructions, base_path)?;
+                let evaluator_system_instructions = &params.evaluator.system_instructions.read()?;
                 let templated_evaluator_system_instructions = format!(
                     include_str!("llm_judge_system_instructions.txt"),
                     system_instructions = evaluator_system_instructions,
                 );
-                let evaluator_system_template = PathWithContents {
-                    path: get_template_path(
-                        evaluation_name,
-                        evaluator_name,
-                        variant_name,
-                        "system",
-                    ),
-                    contents: templated_evaluator_system_instructions,
-                };
+                let evaluator_system_template = PathWithContents::from_path(get_template_path(
+                    evaluation_name,
+                    evaluator_name,
+                    variant_name,
+                    "system",
+                    templated_evaluator_system_instructions,
+                ))?;
                 let evaluator_user_template = match input_format {
-                    LLMJudgeInputFormat::Serialized => Some(PathWithContents {
-                        path: get_template_path(
+                    LLMJudgeInputFormat::Serialized => {
+                        Some(PathWithContents::from_path(get_template_path(
                             evaluation_name,
                             evaluator_name,
                             variant_name,
                             "user",
-                        ),
-                        contents: include_str!("llm_judge_user_template.minijinja").to_string(),
-                    }),
+                            include_str!("llm_judge_user_template.minijinja").to_string(),
+                        ))?)
+                    }
                     LLMJudgeInputFormat::Messages => None,
                 };
                 VariantConfig::BestOfNSampling(BestOfNSamplingConfig {
@@ -692,31 +675,28 @@ impl UninitializedLLMJudgeVariantInfo {
                 })
             }
             UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(params) => {
-                let fuser_system_instructions =
-                    read_system_instructions(&params.fuser.system_instructions, base_path)?;
+                let fuser_system_instructions = &params.fuser.system_instructions.read()?;
                 let templated_fuser_system_instructions = format!(
                     include_str!("llm_judge_system_instructions.txt"),
                     system_instructions = fuser_system_instructions,
                 );
-                let fuser_system_template = PathWithContents {
-                    path: get_template_path(
-                        evaluation_name,
-                        evaluator_name,
-                        variant_name,
-                        "system",
-                    ),
-                    contents: templated_fuser_system_instructions,
-                };
+                let fuser_system_template = PathWithContents::from_path(get_template_path(
+                    evaluation_name,
+                    evaluator_name,
+                    variant_name,
+                    "system",
+                    templated_fuser_system_instructions,
+                ))?;
                 let fuser_user_template = match input_format {
-                    LLMJudgeInputFormat::Serialized => Some(PathWithContents {
-                        path: get_template_path(
+                    LLMJudgeInputFormat::Serialized => {
+                        Some(PathWithContents::from_path(get_template_path(
                             evaluation_name,
                             evaluator_name,
                             variant_name,
                             "user",
-                        ),
-                        contents: include_str!("llm_judge_user_template.minijinja").to_string(),
-                    }),
+                            include_str!("llm_judge_user_template.minijinja").to_string(),
+                        ))?)
+                    }
                     LLMJudgeInputFormat::Messages => None,
                 };
                 VariantConfig::MixtureOfN(MixtureOfNConfig {
@@ -748,7 +728,7 @@ impl UninitializedLLMJudgeVariantInfo {
             UninitializedLLMJudgeVariantConfig::Dicl(params) => {
                 let dicl_system_instructions = params
                     .system_instructions
-                    .map(|si| read_system_instructions(&si, base_path))
+                    .map(|si| si.read())
                     .transpose()?
                     .map(|si| {
                         format!(
@@ -779,7 +759,6 @@ impl UninitializedLLMJudgeVariantInfo {
             UninitializedLLMJudgeVariantConfig::ChainOfThought(params) => {
                 VariantConfig::ChainOfThought(ChainOfThoughtConfig {
                     inner: convert_chat_completion_judge_to_variant(
-                        base_path,
                         evaluation_name,
                         evaluator_name,
                         variant_name,
@@ -796,33 +775,12 @@ impl UninitializedLLMJudgeVariantInfo {
     }
 }
 
-fn read_system_instructions<P: AsRef<Path>>(
-    path: &TomlRelativePath,
-    base_path: &P,
-) -> Result<String, Error> {
-    let path = base_path.as_ref().join(path.path());
-    let file = File::open(&path).map_err(|e| {
-        Error::new(ErrorDetails::FileRead {
-            message: format!("Failed to open system instructions file: {e}"),
-            file_path: path.to_string_lossy().to_string(),
-        })
-    })?;
-    let mut reader = BufReader::new(file);
-    let mut contents = String::new();
-    reader.read_to_string(&mut contents).map_err(|e| {
-        Error::new(ErrorDetails::FileRead {
-            message: format!("Failed to read system instructions file: {e}"),
-            file_path: path.to_string_lossy().to_string(),
-        })
-    })?;
-    Ok(contents)
-}
-
 /// NOTE: this function should not be called.
 /// In the code we already have a conversion from UninitializedLLMJudgeVariantConfig to VariantConfig.
 /// We want to make sure that there is an UninitializedLLMJudgeVariantConfig for each VariantConfig.
 /// This function should complain at compile time if we forget to update it when adding a new variant type.
 #[expect(dead_code)]
+#[expect(clippy::unnecessary_wraps)]
 fn check_convert_variant_to_llm_judge_variant(
     variant: VariantConfig,
 ) -> Result<UninitializedLLMJudgeVariantConfig, Error> {
@@ -832,7 +790,10 @@ fn check_convert_variant_to_llm_judge_variant(
                 UninitializedLLMJudgeChatCompletionVariantConfig {
                     active: Some(false),
                     model: variant.model,
-                    system_instructions: TomlRelativePath::new_fake_path(String::new()),
+                    system_instructions: TomlRelativePath::new_fake_path(
+                        String::new(),
+                        String::new(),
+                    ),
                     temperature: variant.temperature,
                     top_p: variant.top_p,
                     max_tokens: variant.max_tokens,
@@ -856,7 +817,10 @@ fn check_convert_variant_to_llm_judge_variant(
                     evaluator: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
                         model: variant.evaluator.inner.model,
-                        system_instructions: TomlRelativePath::new_fake_path(String::new()),
+                        system_instructions: TomlRelativePath::new_fake_path(
+                            String::new(),
+                            String::new(),
+                        ),
                         temperature: variant.evaluator.inner.temperature,
                         top_p: variant.evaluator.inner.top_p,
                         max_tokens: variant.evaluator.inner.max_tokens,
@@ -881,7 +845,10 @@ fn check_convert_variant_to_llm_judge_variant(
                     fuser: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
                         model: variant.fuser.inner.model,
-                        system_instructions: TomlRelativePath::new_fake_path(String::new()),
+                        system_instructions: TomlRelativePath::new_fake_path(
+                            String::new(),
+                            String::new(),
+                        ),
                         temperature: variant.fuser.inner.temperature,
                         top_p: variant.fuser.inner.top_p,
                         max_tokens: variant.fuser.inner.max_tokens,
@@ -923,7 +890,10 @@ fn check_convert_variant_to_llm_judge_variant(
                     inner: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
                         model: variant.inner.model,
-                        system_instructions: TomlRelativePath::new_fake_path(String::new()),
+                        system_instructions: TomlRelativePath::new_fake_path(
+                            String::new(),
+                            String::new(),
+                        ),
                         temperature: variant.inner.temperature,
                         top_p: variant.inner.top_p,
                         max_tokens: variant.inner.max_tokens,
@@ -950,36 +920,8 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
-    fn test_read_system_instructions() {
-        let system_instructions = read_system_instructions(
-            &TomlRelativePath::new_for_tests(PathBuf::from(
-                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-            )),
-            &PathBuf::from("fixtures/config"),
-        )
-        .unwrap();
-        assert_eq!(
-            system_instructions,
-            "Return True if there is NSFW content in this generation.\n"
-        );
-
-        // Nonexistent file
-        let result = read_system_instructions(
-            &TomlRelativePath::new_for_tests(PathBuf::from(
-                "evaluations/evaluation1/llm_judge_bool/nonexistent.txt",
-            )),
-            &PathBuf::from("fixtures/config"),
-        );
-        assert_eq!(*result.unwrap_err().get_details(), ErrorDetails::FileRead {
-            message: "Failed to open system instructions file: No such file or directory (os error 2)".to_string(),
-            file_path: "fixtures/config/evaluations/evaluation1/llm_judge_bool/nonexistent.txt".to_string(),
-        });
-    }
-
-    #[test]
     fn test_uninitialized_evaluation_config_load() {
         // Setup test fixtures
-        let base_path = PathBuf::from("fixtures/config");
         let evaluation_name = "test_evaluation";
 
         // Prepare function configs map with a function referenced in the evaluation
@@ -1009,7 +951,7 @@ mod tests {
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
+            let result = uninitialized_config.load(&functions, evaluation_name);
             assert!(result.is_ok());
 
             let (config, additional_functions, metric_configs) = result.unwrap();
@@ -1051,7 +993,7 @@ mod tests {
                             active: Some(true),
                             model: Arc::from("gpt-3.5-turbo"),
                             system_instructions:
-                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+                                "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
                                     .into(),
                             temperature: Some(0.7),
                             top_p: None,
@@ -1092,10 +1034,9 @@ mod tests {
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
-            assert!(result.is_ok());
-
-            let (config, additional_functions, metric_configs) = result.unwrap();
+            let (config, additional_functions, metric_configs) = uninitialized_config
+                .load(&functions, evaluation_name)
+                .unwrap();
             assert_eq!(config.evaluators.len(), 1);
 
             // Verify LLM judge evaluator config
@@ -1176,7 +1117,7 @@ mod tests {
                             active: Some(true),
                             model: Arc::from("gpt-3.5-turbo"),
                             system_instructions:
-                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+                                "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
                                     .into(),
                             temperature: Some(0.7),
                             top_p: None,
@@ -1217,10 +1158,9 @@ mod tests {
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
-            assert!(result.is_ok());
-
-            let (config, additional_functions, metric_configs) = result.unwrap();
+            let (config, additional_functions, metric_configs) = uninitialized_config
+                .load(&functions, evaluation_name)
+                .unwrap();
             assert_eq!(config.evaluators.len(), 1);
 
             // Verify LLM judge evaluator config
@@ -1288,7 +1228,7 @@ mod tests {
                 function_name: "nonexistent_function".to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
+            let result = uninitialized_config.load(&functions, evaluation_name);
             assert!(result.is_err());
             assert!(matches!(
                 *result.unwrap_err().get_details(),
@@ -1309,8 +1249,7 @@ mod tests {
                 function_name: function_name.to_string(),
             };
 
-            let result =
-                uninitialized_config.load(&functions, &base_path, "invalid::evaluation::name");
+            let result = uninitialized_config.load(&functions, "invalid::evaluation::name");
             assert!(result.is_err());
             assert!(matches!(
                 *result.unwrap_err().get_details(),
@@ -1329,7 +1268,7 @@ mod tests {
                             active: Some(true),
                             model: Arc::from("gpt-3.5-turbo"),
                             system_instructions:
-                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+                                "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
                                     .into(),
                             temperature: Some(0.7),
                             top_p: None,
@@ -1357,8 +1296,8 @@ mod tests {
                             active: Some(true),
                             model: Arc::from("gpt-4"),
                             system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
-                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                            )),
+                                "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            ), None),
                             temperature: Some(0.5),
                             top_p: None,
                             max_tokens: Some(200),
@@ -1407,7 +1346,7 @@ mod tests {
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
+            let result = uninitialized_config.load(&functions, evaluation_name);
             assert!(result.is_err());
             assert_eq!(
                 *result.unwrap_err().get_details(),
@@ -1419,7 +1358,6 @@ mod tests {
 
         // Test case 6: Error when evaluator name contains "::"
         {
-            let base_path = PathBuf::from(".");
             let evaluation_name = "test_evaluation";
             let function_name = "test_function";
 
@@ -1450,7 +1388,7 @@ mod tests {
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
+            let result = uninitialized_config.load(&functions, evaluation_name);
             assert!(result.is_err());
             assert_eq!(
                 *result.unwrap_err().get_details(),
@@ -1473,8 +1411,8 @@ mod tests {
                             active: Some(true),
                             model: Arc::from("gpt-3.5-turbo"),
                             system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
-                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                            )),
+                                "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            ), None),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
@@ -1514,7 +1452,7 @@ mod tests {
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
+            let result = uninitialized_config.load(&functions, evaluation_name);
             assert!(result.is_ok());
 
             let (config, _additional_functions, _metric_configs) = result.unwrap();
@@ -1544,8 +1482,8 @@ mod tests {
                             active: None, // No 'active' field specified
                             model: Arc::from("gpt-3.5-turbo"),
                             system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
-                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                            )),
+                                "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            ), None),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
@@ -1583,7 +1521,7 @@ mod tests {
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
+            let result = uninitialized_config.load(&functions, evaluation_name);
             assert!(result.is_ok());
 
             let (_config, additional_functions, _metric_configs) = result.unwrap();
@@ -1617,8 +1555,8 @@ mod tests {
                             active: Some(false), // Explicitly inactive
                             model: Arc::from("gpt-3.5-turbo"),
                             system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
-                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                            )),
+                                "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            ), None),
                             temperature: Some(0.7),
                             top_p: None,
                             max_tokens: Some(100),
@@ -1656,7 +1594,7 @@ mod tests {
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
+            let result = uninitialized_config.load(&functions, evaluation_name);
             assert!(result.is_err());
             assert_eq!(
                 *result.unwrap_err().get_details(),

@@ -1222,7 +1222,7 @@ mod tests {
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.id, "123");
 
-        assert!(logs_contain("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object."))
+        assert!(logs_contain("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object."));
     }
 
     #[tokio::test]

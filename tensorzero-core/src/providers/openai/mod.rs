@@ -499,7 +499,7 @@ impl InferenceProvider for OpenAIProvider {
             get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         request_url
             .path_segments_mut()
-            .map_err(|_| {
+            .map_err(|()| {
                 Error::new(ErrorDetails::Inference {
                     message: "Failed to get mutable path segments".to_string(),
                 })
@@ -1136,7 +1136,7 @@ pub fn prepare_openai_messages<'a>(
     provider_type: &str,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut openai_messages = Vec::with_capacity(messages.len());
-    for message in messages.iter() {
+    for message in messages {
         openai_messages.extend(tensorzero_to_openai_messages(message, provider_type)?);
     }
     if let Some(system_msg) =
@@ -1248,7 +1248,7 @@ fn tensorzero_to_openai_user_messages<'a>(
     let mut messages = Vec::new();
     let mut user_content_blocks = Vec::new();
 
-    for block in content_blocks.iter() {
+    for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
                 user_content_blocks.push(OpenAIContentBlock::Text {

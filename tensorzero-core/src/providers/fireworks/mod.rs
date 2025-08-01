@@ -398,7 +398,7 @@ pub fn prepare_fireworks_messages<'a>(
     messages: &'a [RequestMessage],
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut output_messages = Vec::with_capacity(messages.len());
-    for message in messages.iter() {
+    for message in messages {
         output_messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
     }
     if let Some(system_msg) = tensorzero_to_fireworks_system_message(system) {

@@ -413,8 +413,7 @@ impl Client {
                         .await
                         .map_err(err_to_http)
                 })
-                .await?
-                .0)
+                .await?)
             }
         }
     }
@@ -1188,7 +1187,7 @@ impl Client {
             ClientMode::HTTPGateway(client) => {
                 // Acquire the lock on the gateway version
                 let mut gateway_version = client.gateway_version.lock().await;
-                *gateway_version = Some(version)
+                *gateway_version = Some(version);
             }
             // Should never be called
             ClientMode::EmbeddedGateway { .. } => {}

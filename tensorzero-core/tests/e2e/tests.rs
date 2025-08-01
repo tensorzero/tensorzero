@@ -7,6 +7,7 @@ mod common;
 mod datasets;
 mod dicl;
 mod dynamic_evaluations;
+mod dynamic_variants;
 mod fallback;
 mod feedback;
 mod health;
