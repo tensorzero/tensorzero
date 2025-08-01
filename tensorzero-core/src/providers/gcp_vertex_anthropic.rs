@@ -200,16 +200,18 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body =
-            serde_json::to_value(GCPVertexAnthropicRequestBody::new(model_name, request)?)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error serializing GCP Vertex Anthropic request: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?;
+        let request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(
+            self.model_id(),
+            request,
+        )?)
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing GCP Vertex Anthropic request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
@@ -290,16 +292,18 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body =
-            serde_json::to_value(GCPVertexAnthropicRequestBody::new(model_name, request)?)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error serializing GCP Vertex Anthropic request: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?;
+        let request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(
+            self.model_id(),
+            request,
+        )?)
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing GCP Vertex Anthropic request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
@@ -637,7 +641,7 @@ struct GCPVertexAnthropicRequestBody<'a> {
 
 impl<'a> GCPVertexAnthropicRequestBody<'a> {
     fn new(
-        model_name: &'a str,
+        model_id: &'a str,
         request: &'a ModelInferenceRequest,
     ) -> Result<GCPVertexAnthropicRequestBody<'a>, Error> {
         if request.messages.is_empty() {
@@ -681,7 +685,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
 
         let max_tokens = match request.max_tokens {
             Some(max_tokens) => Ok(max_tokens),
-            None => get_default_max_tokens(model_name),
+            None => get_default_max_tokens(model_id),
         }?;
 
         // NOTE: Anthropic does not support seed
@@ -704,24 +708,24 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
 ///
 /// GCP Anthropic requires that the user provides `max_tokens`, but the value depends on the model.
 /// We maintain a library of known maximum values, and ask the user to hardcode it if it's unknown.
-fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
-    if model_name.starts_with("claude-3-haiku@") || model_name.starts_with("claude-3-opus@") {
+fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
+    if model_id.starts_with("claude-3-haiku@") || model_id.starts_with("claude-3-opus@") {
         Ok(4_096)
-    } else if model_name.starts_with("claude-3-5-haiku@")
-        || model_name.starts_with("claude-3-5-sonnet@")
-        || model_name.starts_with("claude-3-5-sonnet-v2@")
+    } else if model_id.starts_with("claude-3-5-haiku@")
+        || model_id.starts_with("claude-3-5-sonnet@")
+        || model_id.starts_with("claude-3-5-sonnet-v2@")
     {
         Ok(8_192)
-    } else if model_name.starts_with("claude-3-7-sonnet@")
-        || model_name.starts_with("claude-sonnet-4@")
-        || model_name == "claude-sonnet-4-0"
+    } else if model_id.starts_with("claude-3-7-sonnet@")
+        || model_id.starts_with("claude-sonnet-4@")
+        || model_id == "claude-sonnet-4-0"
     {
         Ok(64_000)
-    } else if model_name.starts_with("claude-opus-4@") || model_name == "claude-opus-4-0" {
+    } else if model_id.starts_with("claude-opus-4@") || model_id == "claude-opus-4-0" {
         Ok(32_000)
     } else {
         Err(Error::new(ErrorDetails::InferenceClient {
-            message: format!("The TensorZero Gateway doesn't know the output token limit for `{model_name}` and GCP Vertex AI Anthropic requires you to provide a `max_token` value. Please set `max_tokens` in your configuration or inference request."),
+            message: format!("The TensorZero Gateway doesn't know the output token limit for `{model_id}` and GCP Vertex AI Anthropic requires you to provide a `max_token` value. Please set `max_tokens` in your configuration or inference request."),
             status_code: None,
             provider_type: PROVIDER_TYPE.into(),
             raw_request: None,
