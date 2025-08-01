@@ -200,15 +200,16 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing GCP Vertex Anthropic request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let request_body =
+            serde_json::to_value(GCPVertexAnthropicRequestBody::new(model_name, request)?)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing GCP Vertex Anthropic request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
@@ -289,15 +290,16 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing GCP Vertex Anthropic request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let request_body =
+            serde_json::to_value(GCPVertexAnthropicRequestBody::new(model_name, request)?)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing GCP Vertex Anthropic request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
@@ -634,7 +636,10 @@ struct GCPVertexAnthropicRequestBody<'a> {
 }
 
 impl<'a> GCPVertexAnthropicRequestBody<'a> {
-    fn new(request: &'a ModelInferenceRequest) -> Result<GCPVertexAnthropicRequestBody<'a>, Error> {
+    fn new(
+        model_name: &'a str,
+        request: &'a ModelInferenceRequest,
+    ) -> Result<GCPVertexAnthropicRequestBody<'a>, Error> {
         if request.messages.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
                 message: "Anthropic requires at least one message".to_string(),
@@ -673,11 +678,17 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             .filter(|t| !t.is_empty())
             .and(request.tool_config.as_ref())
             .and_then(|c| (&c.tool_choice).try_into().ok());
+
+        let max_tokens = match request.max_tokens {
+            Some(max_tokens) => Ok(max_tokens),
+            None => get_default_max_tokens(model_name),
+        }?;
+
         // NOTE: Anthropic does not support seed
         Ok(GCPVertexAnthropicRequestBody {
             anthropic_version: ANTHROPIC_API_VERSION,
             messages,
-            max_tokens: request.max_tokens.unwrap_or(4096),
+            max_tokens,
             stream: Some(request.stream),
             system,
             temperature: request.temperature,
@@ -686,6 +697,36 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             tool_choice,
             tools,
         })
+    }
+}
+
+/// Returns the default max_tokens for a given GCP Anthropic model name, or an error if unknown.
+///
+/// GCP Anthropic requires that the user provides `max_tokens`, but the value depends on the model.
+/// We maintain a library of known maximum values, and ask the user to hardcode it if it's unknown.
+fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
+    if model_name.starts_with("claude-3-haiku@") || model_name.starts_with("claude-3-opus@") {
+        Ok(4_096)
+    } else if model_name.starts_with("claude-3-5-haiku@")
+        || model_name.starts_with("claude-3-5-sonnet@")
+        || model_name.starts_with("claude-3-5-sonnet-v2@")
+    {
+        Ok(8_192)
+    } else if model_name.starts_with("claude-3-7-sonnet@")
+        || model_name.starts_with("claude-sonnet-4@")
+        || model_name == "claude-sonnet-4-0"
+    {
+        Ok(64_000)
+    } else if model_name.starts_with("claude-opus-4@") || model_name == "claude-opus-4-0" {
+        Ok(32_000)
+    } else {
+        Err(Error::new(ErrorDetails::InferenceClient {
+            message: format!("The TensorZero Gateway doesn't know the output token limit for `{model_name}` and GCP Vertex AI Anthropic requires you to provide a `max_token` value. Please set `max_tokens` in your configuration or inference request."),
+            status_code: None,
+            provider_type: PROVIDER_TYPE.into(),
+            raw_request: None,
+            raw_response: None,
+        }))
     }
 }
 
@@ -1403,7 +1444,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
+        let anthropic_request_body =
+            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request);
         let details = anthropic_request_body.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1441,7 +1483,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
+        let anthropic_request_body =
+            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request);
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
@@ -1452,7 +1495,7 @@ mod tests {
                     GCPVertexAnthropicMessage::try_from(&messages[1]).unwrap(),
                     listening_message.clone(),
                 ],
-                max_tokens: 4096,
+                max_tokens: 32_000,
                 stream: Some(false),
                 system: Some("test_system"),
                 temperature: None,
@@ -1497,7 +1540,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
+        let anthropic_request_body =
+            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request);
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
@@ -1568,7 +1612,8 @@ mod tests {
             ..Default::default()
         };
 
-        let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
+        let anthropic_request_body =
+            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request);
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
@@ -1595,6 +1640,55 @@ mod tests {
                 stop_sequences: None,
             }
         );
+    }
+
+    #[test]
+    fn test_get_default_max_tokens_in_new_gcp_anthropic_request_body() {
+        let messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["Hello".to_string().into()],
+        }];
+
+        let request = ModelInferenceRequest {
+            messages,
+            ..Default::default()
+        };
+
+        let model = "claude-opus-4@20250514".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 32_000);
+
+        let model = "claude-sonnet-4@20250514".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 64_000);
+
+        let model = "claude-3-7-sonnet@20250219".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 64_000);
+
+        let model = "claude-3-5-sonnet-v2@20240222".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 8_192);
+
+        let model = "claude-3-5-sonnet@20240229".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 8_192);
+
+        let model = "claude-3-5-haiku@20240307".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 8_192);
+
+        let model = "claude-3-haiku@20240307".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 4_096);
+
+        let model = "claude-3-5-ballad-latest".to_string(); // fake model
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request);
+        assert!(body.is_err());
+
+        let model = "claude-4-5-haiku-20260101".to_string(); // fake model
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request);
+        assert!(body.is_err());
     }
 
     #[test]
