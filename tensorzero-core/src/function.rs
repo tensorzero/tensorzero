@@ -342,7 +342,7 @@ impl FunctionConfig {
         inference_id: Uuid,
         content_blocks: Vec<ContentBlockOutput>,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
-        inference_config: &'request InferenceConfig<'_, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         inference_params: InferenceParams,
         original_response: Option<String>,
     ) -> Result<InferenceResult, Error> {
@@ -387,7 +387,7 @@ impl FunctionConfig {
                 // If the parsed output fails validation, we log the error and set `parsed_output` to None
                 let parsed_output = match parsed_output {
                     Some(parsed_output) => match output_schema.validate(&parsed_output).await {
-                        Ok(_) => Some(parsed_output),
+                        Ok(()) => Some(parsed_output),
                         Err(_) => None,
                     },
                     None => None,
@@ -477,7 +477,7 @@ impl FunctionConfig {
         }
         match self {
             FunctionConfig::Chat(params) => {
-                for tool in params.tools.iter() {
+                for tool in &params.tools {
                     static_tools.get(tool).ok_or_else(|| Error::new(ErrorDetails::Config {
                         message: format!("`functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
                     }))?;
@@ -546,7 +546,7 @@ fn validate_all_text_input(
     }?;
     for (index, message) in input.messages.iter().enumerate() {
         // Only for Text blocks, not RawText blocks since we don't validate those
-        for block in message.content.iter() {
+        for block in &message.content {
             if let InputMessageContent::Text(kind) = block {
                 let content = match kind {
                     TextKind::Arguments { arguments } => {
@@ -709,9 +709,9 @@ mod tests {
     use super::*;
     use crate::config_parser::path::TomlRelativePath;
     use serde_json::json;
+    use std::io::Write;
     use std::time::Duration;
     use std::time::Instant;
-    use std::{io::Write, path::PathBuf};
     use tempfile::NamedTempFile;
     use tracing_test::traced_test;
 
@@ -730,10 +730,10 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        StaticJSONSchema::from_path(
-            TomlRelativePath::new_for_tests(temp_file.path().to_owned()),
-            PathBuf::new(),
-        )
+        StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+            temp_file.path().to_owned(),
+            None,
+        ))
         .expect("Failed to create schema")
     }
 
@@ -2473,7 +2473,7 @@ mod tests {
         assert_eq!(json_block_index, Some(0));
         match &auxiliary_content[0] {
             ContentBlockOutput::Thought(t) => {
-                assert_eq!(t.text, Some("final thought".to_string()))
+                assert_eq!(t.text, Some("final thought".to_string()));
             }
             _ => panic!("Expected Thought block"),
         }

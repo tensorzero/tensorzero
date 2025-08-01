@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -31,17 +29,19 @@ pub struct ChainOfThoughtConfig {
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct UninitializedChainOfThoughtConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,
 }
 
 impl LoadableConfig<ChainOfThoughtConfig> for UninitializedChainOfThoughtConfig {
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<ChainOfThoughtConfig, Error> {
+    fn load(self) -> Result<ChainOfThoughtConfig, Error> {
         Ok(ChainOfThoughtConfig {
-            inner: self.inner.load(base_path)?,
+            inner: self.inner.load()?,
         })
     }
 }
@@ -52,7 +52,7 @@ impl Variant for ChainOfThoughtConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -118,7 +118,7 @@ impl Variant for ChainOfThoughtConfig {
         _input: &ResolvedInput,
         _models: &'request InferenceModels<'_>,
         _function: &FunctionConfig,
-        _inference_config: &'request InferenceConfig<'static, 'request>,
+        _inference_config: &'request InferenceConfig<'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -168,7 +168,7 @@ impl Variant for ChainOfThoughtConfig {
         _input: &[ResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
-        _inference_configs: &'a [InferenceConfig<'a, 'a>],
+        _inference_configs: &'a [InferenceConfig<'a>],
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {

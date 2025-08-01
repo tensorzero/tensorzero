@@ -33,6 +33,7 @@ use crate::model::{
     build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
     ModelProvider,
 };
+use crate::providers;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -664,7 +665,7 @@ impl<'a> AnthropicRequestBody<'a> {
             .iter()
             .map(AnthropicMessage::try_from)
             .collect::<Result<Vec<_>, _>>()?;
-        let messages = prepare_messages(request_messages)?;
+        let messages = prepare_messages(request_messages);
         let messages = if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
@@ -711,7 +712,9 @@ impl<'a> AnthropicRequestBody<'a> {
 /// Modifies the message array to satisfy Anthropic API requirements by:
 /// - Prepending a default User message with "[listening]" if the first message is not from a User
 /// - Appending a default User message with "[listening]" if the last message is from an Assistant
-fn prepare_messages(mut messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMessage>, Error> {
+fn prepare_messages(
+    mut messages: Vec<AnthropicMessage>,
+) -> std::vec::Vec<providers::anthropic::AnthropicMessage<'_>> {
     // Anthropic also requires that there is at least one message and it is a User message.
     // If it's not we will prepend a default User message.
     match messages.first() {
@@ -745,7 +748,7 @@ fn prepare_messages(mut messages: Vec<AnthropicMessage>) -> Result<Vec<Anthropic
             });
         }
     }
-    Ok(messages)
+    messages
 }
 
 fn prefill_json_message(messages: Vec<AnthropicMessage>) -> Vec<AnthropicMessage> {
@@ -1766,7 +1769,7 @@ mod tests {
 
         // Test case 1: Empty messages - should add listening message
         let messages = vec![];
-        let result = prepare_messages(messages).unwrap();
+        let result = prepare_messages(messages);
         assert_eq!(result, vec![listening_message.clone()]);
 
         // Test case 2: First message is Assistant - should prepend listening message
@@ -1784,7 +1787,7 @@ mod tests {
                 })],
             },
         ];
-        let result = prepare_messages(messages).unwrap();
+        let result = prepare_messages(messages);
         assert_eq!(
             result,
             vec![
@@ -1819,7 +1822,7 @@ mod tests {
                 })],
             },
         ];
-        let result = prepare_messages(messages).unwrap();
+        let result = prepare_messages(messages);
         assert_eq!(
             result,
             vec![
@@ -1860,7 +1863,7 @@ mod tests {
                 })],
             },
         ];
-        let result = prepare_messages(messages.clone()).unwrap();
+        let result = prepare_messages(messages.clone());
         assert_eq!(result, messages);
 
         // Test case 5: Both first Assistant and last Assistant - should add listening messages at both ends
@@ -1884,7 +1887,7 @@ mod tests {
                 })],
             },
         ];
-        let result = prepare_messages(messages).unwrap();
+        let result = prepare_messages(messages);
         assert_eq!(
             result,
             vec![
@@ -1918,7 +1921,7 @@ mod tests {
                 text: "Hi",
             })],
         }];
-        let result = prepare_messages(messages).unwrap();
+        let result = prepare_messages(messages);
         assert_eq!(
             result,
             vec![
@@ -1940,7 +1943,7 @@ mod tests {
                 text: "Hello",
             })],
         }];
-        let result = prepare_messages(messages.clone()).unwrap();
+        let result = prepare_messages(messages.clone());
         assert_eq!(result, messages);
     }
 

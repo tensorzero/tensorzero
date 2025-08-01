@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::path::Path;
 use std::sync::Arc;
 
 use crate::config_parser::path::TomlRelativePath;
@@ -51,8 +50,10 @@ pub struct ChatCompletionConfig {
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
     pub weight: Option<f64>,
@@ -78,21 +79,21 @@ pub struct UninitializedChatCompletionConfig {
 }
 
 impl LoadableConfig<ChatCompletionConfig> for UninitializedChatCompletionConfig {
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<ChatCompletionConfig, Error> {
+    fn load(self) -> Result<ChatCompletionConfig, Error> {
         Ok(ChatCompletionConfig {
             weight: self.weight,
             model: self.model,
             system_template: self
                 .system_template
-                .map(|path| PathWithContents::from_path(path, Some(&base_path)))
+                .map(PathWithContents::from_path)
                 .transpose()?,
             user_template: self
                 .user_template
-                .map(|path| PathWithContents::from_path(path, Some(&base_path)))
+                .map(PathWithContents::from_path)
                 .transpose()?,
             assistant_template: self
                 .assistant_template
-                .map(|path| PathWithContents::from_path(path, Some(&base_path)))
+                .map(PathWithContents::from_path)
                 .transpose()?,
             temperature: self.temperature,
             top_p: self.top_p,
@@ -120,14 +121,14 @@ impl ChatCompletionConfig {
             Role::User => self.user_template.as_ref(),
             Role::Assistant => self.assistant_template.as_ref(),
         }
-        .map(|x| {
-            x.path
-                .path()
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
-        })
-        .transpose()?;
-        prepare_request_message(message, templates, template_path, template_schema_info)
+        .map(|x| x.path.get_template_key());
+
+        prepare_request_message(
+            message,
+            templates,
+            template_path.as_deref(),
+            template_schema_info,
+        )
     }
 
     pub fn prepare_system_message(
@@ -139,24 +140,26 @@ impl ChatCompletionConfig {
         let template_path = self
             .system_template
             .as_ref()
-            .map(|x| {
-                x.path
-                    .path()
-                    .to_str()
-                    .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
-            })
-            .transpose()?;
-        prepare_system_message(system, templates, template_path, template_schema_info)
+            .map(|x| x.path.get_template_key());
+        prepare_system_message(
+            system,
+            templates,
+            template_path.as_deref(),
+            template_schema_info,
+        )
     }
 
     fn prepare_request<'a, 'request>(
         &'a self,
         input: &ResolvedInput,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         stream: bool,
         inference_params: &mut InferenceParams,
-    ) -> Result<ModelInferenceRequest<'request>, Error> {
+    ) -> Result<ModelInferenceRequest<'request>, Error>
+    where
+        'a: 'request,
+    {
         let messages = input
             .messages
             .iter()
@@ -236,7 +239,7 @@ pub fn prepare_model_input(
         template_schema_info,
     )?;
     let mut templated_messages = Vec::with_capacity(messages.len());
-    for message in messages.iter() {
+    for message in messages {
         let template_name = match message.role {
             Role::Assistant => assistant_template_name,
             Role::User => user_template_name,
@@ -316,7 +319,7 @@ fn prepare_request_message(
             }
         }
     };
-    for block in message.content.iter() {
+    for block in &message.content {
         match block {
             ResolvedInputMessageContent::Text { value } => {
                 let text_content= match template_name {
@@ -382,7 +385,7 @@ impl Variant for ChatCompletionConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -417,7 +420,7 @@ impl Variant for ChatCompletionConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -538,7 +541,7 @@ impl Variant for ChatCompletionConfig {
         inputs: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_configs: &'a [InferenceConfig<'a, 'a>],
+        inference_configs: &'a [InferenceConfig<'a>],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -610,11 +613,8 @@ pub fn validate_template_and_schema(
 ) -> Result<(), Error> {
     match (schema, template) {
         (None, Some(template)) => {
-            let template_name = template
-                .path()
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))?;
-            let undeclared_vars = templates.get_undeclared_variables(template_name)?;
+            let template_name = template.get_template_key();
+            let undeclared_vars = templates.get_undeclared_variables(&template_name)?;
             let allowed_var = match kind {
                 TemplateKind::System => SYSTEM_TEXT_TEMPLATE_VAR,
                 TemplateKind::User => USER_TEXT_TEMPLATE_VAR,
@@ -2377,16 +2377,16 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_both_some() {
         let templates = get_test_template_config();
-        let schema = StaticJSONSchema::from_path(
+        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
-            PathBuf::new(),
-        )
+            None,
+        ))
         .unwrap();
         let template = PathBuf::from("test_validate_template_and_schema_both_some");
         let result = validate_template_and_schema(
             TemplateKind::System,
             Some(&schema),
-            Some(&TomlRelativePath::new_for_tests(template)),
+            Some(&TomlRelativePath::new_for_tests(template, None)),
             &templates,
         );
         assert!(result.is_ok());
@@ -2399,7 +2399,7 @@ mod tests {
         let result = validate_template_and_schema(
             TemplateKind::System,
             None,
-            Some(&TomlRelativePath::new_for_tests(template)),
+            Some(&TomlRelativePath::new_for_tests(template, None)),
             &templates,
         );
         assert!(result.is_ok());
@@ -2412,7 +2412,7 @@ mod tests {
         let err = validate_template_and_schema(
             TemplateKind::System,
             None,
-            Some(&TomlRelativePath::new_for_tests(template)),
+            Some(&TomlRelativePath::new_for_tests(template, None)),
             &templates,
         )
         .unwrap_err();
@@ -2431,10 +2431,10 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_schema_some_template_none() {
         let templates = get_test_template_config(); // Default TemplateConfig
-        let schema = StaticJSONSchema::from_path(
+        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
-            PathBuf::new(),
-        )
+            None,
+        ))
         .unwrap();
         let err =
             validate_template_and_schema(TemplateKind::System, Some(&schema), None, &templates)

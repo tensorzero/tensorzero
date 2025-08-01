@@ -9,9 +9,16 @@ use reqwest_eventsource::RequestBuilderExt;
 use serde_json::json;
 use serde_json::Value;
 use std::time::Duration;
+use tensorzero::CacheParamsOptions;
+use tensorzero::ClientInferenceParams;
+use tensorzero::ClientInput;
+use tensorzero::ClientInputMessage;
+use tensorzero::ClientInputMessageContent;
 use tensorzero::ContentBlockChunk;
+use tensorzero::InferenceOutput;
 use tensorzero_core::cache::cache_lookup_streaming;
 use tensorzero_core::cache::start_cache_write_streaming;
+use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::cache::NonStreamingCacheData;
 use tensorzero_core::inference::types::extra_body::FullExtraBodyConfig;
 use tensorzero_core::inference::types::ContentBlock;
@@ -20,6 +27,8 @@ use tensorzero_core::inference::types::FinishReason;
 use tensorzero_core::inference::types::ProviderInferenceResponseChunk;
 use tensorzero_core::inference::types::Text;
 use tensorzero_core::inference::types::TextChunk;
+use tensorzero_core::inference::types::TextKind;
+use tracing_test::traced_test;
 use uuid::Uuid;
 
 use tensorzero_core::cache::cache_lookup;
@@ -34,6 +43,7 @@ use tensorzero_core::inference::types::{
 };
 
 use crate::common::get_gateway_endpoint;
+use crate::providers::common::make_embedded_gateway;
 use tensorzero_core::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
@@ -285,7 +295,7 @@ async fn test_cache_stream_write_and_read() {
                     input_tokens: 20,
                     output_tokens: 40,
                 })
-            )
+            );
         } else {
             assert_eq!(
                 usage,
@@ -293,7 +303,7 @@ async fn test_cache_stream_write_and_read() {
                     input_tokens: 100,
                     output_tokens: 200,
                 })
-            )
+            );
         };
         assert_eq!(raw_response, &initial_chunks[i].raw_response);
         assert_eq!(latency, &Duration::from_secs(0));
@@ -311,6 +321,45 @@ async fn test_cache_stream_write_and_read() {
             .await
             .unwrap();
     assert!(result.is_none());
+}
+
+#[traced_test]
+#[tokio::test]
+pub async fn test_dont_cache_invalid_tool_call() {
+    let client = make_embedded_gateway().await;
+    let randomness = Uuid::now_v7();
+    let params = ClientInferenceParams {
+        model_name: Some("dummy::invalid_tool_arguments".to_string()),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: format!("Test inference: {randomness}"),
+                })],
+            }],
+        },
+        cache_options: CacheParamsOptions {
+            enabled: CacheEnabledMode::On,
+            max_age_s: None,
+        },
+        ..Default::default()
+    };
+    client.inference(params.clone()).await.unwrap();
+
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    let clickhouse = get_clickhouse().await;
+    assert!(logs_contain("Skipping cache write"));
+
+    // Run again, and check that we get a cache miss
+    let res = client.inference(params).await.unwrap();
+    let InferenceOutput::NonStreaming(res) = res else {
+        panic!("Expected non-streaming inference response");
+    };
+    let model_inference = select_model_inference_clickhouse(&clickhouse, res.inference_id())
+        .await
+        .unwrap();
+    assert_eq!(model_inference.get("cached").unwrap(), false);
 }
 
 #[tokio::test]
