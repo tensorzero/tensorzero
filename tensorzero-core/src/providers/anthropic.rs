@@ -693,11 +693,17 @@ impl<'a> AnthropicRequestBody<'a> {
             .filter(|t| !t.is_empty())
             .and(request.tool_config.as_ref())
             .and_then(|c| c.as_ref().try_into().ok());
+
+        let max_tokens = match request.max_tokens {
+            Some(max_tokens) => Ok(max_tokens),
+            None => get_default_max_tokens(model_name),
+        }?;
+
         // NOTE: Anthropic does not support seed
         Ok(AnthropicRequestBody {
             model: model_name,
             messages,
-            max_tokens: request.max_tokens.unwrap_or(4096),
+            max_tokens,
             stream: Some(request.stream),
             system,
             temperature: request.temperature,
@@ -706,6 +712,35 @@ impl<'a> AnthropicRequestBody<'a> {
             tools,
             stop_sequences: request.borrow_stop_sequences(),
         })
+    }
+}
+
+/// Returns the default max_tokens for a given Anthropic model name, or an error if unknown.
+///
+/// Anthropic requires that the user provides `max_tokens`, but the value depends on the model.
+/// We maintain a library of known maximum values, and ask the user to hardcode it if it's unknown.
+fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
+    if model_name.starts_with("claude-3-haiku") || model_name.starts_with("claude-3-opus") {
+        Ok(4_096)
+    } else if model_name.starts_with("claude-3-5-haiku")
+        || model_name.starts_with("claude-3-5-sonnet")
+    {
+        Ok(8_192)
+    } else if model_name.starts_with("claude-3-7-sonnet")
+        || model_name.starts_with("claude-sonnet-4-202")
+        || model_name == "claude-sonnet-4-0"
+    {
+        Ok(64_000)
+    } else if model_name.starts_with("claude-opus-4-202") || model_name == "claude-opus-4-0" {
+        Ok(32_000)
+    } else {
+        Err(Error::new(ErrorDetails::InferenceClient {
+            message: format!("The TensorZero Gateway doesn't know the output token limit for `{model_name}` and Anthropic requires you to provide a `max_token` value. Please set `max_tokens` in your configuration or inference request."),
+            status_code: None,
+            provider_type: PROVIDER_TYPE.into(),
+            raw_request: None,
+            raw_response: None,
+        }))
     }
 }
 
@@ -1513,7 +1548,7 @@ mod tests {
 
     #[test]
     fn test_initialize_anthropic_request_body() {
-        let model = "claude".to_string();
+        let model = "claude-3-7-sonnet-latest".to_string();
         let listening_message = AnthropicMessage {
             role: AnthropicRole::User,
             content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
@@ -1583,7 +1618,7 @@ mod tests {
                     AnthropicMessage::try_from(&inference_request.messages[0]).unwrap(),
                     listening_message.clone(),
                 ],
-                max_tokens: 4096,
+                max_tokens: 64_000,
                 stream: Some(false),
                 system: Some("test_system"),
                 temperature: None,
@@ -1689,7 +1724,7 @@ mod tests {
                     .iter()
                     .map(|m| AnthropicMessage::try_from(m).unwrap())
                     .collect(),
-                max_tokens: 4096,
+                max_tokens: 64_000,
                 stream: Some(false),
                 system: None,
                 temperature: None,
@@ -1755,6 +1790,67 @@ mod tests {
                 })],
             }
         );
+    }
+
+    #[test]
+    fn test_get_default_max_tokens_in_new_anthropic_request_body() {
+        let messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["Hello".to_string().into()],
+        }];
+
+        let request = ModelInferenceRequest {
+            messages,
+            ..Default::default()
+        };
+
+        let model = "claude-opus-4-20250514".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 32_000);
+
+        let model = "claude-sonnet-4-20250514".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 64_000);
+
+        let model = "claude-3-7-sonnet-20250219".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 64_000);
+
+        let model = "claude-3-5-sonnet-20241022".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 8_192);
+
+        let model = "claude-3-5-haiku-20241022".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 8_192);
+
+        let model = "claude-opus-4-0".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 32_000);
+
+        let model = "claude-sonnet-4-0".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 64_000);
+
+        let model = "claude-3-7-sonnet-latest".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 64_000);
+
+        let model = "claude-3-5-sonnet-latest".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 8_192);
+
+        let model = "claude-3-5-haiku-latest".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 8_192);
+
+        let model = "claude-3-haiku-20240307".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 4_096);
+
+        let model = "claude-4-5-haiku-20260101".to_string(); // fake model
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert!(body.is_err());
     }
 
     #[test]
