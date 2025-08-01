@@ -16,64 +16,26 @@ import type { InferenceResponse } from "~/utils/tensorzero";
 import { Card, CardContent } from "~/components/ui/card";
 import type { VariantResponseInfo } from "~/routes/api/tensorzero/inference.utils";
 
-interface VariantResponseModalProps {
-  isOpen: boolean;
-  isLoading: boolean;
-  onClose: () => void;
-  // Use a union type to accept either inference or datapoint
+interface ResponseColumnProps {
+  title: string;
+  response: VariantResponseInfo | null;
+  errorMessage?: string | null;
+  children?: React.ReactNode;
   item: ParsedInferenceRow | ParsedDatasetRow;
-  // Make inferenceUsage optional since datasets don't have it by default
-  inferenceUsage?: InferenceUsage;
-  selectedVariant: string;
-  // Add a source property to determine what type of item we're dealing with
-  source: "inference" | "datapoint";
-  error?: string | null;
-  variantResponse: VariantResponseInfo | null;
-  rawResponse: InferenceResponse | null;
 }
 
-export function VariantResponseModal({
-  isOpen,
-  isLoading,
-  onClose,
+function ResponseColumn({
+  title,
+  response,
+  errorMessage,
+  children,
   item,
-  inferenceUsage,
-  selectedVariant,
-  source,
-  error,
-  variantResponse,
-  rawResponse,
-}: VariantResponseModalProps) {
-  const [showRawResponse, setShowRawResponse] = useState(false);
-
-  // Set up baseline response based on source type
-  const baselineResponse: VariantResponseInfo = {
-    output: item.output,
-    usage: source === "inference" ? inferenceUsage : undefined,
-  };
-
-  // Get original variant name if available (only for inferences)
-  const originalVariant =
-    source === "inference"
-      ? (item as ParsedInferenceRow).variant_name
-      : undefined;
-
-  useEffect(() => {
-    // reset when modal opens or closes
-    setShowRawResponse(false);
-  }, [isOpen]);
-
-  const ResponseColumn = ({
-    title,
-    response,
-    errorMessage,
-  }: {
-    title: string;
-    response: VariantResponseInfo | null;
-    errorMessage?: string | null;
-  }) => (
+}: ResponseColumnProps) {
+  return (
     <div className="flex flex-1 flex-col">
-      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold">{title}</h3>
+      </div>
       {errorMessage ? (
         <div className="flex-1">
           <Card>
@@ -100,22 +62,75 @@ export function VariantResponseModal({
               </div>
             )}
 
-            {response.usage && (
-              <div className="mt-4">
-                <h4 className="mb-1 text-xs font-semibold">Usage</h4>
-                <p className="text-xs">
-                  Input tokens: {response.usage.input_tokens}
-                </p>
-                <p className="text-xs">
-                  Output tokens: {response.usage.output_tokens}
-                </p>
-              </div>
-            )}
+            <div className="mt-4 grid grid-cols-2 justify-end gap-4">
+              {response.usage && (
+                <div>
+                  <h4 className="mb-1 text-xs font-semibold">Usage</h4>
+                  <p className="text-xs">
+                    Input tokens: {response.usage.input_tokens}
+                  </p>
+                  <p className="text-xs">
+                    Output tokens: {response.usage.output_tokens}
+                  </p>
+                </div>
+              )}
+              <div className="flex justify-end">{children}</div>
+            </div>
           </>
         )
       )}
     </div>
   );
+}
+
+interface VariantResponseModalProps {
+  isOpen: boolean;
+  isLoading: boolean;
+  onClose: () => void;
+  // Use a union type to accept either inference or datapoint
+  item: ParsedInferenceRow | ParsedDatasetRow;
+  // Make inferenceUsage optional since datasets don't have it by default
+  inferenceUsage?: InferenceUsage;
+  selectedVariant: string;
+  // Add a source property to determine what type of item we're dealing with
+  source: "inference" | "datapoint";
+  error?: string | null;
+  variantResponse: VariantResponseInfo | null;
+  rawResponse: InferenceResponse | null;
+  children?: React.ReactNode;
+}
+
+export function VariantResponseModal({
+  isOpen,
+  isLoading,
+  onClose,
+  item,
+  inferenceUsage,
+  selectedVariant,
+  source,
+  error,
+  variantResponse,
+  rawResponse,
+  children,
+}: VariantResponseModalProps) {
+  const [showRawResponse, setShowRawResponse] = useState(false);
+
+  // Set up baseline response based on source type
+  const baselineResponse: VariantResponseInfo = {
+    output: item.output,
+    usage: source === "inference" ? inferenceUsage : undefined,
+  };
+
+  // Get original variant name if available (only for inferences)
+  const originalVariant =
+    source === "inference"
+      ? (item as ParsedInferenceRow).variant_name
+      : undefined;
+
+  useEffect(() => {
+    // reset when modal opens or closes
+    setShowRawResponse(false);
+  }, [isOpen]);
 
   // Create a dynamic title based on the source
   const getTitle = () => {
@@ -165,13 +180,21 @@ export function VariantResponseModal({
           ) : (
             <>
               <div className="flex flex-col gap-4 md:grid md:min-h-[300px] md:grid-cols-2">
-                <ResponseColumn title="Original" response={baselineResponse} />
+                <ResponseColumn
+                  title="Original"
+                  response={baselineResponse}
+                  item={item}
+                />
                 <ResponseColumn
                   title="New"
                   response={variantResponse}
                   errorMessage={error}
-                />
+                  item={item}
+                >
+                  {children}
+                </ResponseColumn>
               </div>
+
               <Separator className="my-4" />
               <div>
                 <Button

@@ -7,3 +7,17 @@ type = "chat"
 [functions.generate_haiku.variants.gpt_4o_mini]
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
+
+[functions.test]
+type = "json"
+output_schema = "test_output_schema.json"
+
+[functions.test.variants.o4]
+type = "chat_completion"
+json_mode = "implicit_tool"
+model = "openai::o4-mini-2025-04-16"
+
+[functions.test.variants.sonnet]
+type = "chat_completion"
+json_mode = "off"
+model = "anthropic::claude-sonnet-4-20250514"

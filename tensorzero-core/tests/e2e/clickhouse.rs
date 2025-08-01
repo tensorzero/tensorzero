@@ -940,7 +940,7 @@ async fn test_migration_0013_old_table() {
     ];
 
     // Run migrations up to right before 0013
-    for migration in migrations.iter() {
+    for migration in migrations {
         migration_manager::run_migration(RunMigrationArgs {
             clickhouse: &clickhouse,
             migration: migration.as_ref(),
@@ -1026,7 +1026,7 @@ async fn test_migration_0013_data_no_table() {
     ];
 
     // Run migrations up to right before 0013
-    for migration in migrations.iter() {
+    for migration in migrations {
         migration_manager::run_migration(RunMigrationArgs {
             clickhouse: &clickhouse,
             migration: migration.as_ref(),
