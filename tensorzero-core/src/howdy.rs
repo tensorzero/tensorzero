@@ -57,7 +57,7 @@ pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo) {
     let client = Client::new();
     let deployment_id = match get_deployment_id(&clickhouse).await {
         Ok(deployment_id) => deployment_id,
-        Err(_) => {
+        Err(()) => {
             return;
         }
     };
