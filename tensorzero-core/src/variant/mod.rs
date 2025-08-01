@@ -1228,7 +1228,7 @@ mod tests {
                     expected_content
                 );
             }
-            _ => panic!("Expected Chat inference result"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference result, received Json"),
         }
 
         // Test case 2: Successful inference with FunctionConfigJson
@@ -1343,7 +1343,7 @@ mod tests {
                     vec![DUMMY_JSON_RESPONSE_RAW.to_string().into()]
                 );
             }
-            _ => panic!("Expected Json inference result"),
+            InferenceResult::Chat(_) => panic!("Expected Json inference result, received Chat"),
         }
 
         // Test case 3: Model inference failure
@@ -1546,7 +1546,7 @@ mod tests {
                     expected_content
                 );
             }
-            _ => panic!("Expected Chat inference result"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference result, received Json"),
         }
         assert!(logs_contain(
             r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:infer{model_name="dummy_chat_model" otel.name="model_inference" stream=false}:infer{provider_name="error"}:infer{provider_name="error" otel.name="model_provider_inference" gen_ai.operation.name="chat" gen_ai.system="dummy" gen_ai.request.model="error" stream=false}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#

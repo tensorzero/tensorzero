@@ -1322,8 +1322,8 @@ mod tests {
                 assert_eq!(selected.model_inference_results.len(), 3);
                 assert_eq!(selected.finish_reason, Some(FinishReason::Stop));
             }
-            _ => {
-                panic!("Expected a Chat inference result");
+            InferenceResult::Json(_json_choice) => {
+                panic!("Expected a Chat inference result, received Json");
             }
         }
         // Set up evaluator with a provider that fails
@@ -1388,8 +1388,8 @@ mod tests {
             InferenceResult::Chat(chat_choice) => {
                 assert!(chat_choice.model_inference_results.len() == 2);
             }
-            _ => {
-                panic!("Expected a Chat inference result");
+            InferenceResult::Json(_json_choice) => {
+                panic!("Expected a Chat inference result, received Json");
             }
         }
         // Depending on implementation, you might check which candidate was selected
@@ -1456,8 +1456,8 @@ mod tests {
                 // But, it's a random choice, so we can't assert on the specific index
                 assert!(chat_choice.model_inference_results.len() == 3);
             }
-            _ => {
-                panic!("Expected a Chat inference result");
+            InferenceResult::Json(_json_choice) => {
+                panic!("Expected a Chat inference result, received Json");
             }
         }
         // Test case: No answer choices (should return an error)
