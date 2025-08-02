@@ -2,15 +2,13 @@ use super::{deserialize_delete, serialize_delete};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct ExtraBodyConfig {
     pub data: Vec<ExtraBodyReplacement>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ExtraBodyReplacement {
     pub pointer: String,
     #[serde(flatten)]
@@ -19,8 +17,6 @@ pub struct ExtraBodyReplacement {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-#[derive(ts_rs::TS)]
-#[ts(export)]
 pub enum ExtraBodyReplacementKind {
     Value(Value),
     // We only allow `"delete": true` to be set - deserializing `"delete": false` will error
@@ -35,7 +31,6 @@ pub enum ExtraBodyReplacementKind {
 /// These have not yet been filtered by variant name
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
-#[derive(ts_rs::TS)]
 pub struct UnfilteredInferenceExtraBody {
     extra_body: Vec<InferenceExtraBody>,
 }
@@ -76,7 +71,6 @@ pub struct FullExtraBodyConfig {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
-#[derive(ts_rs::TS)]
 pub enum InferenceExtraBody {
     Provider {
         model_provider_name: String,

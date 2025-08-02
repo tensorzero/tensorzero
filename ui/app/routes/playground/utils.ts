@@ -26,6 +26,10 @@ export function refreshClientInference(
         ? (datapoint.tool_params ?? undefined)
         : undefined,
     output_schema: datapoint?.type === "json" ? datapoint.output_schema : null,
+    cache_options: {
+      max_age_s: null,
+      enabled: "off",
+    },
   });
   // The API endpoint takes form data so we need to stringify it and send as data
   const formData = new FormData();

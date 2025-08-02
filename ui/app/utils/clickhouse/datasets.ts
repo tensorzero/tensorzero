@@ -3,8 +3,8 @@ import {
   contentBlockChatOutputSchema,
   jsonInferenceOutputSchema,
   displayInputSchema,
+  JsonValueSchema,
 } from "./common";
-import { JsonValueSchema } from "../tensorzero";
 
 /**
  * Schema representing a fully-qualified row in the Chat Inference dataset.

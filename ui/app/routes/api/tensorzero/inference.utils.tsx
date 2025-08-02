@@ -3,6 +3,7 @@ import { useFetcher, type FetcherFormProps } from "react-router";
 import type { SubmitTarget, FetcherSubmitOptions } from "react-router";
 import type { DisplayInputMessage } from "~/utils/clickhouse/common";
 import type {
+  CacheParamsOptions,
   ClientInput,
   ClientInputMessage,
   ClientInputMessageContent,
@@ -289,6 +290,7 @@ interface ClickHouseDatapointActionArgs {
   tool_params?: ToolCallConfigDatabaseInsert;
   output_schema?: JsonValue;
   variant: string;
+  cache_options: CacheParamsOptions;
 }
 
 export function prepareInferenceActionRequest(
@@ -327,12 +329,6 @@ export function prepareInferenceActionRequest(
       enabled: "on",
     },
     include_original_response: false,
-    extra_body: {
-      extra_body: [],
-    },
-    extra_headers: {
-      headers: [],
-    },
     internal_dynamic_variant_config: null,
     allowed_tools: null,
     additional_tools: null,
@@ -365,12 +361,14 @@ export function prepareInferenceActionRequest(
       tool_choice: tool_choice || null,
       parallel_tool_calls: parallel_tool_calls || null,
       additional_tools: tools_available || null,
+      cache_options: args.cache_options,
     };
   } else {
     // For other sources, the input is already a DisplayInput
     const clientInput = resolvedInputToClientInput(args.resource.input);
-    const extra_body =
-      args.source === "inference" ? args.resource.extra_body : undefined;
+    // TODO: this is unsupported in Node bindings for now
+    // const extra_body =
+    //   args.source === "inference" ? args.resource.extra_body : undefined;
 
     return {
       ...baseParams,
@@ -378,7 +376,6 @@ export function prepareInferenceActionRequest(
       input: clientInput,
       variant_name: args.variant,
       dryrun: true,
-      extra_body: extra_body ? { extra_body: extra_body } : { extra_body: [] },
     };
   }
 }

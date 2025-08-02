@@ -6,27 +6,12 @@ import { z } from "zod";
 import {
   contentBlockChatOutputSchema,
   thoughtSchema,
+  JsonValueSchema,
   type StoragePath,
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
 import { logger } from "~/utils/logger";
 import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
-import type { JsonValue } from "tensorzero-node";
-
-/**
- * JSON types.
- */
-
-export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.record(JsonValueSchema),
-    z.array(JsonValueSchema),
-  ]),
-);
 
 /**
  * Roles for input messages.

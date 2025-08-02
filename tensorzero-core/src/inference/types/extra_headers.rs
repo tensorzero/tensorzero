@@ -1,15 +1,13 @@
 use super::{deserialize_delete, serialize_delete};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct ExtraHeadersConfig {
     pub data: Vec<ExtraHeader>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ExtraHeader {
     pub name: String,
     #[serde(flatten)]
@@ -32,16 +30,15 @@ pub enum ExtraHeaderKind {
 
 /// The 'InferenceExtraHeaders' options provided directly in an inference request
 /// These have not yet been filtered by variant name
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct UnfilteredInferenceExtraHeaders {
-    pub headers: Vec<InferenceExtraHeader>,
+    pub extra_headers: Vec<InferenceExtraHeader>,
 }
 
 impl UnfilteredInferenceExtraHeaders {
     pub fn is_empty(&self) -> bool {
-        self.headers.is_empty()
+        self.extra_headers.is_empty()
     }
 
     /// Filter the 'InferenceExtraHeader' options by variant name
@@ -49,7 +46,7 @@ impl UnfilteredInferenceExtraHeaders {
     pub fn filter(self, variant_name: &str) -> FilteredInferenceExtraHeaders {
         FilteredInferenceExtraHeaders {
             data: self
-                .headers
+                .extra_headers
                 .into_iter()
                 .filter(|config| config.should_apply_variant(variant_name))
                 .collect(),

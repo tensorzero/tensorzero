@@ -4,8 +4,23 @@ import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
   Thought,
+  JsonValue,
 } from "tensorzero-node";
-import { JsonValueSchema } from "../tensorzero";
+
+/**
+ * JSON types.
+ */
+
+export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.record(JsonValueSchema),
+    z.array(JsonValueSchema),
+  ]),
+);
 
 export const roleSchema = z.enum(["user", "assistant"]);
 export type Role = z.infer<typeof roleSchema>;

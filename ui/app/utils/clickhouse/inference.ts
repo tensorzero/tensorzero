@@ -6,8 +6,8 @@ import {
   displayInputSchema,
   displayModelInferenceInputMessageSchema,
   modelInferenceOutputContentBlockSchema,
+  JsonValueSchema,
 } from "./common";
-import { JsonValueSchema } from "../tensorzero";
 import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,

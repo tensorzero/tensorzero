@@ -4,6 +4,7 @@ import {
   type TableBounds,
   type TableBoundsWithCount,
   TableBoundsWithCountSchema,
+  JsonValueSchema,
 } from "./common";
 import {
   contentBlockSchema,
@@ -37,7 +38,6 @@ import {
 import { z } from "zod";
 import { logger } from "~/utils/logger";
 import { getConfig, getFunctionConfig } from "../config/index.server";
-import { JsonValueSchema } from "../tensorzero";
 
 /**
  * Query a table of at most `page_size` Inferences from ChatInference or JsonInference that are

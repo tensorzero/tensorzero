@@ -4,8 +4,6 @@ import type { ClientInput } from "./ClientInput";
 import type { InferenceParams } from "./InferenceParams";
 import type { Tool } from "./Tool";
 import type { ToolChoice } from "./ToolChoice";
-import type { UnfilteredInferenceExtraBody } from "./UnfilteredInferenceExtraBody";
-import type { UnfilteredInferenceExtraHeaders } from "./UnfilteredInferenceExtraHeaders";
 import type { UninitializedVariantInfo } from "./UninitializedVariantInfo";
 import type { JsonValue } from "./serde_json/JsonValue";
 
@@ -32,8 +30,6 @@ export type ClientInferenceParams = {
    * if the fuser/judge model failed
    */
   include_original_response: boolean;
-  extra_body: UnfilteredInferenceExtraBody;
-  extra_headers: UnfilteredInferenceExtraHeaders;
   internal_dynamic_variant_config: UninitializedVariantInfo | null;
   allowed_tools: Array<string> | null;
   additional_tools: Array<Tool> | null;

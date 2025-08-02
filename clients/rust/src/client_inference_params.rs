@@ -71,8 +71,10 @@ pub struct ClientInferenceParams {
     #[serde(default)]
     pub include_original_response: bool,
     #[serde(default)]
+    #[ts(skip)]
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
+    #[ts(skip)]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
 }
