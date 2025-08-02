@@ -6,11 +6,12 @@ use std::{
 use serde::{Deserialize, Serialize};
 use toml::{
     de::{DeTable, DeValue},
+    map::Entry,
     Spanned, Table,
 };
 
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::{Error, ErrorDetails};
+use crate::{config_parser::span_map::SpanMap, error::IMPOSSIBLE_ERROR_MESSAGE};
 
 /// Wrapper type to enforce proper handling of toml-relative paths.
 /// When we add support for config globbing, we'll require deserializing
@@ -370,6 +371,56 @@ static TARGET_PATH_COMPONENTS: &[&[PathComponent]] = &[
     ],
 ];
 
+/// Merges all of the keys from 'source' into 'target'.
+/// This is conservative, and does not allow overwriting an existing keys in `target`
+/// (if the same key is mapped to a table in both `source` and `target`, then we recursively merge)
+pub(super) fn merge_tomls<'a>(
+    target: &mut DeTable<'a>,
+    source: &DeTable<'a>,
+    error_path: Vec<String>,
+) -> Result<(), Error> {
+    for (key, value) in source {
+        let mut error_path = error_path.clone();
+        error_path.push(key.get_ref().to_string());
+        match target.entry(key.clone()) {
+            Entry::Vacant(entry) => {
+                entry.insert(value.clone());
+            }
+            Entry::Occupied(mut entry) => match entry.get_mut().get_mut() {
+                DeValue::String(_)
+                | DeValue::Integer(_)
+                | DeValue::Float(_)
+                | DeValue::Boolean(_)
+                | DeValue::Array(_)
+                | DeValue::Datetime(_) => {
+                    return Err(ErrorDetails::Config {
+                        message: format!(
+                            "`{}`: Found duplicate values in globbed TOML config files",
+                            error_path.join(".")
+                        ),
+                    }
+                    .into());
+                }
+                DeValue::Table(target_table) => {
+                    if let DeValue::Table(source_table) = value.get_ref() {
+                        merge_tomls(target_table, source_table, error_path)?;
+                    } else {
+                        return Err(ErrorDetails::Config {
+                            message: format!(
+                                "`{}`: Cannot merge `{}` into a table",
+                                error_path.join("."),
+                                value.get_ref().type_str()
+                            ),
+                        }
+                        .into());
+                    }
+                }
+            },
+        }
+    }
+    Ok(())
+}
+
 /// Converts a `toml::DeValue` to a `toml::Value`.
 /// This just removes all of the `Spanned` wrappers, and leaves the value otherwise unchanged.
 pub(super) fn de_value_to_value(value: DeValue<'_>) -> Result<toml::Value, Error> {
@@ -428,11 +479,12 @@ struct TargetData<'a, 'b> {
 /// This ensures that missing entries in `TARGET_PATH_COMPONENTS` produce an error if we try to deserialize
 /// a `TomlRelativePath`, rather than silently deserializing to an incorrect path.
 ///
-/// This currently uses the provided `base_path` to resolve relative paths. Once we add config globbing support,
-/// this will be removed in favor of using the `Spanned` data from the original `DeTable`
+/// Our `DeTable` was deserialized from a a string consisting of concatenated config files
+/// (chosen from the glob passed in on the command line). We use the provided `SpanMap` to
+/// map a particular entry back to its original TOML source file, to determine the base path
 pub(super) fn resolve_toml_relative_paths(
     table: DeTable<'_>,
-    base_path: &Path,
+    span_map: &SpanMap,
 ) -> Result<Table, Error> {
     let mut root = DeValue::Table(table);
     for path in TARGET_PATH_COMPONENTS {
@@ -462,7 +514,19 @@ pub(super) fn resolve_toml_relative_paths(
                         };
                         // Spanned ignores the span for Hash/PartialEq, so we can use a dummy span for the lookup
                         if let Some(entry) = entry.get_mut(literal) {
+                            let span = entry.span();
                             if let DeValue::String(target_string) = entry.get_mut() {
+                                let base_path = span_map
+                                    .lookup_range_base_path(span)
+                                    .ok_or_else(|| {
+                                        Error::new(ErrorDetails::Config {
+                                            message: format!(
+                                                "`{}`: Failed to determine original TOML source file",
+                                                error_path.join(".")
+                                            ),
+                                        })
+                                    })?;
+
                                 let target_path = Path::new(&**target_string);
                                 let mut inner_table = DeTable::new();
 
@@ -590,8 +654,11 @@ mod tests {
             DeTable::parse(r#"functions.my_function.system_schema = "relative/schema_path.json""#)
                 .unwrap();
 
-        let resolved =
-            resolve_toml_relative_paths(table.into_inner(), Path::new("my/base/path")).unwrap();
+        let resolved = resolve_toml_relative_paths(
+            table.into_inner(),
+            &SpanMap::new_single_file(PathBuf::from("my/base/path/fake_config.toml")),
+        )
+        .unwrap();
         assert_eq!(
             resolved,
             toml::from_str(
@@ -605,7 +672,7 @@ mod tests {
     fn test_invalid_resolve_toml_relative_paths() {
         let table = DeTable::parse("functions.my_function.system_schema = 123").unwrap();
         let err =
-            resolve_toml_relative_paths(table.into_inner(), Path::new("my/base/path")).unwrap_err();
+            resolve_toml_relative_paths(table.into_inner(), &SpanMap::new_empty()).unwrap_err();
         assert_eq!(
             *err.get_details(),
             ErrorDetails::Config {

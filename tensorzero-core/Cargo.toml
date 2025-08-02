@@ -125,6 +125,7 @@ mime_guess = "2.0.5"
 indexmap = "2.10.0"
 base64 = "0.22.1"
 thiserror = "2.0.12"
+glob = "0.3.2"
 tempfile = "3.20.0"
 
 
