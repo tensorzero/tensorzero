@@ -25,10 +25,6 @@ import type {
   ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import type {
-  JsonInferenceOutput,
-  ContentBlockOutput,
-} from "~/utils/clickhouse/common";
 import OutputComponent from "~/components/inference/Output";
 
 // Import the custom tooltip styles
@@ -36,7 +32,12 @@ import "./tooltip-styles.css";
 import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import { formatMetricSummaryValue } from "~/utils/config/feedback";
-import type { EvaluatorConfig, MetricConfig } from "tensorzero-node";
+import type {
+  EvaluatorConfig,
+  MetricConfig,
+  JsonInferenceOutput,
+  ContentBlockChatOutput,
+} from "tensorzero-node";
 import {
   useColorAssigner,
   ColorAssignerProvider,
@@ -57,7 +58,7 @@ type TruncatedContentProps = (
     }
   | {
       type: "output";
-      content: JsonInferenceOutput | ContentBlockOutput[];
+      content: JsonInferenceOutput | ContentBlockChatOutput[];
     }
 ) & {
   maxLength?: number;
@@ -156,7 +157,7 @@ function getInputSummary(input: DisplayInput): string {
 
 // Helper function to generate a summary of an Output object
 function getOutputSummary(
-  output: JsonInferenceOutput | ContentBlockOutput[],
+  output: JsonInferenceOutput | ContentBlockChatOutput[],
 ): string {
   if (Array.isArray(output)) {
     // It's ContentBlockOutput[]
@@ -242,7 +243,7 @@ export function EvaluationTable({
       {
         id: string;
         input: DisplayInput;
-        reference_output: JsonInferenceOutput | ContentBlockOutput[];
+        reference_output: JsonInferenceOutput | ContentBlockChatOutput[];
       }
     >();
 
@@ -269,7 +270,7 @@ export function EvaluationTable({
       Map<
         string, // evaluation run id
         {
-          generated_output: JsonInferenceOutput | ContentBlockOutput[];
+          generated_output: JsonInferenceOutput | ContentBlockChatOutput[];
           metrics: Map<string, MetricValueInfo>;
         }
       >
@@ -390,7 +391,7 @@ export function EvaluationTable({
                       {
                         generated_output:
                           | JsonInferenceOutput
-                          | ContentBlockOutput[];
+                          | ContentBlockChatOutput[];
                         metrics: Map<string, MetricValueInfo>;
                       },
                     ][];

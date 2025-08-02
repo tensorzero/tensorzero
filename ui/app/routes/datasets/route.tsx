@@ -14,7 +14,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { DatasetsActions } from "./DatasetsActions";
 import { logger } from "~/utils/logger";
-import { getNativeTensorZeroClient } from "~/utils/supervised_fine_tuning/client";
+import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);

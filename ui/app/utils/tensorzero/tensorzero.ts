@@ -4,33 +4,13 @@ TensorZero Client (for internal use only for now)
 
 import { z } from "zod";
 import {
-  contentBlockOutputSchema,
+  contentBlockChatOutputSchema,
+  thoughtSchema,
+  JsonValueSchema,
   type StoragePath,
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
-import { logger } from "~/utils/logger";
 import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
-
-/**
- * JSON types.
- */
-export type JSONValue =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: JSONValue }
-  | JSONValue[];
-export const JSONValueSchema: z.ZodType = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.record(JSONValueSchema),
-    z.array(JSONValueSchema),
-  ]),
-);
 
 /**
  * Roles for input messages.
@@ -66,7 +46,7 @@ export const TextContentSchema = z.object({
 
 export const TextArgumentsContentSchema = z.object({
   type: z.literal("text"),
-  arguments: JSONValueSchema,
+  arguments: JsonValueSchema,
 });
 
 export const RawTextContentSchema = z.object({
@@ -102,21 +82,11 @@ export const ImageContentSchema = z
 export type ImageContent = z.infer<typeof ImageContentSchema>;
 
 /**
- * Thought content for Chain of Thought reasoning
- */
-export const ThoughtContentSchema = z.object({
-  type: z.literal("thought"),
-  text: z.string().nullable(),
-  signature: z.string().nullable().optional(),
-});
-export type ThoughtContent = z.infer<typeof ThoughtContentSchema>;
-
-/**
  * Unknown content type for model-specific content
  */
 export const UnknownContentSchema = z.object({
   type: z.literal("unknown"),
-  data: JSONValueSchema,
+  data: JsonValueSchema,
   model_provider_name: z.string().nullable(),
 });
 export type UnknownContent = z.infer<typeof UnknownContentSchema>;
@@ -128,7 +98,7 @@ export const InputMessageContentSchema = z.union([
   ToolCallContentSchema,
   ToolResultContentSchema,
   ImageContentSchema,
-  ThoughtContentSchema,
+  thoughtSchema,
   UnknownContentSchema,
 ]);
 
@@ -147,7 +117,7 @@ export type InputMessage = z.infer<typeof InputMessageSchema>;
  * The inference input object.
  */
 export const InputSchema = z.object({
-  system: JSONValueSchema.optional(),
+  system: JsonValueSchema.optional(),
   messages: z.array(InputMessageSchema),
 });
 export type Input = z.infer<typeof InputSchema>;
@@ -157,7 +127,7 @@ export type Input = z.infer<typeof InputSchema>;
  */
 export const ToolSchema = z.object({
   description: z.string(),
-  parameters: JSONValueSchema,
+  parameters: JsonValueSchema,
   name: z.string(),
   strict: z.boolean().optional(),
 });
@@ -180,7 +150,7 @@ export type ToolChoice = z.infer<typeof ToolChoiceSchema>;
 /**
  * Inference parameters allow runtime overrides for a given variant.
  */
-export const InferenceParamsSchema = z.record(z.record(JSONValueSchema));
+export const InferenceParamsSchema = z.record(z.record(JsonValueSchema));
 export type InferenceParams = z.infer<typeof InferenceParamsSchema>;
 
 /**
@@ -203,7 +173,7 @@ export const InferenceRequestSchema = z.object({
   additional_tools: z.array(ToolSchema).optional(),
   tool_choice: ToolChoiceSchema.optional(),
   parallel_tool_calls: z.boolean().optional(),
-  output_schema: JSONValueSchema.optional(),
+  output_schema: JsonValueSchema.optional(),
   credentials: z.record(z.string()).optional(),
 });
 export type InferenceRequest = z.infer<typeof InferenceRequestSchema>;
@@ -215,7 +185,7 @@ export const ChatInferenceResponseSchema = z.object({
   inference_id: z.string(),
   episode_id: z.string(),
   variant_name: z.string(),
-  content: z.array(contentBlockOutputSchema),
+  content: z.array(contentBlockChatOutputSchema),
   usage: z
     .object({
       input_tokens: z.number(),
@@ -231,7 +201,7 @@ export const JSONInferenceResponseSchema = z.object({
   variant_name: z.string(),
   output: z.object({
     raw: z.string(),
-    parsed: JSONValueSchema.nullable(),
+    parsed: JsonValueSchema.nullable(),
   }),
   usage: z
     .object({
@@ -260,7 +230,7 @@ export const FeedbackRequestSchema = z.object({
   inference_id: z.string().nullable(),
   metric_name: z.string(),
   tags: z.record(z.string()).optional(),
-  value: JSONValueSchema,
+  value: JsonValueSchema,
   internal: z.boolean().optional(),
 });
 export type FeedbackRequest = z.infer<typeof FeedbackRequestSchema>;
@@ -273,7 +243,7 @@ export type FeedbackResponse = z.infer<typeof FeedbackResponseSchema>;
 /**
  * Schema for tool parameters in a datapoint
  */
-export const ToolParamsSchema = z.record(JSONValueSchema);
+export const ToolParamsSchema = z.record(JsonValueSchema);
 export type ToolParams = z.infer<typeof ToolParamsSchema>;
 
 /**
@@ -283,7 +253,7 @@ const BaseDatapointSchema = z.object({
   id: z.string().uuid(),
   function_name: z.string(),
   input: InputSchema,
-  output: JSONValueSchema,
+  output: JsonValueSchema,
   tags: z.record(z.string()).optional(),
   auxiliary: z.string().optional(),
   is_custom: z.boolean(),
@@ -304,7 +274,7 @@ export type ChatInferenceDatapoint = z.infer<
  * Schema for JSON inference datapoints
  */
 export const JsonInferenceDatapointSchema = BaseDatapointSchema.extend({
-  output_schema: JSONValueSchema,
+  output_schema: JsonValueSchema,
 });
 export type JsonInferenceDatapoint = z.infer<
   typeof JsonInferenceDatapointSchema
@@ -351,6 +321,8 @@ export class TensorZeroClient {
   }
 
   // Overloads for inference:
+  /*
+  This is deprecated in favor of the native client
   async inference(
     request: InferenceRequest & { stream?: false | undefined },
   ): Promise<InferenceResponse>;
@@ -377,13 +349,10 @@ export class TensorZeroClient {
       return (await response.json()) as InferenceResponse;
     }
   }
-
-  /**
    * Returns an async generator that yields inference responses as they arrive via SSE.
    *
    * Note: The TensorZero gateway streams responses as Server-Sent Events (SSE). This simple parser
    * splits events by a double newline. Adjust if the event format changes.
-   */
   private async *inferenceStream(
     request: InferenceRequest,
   ): AsyncGenerator<InferenceResponse, void, unknown> {
@@ -415,7 +384,8 @@ export class TensorZeroClient {
         let dataStr = "";
         for (const line of lines) {
           if (line.startsWith("data:")) {
-            dataStr += line.replace(/^data:\s*/, "");
+          // note the line below has  an escape backslash for the comment to work
+          dataStr += line.replace(/^data:\s*\/, "");
           }
         }
         if (dataStr === "[DONE]") {
@@ -432,6 +402,7 @@ export class TensorZeroClient {
       }
     }
   }
+  */
 
   /**
    * Sends feedback for a particular inference or episode.

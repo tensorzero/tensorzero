@@ -26,12 +26,6 @@ describe("create_dump_variant_config", () => {
         max_delay_s: 0,
       },
       stop_sequences: [],
-      extra_body: {
-        data: [],
-      },
-      extra_headers: {
-        data: [],
-      },
     };
 
     const result = create_dump_variant_config(
@@ -73,12 +67,6 @@ describe("create_dump_variant_config", () => {
         max_delay_s: 0,
       },
       stop_sequences: [],
-      extra_body: {
-        data: [],
-      },
-      extra_headers: {
-        data: [],
-      },
     };
 
     const result = create_dump_variant_config(

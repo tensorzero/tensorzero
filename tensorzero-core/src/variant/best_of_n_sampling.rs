@@ -46,10 +46,9 @@ pub struct BestOfNSamplingConfig {
     pub evaluator: BestOfNEvaluatorConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct UninitializedBestOfNSamplingConfig {
     #[serde(default)]
     pub weight: Option<f64>,
@@ -71,10 +70,9 @@ pub struct BestOfNEvaluatorConfig {
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct UninitializedBestOfNEvaluatorConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,

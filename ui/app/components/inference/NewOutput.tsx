@@ -1,7 +1,4 @@
-import type {
-  JsonInferenceOutput,
-  ContentBlockOutput,
-} from "~/utils/clickhouse/common";
+import type { JsonInferenceOutput } from "tensorzero-node";
 import {
   SnippetLayout,
   SnippetContent,
@@ -15,6 +12,7 @@ import {
   ToolCallMessage,
 } from "~/components/layout/SnippetContent";
 import { CodeEditor } from "../ui/code-editor";
+import type { JsonValue, ContentBlockChatOutput } from "tensorzero-node";
 
 // IMPORTANT: THIS VERSION HAS `maxHeight` IN THE PROPS WHICH THE OTHER VERSIONS DO NOT HAVE
 
@@ -23,10 +21,10 @@ import { CodeEditor } from "../ui/code-editor";
   it out across the UI incrementally.
 */
 
-export type ChatInferenceOutputRenderingData = ContentBlockOutput[];
+export type ChatInferenceOutputRenderingData = ContentBlockChatOutput[];
 
 export interface JsonInferenceOutputRenderingData extends JsonInferenceOutput {
-  schema?: Record<string, unknown>;
+  schema?: JsonValue;
 }
 
 interface OutputProps {
@@ -86,7 +84,7 @@ function renderJsonInferenceOutput(
           ) : activeTab === "raw" ? (
             <CodeEditor
               allowedLanguages={["json"]}
-              value={output.raw}
+              value={output.raw ?? undefined}
               readOnly
             />
           ) : (
@@ -124,10 +122,7 @@ function renderChatInferenceOutput(
                     key={index}
                     toolName={block.name}
                     toolRawName={block.raw_name}
-                    toolArguments={
-                      block.arguments &&
-                      JSON.stringify(block.arguments, null, 2)
-                    }
+                    toolArguments={JSON.stringify(block.arguments, null, 2)}
                     toolRawArguments={block.raw_arguments}
                     toolCallId={block.id}
                   />

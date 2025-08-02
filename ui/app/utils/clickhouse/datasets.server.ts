@@ -18,7 +18,7 @@ import {
 import type { AdjacentIds } from "./inference";
 import { adjacentIdsSchema } from "./inference";
 import {
-  contentBlockOutputSchema,
+  contentBlockChatOutputSchema,
   CountSchema,
   displayInputToInput,
   inputSchema,
@@ -569,7 +569,7 @@ async function parseDatapointRow(row: DatapointRow): Promise<ParsedDatasetRow> {
       ...row,
       input: resolvedInput,
       output: row.output
-        ? z.array(contentBlockOutputSchema).parse(JSON.parse(row.output))
+        ? z.array(contentBlockChatOutputSchema).parse(JSON.parse(row.output))
         : undefined,
       tool_params:
         row.tool_params === ""

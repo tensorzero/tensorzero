@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { MetricConfigOptimize } from "tensorzero-node";
 import {
-  contentBlockOutputSchema,
+  contentBlockChatOutputSchema,
   CountSchema,
   getInferenceTableName,
   InferenceJoinKey,
@@ -9,9 +9,8 @@ import {
   inputSchema,
   jsonInferenceOutputSchema,
 } from "./common";
-import type { JsonInferenceOutput } from "./common";
 import { getClickhouseClient } from "./client.server";
-import type { FunctionConfig } from "tensorzero-node";
+import type { FunctionConfig, JsonInferenceOutput } from "tensorzero-node";
 import { getComparisonOperator, type FeedbackConfig } from "../config/feedback";
 import {
   getInferenceJoinKey,
@@ -390,7 +389,9 @@ function parseInferenceExamples(
     const processedRows = rows.map((row) => ({
       ...row,
       input: inputSchema.parse(JSON.parse(row.input)),
-      output: z.array(contentBlockOutputSchema).parse(JSON.parse(row.output)),
+      output: z
+        .array(contentBlockChatOutputSchema)
+        .parse(JSON.parse(row.output)),
     })) as ParsedChatInferenceExample[];
     const parsedRows = processedRows.map((row) =>
       parsedChatExampleSchema.parse(row),
@@ -429,16 +430,21 @@ export function handle_llm_judge_output(output: string) {
     // Don't do anything if the output failed to parse
     return output;
   }
-  if (!parsed.parsed) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (!(parsed as any).parsed) {
     // if the output failed to parse don't do anything
     return output;
   }
-  if (parsed.parsed.thinking) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((parsed as any).parsed.thinking) {
     // there is a thinking section that needs to be removed in the parsed and raw outputs
-    delete parsed.parsed.thinking;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (parsed as any).parsed.thinking;
     const output = {
-      parsed: parsed.parsed,
-      raw: JSON.stringify(parsed.parsed),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      parsed: (parsed as any).parsed,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      raw: JSON.stringify((parsed as any).parsed),
     };
     return JSON.stringify(output);
   }

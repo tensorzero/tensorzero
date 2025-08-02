@@ -1,8 +1,9 @@
 import { z } from "zod";
 import {
-  contentBlockOutputSchema,
+  contentBlockChatOutputSchema,
   jsonInferenceOutputSchema,
   displayInputSchema,
+  JsonValueSchema,
 } from "./common";
 
 /**
@@ -71,8 +72,8 @@ export const ParsedChatInferenceDatapointRowSchema =
     tool_params: true,
   }).extend({
     input: displayInputSchema,
-    output: z.array(contentBlockOutputSchema).optional(),
-    tool_params: z.record(z.string(), z.unknown()).optional(),
+    output: z.array(contentBlockChatOutputSchema).optional(),
+    tool_params: z.record(z.string(), JsonValueSchema).optional(),
     is_custom: z.boolean(),
     tags: z.record(z.string(), z.string()),
   });
@@ -88,7 +89,7 @@ export const ParsedJsonInferenceDatapointRowSchema =
   }).extend({
     input: displayInputSchema,
     output: jsonInferenceOutputSchema.optional(),
-    output_schema: z.record(z.string(), z.unknown()),
+    output_schema: JsonValueSchema,
     is_custom: z.boolean(),
   });
 export type ParsedJsonInferenceDatapointRow = z.infer<

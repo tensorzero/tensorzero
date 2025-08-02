@@ -29,10 +29,9 @@ pub struct ChainOfThoughtConfig {
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct UninitializedChainOfThoughtConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,
