@@ -1,0 +1,13 @@
+[models.llama3-groq]
+routing = ["groq"]
+
+[models.llama3-groq.providers.groq]
+type = "groq"
+model_name = "llama3-70b-8192"
+
+[functions.generate_haiku]
+type = "chat"
+
+[functions.generate_haiku.variants.llama3_variant]
+type = "chat_completion"
+model = "llama3-groq"
