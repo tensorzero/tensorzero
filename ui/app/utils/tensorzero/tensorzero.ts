@@ -10,7 +10,6 @@ import {
   type StoragePath,
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
-import { logger } from "~/utils/logger";
 import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 
 /**
@@ -322,6 +321,8 @@ export class TensorZeroClient {
   }
 
   // Overloads for inference:
+  /*
+  This is deprecated in favor of the native client
   async inference(
     request: InferenceRequest & { stream?: false | undefined },
   ): Promise<InferenceResponse>;
@@ -348,13 +349,10 @@ export class TensorZeroClient {
       return (await response.json()) as InferenceResponse;
     }
   }
-
-  /**
    * Returns an async generator that yields inference responses as they arrive via SSE.
    *
    * Note: The TensorZero gateway streams responses as Server-Sent Events (SSE). This simple parser
    * splits events by a double newline. Adjust if the event format changes.
-   */
   private async *inferenceStream(
     request: InferenceRequest,
   ): AsyncGenerator<InferenceResponse, void, unknown> {
@@ -386,7 +384,8 @@ export class TensorZeroClient {
         let dataStr = "";
         for (const line of lines) {
           if (line.startsWith("data:")) {
-            dataStr += line.replace(/^data:\s*/, "");
+          // note the line below has  an escape backslash for the comment to work
+          dataStr += line.replace(/^data:\s*\/, "");
           }
         }
         if (dataStr === "[DONE]") {
@@ -403,6 +402,7 @@ export class TensorZeroClient {
       }
     }
   }
+  */
 
   /**
    * Sends feedback for a particular inference or episode.

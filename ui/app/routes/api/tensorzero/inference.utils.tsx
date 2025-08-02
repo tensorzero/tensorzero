@@ -291,6 +291,7 @@ interface ClickHouseDatapointActionArgs {
   output_schema?: JsonValue;
   variant: string;
   cache_options: CacheParamsOptions;
+  dryrun: boolean;
 }
 
 export function prepareInferenceActionRequest(
@@ -359,6 +360,7 @@ export function prepareInferenceActionRequest(
       variant_name: args.variant,
       output_schema: args.output_schema || null,
       tool_choice: tool_choice || null,
+      dryrun: true,
       parallel_tool_calls: parallel_tool_calls || null,
       additional_tools: tools_available || null,
       cache_options: args.cache_options,

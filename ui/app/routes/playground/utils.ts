@@ -30,6 +30,7 @@ export function refreshClientInference(
       max_age_s: null,
       enabled: "off",
     },
+    dryrun: true,
   });
   // The API endpoint takes form data so we need to stringify it and send as data
   const formData = new FormData();
@@ -40,7 +41,6 @@ export function refreshClientInference(
       body: formData,
     });
     const data = await response.json();
-    console.log(data);
     if (data.error) {
       throw new Error(data.error);
     }

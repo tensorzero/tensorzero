@@ -163,15 +163,10 @@ export async function loader({ request }: Route.LoaderArgs) {
         max_age_s: null,
         enabled: "off",
       },
+      dryrun: true,
     });
-    console.log("foo");
     const nativeClient = await getNativeTensorZeroClient();
-    console.log(
-      "Inference request received:",
-      JSON.stringify(request, null, 2),
-    );
     const inferenceResponse = await nativeClient.inference(request);
-    console.log(inferenceResponse);
     return inferenceResponse;
   };
   // Do not block on all the server inferences, just return the promises
@@ -546,6 +541,7 @@ function useClientInferences(
             max_age_s: null,
             enabled: "off",
           },
+          dryrun: true,
         });
         const formData = new FormData();
         formData.append("data", JSON.stringify(request));

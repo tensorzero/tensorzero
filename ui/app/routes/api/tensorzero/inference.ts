@@ -1,17 +1,19 @@
-import { ZodError } from "zod";
-import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import {
-  isTensorZeroServerError,
-  InferenceRequestSchema,
-  type InferenceResponse,
-} from "~/utils/tensorzero";
+import { isTensorZeroServerError } from "~/utils/tensorzero";
 import { JSONParseError } from "~/utils/common";
 import type { Route } from "./+types/inference";
+import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
+import type { ClientInferenceParams } from "tensorzero-node";
 
 export async function action({ request }: Route.ActionArgs): Promise<Response> {
   const formData = await request.formData();
   try {
-    const inference = await handleInferenceAction(formData.get("data"));
+    const data = formData.get("data");
+    if (typeof data !== "string") {
+      return Response.json({ error: "Missing request data" }, { status: 400 });
+    }
+    const parsed = JSON.parse(data) as ClientInferenceParams;
+    const nativeClient = await getNativeTensorZeroClient();
+    const inference = await nativeClient.inference(parsed);
     return Response.json(inference);
   } catch (error) {
     if (error instanceof JSONParseError) {
@@ -20,34 +22,10 @@ export async function action({ request }: Route.ActionArgs): Promise<Response> {
         { status: 400 },
       );
     }
-    if (error instanceof ZodError) {
-      return Response.json({ error: error.issues }, { status: 400 });
-    }
+
     if (isTensorZeroServerError(error)) {
       return Response.json({ error: error.message }, { status: error.status });
     }
     return Response.json({ error: "Server error" }, { status: 500 });
   }
-}
-
-async function handleInferenceAction(
-  payload: unknown,
-): Promise<InferenceResponse> {
-  if (typeof payload === "string") {
-    try {
-      payload = JSON.parse(payload);
-    } catch {
-      throw new JSONParseError("Error parsing request data");
-    }
-  }
-
-  const result = InferenceRequestSchema.safeParse(payload);
-  if (!result.success) {
-    throw result.error;
-  }
-
-  return await getTensorZeroClient().inference({
-    ...result.data,
-    stream: false,
-  });
 }
