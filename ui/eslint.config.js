@@ -6,7 +6,6 @@ import pluginReactHooks from "eslint-plugin-react-hooks";
 export default [
   {
     ignores: [
-      "**/minijinja/pkg/",
       "**/node_modules/**",
       "**/build/**",
       "**/.react-router/**",
