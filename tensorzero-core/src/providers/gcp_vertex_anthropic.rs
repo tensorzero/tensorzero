@@ -232,19 +232,22 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
-        if res.status().is_success() {
-            let raw_response = res.text().await.map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error parsing text response: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                })
-            })?;
 
+        let response_status = res.status();
+
+        let raw_response = res.text().await.map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Error parsing text response: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: Some(raw_request.clone()),
+                raw_response: None,
+            })
+        })?;
+
+        if response_status.is_success() {
             let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {raw_response}"),
@@ -265,18 +268,20 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 model_name,
                 provider_name,
             };
+
             Ok(response_with_latency.try_into()?)
         } else {
-            let response_code = res.status();
-            let error_body = res.json::<GCPVertexAnthropicError>().await.map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing response: {e:?}"),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                })
-            })?;
-            handle_anthropic_error(response_code, error_body.error)
+            let error_body: GCPVertexAnthropicError =
+                serde_json::from_str(&raw_response).map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!("Error parsing JSON response: {e}: {raw_response}"),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: Some(raw_request.clone()),
+                        raw_response: Some(raw_response.clone()),
+                    })
+                })?;
+
+            handle_anthropic_error(response_status, error_body.error)
         }
     }
 
@@ -709,14 +714,17 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
 /// GCP Anthropic requires that the user provides `max_tokens`, but the value depends on the model.
 /// We maintain a library of known maximum values, and ask the user to hardcode it if it's unknown.
 fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
-    if model_id.starts_with("claude-3-haiku@")
-        || model_id.starts_with("claude-3-5-haiku@")
+    if model_id.starts_with("claude-3-haiku@") {
+        // GCP docs say 8k but that causes `max_tokens: XXX > 8192, which is the maximum allowed number of output tokens for claude-3-haiku-20250219`
+        Ok(4_192)
+    } else if model_id.starts_with("claude-3-5-haiku@")
         || model_id.starts_with("claude-3-5-sonnet@")
         || model_id.starts_with("claude-3-5-sonnet-v2@")
     {
-        Ok(8_000)
+        Ok(8_192)
     } else if model_id.starts_with("claude-3-7-sonnet@") {
-        Ok(128_000)
+        // GCP docs say 128k but that causes `max_tokens: XXX > 64000, which is the maximum allowed number of output tokens for claude-3-7-sonnet-20250219`
+        Ok(64_000)
     } else if model_id.starts_with("claude-sonnet-4@") {
         Ok(64_000)
     } else if model_id.starts_with("claude-opus-4@") {
@@ -823,7 +831,8 @@ struct GCPVertexAnthropicError {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct GCPVertexAnthropicErrorBody {
-    r#type: String,
+    r#type: Option<String>,
+    code: Option<u32>,
     message: String,
 }
 
@@ -1670,19 +1679,19 @@ mod tests {
 
         let model = "claude-3-5-sonnet-v2@20240222".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
-        assert_eq!(body.unwrap().max_tokens, 8_000);
+        assert_eq!(body.unwrap().max_tokens, 8_192);
 
         let model = "claude-3-5-sonnet@20240229".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
-        assert_eq!(body.unwrap().max_tokens, 8_000);
+        assert_eq!(body.unwrap().max_tokens, 8_192);
 
         let model = "claude-3-5-haiku@20240307".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
-        assert_eq!(body.unwrap().max_tokens, 8_000);
+        assert_eq!(body.unwrap().max_tokens, 8_192);
 
         let model = "claude-3-haiku@20240307".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
-        assert_eq!(body.unwrap().max_tokens, 8_000);
+        assert_eq!(body.unwrap().max_tokens, 4_096);
 
         let model = "claude-sonnet-4".to_string(); // fake model
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
@@ -1953,7 +1962,8 @@ mod tests {
     #[test]
     fn test_handle_anthropic_error() {
         let error_body = GCPVertexAnthropicErrorBody {
-            r#type: "error".to_string(),
+            r#type: None,
+            code: None,
             message: "test_message".to_string(),
         };
         let response_code = StatusCode::BAD_REQUEST;
