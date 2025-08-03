@@ -33,7 +33,7 @@ use crate::providers::helpers::{
 };
 
 fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("GROQ_API_KEY".to_string())
+    CredentialLocation::Env("LLAMA_API_KEY".to_string())
 }
 
 const PROVIDER_NAME: &str = "Llama";
