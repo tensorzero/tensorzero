@@ -723,7 +723,7 @@ fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
         Ok(32_000)
     } else {
         Err(Error::new(ErrorDetails::InferenceClient {
-            message: format!("The TensorZero Gateway doesn't know the output token limit for `{model_id}` and GCP Vertex AI Anthropic requires you to provide a `max_token` value. Please set `max_tokens` in your configuration or inference request."),
+            message: format!("The TensorZero Gateway doesn't know the output token limit for `{model_id}` and GCP Vertex AI Anthropic requires you to provide a `max_tokens` value. Please set `max_tokens` in your configuration or inference request."),
             status_code: None,
             provider_type: PROVIDER_TYPE.into(),
             raw_request: None,
