@@ -239,3 +239,40 @@ async fn test_inference_with_explicit_broken_region() {
 
     response_json.get("error").unwrap();
 }
+
+#[tokio::test]
+async fn test_inference_with_empty_system() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "write_haiku",
+        "variant_name": "aws_bedrock",
+        "episode_id": episode_id,
+        "input":
+            {"system": "",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"topic": "artificial intelligence"}}]
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(content_blocks.len() == 1);
+    let content_block = content_blocks.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    content_block.get("text").unwrap().as_str().unwrap();
+}

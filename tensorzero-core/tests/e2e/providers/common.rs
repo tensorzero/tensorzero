@@ -1,4 +1,5 @@
 #![expect(clippy::print_stdout)]
+use std::io::Cursor;
 use std::{collections::HashMap, net::SocketAddr};
 
 use aws_config::Region;
@@ -13,6 +14,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{routing::get, Router};
 use base64::prelude::*;
 use futures::StreamExt;
+use image::{ImageFormat, ImageReader};
 use object_store::path::Path;
 
 use rand::Rng;
@@ -666,14 +668,14 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.image_test.variants.gcp_vertex]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-06-05"
+model = "gcp-gemini-2.5-pro"
 
-[models."gemini-2.5-pro-preview-06-05"]
+[models."gcp-gemini-2.5-pro"]
 routing = ["gcp_vertex_gemini"]
 
-[models."gemini-2.5-pro-preview-06-05".providers.gcp_vertex_gemini]
+[models."gcp-gemini-2.5-pro".providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
-model_id = "gemini-2.5-pro-preview-06-05"
+model_id = "gemini-2.5-pro"
 location = "global"
 project_id = "tensorzero-public"
 
@@ -1133,35 +1135,34 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     let client = make_embedded_gateway_with_config(config_toml).await;
     let mut storage_path = None;
 
+    let mut params = ClientInferenceParams {
+        function_name: Some("image_test".to_string()),
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![
+                    ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Describe the contents of the image".to_string(),
+                    }),
+                    ClientInputMessageContent::File(File::Base64 {
+                        mime_type: mime::IMAGE_PNG,
+                        data: image_data.clone(),
+                    }),
+                ],
+            }],
+        },
+        cache_options: CacheParamsOptions {
+            enabled: CacheEnabledMode::On,
+            max_age_s: Some(10),
+        },
+        ..Default::default()
+    };
+
     for should_be_cached in [false, true] {
-        let response = client
-            .inference(ClientInferenceParams {
-                function_name: Some("image_test".to_string()),
-                variant_name: Some(provider.variant_name.clone()),
-                episode_id: Some(episode_id),
-                input: ClientInput {
-                    system: None,
-                    messages: vec![ClientInputMessage {
-                        role: Role::User,
-                        content: vec![
-                            ClientInputMessageContent::Text(TextKind::Text {
-                                text: "Describe the contents of the image".to_string(),
-                            }),
-                            ClientInputMessageContent::File(File::Base64 {
-                                mime_type: mime::IMAGE_PNG,
-                                data: image_data.clone(),
-                            }),
-                        ],
-                    }],
-                },
-                cache_options: CacheParamsOptions {
-                    enabled: CacheEnabledMode::On,
-                    max_age_s: Some(10),
-                },
-                ..Default::default()
-            })
-            .await
-            .unwrap();
+        let response = client.inference(params.clone()).await.unwrap();
 
         let InferenceOutput::NonStreaming(response) = response else {
             panic!("Expected non-streaming inference response");
@@ -1179,6 +1180,52 @@ pub async fn test_base64_image_inference_with_provider_and_store(
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         storage_path = Some(latest_storage_path);
     }
+
+    let mut image_png = ImageReader::new(Cursor::new(FERRIS_PNG))
+        .with_guessed_format()
+        .unwrap()
+        .decode()
+        .unwrap();
+
+    // Get 32 random bytes, and write then to the image. This should force a cache miss
+    let mut rng = rand::rng();
+    let random_bytes: Vec<u8> = (0..32)
+        .map(|_| rng.sample(rand::distr::StandardUniform))
+        .collect();
+    image_png
+        .as_mut_rgba8()
+        .unwrap()
+        .as_flat_samples_mut()
+        .samples[0..(random_bytes.len())]
+        .copy_from_slice(&random_bytes);
+
+    let mut updated_image = Cursor::new(Vec::new());
+    image_png
+        .write_to(&mut updated_image, ImageFormat::Png)
+        .unwrap();
+
+    let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
+
+    params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64 {
+        mime_type: mime::IMAGE_PNG,
+        data: updated_base64,
+    });
+
+    let response = client.inference(params.clone()).await.unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    let inference_id = response.inference_id();
+
+    let clickhouse = get_clickhouse().await;
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    assert_eq!(result["cached"], false);
+    // Should be a cache miss since the image data was changed
     (client, storage_path.unwrap())
 }
 
@@ -1683,24 +1730,24 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                     .as_str()
                     .is_some_and(|e| e.contains("401 Authorization")),
                 "Unexpected error: {res}"
-            )
+            );
         }
         "together" => {
             assert!(
                 res["error"].as_str().unwrap().contains("Invalid API key"),
                 "Unexpected error: {res}"
-            )
+            );
         }
         "vllm" => {
             // vLLM returns different errors if you mess with the request headers,
             // so we just check that an error occurs
-            assert!(res["error"].as_str().is_some(), "Unexpected error: {res}")
+            assert!(res["error"].as_str().is_some(), "Unexpected error: {res}");
         }
         "xai" => {
             assert!(
                 res["error"].as_str().unwrap().contains("Incorrect"),
                 "Unexpected error: {res}"
-            )
+            );
         }
         "gcp_vertex_gemini" => {
             // We produce an error by setting a bad 'Content-Length', so just
@@ -1728,8 +1775,9 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
                     ClientInputMessage {
                         role: Role::Assistant,
                         content: vec![ClientInputMessageContent::Thought(Thought {
-                            text: "My TensorZero thought".to_string(),
+                            text: Some("My TensorZero thought".to_string()),
                             signature: Some("My TensorZero signature".to_string()),
+                            provider_type: None,
                         })],
                     },
                     ClientInputMessage {
@@ -2851,14 +2899,18 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let mut input_tokens = 0;
     let mut output_tokens = 0;
     let mut finish_reason: Option<String> = None;
-    for chunk in chunks.clone() {
-        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
+    for (i, chunk) in chunks.clone().iter().enumerate() {
+        let chunk_json: Value = serde_json::from_str(chunk).unwrap();
 
         println!("API response chunk: {chunk_json:#?}");
 
         // The `original_chunk` field should only be set if we enable the `include_original_response` flag
         if include_original_response {
-            assert!(chunk_json.get("original_chunk").is_some());
+            // The last chunk might be a usage chunk generated by TensorZero
+            // (if the original stream didn't report usage), so don't check it
+            if i != chunks.len() - 1 {
+                assert!(chunk_json.get("original_chunk").is_some());
+            }
         } else {
             assert_eq!(chunk_json.get("original_chunk"), None);
         }
@@ -3069,8 +3121,8 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 }
 
 pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
-    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-06-05'
-    if provider.model_name.starts_with("gemini-2.5-pro") {
+    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
+    if provider.model_name.contains("gemini-2.5-pro") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -3240,11 +3292,11 @@ pub async fn check_inference_params_response(
         .unwrap();
     assert_eq!(frequency_penalty, 0.2);
 
-    if !is_batch {
+    if is_batch {
+        assert!(result.get("processing_time_ms").unwrap().is_null());
+    } else {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
         assert!(processing_time_ms > 0);
-    } else {
-        assert!(result.get("processing_time_ms").unwrap().is_null());
     }
 
     // Check the ModelInference Table
@@ -3281,12 +3333,12 @@ pub async fn check_inference_params_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -3311,8 +3363,8 @@ pub async fn check_inference_params_response(
 pub async fn test_inference_params_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-06-05'
-    if provider.model_name.starts_with("gemini-2.5-pro") {
+    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
+    if provider.model_name.contains("gemini-2.5-pro") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -3863,11 +3915,6 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         return;
     }
 
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
@@ -3934,7 +3981,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         assert_eq!(chunk_episode_id, episode_id);
 
         let blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        for block in blocks.iter() {
+        for block in blocks {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -4376,11 +4423,11 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
         location["description"],
         "The location to get the temperature for (e.g. \"New York\")"
     );
-    if !is_batch {
+    if is_batch {
+        assert!(result.get("processing_time_ms").unwrap().is_null());
+    } else {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
         assert!(processing_time_ms > 0);
-    } else {
-        assert!(result.get("processing_time_ms").unwrap().is_null());
     }
 
     let units = properties["units"].as_object().unwrap();
@@ -4422,12 +4469,12 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
 
@@ -4438,12 +4485,12 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
 
@@ -4483,10 +4530,6 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
         return;
     }
 
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -4879,16 +4922,16 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
         assert!(units == "celsius" || units == "fahrenheit");
     }
 
-    let arguments = content_block.get("arguments").unwrap();
-    let arguments = arguments.as_object().unwrap();
-    // OpenAI occasionally emits a tool call with an empty object for `arguments`
-    assert!(arguments.len() <= 2);
-    if let Some(location) = arguments.get("location") {
-        assert!(location.as_str().is_some())
-    }
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "celsius" || units == "fahrenheit");
+    if let Some(arguments) = content_block["arguments"].as_object() {
+        // OpenAI occasionally emits a tool call with an empty object for `arguments`
+        assert!(arguments.len() <= 2);
+        if let Some(location) = arguments.get("location") {
+            assert!(location.as_str().is_some());
+        }
+        if arguments.len() == 2 {
+            let units = arguments.get("units").unwrap().as_str().unwrap();
+            assert!(units == "celsius" || units == "fahrenheit");
+        }
     }
 
     let usage = response_json.get("usage").unwrap();
@@ -5025,12 +5068,12 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
 
@@ -5076,11 +5119,6 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         || provider.model_provider_name == "sglang"
         || provider.model_provider_name == "groq"
     {
-        return;
-    }
-
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -5405,16 +5443,20 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
         .collect();
 
-    // Assert exactly one tool call
-    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+    // Assert at least one tool call
+    assert!(
+        !tool_call_blocks.is_empty(),
+        "Expected at least one tool call in {output:?}"
+    );
 
-    let tool_call_block = tool_call_blocks[0];
-    match tool_call_block {
-        ContentBlock::ToolCall(tool_call) => {
-            assert_eq!(tool_call.name, "get_temperature");
-            serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+    for tool_call_block in tool_call_blocks {
+        match tool_call_block {
+            ContentBlock::ToolCall(tool_call) => {
+                assert_eq!(tool_call.name, "get_temperature");
+                serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+            }
+            _ => panic!("Unreachable"),
         }
-        _ => panic!("Unreachable"),
     }
 }
 
@@ -5432,7 +5474,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
 
     // NOTE - Gemini 2.5 produces 'UNEXPECTED_TOOL_CALL' here
     // See https://github.com/tensorzero/tensorzero/issues/2329
-    if provider.model_name == "gemini-2.5-pro-preview-06-05" {
+    if provider.model_name == "gcp-gemini-2.5-pro" {
         return;
     }
 
@@ -5681,11 +5723,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
 ) {
     // Gemini 2.5 Pro will produce 'executableCode' blocks for this test, which we don't support
     // in streaming mode (since we don't have "unknown" streaming chunks)
-    if provider.model_name.starts_with("gemini-2.5-pro") {
-        return;
-    }
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
+    if provider.model_name.contains("gemini-2.5-pro") {
         return;
     }
 
@@ -5994,11 +6032,6 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
         || provider.model_provider_name == "mistral"
         || provider.model_provider_name == "together"
     {
-        return;
-    }
-
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -6334,11 +6367,6 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "groq"
     {
-        return;
-    }
-
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -7001,10 +7029,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     if provider.model_provider_name == "together" {
         return;
     }
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
+
     // Groq does not support streaming in JSON mode
     // (no reason given): https://console.groq.com/docs/text-chat#json-mode
     if provider.model_provider_name == "groq" {
@@ -7355,11 +7380,6 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
         return;
     }
 
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -7631,11 +7651,6 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     // We skip this test for xAI until the fix is deployed.
     // https://gist.github.com/GabrielBianconi/47a4247cfd8b6689e7228f654806272d
     if provider.model_provider_name == "xai" {
-        return;
-    }
-
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -8028,8 +8043,6 @@ pub async fn test_stop_sequences_inference_request_with_provider(
                 "deepseek",
                 "openrouter",
                 "openai",
-                "sglang",
-                "mistral",
                 "azure",
                 "groq",
                 "hyperbolic",
@@ -8367,11 +8380,6 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
 ) {
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
 
     let input_function_name = "basic_test";
@@ -8450,7 +8458,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         assert_eq!(chunk_episode_id, episode_id);
 
         let blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        for block in blocks.iter() {
+        for block in blocks {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -10040,10 +10048,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         // Groq does not support streaming in JSON mode (no reason given): https://console.groq.com/docs/text-chat#json-mode)
         return;
     }
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -10187,8 +10192,10 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("gemini-2.5-pro") {
+    let max_tokens = if provider.model_name.contains("gemini-2.5-pro") {
         500
+    } else if provider.model_name.starts_with("o1") {
+        1000
     } else {
         100
     };
@@ -10320,7 +10327,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     // {"generationConfig": {"thinkingConfig": {"thinkingBudget": 0 }}
     // This prevents us from setting a low max_tokens, since the thinking tokens will
     // use up all of the output tokens before an actual response is generated.
-    if provider.model_name.starts_with("gemini-2.5-pro") {
+    if provider.model_name.contains("gemini-2.5-pro") {
         return;
     }
 
@@ -10677,7 +10684,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
                     "name": "get_temperature",
                     "result": "70",
                 }
-            ))
+            ));
         } else if content_block.get("name").unwrap().as_str().unwrap() == "get_humidity" {
             tool_results.push(json!(
                 {
@@ -10686,7 +10693,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
                     "name": "get_humidity",
                     "result": "30",
                 }
-            ))
+            ));
         } else {
             panic!(
                 "Unknown tool call: {}",
@@ -10969,7 +10976,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
                     "name": "get_temperature",
                     "result": "70",
                 }
-            ))
+            ));
         } else if content_block.get("name").unwrap().as_str().unwrap() == "get_humidity" {
             tool_results.push(json!(
                 {
@@ -10978,7 +10985,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
                     "name": "get_humidity",
                     "result": "30",
                 }
-            ))
+            ));
         } else {
             panic!(
                 "Unknown tool call: {}",

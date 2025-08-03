@@ -50,7 +50,7 @@ impl Migration for Migration0004<'_> {
                     message: format!("Failed to fetch columns for ModelInference: {e}"),
                 })
             })?;
-        let present_columns: Vec<&str> = response.lines().map(|line| line.trim()).collect();
+        let present_columns: Vec<&str> = response.response.lines().map(str::trim).collect();
         if present_columns.contains(&"system")
             && present_columns.contains(&"input_messages")
             && present_columns.contains(&"output")
@@ -63,12 +63,12 @@ impl Migration for Migration0004<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Add a column `system` to the `ModelInference` table
-        let query = r#"
+        let query = r"
             ALTER TABLE ModelInference
             ADD COLUMN IF NOT EXISTS system Nullable(String),
             ADD COLUMN IF NOT EXISTS input_messages String,
             ADD COLUMN IF NOT EXISTS output String
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())

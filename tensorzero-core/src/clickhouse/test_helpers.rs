@@ -46,14 +46,14 @@ pub async fn select_chat_datapoint_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM ChatInferenceDatapoint WHERE id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
+        "SELECT * FROM ChatInferenceDatapoint FINAL WHERE id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
+    let json: Value = serde_json::from_str(&text.response).ok()?;
     Some(json)
 }
 
@@ -65,14 +65,14 @@ pub async fn select_json_datapoint_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM JsonInferenceDatapoint WHERE id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
+        "SELECT * FROM JsonInferenceDatapoint FINAL WHERE id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
+    let json: Value = serde_json::from_str(&text.response).ok()?;
     Some(json)
 }
 
@@ -91,7 +91,7 @@ pub async fn select_chat_dataset_clickhouse(
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    let lines = text.lines();
+    let lines = text.response.lines();
     let mut chat_rows: Vec<ChatInferenceDatapoint> = Vec::new();
     for line in lines {
         let chat_row: ChatInferenceDatapoint = serde_json::from_str(line).unwrap();
@@ -115,7 +115,7 @@ pub async fn select_json_dataset_clickhouse(
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    let lines = text.lines();
+    let lines = text.response.lines();
     let mut json_rows: Vec<JsonInferenceDatapoint> = Vec::new();
     for line in lines {
         let json_row: JsonInferenceDatapoint = serde_json::from_str(line).unwrap();
@@ -140,7 +140,7 @@ pub async fn select_chat_inference_clickhouse(
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
+    let json: Value = serde_json::from_str(&text.response).ok()?;
     Some(json)
 }
 
@@ -160,7 +160,7 @@ pub async fn select_json_inference_clickhouse(
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
+    let json: Value = serde_json::from_str(&text.response).ok()?;
     Some(json)
 }
 
@@ -180,7 +180,7 @@ pub async fn select_model_inference_clickhouse(
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
+    let json: Value = serde_json::from_str(&text.response).ok()?;
     Some(json)
 }
 
@@ -201,6 +201,7 @@ pub async fn select_model_inferences_clickhouse(
         .await
         .unwrap();
     let json_rows: Vec<Value> = text
+        .response
         .lines()
         .filter_map(|line| serde_json::from_str(line).ok())
         .collect();
@@ -230,7 +231,7 @@ pub async fn select_inference_tags_clickhouse(
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
+    let json: Value = serde_json::from_str(&text.response).ok()?;
     Some(json)
 }
 
@@ -239,19 +240,19 @@ pub async fn select_batch_model_inference_clickhouse(
     inference_id: Uuid,
 ) -> Option<Value> {
     let query = format!(
-        r#"
+        r"
         SELECT bmi.*
         FROM BatchModelInference bmi
         INNER JOIN BatchIdByInferenceId bid ON bmi.inference_id = bid.inference_id
         WHERE bid.inference_id = '{inference_id}'
-        FORMAT JSONEachRow"#
+        FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    Some(serde_json::from_str(&text).unwrap())
+    Some(serde_json::from_str(&text.response).unwrap())
 }
 
 pub async fn select_batch_model_inferences_clickhouse(
@@ -259,11 +260,11 @@ pub async fn select_batch_model_inferences_clickhouse(
     batch_id: Uuid,
 ) -> Option<Vec<Value>> {
     let query = format!(
-        r#"
+        r"
         SELECT bmi.*
         FROM BatchModelInference bmi
         WHERE bmi.batch_id = '{batch_id}'
-        FORMAT JSONEachRow"#
+        FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
@@ -271,6 +272,7 @@ pub async fn select_batch_model_inferences_clickhouse(
         .await
         .unwrap();
     let json_rows: Vec<Value> = text
+        .response
         .lines()
         .filter_map(|line| serde_json::from_str(line).ok())
         .collect();
@@ -290,7 +292,7 @@ pub async fn select_latest_batch_request_clickhouse(
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
+    let json: Value = serde_json::from_str(&text.response).ok()?;
     Some(json)
 }
 
@@ -308,7 +310,7 @@ pub async fn select_feedback_clickhouse(
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
+    let json: Value = serde_json::from_str(&text.response).ok()?;
     Some(json)
 }
 
@@ -334,7 +336,7 @@ pub async fn select_feedback_by_target_id_clickhouse(
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
+    let json: Value = serde_json::from_str(&text.response).ok()?;
     Some(json)
 }
 
@@ -446,7 +448,7 @@ pub async fn select_dynamic_evaluation_run_clickhouse(
         .await
         .unwrap();
 
-    Some(serde_json::from_str(&text).unwrap())
+    Some(serde_json::from_str(&text.response).unwrap())
 }
 
 pub async fn select_dynamic_evaluation_run_episode_clickhouse(
@@ -462,7 +464,7 @@ pub async fn select_dynamic_evaluation_run_episode_clickhouse(
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    Some(serde_json::from_str(&text).unwrap())
+    Some(serde_json::from_str(&text.response).unwrap())
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -482,7 +484,7 @@ pub async fn select_feedback_tags_clickhouse(
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
+    let json: Value = serde_json::from_str(&text.response).ok()?;
     Some(json)
 }
 
@@ -510,24 +512,24 @@ pub async fn select_human_static_evaluation_feedback_clickhouse(
         ("datapoint_id", &datapoint_id_str),
         ("output", &escaped_output),
     ]);
-    let query = r#"
+    let query = r"
         SELECT * FROM StaticEvaluationHumanFeedback
         WHERE
             metric_name = {metric_name:String}
             AND datapoint_id = {datapoint_id:UUID}
             AND output = {output:String}
-        FORMAT JSONEachRow"#
+        FORMAT JSONEachRow"
         .to_string();
     let text = clickhouse_connection_info
         .run_query_synchronous(query, &params)
         .await
         .unwrap();
-    if text.is_empty() {
+    if text.response.is_empty() {
         // Return None if the query returns no rows
         None
     } else {
         // Panic if the query fails to parse or multiple rows are returned
-        let json: StaticEvaluationHumanFeedback = serde_json::from_str(&text).unwrap();
+        let json: StaticEvaluationHumanFeedback = serde_json::from_str(&text.response).unwrap();
         Some(json)
     }
 }

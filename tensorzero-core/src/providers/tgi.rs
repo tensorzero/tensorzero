@@ -51,15 +51,18 @@ use crate::providers::openai::check_api_base_suffix;
 use crate::tool::ToolCall;
 
 const PROVIDER_NAME: &str = "TGI";
-const PROVIDER_TYPE: &str = "tgi";
+pub const PROVIDER_TYPE: &str = "tgi";
 
 fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("TGI_API_KEY".to_string())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct TGIProvider {
     api_base: Url,
+    #[serde(skip)]
     credentials: TGICredentials,
 }
 
@@ -129,6 +132,10 @@ impl TGICredentials {
 }
 
 impl WrappedProvider for TGIProvider {
+    fn thought_block_provider_type_suffix(&self) -> Cow<'static, str> {
+        Cow::Borrowed("tgi")
+    }
+
     fn make_body<'a>(
         &'a self,
         ModelProviderRequest {
@@ -431,11 +438,12 @@ impl<'a> TGIRequest<'a> {
             tracing::warn!("TGI does not support JSON mode. Ignoring JSON mode. Consider using `json_mode = \"implicit_tool\"` instead.");
         }
 
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
 
         let messages = prepare_openai_messages(
@@ -543,7 +551,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 latency,
-                finish_reason: finish_reason.map(|r| r.into()),
+                finish_reason: finish_reason.map(Into::into),
             },
         ))
     }
@@ -719,7 +727,7 @@ fn tgi_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {

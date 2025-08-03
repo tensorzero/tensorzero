@@ -18,6 +18,8 @@ use super::helpers::inject_extra_request_data_and_send_eventsource;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::warn_discarded_thought_block;
+use crate::error::warn_discarded_unknown_chunk;
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::file::require_image;
@@ -45,15 +47,18 @@ use super::helpers::inject_extra_request_data_and_send;
 use super::openai::convert_stream_error;
 
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
-const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
+pub const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 /// See the `GCPVertexGeminiProvider` struct docs for information about our handling 'thought' and unknown blocks.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct GoogleAIStudioGeminiProvider {
     model_name: String,
     request_url: Url,
     streaming_request_url: Url,
+    #[serde(skip)]
     credentials: GoogleAIStudioCredentials,
 }
 
@@ -276,7 +281,8 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             builder,
         )
         .await?;
-        let stream = stream_google_ai_studio_gemini(event_source, start_time).peekable();
+        let stream =
+            stream_google_ai_studio_gemini(event_source, start_time, model_provider).peekable();
         Ok((stream, raw_request))
     }
 
@@ -308,10 +314,13 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
 fn stream_google_ai_studio_gemini(
     mut event_source: EventSource,
     start_time: Instant,
+    model_provider: &ModelProvider,
 ) -> ProviderInferenceResponseStreamInner {
+    let discard_unknown_chunks = model_provider.discard_unknown_chunks;
     Box::pin(async_stream::stream! {
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
+        let mut last_thought_id = 0;
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -344,6 +353,8 @@ fn stream_google_ai_studio_gemini(
                             start_time.elapsed(),
                             &mut last_tool_name,
                             &mut last_tool_idx,
+                            &mut last_thought_id,
+                            discard_unknown_chunks,
                         )
                     }
                 }
@@ -380,9 +391,21 @@ struct GeminiFunctionResponse<'a> {
     response: Value,
 }
 
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct GeminiContentPart<'a> {
+    #[serde(default)]
+    thought: bool,
+    #[serde(default)]
+    thought_signature: Option<String>,
+    #[serde(flatten)]
+    #[serde(default)]
+    data: FlattenUnknown<'a, GeminiPartData<'a>>,
+}
+
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", untagged)]
-enum GeminiPart<'a> {
+enum GeminiPartData<'a> {
     Text {
         text: &'a str,
     },
@@ -407,96 +430,10 @@ struct GeminiInlineData<'a> {
     data: &'a str,
 }
 
-impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GeminiPart<'a>>> {
-    type Error = Error;
-
-    fn try_from(block: &'a ContentBlock) -> Result<Self, Error> {
-        match block {
-            ContentBlock::Text(Text { text }) => {
-                Ok(Some(FlattenUnknown::Normal(GeminiPart::Text { text })))
-            }
-            ContentBlock::ToolResult(tool_result) => {
-                // Gemini expects the format below according to [the documentation](https://ai.google.dev/gemini-api/docs/function-calling#multi-turn-example-1)
-                let response = serde_json::json!({
-                    "name": tool_result.name,
-                    "content": tool_result.result,
-                });
-
-                Ok(Some(FlattenUnknown::Normal(GeminiPart::FunctionResponse {
-                    function_response: GeminiFunctionResponse {
-                        name: &tool_result.name,
-                        response,
-                    },
-                })))
-            }
-            ContentBlock::ToolCall(tool_call) => {
-                // Convert the tool call arguments from String to JSON Value (Gemini expects an object)
-                let args: Value = serde_json::from_str(&tool_call.arguments).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceClient {
-                        status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!(
-                            "Error parsing tool call arguments as JSON Value: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: Some(tool_call.arguments.clone()),
-                    })
-                })?;
-
-                if !args.is_object() {
-                    return Err(ErrorDetails::InferenceClient {
-                        status_code: Some(StatusCode::BAD_REQUEST),
-                        message: "Tool call arguments must be a JSON object".to_string(),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: Some(tool_call.arguments.clone()),
-                    }
-                    .into());
-                }
-
-                Ok(Some(FlattenUnknown::Normal(GeminiPart::FunctionCall {
-                    function_call: GeminiFunctionCall {
-                        name: &tool_call.name,
-                        args,
-                    },
-                })))
-            }
-            ContentBlock::File(file) => {
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &**file;
-                require_image(&file.mime_type, PROVIDER_TYPE)?;
-                Ok(Some(FlattenUnknown::Normal(GeminiPart::InlineData {
-                    inline_data: GeminiInlineData {
-                        mime_type: file.mime_type.to_string(),
-                        data: file.data()?.as_str(),
-                    },
-                })))
-            }
-
-            // We don't support thought blocks being passed in from a request.
-            // These are only possible to be passed in in the scenario where the
-            // output of a chat completion is used as an input to another model inference,
-            // i.e. a judge or something.
-            // We don't think the thoughts should be passed in in this case.
-            ContentBlock::Thought(thought) => {
-                warn_discarded_thought_block(PROVIDER_TYPE, thought);
-                Ok(None)
-            }
-            ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            } => Ok(Some(FlattenUnknown::Unknown(Cow::Borrowed(data)))),
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Serialize)]
 struct GeminiContent<'a> {
     role: GeminiRole,
-    parts: Vec<FlattenUnknown<'a, GeminiPart<'a>>>,
+    parts: Vec<GeminiContentPart<'a>>,
 }
 
 impl<'a> TryFrom<&'a RequestMessage> for GeminiContent<'a> {
@@ -504,16 +441,177 @@ impl<'a> TryFrom<&'a RequestMessage> for GeminiContent<'a> {
 
     fn try_from(message: &'a RequestMessage) -> Result<Self, Self::Error> {
         let role = GeminiRole::from(message.role);
-        let parts: Vec<FlattenUnknown<GeminiPart>> = message
-            .content
-            .iter()
-            .map(|block| block.try_into())
-            .collect::<Result<Vec<Option<FlattenUnknown<GeminiPart>>>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect();
+        let mut output = Vec::with_capacity(message.content.len());
+        let mut iter = message.content.iter();
+        while let Some(block) = iter.next() {
+            match block {
+                ContentBlock::Thought(
+                    thought @ Thought {
+                        text,
+                        signature,
+                        provider_type: _,
+                    },
+                ) => {
+                    // Gemini never produces 'thought: true' at the moment, and there's no documentation
+                    // on whether or not they should be passed back in.
+                    // As a result, we don't attempt to feed `Thought.text` back to Gemini, as this would
+                    // require us to set 'thought: true' in the request.
+                    // Instead, we just warn and discard the content block.
+                    if text.is_some() {
+                        warn_discarded_thought_block(PROVIDER_TYPE, thought);
+                    } else if let Some(signature) = signature {
+                        let next_block = iter.next();
+                        match next_block {
+                            None => {
+                                return Err(Error::new(ErrorDetails::InferenceServer {
+                                    message: "Thought block with signature must be followed by a content block in Gemini".to_string(),
+                                    provider_type: PROVIDER_TYPE.to_string(),
+                                    raw_request: None,
+                                    raw_response: None,
+                                }));
+                            }
+                            Some(ContentBlock::Thought(Thought { .. })) => {
+                                return Err(Error::new(ErrorDetails::InferenceServer {
+                                    message: "Thought block with signature cannot be followed by another thought block in Gemini".to_string(),
+                                    provider_type: PROVIDER_TYPE.to_string(),
+                                    raw_request: None,
+                                    raw_response: None,
+                                }));
+                            }
+                            Some(ContentBlock::Unknown { .. }) => {
+                                return Err(Error::new(ErrorDetails::InferenceServer {
+                                    message: "Thought block with signature cannot be followed by an unknown block in Gemini".to_string(),
+                                    provider_type: PROVIDER_TYPE.to_string(),
+                                    raw_request: None,
+                                    raw_response: None,
+                                }));
+                            }
+                            Some(next_block) => {
+                                let gemini_part = convert_non_thought_content_block(next_block)?;
+                                match gemini_part {
+                                    FlattenUnknown::Normal(part) => {
+                                        output.push(GeminiContentPart {
+                                            thought: false,
+                                            thought_signature: Some(signature.clone()),
+                                            data: FlattenUnknown::Normal(part),
+                                        });
+                                    }
+                                    // We should have handled this case above with `Some(ContentBlock::Unknown { .. })`
+                                    FlattenUnknown::Unknown(_) => {
+                                        return Err(Error::new(ErrorDetails::InternalError {
+                                            message: format!("Got unknown block after thought block. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                                        }));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    let part = convert_non_thought_content_block(block)?;
+                    match part {
+                        FlattenUnknown::Normal(part) => {
+                            output.push(GeminiContentPart {
+                                thought: false,
+                                thought_signature: None,
+                                data: FlattenUnknown::Normal(part),
+                            });
+                        }
+                        FlattenUnknown::Unknown(data) => {
+                            output.push(GeminiContentPart {
+                                thought: false,
+                                thought_signature: None,
+                                data: FlattenUnknown::Unknown(data),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        Ok(GeminiContent {
+            role,
+            parts: output,
+        })
+    }
+}
 
-        Ok(GeminiContent { role, parts })
+/// Handles all `ContentBlock`s other than `ContentBlock::Thought` (which needs special handling
+/// to merge the signature with the next block).
+fn convert_non_thought_content_block(
+    block: &ContentBlock,
+) -> Result<FlattenUnknown<GeminiPartData>, Error> {
+    match block {
+        ContentBlock::Text(Text { text }) => {
+            Ok(FlattenUnknown::Normal(GeminiPartData::Text { text }))
+        }
+        ContentBlock::ToolResult(tool_result) => {
+            // Gemini expects the format below according to [the documentation](https://ai.google.dev/gemini-api/docs/function-calling#multi-turn-example-1)
+            let response = serde_json::json!({
+                "name": tool_result.name,
+                "content": tool_result.result,
+            });
+            Ok(FlattenUnknown::Normal(
+                GeminiPartData::FunctionResponse {
+                    function_response: GeminiFunctionResponse {
+                        name: &tool_result.name,
+                        response,
+                    },
+                },
+            ))
+        }
+        ContentBlock::ToolCall(tool_call) => {
+            // Convert the tool call arguments from String to JSON Value (Gemini expects an object)
+            let args: Value = serde_json::from_str(&tool_call.arguments).map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: Some(StatusCode::BAD_REQUEST),
+                    message: format!(
+                        "Error parsing tool call arguments as JSON Value: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: None,
+                    raw_response: Some(tool_call.arguments.clone()),
+                })
+            })?;
+
+            if !args.is_object() {
+                return Err(ErrorDetails::InferenceClient {
+                    status_code: Some(StatusCode::BAD_REQUEST),
+                    message: "Tool call arguments must be a JSON object".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: None,
+                    raw_response: Some(tool_call.arguments.clone()),
+                }
+                .into());
+            }
+
+            Ok(FlattenUnknown::Normal(GeminiPartData::FunctionCall {
+                function_call: GeminiFunctionCall {
+                    name: &tool_call.name,
+                    args,
+                },
+            }))
+        }
+        ContentBlock::File(file) => {
+            let FileWithPath {
+                file,
+                storage_path: _,
+            } = &**file;
+            require_image(&file.mime_type, PROVIDER_TYPE)?;
+            Ok(FlattenUnknown::Normal(GeminiPartData::InlineData {
+                inline_data: GeminiInlineData {
+                    mime_type: file.mime_type.to_string(),
+                    data: file.data()?.as_str(),
+                },
+            }))
+        }
+        ContentBlock::Thought(_) => Err(Error::new(ErrorDetails::InternalError {
+            message: format!("Got thought block in `convert_non_thought_content_block`. {IMPOSSIBLE_ERROR_MESSAGE}"),
+        })),
+        ContentBlock::Unknown {
+            data,
+            model_provider_name: _,
+        } => Ok(FlattenUnknown::Unknown(Cow::Borrowed(data))),
     }
 }
 
@@ -550,7 +648,7 @@ impl<'a> From<&'a ToolConfig> for GeminiFunctionDeclaration<'a> {
 impl<'a> From<&'a Vec<ToolConfig>> for GeminiTool<'a> {
     fn from(tools: &'a Vec<ToolConfig>) -> Self {
         let function_declarations: Vec<GeminiFunctionDeclaration<'a>> =
-            tools.iter().map(|tc| tc.into()).collect();
+            tools.iter().map(Into::into).collect();
         GeminiTool {
             function_declarations,
         }
@@ -656,7 +754,7 @@ impl<'a> GeminiRequest<'a> {
             request
                 .system
                 .as_ref()
-                .map(|system_instruction| GeminiPart::Text {
+                .map(|system_instruction| GeminiPartData::Text {
                     text: system_instruction,
                 });
         let contents: Vec<GeminiContent> = request
@@ -696,7 +794,11 @@ impl<'a> GeminiRequest<'a> {
             generation_config,
             system_instruction: system_instruction.map(|content| GeminiContent {
                 role: GeminiRole::Model,
-                parts: vec![FlattenUnknown::Normal(content)],
+                parts: vec![GeminiContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(content),
+                }],
             }),
         })
     }
@@ -754,22 +856,31 @@ fn content_part_to_tensorzero_chunk(
     part: GeminiResponseContentPart,
     last_tool_name: &mut Option<String>,
     last_tool_idx: &mut Option<u32>,
-) -> Result<ContentBlockChunk, Error> {
+    last_thought_id: &mut u32,
+    discard_unknown_chunks: bool,
+    output: &mut Vec<ContentBlockChunk>,
+) -> Result<(), Error> {
     if part.thought {
         match part.data {
             FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => {
-                return Ok(ContentBlockChunk::Thought(ThoughtChunk {
-                    id: "0".to_string(),
+                *last_thought_id += 1;
+                output.push(ContentBlockChunk::Thought(ThoughtChunk {
+                    id: last_thought_id.to_string(),
                     text: Some(text),
                     signature: part.thought_signature,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             // Handle 'thought/thoughtSignature' with no other fields
-            FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
-                return Ok(ContentBlockChunk::Thought(ThoughtChunk {
-                    id: "0".to_string(),
+            FlattenUnknown::Unknown(obj)
+                if obj.as_object().is_some_and(serde_json::Map::is_empty) =>
+            {
+                *last_thought_id += 1;
+                output.push(ContentBlockChunk::Thought(ThoughtChunk {
+                    id: last_thought_id.to_string(),
                     text: None,
                     signature: part.thought_signature,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             _ => {
@@ -784,13 +895,34 @@ fn content_part_to_tensorzero_chunk(
                     }));
             }
         }
+        return Ok(());
     }
+
+    // Google AI Studio can emit `thoughtSignature` attached to arbitrary parts (including function calls)
+    // Their API expects us to pass back the part with the 'thoughtSignature' attached.
+    // Since the TensorZero model only supports standalone thought blocks, we emit a Thought block
+    // with just the signature, immediately following the original part.
+    // When constructing the input, we merge these blocks with their predecessor
+    if let Some(thought_signature) = part.thought_signature {
+        // GCP doesn't have any concept of chunk ids. To make sure that our
+        // `collect_chunks` code never tries to merge thought blocks, we assign
+        // a fresh id to each 'thoughtSignature' that we see.
+        *last_thought_id += 1;
+        // Add a thought chunk to the output, then continue on to process 'part.data'
+        output.push(ContentBlockChunk::Thought(ThoughtChunk {
+            id: last_thought_id.to_string(),
+            text: None,
+            signature: Some(thought_signature),
+            provider_type: Some(PROVIDER_TYPE.to_string()),
+        }));
+    }
+
     match part.data {
         FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => {
-            Ok(ContentBlockChunk::Text(TextChunk {
+            output.push(ContentBlockChunk::Text(TextChunk {
                 text,
                 id: "0".to_string(),
-            }))
+            }));
         }
         FlattenUnknown::Normal(GeminiResponseContentPartData::FunctionCall(function_call)) => {
             let arguments = serialize_or_log(&function_call.args);
@@ -811,43 +943,55 @@ fn content_part_to_tensorzero_chunk(
                     message: "Tool call index is not set in Google AI Studio Gemini. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports".to_string(),
                 })),
             };
-            Ok(ContentBlockChunk::ToolCall(ToolCallChunk {
+            output.push(ContentBlockChunk::ToolCall(ToolCallChunk {
                 raw_name: name,
                 raw_arguments: arguments,
                 id,
-            }))
+            }));
         }
-        FlattenUnknown::Unknown(part) => Err(Error::new(ErrorDetails::InferenceServer {
-            message: "Unknown content part in Google AI Studio Gemini response".to_string(),
-            provider_type: PROVIDER_TYPE.to_string(),
-            raw_request: None,
-            raw_response: Some(part.to_string()),
-        })),
+        FlattenUnknown::Unknown(part) => {
+            if discard_unknown_chunks {
+                warn_discarded_unknown_chunk(PROVIDER_TYPE, &part.to_string());
+                return Ok(());
+            }
+            return Err(Error::new(ErrorDetails::InferenceServer {
+                message: "Unknown content part in Google AI Studio Gemini response".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(part.to_string()),
+            }));
+        }
     }
+    Ok(())
 }
 
 fn convert_part_to_output(
     model_name: &str,
     provider_name: &str,
     part: GeminiResponseContentPart,
-) -> Result<ContentBlockOutput, Error> {
+    output: &mut Vec<ContentBlockOutput>,
+) -> Result<(), Error> {
     if part.thought {
         match part.data {
             FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => {
-                return Ok(ContentBlockOutput::Thought(Thought {
+                output.push(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
-                    text,
+                    text: Some(text),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
-            // Handle 'thought/thoughtSignature' with no other fields
-            FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
-                return Ok(ContentBlockOutput::Thought(Thought {
+            // Handle 'thought' with no other fields
+            FlattenUnknown::Unknown(obj)
+                if obj.as_object().is_some_and(serde_json::Map::is_empty) =>
+            {
+                output.push(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
-                    text: "".to_string(),
+                    text: None,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             _ => {
-                return Ok(ContentBlockOutput::Unknown {
+                output.push(ContentBlockOutput::Unknown {
                     data: serde_json::to_value(part).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
@@ -859,11 +1003,27 @@ fn convert_part_to_output(
                 });
             }
         }
+        return Ok(());
+    }
+
+    // If we have a thought_signature but 'thought' is not set, then we emit a separate Thought block
+    // containing just the signature. When we receive this as input, we'll attach the thought signature
+    // to the GCP content part that we create for the following content block.
+    // This is needed due to the fact that that TensorZero data model cannot represent thought signatures
+    // attached to arbitrary content blocks.
+    if let Some(thought_signature) = part.thought_signature {
+        output.push(ContentBlockOutput::Thought(Thought {
+            signature: Some(thought_signature),
+            text: None,
+            provider_type: Some(PROVIDER_TYPE.to_string()),
+        }));
     }
     match part.data {
-        FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => Ok(text.into()),
+        FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => {
+            output.push(text.into());
+        }
         FlattenUnknown::Normal(GeminiResponseContentPartData::FunctionCall(function_call)) => {
-            Ok(ContentBlockOutput::ToolCall(ToolCall {
+            output.push(ContentBlockOutput::ToolCall(ToolCall {
                 name: function_call.name,
                 arguments: serde_json::to_string(&function_call.args).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
@@ -874,13 +1034,16 @@ fn convert_part_to_output(
                 })?,
                 // Gemini doesn't have the concept of tool call ID so we generate one for our bookkeeping
                 id: Uuid::now_v7().to_string(),
-            }))
+            }));
         }
-        FlattenUnknown::Unknown(part) => Ok(ContentBlockOutput::Unknown {
-            data: part.into_owned(),
-            model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-        }),
+        FlattenUnknown::Unknown(part) => {
+            output.push(ContentBlockOutput::Unknown {
+                data: part.into_owned(),
+                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+            });
+        }
     }
+    Ok(())
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -996,11 +1159,13 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
 
         // Gemini sometimes doesn't return content in the response (e.g. safety settings blocked the generation).
         let content: Vec<ContentBlockOutput> = match first_candidate.content {
-            Some(content) => content
-                .parts
-                .into_iter()
-                .map(|part| convert_part_to_output(model_name, provider_name, part))
-                .collect::<Result<Vec<ContentBlockOutput>, Error>>()?,
+            Some(content) => {
+                let mut output = Vec::with_capacity(content.parts.len());
+                for part in content.parts {
+                    convert_part_to_output(model_name, provider_name, part, &mut output)?;
+                }
+                output
+            }
             None => vec![],
         };
 
@@ -1027,9 +1192,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 latency,
-                finish_reason: first_candidate
-                    .finish_reason
-                    .map(|finish_reason| finish_reason.into()),
+                finish_reason: first_candidate.finish_reason.map(Into::into),
             },
         ))
     }
@@ -1041,6 +1204,8 @@ fn convert_stream_response_with_metadata_to_chunk(
     latency: Duration,
     last_tool_name: &mut Option<String>,
     last_tool_idx: &mut Option<u32>,
+    last_thought_id: &mut u32,
+    discard_unknown_chunks: bool,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
         Error::new(ErrorDetails::InferenceServer {
@@ -1053,11 +1218,20 @@ fn convert_stream_response_with_metadata_to_chunk(
 
     // Gemini sometimes returns chunks without content (e.g. they might have usage only).
     let mut content: Vec<ContentBlockChunk> = match first_candidate.content {
-        Some(content) => content
-            .parts
-            .into_iter()
-            .map(|part| content_part_to_tensorzero_chunk(part, last_tool_name, last_tool_idx))
-            .collect::<Result<Vec<ContentBlockChunk>, Error>>()?,
+        Some(content) => {
+            let mut output = Vec::with_capacity(content.parts.len());
+            for part in content.parts {
+                content_part_to_tensorzero_chunk(
+                    part,
+                    last_tool_name,
+                    last_tool_idx,
+                    last_thought_id,
+                    discard_unknown_chunks,
+                    &mut output,
+                )?;
+            }
+            output
+        }
         None => vec![],
     };
 
@@ -1072,18 +1246,14 @@ fn convert_stream_response_with_metadata_to_chunk(
     let usage = if first_candidate.finish_reason.as_ref().is_none() {
         None
     } else {
-        response
-            .usage_metadata
-            .map(|usage_metadata| usage_metadata.into())
+        response.usage_metadata.map(Into::into)
     };
     Ok(ProviderInferenceResponseChunk::new(
         content,
         usage,
         raw_response,
         latency,
-        first_candidate
-            .finish_reason
-            .map(|finish_reason| finish_reason.into()),
+        first_candidate.finish_reason.map(Into::into),
     ))
 }
 
@@ -1120,11 +1290,59 @@ mod tests {
     use std::borrow::Cow;
 
     use serde_json::json;
+    use tracing_test::traced_test;
 
     use super::*;
     use crate::inference::types::{FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode};
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{ToolCallConfig, ToolResult};
+
+    #[test]
+    #[traced_test]
+    fn test_convert_unknown_content_block_warn() {
+        use std::time::Duration;
+        let content = GeminiResponseContent {
+            parts: vec![GeminiResponseContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Unknown(Cow::Owned(
+                    json!({"unknown_field": "unknown_value"}),
+                )),
+            }],
+        };
+
+        let response = GeminiResponse {
+            candidates: vec![GeminiResponseCandidate {
+                content: Some(content),
+                finish_reason: Some(GeminiFinishReason::Stop),
+            }],
+            usage_metadata: Some(GeminiUsageMetadata {
+                prompt_token_count: 10,
+                candidates_token_count: Some(5),
+            }),
+        };
+
+        let latency = Duration::from_millis(100);
+        let mut last_tool_name = None;
+
+        let mut last_tool_idx = None;
+        let mut last_thought_id = 0;
+        let res = convert_stream_response_with_metadata_to_chunk(
+            "raw_response".to_string(),
+            response,
+            latency,
+            &mut last_tool_name,
+            &mut last_tool_idx,
+            &mut last_thought_id,
+            true,
+        )
+        .unwrap();
+        assert_eq!(res.content, []);
+        assert!(
+            logs_contain("Discarding unknown chunk in google_ai_studio_gemini response"),
+            "Missing warning in logs"
+        );
+    }
 
     #[test]
     fn test_google_ai_studio_gemini_content_try_from() {
@@ -1137,9 +1355,13 @@ mod tests {
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
             content.parts[0],
-            FlattenUnknown::Normal(GeminiPart::Text {
-                text: "Hello, world!"
-            })
+            GeminiContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(GeminiPartData::Text {
+                    text: "Hello, world!"
+                }),
+            }
         );
 
         let message = RequestMessage {
@@ -1151,9 +1373,13 @@ mod tests {
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
             content.parts[0],
-            FlattenUnknown::Normal(GeminiPart::Text {
-                text: "Hello, world!"
-            })
+            GeminiContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(GeminiPartData::Text {
+                    text: "Hello, world!"
+                }),
+            }
         );
         let message = RequestMessage {
             role: Role::Assistant,
@@ -1171,18 +1397,26 @@ mod tests {
         assert_eq!(content.parts.len(), 2);
         assert_eq!(
             content.parts[0],
-            FlattenUnknown::Normal(GeminiPart::Text {
-                text: "Here's the result of the function call:"
-            })
+            GeminiContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(GeminiPartData::Text {
+                    text: "Here's the result of the function call:",
+                }),
+            }
         );
         assert_eq!(
             content.parts[1],
-            FlattenUnknown::Normal(GeminiPart::FunctionCall {
-                function_call: GeminiFunctionCall {
-                    name: "get_temperature",
-                    args: json!({"location": "New York", "unit": "celsius"}),
-                }
-            })
+            GeminiContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(GeminiPartData::FunctionCall {
+                    function_call: GeminiFunctionCall {
+                        name: "get_temperature",
+                        args: json!({"location": "New York", "unit": "celsius"}),
+                    }
+                }),
+            }
         );
 
         let message = RequestMessage {
@@ -1198,15 +1432,19 @@ mod tests {
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
             content.parts[0],
-            FlattenUnknown::Normal(GeminiPart::FunctionResponse {
-                function_response: GeminiFunctionResponse {
-                    name: "get_temperature",
-                    response: json!({
-                        "name": "get_temperature",
-                        "content": r#"{"temperature": 25, "conditions": "sunny"}"#
-                    }),
-                }
-            })
+            GeminiContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(GeminiPartData::FunctionResponse {
+                    function_response: GeminiFunctionResponse {
+                        name: "get_temperature",
+                        response: json!({
+                            "name": "get_temperature",
+                            "content": r#"{"temperature": 25, "conditions": "sunny"}"#
+                        }),
+                    }
+                }),
+            }
         );
     }
 
@@ -1353,15 +1591,23 @@ mod tests {
         assert_eq!(request.contents[0].role, GeminiRole::User);
         assert_eq!(
             request.contents[0].parts[0],
-            FlattenUnknown::Normal(GeminiPart::Text { text: "test_user" })
+            GeminiContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(GeminiPartData::Text { text: "test_user" }),
+            }
         );
         assert_eq!(request.contents[1].role, GeminiRole::Model);
         assert_eq!(request.contents[1].parts.len(), 1);
         assert_eq!(
             request.contents[1].parts[0],
-            FlattenUnknown::Normal(GeminiPart::Text {
-                text: "test_assistant"
-            })
+            GeminiContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(GeminiPartData::Text {
+                    text: "test_assistant"
+                }),
+            }
         );
 
         // Test case 3: Messages with system message and some of the optional fields are tested
@@ -1410,17 +1656,29 @@ mod tests {
         assert_eq!(request.contents[2].parts.len(), 1);
         assert_eq!(
             request.contents[0].parts[0],
-            FlattenUnknown::Normal(GeminiPart::Text { text: "test_user" })
+            GeminiContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(GeminiPartData::Text { text: "test_user" }),
+            }
         );
         assert_eq!(
             request.contents[1].parts[0],
-            FlattenUnknown::Normal(GeminiPart::Text { text: "test_user2" })
+            GeminiContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(GeminiPartData::Text { text: "test_user2" }),
+            }
         );
         assert_eq!(
             request.contents[2].parts[0],
-            FlattenUnknown::Normal(GeminiPart::Text {
-                text: "test_assistant"
-            })
+            GeminiContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(GeminiPartData::Text {
+                    text: "test_assistant"
+                }),
+            }
         );
         assert_eq!(
             request.generation_config.as_ref().unwrap().temperature,
@@ -2024,12 +2282,15 @@ mod tests {
         // Convert to ProviderInferenceResponseChunk
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
+        let mut last_thought_id = 0;
         let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
             "my_raw_chunk".to_string(),
             response,
             Duration::from_millis(100),
             &mut last_tool_name,
             &mut last_tool_idx,
+            &mut last_thought_id,
+            false,
         )
         .unwrap();
 
@@ -2081,12 +2342,15 @@ mod tests {
         // Convert to ProviderInferenceResponseChunk
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
+        let mut last_thought_id = 0;
         let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
             "my_raw_chunk".to_string(),
             response,
             Duration::from_millis(50),
             &mut last_tool_name,
             &mut last_tool_idx,
+            &mut last_thought_id,
+            false,
         )
         .unwrap();
 
@@ -2111,7 +2375,7 @@ mod tests {
     #[test]
     fn test_try_from_with_empty_text_chunks() {
         // Setup a response with empty text chunks that should be filtered out
-        let empty_text = GeminiResponseContentPartData::Text("".to_string());
+        let empty_text = GeminiResponseContentPartData::Text(String::new());
         let non_empty_text = GeminiResponseContentPartData::Text("Non-empty text".to_string());
         let content = GeminiResponseContent {
             parts: vec![
@@ -2142,12 +2406,15 @@ mod tests {
         // Convert to ProviderInferenceResponseChunk
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
+        let mut last_thought_id = 0;
         let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
             "my_raw_chunk".to_string(),
             response,
             Duration::from_millis(75),
             &mut last_tool_name,
             &mut last_tool_idx,
+            &mut last_thought_id,
+            false,
         )
         .unwrap();
 
@@ -2193,12 +2460,15 @@ mod tests {
         // Convert to ProviderInferenceResponseChunk
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
+        let mut last_thought_id = 0;
         let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
             "my_raw_chunk".to_string(),
             response,
             Duration::from_millis(120),
             &mut last_tool_name,
             &mut last_tool_idx,
+            &mut last_thought_id,
+            false,
         )
         .unwrap();
 
@@ -2241,12 +2511,15 @@ mod tests {
         // Convert to ProviderInferenceResponseChunk
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
+        let mut last_thought_id = 0;
         let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
             "my_raw_chunk".to_string(),
             response,
             Duration::from_millis(60),
             &mut last_tool_name,
             &mut last_tool_idx,
+            &mut last_thought_id,
+            false,
         )
         .unwrap();
 
@@ -2280,12 +2553,15 @@ mod tests {
         // Convert to ProviderInferenceResponseChunk
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
+        let mut last_thought_id = 0;
         let result = convert_stream_response_with_metadata_to_chunk(
             "my_raw_chunk".to_string(),
             response,
             Duration::from_millis(30),
             &mut last_tool_name,
             &mut last_tool_idx,
+            &mut last_thought_id,
+            false,
         );
 
         // Should remain None when there's an error
@@ -2352,12 +2628,15 @@ mod tests {
             let chunk: ProviderInferenceResponseChunk = {
                 let mut last_tool_name = None;
                 let mut last_tool_idx = None;
+                let mut last_thought_id = 0;
                 let result = convert_stream_response_with_metadata_to_chunk(
                     "my_raw_chunk".to_string(),
                     response,
                     Duration::from_millis(10),
                     &mut last_tool_name,
                     &mut last_tool_idx,
+                    &mut last_thought_id,
+                    false,
                 );
                 // Verify tool call tracking state
                 assert_eq!(last_tool_idx, None);

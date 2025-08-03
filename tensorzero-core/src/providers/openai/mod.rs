@@ -65,10 +65,13 @@ pub fn default_api_key_location() -> CredentialLocation {
 const PROVIDER_NAME: &str = "OpenAI";
 pub const PROVIDER_TYPE: &str = "openai";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct OpenAIProvider {
     model_name: String,
     api_base: Option<Url>,
+    #[serde(skip)]
     credentials: OpenAICredentials,
 }
 
@@ -168,6 +171,10 @@ impl OpenAICredentials {
 }
 
 impl WrappedProvider for OpenAIProvider {
+    fn thought_block_provider_type_suffix(&self) -> Cow<'static, str> {
+        Cow::Borrowed("openai")
+    }
+
     fn make_body<'a>(
         &'a self,
         ModelProviderRequest {
@@ -490,7 +497,7 @@ impl InferenceProvider for OpenAIProvider {
             get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         request_url
             .path_segments_mut()
-            .map_err(|_| {
+            .map_err(|()| {
                 Error::new(ErrorDetails::Inference {
                     message: "Failed to get mutable path segments".to_string(),
                 })
@@ -780,7 +787,7 @@ impl OpenAIProvider {
                 raw_response,
                 provider_type: PROVIDER_TYPE.to_string(),
             },
-            |r| r.try_into(),
+            TryInto::try_into,
         )
         .await
     }
@@ -1125,7 +1132,7 @@ pub fn prepare_openai_messages<'a>(
     provider_type: &str,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut openai_messages = Vec::with_capacity(messages.len());
-    for message in messages.iter() {
+    for message in messages {
         openai_messages.extend(tensorzero_to_openai_messages(message, provider_type)?);
     }
     if let Some(system_msg) =
@@ -1151,13 +1158,7 @@ pub(super) fn prepare_openai_tools<'a>(
             if tool_config.tools_available.is_empty() {
                 return (None, None, None);
             }
-            let tools = Some(
-                tool_config
-                    .tools_available
-                    .iter()
-                    .map(|tool| tool.into())
-                    .collect(),
-            );
+            let tools = Some(tool_config.tools_available.iter().map(Into::into).collect());
             let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
             (tools, tool_choice, parallel_tool_calls)
@@ -1243,7 +1244,7 @@ fn tensorzero_to_openai_user_messages<'a>(
     let mut messages = Vec::new();
     let mut user_content_blocks = Vec::new();
 
-    for block in content_blocks.iter() {
+    for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
                 user_content_blocks.push(OpenAIContentBlock::Text {
@@ -1317,7 +1318,7 @@ fn tensorzero_to_openai_user_messages<'a>(
     Ok(messages)
 }
 
-fn tensorzero_to_openai_assistant_message<'a>(
+pub fn tensorzero_to_openai_assistant_message<'a>(
     content_blocks: Cow<'a, [ContentBlock]>,
     provider_type: &str,
 ) -> Result<OpenAIRequestMessage<'a>, Error> {
@@ -1442,11 +1443,11 @@ enum OpenAIResponseFormat {
 
 impl OpenAIResponseFormat {
     fn new(
-        json_mode: &ModelInferenceRequestJsonMode,
+        json_mode: ModelInferenceRequestJsonMode,
         output_schema: Option<&Value>,
         model: &str,
     ) -> Option<Self> {
-        if model.contains("3.5") && *json_mode == ModelInferenceRequestJsonMode::Strict {
+        if model.contains("3.5") && json_mode == ModelInferenceRequestJsonMode::Strict {
             return Some(OpenAIResponseFormat::JsonObject);
         }
 
@@ -1669,12 +1670,13 @@ impl<'a> OpenAIRequest<'a> {
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<OpenAIRequest<'a>, Error> {
         let response_format =
-            OpenAIResponseFormat::new(&request.json_mode, request.output_schema, model);
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+            OpenAIResponseFormat::new(request.json_mode, request.output_schema, model);
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
         let mut messages = prepare_openai_messages(
             request.system.as_deref(),
@@ -2001,7 +2003,7 @@ fn openai_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
@@ -3307,17 +3309,17 @@ mod tests {
         // Test JSON mode On
         let json_mode = ModelInferenceRequestJsonMode::On;
         let output_schema = None;
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = OpenAIResponseFormat::new(json_mode, output_schema, "gpt-4o");
         assert_eq!(format, Some(OpenAIResponseFormat::JsonObject));
 
         // Test JSON mode Off
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = OpenAIResponseFormat::new(json_mode, output_schema, "gpt-4o");
         assert_eq!(format, None);
 
         // Test JSON mode Strict with no schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = OpenAIResponseFormat::new(json_mode, output_schema, "gpt-4o");
         assert_eq!(format, Some(OpenAIResponseFormat::JsonObject));
 
         // Test JSON mode Strict with schema
@@ -3329,7 +3331,7 @@ mod tests {
             }
         });
         let output_schema = Some(&schema);
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = OpenAIResponseFormat::new(json_mode, output_schema, "gpt-4o");
         match format {
             Some(OpenAIResponseFormat::JsonSchema { json_schema }) => {
                 assert_eq!(json_schema["schema"], schema);
@@ -3348,7 +3350,7 @@ mod tests {
             }
         });
         let output_schema = Some(&schema);
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-3.5-turbo");
+        let format = OpenAIResponseFormat::new(json_mode, output_schema, "gpt-3.5-turbo");
         assert_eq!(format, Some(OpenAIResponseFormat::JsonObject));
     }
 

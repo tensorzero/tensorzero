@@ -20,11 +20,11 @@ pub async fn query_dataset(
     debug!(table_name = %table_name, "Determined table name for function type");
 
     // Construct the query to fetch datapoints from the appropriate table
-    let query = r#"SELECT * FROM {table_name: Identifier} FINAL
+    let query = r"SELECT * FROM {table_name: Identifier} FINAL
          WHERE dataset_name = {dataset_name: String}
          AND function_name = {function_name: String}
          AND staled_at IS NULL
-         FORMAT JSON"#;
+         FORMAT JSON";
 
     let params = HashMap::from([
         ("table_name", table_name),
@@ -36,12 +36,15 @@ pub async fn query_dataset(
     let result = clickhouse_client
         .run_query_synchronous(query.to_string(), &params)
         .await?;
-    debug!(result_length = result.len(), "Query executed successfully");
+    debug!(
+        result_length = result.response.len(),
+        "Query executed successfully"
+    );
     debug!("Parsing datapoints from query result");
     let datapoints: Vec<Datapoint> = match function_config {
         FunctionConfig::Chat(_) => {
             debug!("Parsing as chat datapoints");
-            let chat_datapoints: serde_json::Value = serde_json::from_str(&result)?;
+            let chat_datapoints: serde_json::Value = serde_json::from_str(&result.response)?;
             let chat_datapoints: Vec<ChatInferenceDatapoint> =
                 serde_json::from_value(chat_datapoints["data"].clone())?;
             let datapoints: Vec<Datapoint> =
@@ -51,7 +54,7 @@ pub async fn query_dataset(
         }
         FunctionConfig::Json(_) => {
             debug!("Parsing as JSON datapoints");
-            let json_value: serde_json::Value = serde_json::from_str(&result)?;
+            let json_value: serde_json::Value = serde_json::from_str(&result.response)?;
             let json_datapoints: Vec<JsonInferenceDatapoint> =
                 serde_json::from_value(json_value["data"].clone())?;
             let datapoints: Vec<Datapoint> =

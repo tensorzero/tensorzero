@@ -10,10 +10,10 @@ use crate::{
     config_parser::Config,
     error::{Error, ErrorDetails},
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ModelInput, ResolvedInput},
-    serde_util::{deserialize_defaulted_string_or_parsed_json, deserialize_string_or_parsed_json},
     tool::ToolCallConfigDatabaseInsert,
     variant::{chat_completion::prepare_model_input, VariantConfig},
 };
+use chrono::{DateTime, Utc};
 use futures::future::try_join_all;
 #[cfg(feature = "pyo3")]
 use pyo3::types::{PyAny, PyList};
@@ -22,6 +22,31 @@ use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
+
+/// This trait is used to represent a stored sample of data.
+/// It should contain all the methods used by `render_samples`
+/// from the stored sample of data so that we can abstract over the
+/// different places where we could get training samples from, notably
+/// datasets and stored inferences.
+pub trait StoredSample {
+    fn function_name(&self) -> &str;
+    fn input(&self) -> &ResolvedInput;
+    fn input_mut(&mut self) -> &mut ResolvedInput;
+    fn owned_simple_info(self) -> SimpleStoredSampleInfo;
+}
+
+/// Utility struct that contains the information needed for a RenderedSample
+/// that is just copied over from the StoredSample.
+pub struct SimpleStoredSampleInfo {
+    pub function_name: String,
+    pub episode_id: Option<Uuid>,
+    pub inference_id: Option<Uuid>,
+    pub output: Option<Vec<ContentBlockChatOutput>>,
+    pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub output_schema: Option<Value>,
+    pub tags: HashMap<String, String>,
+}
 
 /// Represents an stored inference to be used for optimization.
 /// These are retrieved from the database in this format.
@@ -46,8 +71,8 @@ impl std::fmt::Display for StoredInference {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl StoredInference {
-    #[new]
     #[expect(clippy::too_many_arguments)]
+    #[new]
     pub fn new<'py>(
         py: Python<'py>,
         r#type: String,
@@ -57,15 +82,28 @@ impl StoredInference {
         output: Bound<'py, PyAny>,
         episode_id: Bound<'py, PyAny>,
         inference_id: Bound<'py, PyAny>,
+        dispreferred_outputs: Option<Bound<'py, PyAny>>,
         tool_params: Option<Bound<'py, PyAny>>,
         output_schema: Option<Bound<'py, PyAny>>,
+        tags: Option<Bound<'py, PyAny>>,
+        timestamp: Bound<'py, PyAny>,
     ) -> PyResult<Self> {
         let input: ResolvedInput = deserialize_from_pyobj(py, &input)?;
         let episode_id: Uuid = deserialize_from_pyobj(py, &episode_id)?;
         let inference_id: Uuid = deserialize_from_pyobj(py, &inference_id)?;
+        let timestamp: DateTime<Utc> = deserialize_from_pyobj(py, &timestamp)?;
+        let tags: HashMap<String, String> = tags
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(py, x))
+            .transpose()?
+            .unwrap_or_default();
         match r#type.as_str() {
             "chat" => {
                 let output: Vec<ContentBlockChatOutput> = deserialize_from_pyobj(py, &output)?;
+                let dispreferred_outputs: Option<Vec<Vec<ContentBlockChatOutput>>> =
+                    dispreferred_outputs
+                        .map(|x| deserialize_from_pyobj(py, &x))
+                        .transpose()?;
                 let Some(tool_params) = tool_params.map(|x| deserialize_from_pyobj(py, &x)) else {
                     return Err(PyValueError::new_err(
                         "tool_params is required for chat inferences",
@@ -77,13 +115,19 @@ impl StoredInference {
                     variant_name,
                     input,
                     output,
+                    dispreferred_outputs: dispreferred_outputs.unwrap_or_default(),
                     episode_id,
                     inference_id,
                     tool_params,
+                    tags,
+                    timestamp,
                 }))
             }
             "json" => {
                 let output: JsonInferenceOutput = deserialize_from_pyobj(py, &output)?;
+                let dispreferred_outputs: Option<Vec<JsonInferenceOutput>> = dispreferred_outputs
+                    .map(|x| deserialize_from_pyobj(py, &x))
+                    .transpose()?;
                 let Some(output_schema) = output_schema.map(|x| deserialize_from_pyobj(py, &x))
                 else {
                     return Err(PyValueError::new_err(
@@ -96,9 +140,12 @@ impl StoredInference {
                     variant_name,
                     input,
                     output,
+                    dispreferred_outputs: dispreferred_outputs.unwrap_or_default(),
                     episode_id,
                     inference_id,
                     output_schema,
+                    tags,
+                    timestamp,
                 }))
             }
             _ => Err(PyValueError::new_err(format!("Invalid type: {type}"))),
@@ -144,10 +191,26 @@ impl StoredInference {
                 .iter()
                 .map(|x| content_block_chat_output_to_python(py, x.clone()))
                 .collect::<PyResult<Vec<_>>>()?
-                .into_py_any(py)?
-                .into_bound(py),
+                .into_bound_py_any(py)?,
+            StoredInference::Json(example) => example.output.clone().into_bound_py_any(py)?,
+        })
+    }
+
+    #[getter]
+    pub fn get_dispreferred_outputs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(match self {
+            StoredInference::Chat(example) => example
+                .dispreferred_outputs
+                .iter()
+                .map(|x| {
+                    x.iter()
+                        .map(|y| content_block_chat_output_to_python(py, y.clone()))
+                        .collect::<PyResult<Vec<_>>>()
+                })
+                .collect::<PyResult<Vec<Vec<_>>>>()?
+                .into_bound_py_any(py)?,
             StoredInference::Json(example) => {
-                example.output.clone().into_py_any(py)?.into_bound(py)
+                example.dispreferred_outputs.clone().into_bound_py_any(py)?
             }
         })
     }
@@ -196,6 +259,22 @@ impl StoredInference {
             StoredInference::Json(_) => "json".to_string(),
         }
     }
+
+    #[getter]
+    pub fn get_tags(&self) -> HashMap<String, String> {
+        match self {
+            StoredInference::Chat(example) => example.tags.clone(),
+            StoredInference::Json(example) => example.tags.clone(),
+        }
+    }
+
+    #[getter]
+    pub fn get_timestamp(&self) -> String {
+        match self {
+            StoredInference::Chat(example) => example.timestamp.to_rfc3339(),
+            StoredInference::Json(example) => example.timestamp.to_rfc3339(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -203,14 +282,17 @@ impl StoredInference {
 pub struct StoredChatInference {
     pub function_name: String,
     pub variant_name: String,
-    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub input: ResolvedInput,
-    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output: Vec<ContentBlockChatOutput>,
+    #[serde(default)]
+    pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
+    pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    #[serde(deserialize_with = "deserialize_defaulted_string_or_parsed_json")]
+    #[serde(default)]
     pub tool_params: ToolCallConfigDatabaseInsert,
+    #[serde(default)]
+    pub tags: HashMap<String, String>,
 }
 
 impl std::fmt::Display for StoredChatInference {
@@ -233,14 +315,16 @@ impl StoredChatInference {
 pub struct StoredJsonInference {
     pub function_name: String,
     pub variant_name: String,
-    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub input: ResolvedInput,
-    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output: JsonInferenceOutput,
+    #[serde(default)]
+    pub dispreferred_outputs: Vec<JsonInferenceOutput>,
+    pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output_schema: Value,
+    #[serde(default)]
+    pub tags: HashMap<String, String>,
 }
 
 impl std::fmt::Display for StoredJsonInference {
@@ -258,25 +342,67 @@ impl StoredJsonInference {
     }
 }
 
-impl StoredInference {
-    pub fn input_mut(&mut self) -> &mut ResolvedInput {
+impl StoredSample for StoredInference {
+    fn input_mut(&mut self) -> &mut ResolvedInput {
         match self {
             StoredInference::Chat(example) => &mut example.input,
             StoredInference::Json(example) => &mut example.input,
         }
     }
-    pub fn input(&self) -> &ResolvedInput {
+    fn input(&self) -> &ResolvedInput {
         match self {
             StoredInference::Chat(example) => &example.input,
             StoredInference::Json(example) => &example.input,
         }
     }
 
-    pub fn function_name(&self) -> &str {
+    fn function_name(&self) -> &str {
         match self {
             StoredInference::Chat(example) => &example.function_name,
             StoredInference::Json(example) => &example.function_name,
         }
+    }
+
+    fn owned_simple_info(self) -> SimpleStoredSampleInfo {
+        match self {
+            StoredInference::Chat(example) => SimpleStoredSampleInfo {
+                function_name: example.function_name,
+                episode_id: Some(example.episode_id),
+                inference_id: Some(example.inference_id),
+                output: Some(example.output),
+                dispreferred_outputs: example.dispreferred_outputs,
+                tool_params: Some(example.tool_params),
+                output_schema: None,
+                tags: example.tags,
+            },
+            StoredInference::Json(example) => {
+                let output = json_output_to_content_block_chat_output(example.output);
+                let dispreferred_outputs = example
+                    .dispreferred_outputs
+                    .into_iter()
+                    .map(json_output_to_content_block_chat_output)
+                    .collect();
+                SimpleStoredSampleInfo {
+                    function_name: example.function_name,
+                    episode_id: Some(example.episode_id),
+                    inference_id: Some(example.inference_id),
+                    output: Some(output),
+                    dispreferred_outputs,
+                    tool_params: None,
+                    output_schema: Some(example.output_schema),
+                    tags: example.tags,
+                }
+            }
+        }
+    }
+}
+
+fn json_output_to_content_block_chat_output(
+    output: JsonInferenceOutput,
+) -> Vec<ContentBlockChatOutput> {
+    match output.raw {
+        Some(raw) => vec![ContentBlockChatOutput::Text(Text { text: raw })],
+        None => vec![],
     }
 }
 
@@ -285,29 +411,25 @@ impl StoredInference {
 /// and by resolving all network resources (e.g. images).
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct RenderedStoredInference {
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RenderedSample {
     pub function_name: String,
-    pub variant_name: String,
     pub input: ModelInput,
-    pub output: Vec<ContentBlockChatOutput>,
-    pub episode_id: Uuid,
-    pub inference_id: Uuid,
+    pub output: Option<Vec<ContentBlockChatOutput>>,
+    pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
+    pub episode_id: Option<Uuid>,
+    pub inference_id: Option<Uuid>,
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
+    pub tags: HashMap<String, String>,
 }
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl RenderedStoredInference {
+impl RenderedSample {
     #[getter]
     pub fn get_function_name(&self) -> &str {
         &self.function_name
-    }
-
-    #[getter]
-    pub fn get_variant_name(&self) -> &str {
-        &self.variant_name
     }
 
     #[getter]
@@ -317,22 +439,29 @@ impl RenderedStoredInference {
 
     #[getter]
     pub fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let output = self
-            .output
+        if let Some(output) = &self.output {
+            let output = output
+                .iter()
+                .map(|x| content_block_chat_output_to_python(py, x.clone()))
+                .collect::<PyResult<Vec<_>>>()?;
+            PyList::new(py, output).map(Bound::into_any)
+        } else {
+            Ok(py.None().into_bound(py))
+        }
+    }
+
+    #[getter]
+    pub fn get_dispreferred_outputs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let dispreferred_outputs = self
+            .dispreferred_outputs
             .iter()
-            .map(|x| content_block_chat_output_to_python(py, x.clone()))
+            .map(|x| {
+                x.iter()
+                    .map(|y| content_block_chat_output_to_python(py, y.clone()))
+                    .collect::<PyResult<Vec<_>>>()
+            })
             .collect::<PyResult<Vec<_>>>()?;
-        PyList::new(py, output).map(|list| list.into_any())
-    }
-
-    #[getter]
-    pub fn get_episode_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        uuid_to_python(py, self.episode_id)
-    }
-
-    #[getter]
-    pub fn get_inference_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        uuid_to_python(py, self.inference_id)
+        PyList::new(py, dispreferred_outputs).map(Bound::into_any)
     }
 
     #[getter]
@@ -345,12 +474,33 @@ impl RenderedStoredInference {
         serialize_to_dict(py, self.output_schema.clone()).map(|x| x.into_bound(py))
     }
 
+    #[getter]
+    pub fn get_episode_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self.episode_id {
+            Some(id) => uuid_to_python(py, id),
+            None => Ok(py.None().into_bound(py)),
+        }
+    }
+
+    #[getter]
+    pub fn get_inference_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self.inference_id {
+            Some(id) => uuid_to_python(py, id),
+            None => Ok(py.None().into_bound(py)),
+        }
+    }
+
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
+
+    #[getter]
+    pub fn get_tags(&self) -> HashMap<String, String> {
+        self.tags.clone()
+    }
 }
 
-impl std::fmt::Display for RenderedStoredInference {
+impl std::fmt::Display for RenderedSample {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Serialize the rendered inference to pretty-printed JSON
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
@@ -363,18 +513,17 @@ impl std::fmt::Display for RenderedStoredInference {
 /// as the stored inference is being rendered.
 /// This does not handle resolving network resources (e.g. images).
 fn render_model_input(
-    inference_example: &StoredInference,
+    resolved_input: &ResolvedInput,
+    function_name: &str,
     config: &Config,
     variants: &HashMap<String, String>,
 ) -> Result<ModelInput, Error> {
-    let variant_name = variants
-        .get(inference_example.function_name())
-        .ok_or_else(|| {
-            Error::new(ErrorDetails::MissingFunctionInVariants {
-                function_name: inference_example.function_name().to_string(),
-            })
-        })?;
-    let function_config = config.get_function(inference_example.function_name())?;
+    let variant_name = variants.get(function_name).ok_or_else(|| {
+        Error::new(ErrorDetails::MissingFunctionInVariants {
+            function_name: function_name.to_string(),
+        })
+    })?;
+    let function_config = config.get_function(function_name)?;
     let variant_config = function_config
         .variants()
         .get(variant_name)
@@ -385,87 +534,70 @@ fn render_model_input(
         })?;
     let VariantConfig::ChatCompletion(chat_completion_config) = &variant_config.inner else {
         return Err(Error::new(ErrorDetails::InvalidVariantForOptimization {
-            function_name: inference_example.function_name().to_string(),
+            function_name: function_name.to_string(),
             variant_name: variant_name.clone(),
         }));
     };
     let system_template_name = chat_completion_config
         .system_template
         .as_ref()
-        .map(|x| {
-            x.path
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
-        })
-        .transpose()?;
+        .map(|x| x.path.get_template_key());
     let user_template_name = chat_completion_config
         .user_template
         .as_ref()
-        .map(|x| {
-            x.path
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
-        })
-        .transpose()?;
+        .map(|x| x.path.get_template_key());
     let assistant_template_name = chat_completion_config
         .assistant_template
         .as_ref()
-        .map(|x| {
-            x.path
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
-        })
-        .transpose()?;
+        .map(|x| x.path.get_template_key());
     prepare_model_input(
-        inference_example.input().system.as_ref(),
-        &inference_example.input().messages,
+        resolved_input.system.as_ref(),
+        &resolved_input.messages,
         &config.templates,
-        system_template_name,
-        user_template_name,
-        assistant_template_name,
+        system_template_name.as_deref(),
+        user_template_name.as_deref(),
+        assistant_template_name.as_deref(),
         function_config.template_schema_info(),
     )
 }
 
-/// Render a StoredInference to a RenderedStoredInference.
+/// Render an impl StoredSample to a RenderedStoredInference.
 /// `variants` should be a map from function name to variant name, i.e. what variant to use for a particular function
 /// as the inference example is being rendered.
 ///
 /// This does not handle resolving network resources (e.g. images).
-pub fn render_stored_inference(
-    inference_example: StoredInference,
+pub fn render_stored_sample<T: StoredSample>(
+    stored_sample: T,
     config: &Config,
     variants: &HashMap<String, String>,
-) -> Result<RenderedStoredInference, Error> {
-    let model_input = render_model_input(&inference_example, config, variants)?;
-    match inference_example {
-        StoredInference::Chat(example) => Ok(RenderedStoredInference {
-            function_name: example.function_name,
-            variant_name: example.variant_name,
-            input: model_input,
-            output: example.output,
-            episode_id: example.episode_id,
-            inference_id: example.inference_id,
-            tool_params: Some(example.tool_params),
-            output_schema: None,
-        }),
-        StoredInference::Json(example) => {
-            let output: Vec<ContentBlockChatOutput> = match example.output.raw {
-                Some(raw) => vec![ContentBlockChatOutput::Text(Text { text: raw })],
-                None => vec![],
-            };
-            Ok(RenderedStoredInference {
-                function_name: example.function_name,
-                variant_name: example.variant_name,
-                input: model_input,
-                output,
-                episode_id: example.episode_id,
-                inference_id: example.inference_id,
-                tool_params: None,
-                output_schema: Some(example.output_schema),
-            })
-        }
-    }
+) -> Result<RenderedSample, Error> {
+    let model_input = render_model_input(
+        stored_sample.input(),
+        stored_sample.function_name(),
+        config,
+        variants,
+    )?;
+    let SimpleStoredSampleInfo {
+        function_name,
+        output,
+        dispreferred_outputs,
+        tool_params,
+        output_schema,
+        episode_id,
+        inference_id,
+        tags,
+    } = stored_sample.owned_simple_info();
+    Ok(RenderedSample {
+        function_name,
+        episode_id,
+        inference_id,
+        input: model_input,
+        output,
+        dispreferred_outputs,
+        tool_params,
+        output_schema,
+        tags,
+    })
 }
 
 /// Since we store the input in the database in the form of ResolvedInput but without e.g. images inside,
@@ -473,7 +605,7 @@ pub fn render_stored_inference(
 /// Resolves images in place.
 pub async fn reresolve_input_for_fine_tuning(
     input: &mut ResolvedInput,
-    config: &Config<'static>,
+    config: &Config,
 ) -> Result<(), Error> {
     let mut file_fetch_tasks = Vec::new();
 
@@ -520,170 +652,4 @@ pub async fn reresolve_input_for_fine_tuning(
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn test_stored_inference_deserialization_chat() {
-        // Test the ClickHouse version (doubly serialized)
-        let json = r#"
-            {
-                "type": "chat",
-                "function_name": "test_function",
-                "variant_name": "test_variant",
-                "input": "{\"system\": \"you are a helpful assistant\", \"messages\": []}",
-                "output": "[{\"type\": \"text\", \"text\": \"Hello! How can I help you today?\"}]",
-                "episode_id": "123e4567-e89b-12d3-a456-426614174000",
-                "inference_id": "123e4567-e89b-12d3-a456-426614174000",
-                "tool_params": ""
-            }
-        "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Chat(chat_inference) = inference else {
-            panic!("Expected a chat inference");
-        };
-        assert_eq!(chat_inference.function_name, "test_function");
-        assert_eq!(chat_inference.variant_name, "test_variant");
-        assert_eq!(
-            chat_inference.input,
-            ResolvedInput {
-                system: Some(json!("you are a helpful assistant")),
-                messages: vec![],
-            }
-        );
-        assert_eq!(
-            chat_inference.output,
-            vec!["Hello! How can I help you today?".to_string().into()]
-        );
-
-        // Test the Python version (singly serialized)
-        let json = r#"
-        {
-            "type": "chat",
-            "function_name": "test_function",
-            "variant_name": "test_variant",
-            "input": {"system": "you are a helpful assistant", "messages": []},
-            "output": [{"type": "text", "text": "Hello! How can I help you today?"}],
-            "episode_id": "123e4567-e89b-12d3-a456-426614174000",
-            "inference_id": "123e4567-e89b-12d3-a456-426614174000",
-            "tool_params": ""
-        }
-    "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Chat(chat_inference) = inference else {
-            panic!("Expected a chat inference");
-        };
-        assert_eq!(chat_inference.function_name, "test_function");
-        assert_eq!(chat_inference.variant_name, "test_variant");
-        assert_eq!(
-            chat_inference.input,
-            ResolvedInput {
-                system: Some(json!("you are a helpful assistant")),
-                messages: vec![],
-            }
-        );
-        assert_eq!(
-            chat_inference.output,
-            vec!["Hello! How can I help you today?".to_string().into()]
-        );
-    }
-
-    #[test]
-    fn test_stored_inference_deserialization_json() {
-        // Test the ClickHouse version (doubly serialized)
-        let json = r#"
-            {
-                "type": "json",
-                "function_name": "test_function",
-                "variant_name": "test_variant",
-                "input": "{\"system\": \"you are a helpful assistant\", \"messages\": []}",
-                "output": "{\"raw\":\"{\\\"answer\\\":\\\"Goodbye\\\"}\",\"parsed\":{\"answer\":\"Goodbye\"}}",
-                "episode_id": "123e4567-e89b-12d3-a456-426614174000",
-                "inference_id": "123e4567-e89b-12d3-a456-426614174000",
-                "output_schema": "{\"type\": \"object\", \"properties\": {\"output\": {\"type\": \"string\"}}}"
-            }
-        "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Json(json_inference) = inference else {
-            panic!("Expected a json inference");
-        };
-        assert_eq!(json_inference.function_name, "test_function");
-        assert_eq!(json_inference.variant_name, "test_variant");
-        assert_eq!(
-            json_inference.input,
-            ResolvedInput {
-                system: Some(json!("you are a helpful assistant")),
-                messages: vec![],
-            }
-        );
-        assert_eq!(
-            json_inference.output,
-            JsonInferenceOutput {
-                raw: Some("{\"answer\":\"Goodbye\"}".to_string()),
-                parsed: Some(json!({"answer":"Goodbye"})),
-            }
-        );
-        assert_eq!(
-            json_inference.episode_id,
-            Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap()
-        );
-        assert_eq!(
-            json_inference.inference_id,
-            Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap()
-        );
-        assert_eq!(
-            json_inference.output_schema,
-            json!({"type": "object", "properties": {"output": {"type": "string"}}})
-        );
-
-        // Test the Python version (singly serialized)
-        let json = r#"
-         {
-             "type": "json",
-             "function_name": "test_function",
-             "variant_name": "test_variant",
-             "input": {"system": "you are a helpful assistant", "messages": []},
-             "output": {"raw":"{\"answer\":\"Goodbye\"}","parsed":{"answer":"Goodbye"}},
-             "episode_id": "123e4567-e89b-12d3-a456-426614174000",
-             "inference_id": "123e4567-e89b-12d3-a456-426614174000",
-             "output_schema": {"type": "object", "properties": {"output": {"type": "string"}}}
-         }
-     "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Json(json_inference) = inference else {
-            panic!("Expected a json inference");
-        };
-        assert_eq!(json_inference.function_name, "test_function");
-        assert_eq!(json_inference.variant_name, "test_variant");
-        assert_eq!(
-            json_inference.input,
-            ResolvedInput {
-                system: Some(json!("you are a helpful assistant")),
-                messages: vec![],
-            }
-        );
-        assert_eq!(
-            json_inference.output,
-            JsonInferenceOutput {
-                raw: Some("{\"answer\":\"Goodbye\"}".to_string()),
-                parsed: Some(json!({"answer":"Goodbye"})),
-            }
-        );
-        assert_eq!(
-            json_inference.episode_id,
-            Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap()
-        );
-        assert_eq!(
-            json_inference.inference_id,
-            Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap()
-        );
-        assert_eq!(
-            json_inference.output_schema,
-            json!({"type": "object", "properties": {"output": {"type": "string"}}})
-        );
-    }
 }

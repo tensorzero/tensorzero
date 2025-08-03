@@ -8,13 +8,21 @@ import {
   countCuratedInferences,
   getCuratedInferences,
 } from "./curation.server";
+import type { FunctionConfig } from "tensorzero-node";
 
 // Test boolean metrics
 test("countCuratedInferences for boolean metrics", async () => {
   // JSON Inference level
   const jsonInferenceResult = await countCuratedInferences(
     "extract_entities",
-    { type: "json", variants: {} },
+    {
+      type: "json",
+      variants: {},
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
+    } as FunctionConfig,
     "exact_match",
     { type: "boolean", optimize: "max", level: "inference" },
     0, // threshold not used for boolean
@@ -24,7 +32,20 @@ test("countCuratedInferences for boolean metrics", async () => {
   // JSON Episode level
   const jsonEpisodeResult = await countCuratedInferences(
     "extract_entities",
-    { type: "json", variants: {} },
+    {
+      type: "json",
+      variants: {},
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
+      output_schema: { value: {} },
+      implicit_tool_call_config: {
+        tools_available: [],
+        tool_choice: "none",
+        parallel_tool_calls: false,
+      },
+    },
     "exact_match_episode",
     { type: "boolean", optimize: "max", level: "episode" },
     0,
@@ -40,6 +61,10 @@ test("countCuratedInferences for boolean metrics", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
     },
     "haiku_score",
     { type: "boolean", optimize: "max", level: "inference" },
@@ -56,6 +81,10 @@ test("countCuratedInferences for boolean metrics", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
     },
     "haiku_score_episode",
     { type: "boolean", optimize: "max", level: "episode" },
@@ -69,7 +98,20 @@ test("countCuratedInferences for float metrics", async () => {
   // JSON Inference level
   const jsonInferenceResult = await countCuratedInferences(
     "extract_entities",
-    { type: "json", variants: {} },
+    {
+      type: "json",
+      variants: {},
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
+      output_schema: { value: {} },
+      implicit_tool_call_config: {
+        tools_available: [],
+        tool_choice: "none",
+        parallel_tool_calls: false,
+      },
+    },
     "jaccard_similarity",
     { type: "float", optimize: "max", level: "inference" },
     0.8,
@@ -79,7 +121,20 @@ test("countCuratedInferences for float metrics", async () => {
   // JSON Episode level
   const jsonEpisodeResult = await countCuratedInferences(
     "extract_entities",
-    { type: "json", variants: {} },
+    {
+      type: "json",
+      variants: {},
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
+      output_schema: { value: {} },
+      implicit_tool_call_config: {
+        tools_available: [],
+        tool_choice: "none",
+        parallel_tool_calls: false,
+      },
+    },
     "jaccard_similarity_episode",
     { type: "float", optimize: "max", level: "episode" },
     0.8,
@@ -95,6 +150,10 @@ test("countCuratedInferences for float metrics", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
     },
     "haiku_rating",
     { type: "float", optimize: "max", level: "inference" },
@@ -111,6 +170,10 @@ test("countCuratedInferences for float metrics", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
     },
     "haiku_rating_episode",
     { type: "float", optimize: "max", level: "episode" },
@@ -118,12 +181,24 @@ test("countCuratedInferences for float metrics", async () => {
   );
   expect(chatEpisodeResult).toBe(11);
 });
-
 // Test demonstration metrics
 test("countCuratedInferences for demonstration metrics", async () => {
   const jsonResult = await countCuratedInferences(
     "extract_entities",
-    { type: "json", variants: {} },
+    {
+      type: "json",
+      variants: {},
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
+      output_schema: { value: {} },
+      implicit_tool_call_config: {
+        tools_available: [],
+        tool_choice: "none",
+        parallel_tool_calls: false,
+      },
+    },
     "unused_metric_name",
     { type: "demonstration", level: "inference" },
     0,
@@ -138,20 +213,37 @@ test("countCuratedInferences for demonstration metrics", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
     },
     "unused_metric_name",
     { type: "demonstration", level: "inference" },
     0,
   );
   expect(chatResult).toBe(493);
-});
+}, 10000);
 
 // Test getCuratedInferences
 test("getCuratedInferences retrieves correct data", async () => {
   // Test with boolean metric
   const booleanResults = await getCuratedInferences(
     "extract_entities",
-    { type: "json", variants: {} },
+    {
+      type: "json",
+      variants: {},
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
+      output_schema: { value: {} },
+      implicit_tool_call_config: {
+        tools_available: [],
+        tool_choice: "none",
+        parallel_tool_calls: false,
+      },
+    },
     "exact_match",
     { type: "boolean", optimize: "max", level: "inference" },
     0,
@@ -168,6 +260,10 @@ test("getCuratedInferences retrieves correct data", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
     },
     "haiku_rating",
     { type: "float", optimize: "max", level: "inference" },
@@ -179,7 +275,20 @@ test("getCuratedInferences retrieves correct data", async () => {
   // Test with demonstration
   const demoResults = await getCuratedInferences(
     "extract_entities",
-    { type: "json", variants: {} },
+    {
+      type: "json",
+      variants: {},
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
+      output_schema: { value: {} },
+      implicit_tool_call_config: {
+        tools_available: [],
+        tool_choice: "none",
+        parallel_tool_calls: false,
+      },
+    },
     "unused_metric_name",
     { type: "demonstration", level: "inference" },
     0,
@@ -190,7 +299,20 @@ test("getCuratedInferences retrieves correct data", async () => {
   // Test without metric (should return all inferences)
   const allResults = await getCuratedInferences(
     "extract_entities",
-    { type: "json", variants: {} },
+    {
+      type: "json",
+      variants: {},
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
+      output_schema: { value: {} },
+      implicit_tool_call_config: {
+        tools_available: [],
+        tool_choice: "none",
+        parallel_tool_calls: false,
+      },
+    },
     null,
     null,
     0,
@@ -204,7 +326,20 @@ test("countFeedbacksForMetric returns correct counts", async () => {
   // Test boolean metrics
   const booleanInferenceCount = await countFeedbacksForMetric(
     "extract_entities",
-    { type: "json", variants: {} },
+    {
+      type: "json",
+      variants: {},
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
+      output_schema: { value: {} },
+      implicit_tool_call_config: {
+        tools_available: [],
+        tool_choice: "none",
+        parallel_tool_calls: false,
+      },
+    },
     "exact_match",
     { type: "boolean", optimize: "max", level: "inference" },
   );
@@ -219,6 +354,10 @@ test("countFeedbacksForMetric returns correct counts", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
     },
     "haiku_rating",
     { type: "float", optimize: "max", level: "inference" },
@@ -228,7 +367,20 @@ test("countFeedbacksForMetric returns correct counts", async () => {
   // Test demonstration
   const demoCount = await countFeedbacksForMetric(
     "extract_entities",
-    { type: "json", variants: {} },
+    {
+      type: "json",
+      variants: {},
+      system_schema: null,
+      user_schema: null,
+      assistant_schema: null,
+      description: "",
+      output_schema: { value: {} },
+      implicit_tool_call_config: {
+        tools_available: [],
+        tool_choice: "none",
+        parallel_tool_calls: false,
+      },
+    },
     "unused_metric_name",
     { type: "demonstration", level: "inference" },
   );

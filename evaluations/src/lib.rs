@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 use std::io::Write;
 use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
@@ -415,6 +416,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         internal: true,
         extra_body: Default::default(),
         extra_headers: Default::default(),
+        internal_dynamic_variant_config: None,
     };
     debug!("Making inference request");
     let inference_result = clients.tensorzero_client.inference(params).await?;
@@ -464,7 +466,7 @@ impl ThrottledTensorZeroClient {
     }
 
     async fn inference(&self, params: ClientInferenceParams) -> Result<InferenceOutput> {
-        let _permit = self.semaphore.acquire().await;
+        let _permit = self.semaphore.acquire().await?;
         let inference_output = self.client.inference(params).await?;
         Ok(inference_output)
     }

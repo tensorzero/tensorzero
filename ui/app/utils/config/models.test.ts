@@ -1,55 +1,67 @@
 import { describe, it, expect } from "vitest";
-import { get_fine_tuned_model_config, dump_model_config } from "./models";
+import { dump_optimizer_output } from "./models";
+import type { OptimizerOutput } from "tensorzero-node";
 
-describe("get_fine_tuned_model_config", () => {
-  it("should create correct config for anthropic model", async () => {
-    const result = get_fine_tuned_model_config("claude-2", "anthropic");
-    expect(result).toEqual({
-      models: {
+describe("dump_optimizer_output", () => {
+  it("should create correct config for fireworks model", async () => {
+    const optimizerOutput: OptimizerOutput = {
+      type: "model",
+      routing: ["claude-2"],
+      providers: {
         "claude-2": {
-          routing: ["claude-2"],
-          providers: {
-            "claude-2": {
-              type: "anthropic",
-              model_name: "claude-2",
-            },
-          },
+          type: "fireworks",
+          model_name: "claude-2",
+          parse_think_blocks: false,
+          api_key_location: null,
+          discard_unknown_chunks: false,
+          extra_body: null,
+          extra_headers: null,
+          timeouts: null,
         },
       },
-    });
-  });
-
-  it("should create correct config for aws bedrock model", async () => {
-    const result = get_fine_tuned_model_config(
-      "anthropic.claude-v2",
-      "aws_bedrock",
-    );
-    expect(result).toEqual({
-      models: {
-        "anthropic.claude-v2": {
-          routing: ["anthropic.claude-v2"],
-          providers: {
-            "anthropic.claude-v2": {
-              type: "aws_bedrock",
-              model_id: "anthropic.claude-v2",
-            },
-          },
+      timeouts: {
+        non_streaming: {
+          total_ms: null,
+        },
+        streaming: {
+          ttft_ms: null,
         },
       },
-    });
-  });
-});
-
-describe("dump_model_config", () => {
-  it("should correctly stringify model config", () => {
-    const fullyQualifiedModelConfig = get_fine_tuned_model_config(
-      "test",
-      "dummy",
+    };
+    const result_string = dump_optimizer_output(optimizerOutput);
+    expect(result_string).toBe(
+      '[models.claude-2]\nrouting = [ "claude-2" ]\n\n[models.claude-2.providers.claude-2]\ntype = "fireworks"\nmodel_name = "claude-2"\nparse_think_blocks = false\ndiscard_unknown_chunks = false',
     );
+  });
 
-    const result = dump_model_config(fullyQualifiedModelConfig);
-    const expected_result =
-      '[models.test]\nrouting = [ "test" ]\n\n[models.test.providers.test]\ntype = "dummy"\nmodel_name = "test"';
-    expect(result).toBe(expected_result);
+  it("should create correct config for openai model", async () => {
+    const optimizerOutput: OptimizerOutput = {
+      type: "model",
+      routing: ["gpt-4o"],
+      providers: {
+        "gpt-4o": {
+          type: "openai",
+          model_name: "gpt-4o",
+          api_base: null,
+          api_key_location: null,
+          discard_unknown_chunks: false,
+          extra_body: null,
+          extra_headers: null,
+          timeouts: null,
+        },
+      },
+      timeouts: {
+        non_streaming: {
+          total_ms: null,
+        },
+        streaming: {
+          ttft_ms: null,
+        },
+      },
+    };
+    const result_string = dump_optimizer_output(optimizerOutput);
+    expect(result_string).toBe(
+      '[models.gpt-4o]\nrouting = [ "gpt-4o" ]\n\n[models.gpt-4o.providers.gpt-4o]\ntype = "openai"\nmodel_name = "gpt-4o"\ndiscard_unknown_chunks = false',
+    );
   });
 });

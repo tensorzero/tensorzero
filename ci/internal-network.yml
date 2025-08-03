@@ -1,0 +1,5 @@
+# We combine this with other files via 'docker compose up -of'
+# This blocks access to the outside internet (in particular, Howdy)
+networks:
+  default:
+    internal: true

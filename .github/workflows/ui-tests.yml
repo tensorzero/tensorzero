@@ -12,6 +12,9 @@ jobs:
         clickhouse_version: ["24.12-alpine", "25.2-alpine", "latest-alpine"]
 
     steps:
+      - name: Set DNS
+        run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
+
       - uses: namespacelabs/nscloud-checkout-action@953fed31a6113cc2347ca69c9d823743c65bc84b
 
       - uses: dtolnay/rust-toolchain@stable
@@ -34,7 +37,7 @@ jobs:
             ./ui/fixtures/s3-fixtures
 
       - name: Setup `wasm-pack`
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+        run: npm install -g wasm-pack
 
       - name: Build minijinja WASM bindings
         working-directory: ui/app/utils/minijinja
@@ -56,10 +59,17 @@ jobs:
       - name: Start Docker containers and apply fixtures
         working-directory: ui
         run: |
-          echo "OPENAI_API_KEY=not_used" >> fixtures/.env
-          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
+
+          # Environment variables only used by the gateway container
+          # We deliberately leave these unset when starting the UI container, to ensure
+          # that it doesn't depend on them being set
+          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env-gateway
+          echo "OPENAI_API_KEY=not_used" >> fixtures/.env-gateway
+
           TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up -d
           docker compose -f fixtures/docker-compose.yml wait fixtures
 
@@ -80,6 +90,16 @@ jobs:
         if: always()
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.yml logs -t
+
+      - name: Make sure the current commit short hash is in the Docker Compose gateway logs
+        if: always()
+        working-directory: ui
+        run: |
+          SHORT_HASH=$(echo "${{ github.sha }}" | cut -c1-7)
+          docker compose -f fixtures/docker-compose.yml logs gateway | grep "(commit: ${SHORT_HASH})" || {
+            echo "ERROR: Commit hash ${SHORT_HASH} not found in gateway logs"
+            exit 1
+          }
 
       - name: Print ClickHouse error logs
         if: always()

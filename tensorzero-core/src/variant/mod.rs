@@ -2,6 +2,10 @@ use backon::ExponentialBuilder;
 use backon::Retryable;
 use futures::StreamExt;
 use itertools::izip;
+#[cfg(feature = "pyo3")]
+use pyo3::exceptions::PyValueError;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
@@ -18,6 +22,8 @@ use crate::endpoints::inference::InferenceIds;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::Error;
 use crate::error::ErrorDetails;
+#[cfg(feature = "pyo3")]
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
 use crate::inference::types::extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
@@ -41,18 +47,27 @@ pub mod best_of_n_sampling;
 pub mod chain_of_thought;
 pub mod chat_completion;
 pub mod dicl;
+pub mod dynamic;
 pub mod mixture_of_n;
 
 /// Holds a particular variant implementation, plus additional top-level configuration
 /// that is applicable to any variant type.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct VariantInfo {
     pub inner: VariantConfig,
     pub timeouts: TimeoutsConfig,
 }
 
+impl VariantInfo {
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        self.inner.set_weight(weight);
+    }
+}
+
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum VariantConfig {
@@ -61,6 +76,36 @@ pub enum VariantConfig {
     Dicl(dicl::DiclConfig),
     MixtureOfN(mixture_of_n::MixtureOfNConfig),
     ChainOfThought(chain_of_thought::ChainOfThoughtConfig),
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "ChatCompletionConfig")]
+pub struct ChatCompletionConfigPyClass {
+    pub inner: Arc<VariantInfo>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "BestOfNSamplingConfig")]
+pub struct BestOfNSamplingConfigPyClass {
+    pub inner: Arc<VariantInfo>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "DiclConfig")]
+pub struct DiclConfigPyClass {
+    pub inner: Arc<VariantInfo>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "MixtureOfNConfig")]
+pub struct MixtureOfNConfigPyClass {
+    pub inner: Arc<VariantInfo>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "ChainOfThoughtConfig")]
+pub struct ChainOfThoughtConfigPyClass {
+    pub inner: Arc<VariantInfo>,
 }
 
 /// This type is used to determine how to enforce JSON mode for a given variant.
@@ -80,15 +125,15 @@ pub enum JsonMode {
 
 /// Configuration that applies to the current inference request.
 #[derive(Clone, Debug)]
-pub struct InferenceConfig<'a, 'request> {
+pub struct InferenceConfig<'request> {
     pub tool_config: Option<&'request ToolCallConfig>,
-    pub templates: &'request TemplateConfig<'a>,
+    pub templates: &'request TemplateConfig<'request>,
     pub dynamic_output_schema: Option<&'request DynamicJSONSchema>,
     pub function_name: &'request str,
-    pub variant_name: Option<&'request str>,
+    pub variant_name: &'request str,
     pub ids: InferenceIds,
-    pub extra_body: UnfilteredInferenceExtraBody,
-    pub extra_headers: UnfilteredInferenceExtraHeaders,
+    pub extra_body: Cow<'request, UnfilteredInferenceExtraBody>,
+    pub extra_headers: Cow<'request, UnfilteredInferenceExtraHeaders>,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
@@ -99,18 +144,18 @@ pub struct InferenceConfig<'a, 'request> {
 /// Maps to the subset of Config that applies to the current inference request.
 #[derive(Clone, Debug)]
 pub struct BatchInferenceConfig<'a> {
-    pub tool_configs: Vec<Option<ToolCallConfig>>,
+    pub tool_configs: &'a Vec<Option<ToolCallConfig>>,
     pub templates: &'a TemplateConfig<'a>,
-    pub dynamic_output_schemas: Vec<Option<DynamicJSONSchema>>,
+    pub dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
     pub function_name: &'a str,
-    pub variant_name: Option<&'a str>,
+    pub variant_name: &'a str,
 }
 impl<'a> BatchInferenceConfig<'a> {
     pub fn inference_configs(
         &'a self,
         episode_ids: &[Uuid],
         inference_ids: &[Uuid],
-    ) -> Vec<InferenceConfig<'a, 'a>> {
+    ) -> Vec<InferenceConfig<'a>> {
         izip!(
             self.tool_configs.iter().map(|x| x.as_ref()),
             self.dynamic_output_schemas.iter().map(|x| x.as_ref()),
@@ -147,8 +192,9 @@ pub struct ModelUsedInfo {
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
-    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub cached: bool,
+    // These responses will get added into the final inference result (after `collect_chunks` finishes)
+    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
 }
 
 pub trait Variant {
@@ -157,7 +203,7 @@ pub trait Variant {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error>;
@@ -167,7 +213,7 @@ pub trait Variant {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error>;
@@ -189,7 +235,7 @@ pub trait Variant {
         input: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_configs: &'a [InferenceConfig<'a, 'a>],
+        inference_configs: &'a [InferenceConfig<'a>],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error>;
@@ -205,11 +251,21 @@ impl VariantConfig {
             VariantConfig::ChainOfThought(params) => params.inner.weight,
         }
     }
+
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        match self {
+            VariantConfig::ChatCompletion(params) => params.weight = weight,
+            VariantConfig::BestOfNSampling(params) => params.weight = weight,
+            VariantConfig::Dicl(params) => params.weight = weight,
+            VariantConfig::MixtureOfN(params) => params.weight = weight,
+            VariantConfig::ChainOfThought(params) => params.inner.weight = weight,
+        }
+    }
 }
 
 impl Variant for VariantInfo {
     #[instrument(
-        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or(""), otel.name="variant_inference", stream=false),
+        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name, otel.name="variant_inference", stream=false),
         skip_all
     )]
     async fn infer<'a: 'request, 'request>(
@@ -217,7 +273,7 @@ impl Variant for VariantInfo {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -294,7 +350,7 @@ impl Variant for VariantInfo {
                 // so that it can be handled by the `match response` block below
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
-                        variant_name: inference_config.variant_name.map(|v| v.to_string()),
+                        variant_name: inference_config.variant_name.to_string(),
                         timeout,
                         streaming: false,
                     }))
@@ -305,7 +361,7 @@ impl Variant for VariantInfo {
     }
 
     #[instrument(
-        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or(""), otel.name="variant_inference", stream=true),
+        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name, otel.name="variant_inference", stream=true),
         skip_all
     )]
     async fn infer_stream<'request>(
@@ -313,7 +369,7 @@ impl Variant for VariantInfo {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -390,7 +446,7 @@ impl Variant for VariantInfo {
                 .await
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
-                        variant_name: inference_config.variant_name.map(|v| v.to_string()),
+                        variant_name: inference_config.variant_name.to_string(),
                         timeout,
                         streaming: true,
                     }))
@@ -400,13 +456,13 @@ impl Variant for VariantInfo {
         }
     }
 
-    #[instrument(skip_all, fields(variant_name = %inference_configs.first().map(|x| x.variant_name.unwrap_or("")).unwrap_or("")))]
+    #[instrument(skip_all, fields(variant_name = %inference_configs.first().map(|x| x.variant_name).unwrap_or("")))]
     async fn start_batch_inference<'a>(
         &'a self,
         inputs: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_configs: &'a [InferenceConfig<'a, 'a>],
+        inference_configs: &'a [InferenceConfig<'a>],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -515,11 +571,12 @@ impl Variant for VariantInfo {
 }
 
 #[expect(clippy::too_many_arguments)]
+#[expect(clippy::unnecessary_wraps)]
 fn prepare_model_inference_request<'a, 'request>(
     messages: Vec<RequestMessage>,
     system: Option<String>,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'a, 'request>,
+    inference_config: &'request InferenceConfig<'request>,
     stream: bool,
     inference_params: &InferenceParams,
     base_json_mode: Option<JsonMode>,
@@ -613,7 +670,7 @@ struct InferModelRequestArgs<'a, 'request> {
     model_name: Arc<str>,
     model_config: &'a ModelConfig,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'a, 'request>,
+    inference_config: &'request InferenceConfig<'request>,
     clients: &'request InferenceClients<'request>,
     inference_params: InferenceParams,
     retry_config: &'a RetryConfig,
@@ -636,14 +693,12 @@ async fn infer_model_request(
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, args.model_name);
     let raw_content = model_inference_result.output.clone();
-    let usage = model_inference_result.actual_usage();
     let model_inference_results = vec![model_inference_result];
 
     args.function
         .prepare_response(
             args.inference_config.ids.inference_id,
             raw_content,
-            usage,
             model_inference_results,
             args.inference_config,
             args.inference_params,
@@ -725,10 +780,10 @@ impl RetryConfig {
 impl<'a> BatchInferenceConfig<'a> {
     pub fn new(
         templates: &'a TemplateConfig,
-        tool_configs: Vec<Option<ToolCallConfig>>,
-        dynamic_output_schemas: Vec<Option<DynamicJSONSchema>>,
+        tool_configs: &'a Vec<Option<ToolCallConfig>>,
+        dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
         function_name: &'a str,
-        variant_name: Option<&'a str>,
+        variant_name: &'a str,
     ) -> Self {
         Self {
             templates,
@@ -737,6 +792,51 @@ impl<'a> BatchInferenceConfig<'a> {
             function_name,
             variant_name,
         }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+impl ChatCompletionConfigPyClass {
+    fn extract_chat_completion_config(
+        variant_info: &VariantInfo,
+    ) -> Result<&chat_completion::ChatCompletionConfig, PyErr> {
+        match &variant_info.inner {
+            VariantConfig::ChatCompletion(config) => Ok(config),
+            _ => Err(PyValueError::new_err(format!(
+                "Variant is not a chat completion variant: {IMPOSSIBLE_ERROR_MESSAGE}"
+            ))),
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ChatCompletionConfigPyClass {
+    #[getter]
+    fn get_system_template(&self) -> PyResult<Option<String>> {
+        let config = Self::extract_chat_completion_config(&self.inner)?;
+        Ok(config.system_template.as_ref().map(|t| t.contents.clone()))
+    }
+
+    #[getter]
+    fn get_user_template(&self) -> PyResult<Option<String>> {
+        let config = Self::extract_chat_completion_config(&self.inner)?;
+        Ok(config.user_template.as_ref().map(|t| t.contents.clone()))
+    }
+
+    #[getter]
+    fn get_assistant_template(&self) -> PyResult<Option<String>> {
+        let config = Self::extract_chat_completion_config(&self.inner)?;
+        Ok(config
+            .assistant_template
+            .as_ref()
+            .map(|t| t.contents.clone()))
+    }
+
+    #[getter]
+    fn get_model(&self) -> PyResult<String> {
+        let config = Self::extract_chat_completion_config(&self.inner)?;
+        Ok(config.model.to_string())
     }
 }
 
@@ -749,13 +849,13 @@ mod tests {
     use crate::error::ErrorDetails;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::{
-        ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role,
+        ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role, Usage,
     };
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
     use crate::providers::dummy::{
-        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_USAGE, DUMMY_JSON_RESPONSE_RAW,
+        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW,
         DUMMY_STREAMING_RESPONSE,
     };
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -782,7 +882,7 @@ mod tests {
             templates: &templates,
             tool_config: Some(&tool_config),
             function_name: "test_function",
-            variant_name: Some("test_variant"),
+            variant_name: "test_variant",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -924,7 +1024,7 @@ mod tests {
             templates: &templates,
             tool_config: Some(&tool_config),
             function_name: "test_function",
-            variant_name: Some("test_variant"),
+            variant_name: "test_variant",
             dynamic_output_schema: Some(&dynamic_output_schema),
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1015,7 +1115,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "test_function",
-            variant_name: Some("test_variant"),
+            variant_name: "test_variant",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1104,12 +1204,18 @@ mod tests {
         let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
+        assert_eq!(
+            inference_result.usage_considering_cached(),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 // The DummyProvider returns DUMMY_INFER_RESPONSE_CONTENT by default
                 let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
                 assert_eq!(chat_result.content, expected_content);
-                assert_eq!(chat_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(chat_result.model_inference_results.len(), 1);
                 assert_eq!(
                     &*chat_result.model_inference_results[0].model_name,
@@ -1213,6 +1319,13 @@ mod tests {
         let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
+        assert_eq!(
+            inference_result.usage_considering_cached(),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         match inference_result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(
@@ -1220,7 +1333,6 @@ mod tests {
                     Some(DUMMY_JSON_RESPONSE_RAW.to_string())
                 );
                 assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
-                assert_eq!(json_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
                     &*json_result.model_inference_results[0].model_name,
@@ -1302,7 +1414,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "test_function",
-            variant_name: Some("test_variant"),
+            variant_name: "test_variant",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1410,12 +1522,18 @@ mod tests {
         let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
+        assert_eq!(
+            inference_result.usage_considering_cached(),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 1,
+            }
+        );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 // The DummyProvider returns DUMMY_INFER_RESPONSE_CONTENT by default
                 let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
                 assert_eq!(chat_result.content, expected_content);
-                assert_eq!(chat_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(chat_result.model_inference_results.len(), 1);
                 assert_eq!(
                     &*chat_result.model_inference_results[0].model_name,

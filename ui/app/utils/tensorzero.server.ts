@@ -6,15 +6,20 @@ import {
   type FeedbackResponse,
   type JSONValue,
 } from "~/utils/tensorzero";
+import { getEnv } from "./env.server";
+import { getFeedbackConfig } from "./config/feedback";
+import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 
-if (!process.env.TENSORZERO_GATEWAY_URL) {
-  throw new Error("TENSORZERO_GATEWAY_URL environment variable is required");
+let _tensorZeroClient: TensorZeroClient | undefined;
+
+export function getTensorZeroClient() {
+  if (_tensorZeroClient) {
+    return _tensorZeroClient;
+  }
+
+  _tensorZeroClient = new TensorZeroClient(getEnv().TENSORZERO_GATEWAY_URL);
+  return _tensorZeroClient;
 }
-
-// Export a singleton instance
-export const tensorZeroClient = new TensorZeroClient(
-  process.env.TENSORZERO_GATEWAY_URL,
-);
 
 export async function addHumanFeedback(formData: FormData) {
   const metricName = formData.get("metricName")?.toString();
@@ -24,13 +29,13 @@ export async function addHumanFeedback(formData: FormData) {
     );
   }
   const config = await getConfig();
-  const metric = config.metrics[metricName];
-  if (!metric) {
+  const metricConfig = getFeedbackConfig(metricName, config);
+  if (!metricConfig) {
     throw new TensorZeroServerError.UnknownMetric(
       `Metric ${metricName} not found`,
     );
   }
-  const metricType = metric.type;
+  const metricType = metricConfig.type;
   // Metrics can be of type boolean, float, comment, or demonstration.
   // In this case we need to handle the value differently depending on the metric type.
   const formValue = formData.get("value");
@@ -88,7 +93,7 @@ export async function addHumanFeedback(formData: FormData) {
       feedbackRequest.error.message,
     );
   }
-  const response = await tensorZeroClient.feedback(feedbackRequest.data);
+  const response = await getTensorZeroClient().feedback(feedbackRequest.data);
   return response;
 }
 
@@ -154,6 +159,21 @@ export async function addJudgeDemonstration(formData: FormData) {
     tags: { "tensorzero::human_feedback": "true" },
     internal: true,
   });
-  const response = await tensorZeroClient.feedback(feedbackRequest);
+  const response = await getTensorZeroClient().feedback(feedbackRequest);
+  return response;
+}
+
+export async function listDatapoints(
+  datasetName: string,
+  functionName?: string,
+  limit?: number,
+  offset?: number,
+): Promise<TensorZeroDatapoint[]> {
+  const response = await getTensorZeroClient().listDatapoints(
+    datasetName,
+    functionName,
+    limit,
+    offset,
+  );
   return response;
 }

@@ -14,6 +14,7 @@ use aws_types::region::Region;
 use futures::StreamExt;
 use itertools::Itertools;
 use reqwest::StatusCode;
+use serde::Serialize;
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -41,13 +42,17 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 #[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Bedrock";
-const PROVIDER_TYPE: &str = "aws_bedrock";
+pub const PROVIDER_TYPE: &str = "aws_bedrock";
 
 // NB: If you add `Clone` someday, you'll need to wrap client in Arc
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct AWSBedrockProvider {
     model_id: String,
+    #[serde(skip)]
     client: aws_sdk_bedrockruntime::Client,
+    #[serde(skip)]
     base_config: aws_sdk_bedrockruntime::config::Builder,
 }
 
@@ -122,8 +127,11 @@ impl InferenceProvider for AWSBedrockProvider {
             .inference_config(inference_config.build());
 
         if let Some(system) = &request.system {
-            let system_block = SystemContentBlock::Text(system.clone());
-            bedrock_request = bedrock_request.system(system_block);
+            // AWS Bedrock does not support system message "" so we remove it
+            if !system.is_empty() {
+                let system_block = SystemContentBlock::Text(system.clone());
+                bedrock_request = bedrock_request.system(system_block);
+            }
         }
 
         if let Some(tool_config) = &request.tool_config {
@@ -258,8 +266,11 @@ impl InferenceProvider for AWSBedrockProvider {
             .inference_config(inference_config.build());
 
         if let Some(system) = &request.system {
-            let system_block = SystemContentBlock::Text(system.clone());
-            bedrock_request = bedrock_request.system(system_block);
+            // AWS Bedrock does not support system message "" so we remove it
+            if !system.is_empty() {
+                let system_block = SystemContentBlock::Text(system.clone());
+                bedrock_request = bedrock_request.system(system_block);
+            }
         }
 
         if let Some(tool_config) = &request.tool_config {
@@ -468,7 +479,7 @@ fn bedrock_to_tensorzero_stream_message(
                         vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                             id: tool_use.tool_use_id,
                             raw_name: Some(tool_use.name),
-                            raw_arguments: "".to_string(),
+                            raw_arguments: String::new(),
                         })],
                         None,
                         raw_message,
@@ -737,7 +748,7 @@ impl TryFrom<&RequestMessage> for Message {
         let content: Vec<BedrockContentBlock> = inference_message
             .content
             .iter()
-            .map(|block| block.try_into())
+            .map(TryInto::try_into)
             .collect::<Result<Vec<Option<BedrockContentBlock>>, _>>()?
             .into_iter()
             .flatten()
@@ -768,6 +779,7 @@ struct ConverseOutputWithMetadata<'a> {
     json_mode: &'a ModelInferenceRequestJsonMode,
 }
 
+#[expect(clippy::unnecessary_wraps)]
 fn aws_stop_reason_to_tensorzero_finish_reason(stop_reason: StopReason) -> Option<FinishReason> {
     match stop_reason {
         StopReason::ContentFiltered => Some(FinishReason::ContentFilter),
@@ -821,7 +833,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             })?
             .content
             .into_iter()
-            .map(|block| block.try_into())
+            .map(TryInto::try_into)
             .collect::<Result<Vec<ContentBlockOutput>, _>>()?;
 
         if model_id.contains("claude")

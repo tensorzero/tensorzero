@@ -27,11 +27,11 @@ pub async fn get_tool_params_args(
         FunctionConfig::Chat(function_config) => {
             let mut additional_tools = Vec::new();
             let mut allowed_tools = Vec::new();
-            for tool in tool_params.tools_available.iter() {
-                if !function_config.tools.contains(&tool.name) {
-                    additional_tools.push(tool.clone());
-                } else {
+            for tool in &tool_params.tools_available {
+                if function_config.tools.contains(&tool.name) {
                     allowed_tools.push(tool.name.clone());
+                } else {
+                    additional_tools.push(tool.clone());
                 }
             }
             DynamicToolParams {
@@ -94,7 +94,7 @@ pub async fn check_static_eval_human_feedback(
     inference_output: &InferenceResponse,
 ) -> Result<Option<HumanFeedbackResult>> {
     let serialized_output = inference_output.get_serialized_output()?;
-    let query = r#"
+    let query = r"
         SELECT value, evaluator_inference_id FROM StaticEvaluationHumanFeedback
         WHERE
             metric_name = {metric_name:String}
@@ -102,8 +102,7 @@ pub async fn check_static_eval_human_feedback(
         AND output = {output:String}
         ORDER BY timestamp DESC
         LIMIT 1
-        FORMAT JSONEachRow
-    "#;
+        FORMAT JSONEachRow";
     debug!(query = %query, "Executing ClickHouse query");
     let escaped_serialized_output = escape_string_for_clickhouse_literal(&serialized_output);
     let result = clickhouse
@@ -116,11 +115,14 @@ pub async fn check_static_eval_human_feedback(
             ]),
         )
         .await?;
-    debug!(result_length = result.len(), "Query executed successfully");
-    if result.is_empty() {
+    debug!(
+        result_length = result.response.len(),
+        "Query executed successfully"
+    );
+    if result.response.is_empty() {
         return Ok(None);
     }
-    let human_feedback_result: HumanFeedbackResult = serde_json::from_str(&result)
+    let human_feedback_result: HumanFeedbackResult = serde_json::from_str(&result.response)
         .map_err(|e| anyhow!("Failed to parse human feedback result: {}", e))?;
     Ok(Some(human_feedback_result))
 }

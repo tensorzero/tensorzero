@@ -37,11 +37,14 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "Groq";
-const PROVIDER_TYPE: &str = "groq";
+pub const PROVIDER_TYPE: &str = "groq";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct GroqProvider {
     model_name: String,
+    #[serde(skip)]
     credentials: GroqCredentials,
 }
 
@@ -528,11 +531,11 @@ pub(super) fn prepare_groq_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
 ) -> Result<Vec<GroqRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
-    for message in request.messages.iter() {
+    for message in &request.messages {
         messages.extend(tensorzero_to_groq_messages(message)?);
     }
     if let Some(system_msg) =
-        tensorzero_to_groq_system_message(request.system.as_deref(), &request.json_mode, &messages)
+        tensorzero_to_groq_system_message(request.system.as_deref(), request.json_mode, &messages)
     {
         messages.insert(0, system_msg);
     }
@@ -555,13 +558,7 @@ pub(super) fn prepare_groq_tools<'a>(
             if tool_config.tools_available.is_empty() {
                 return (None, None, None);
             }
-            let tools = Some(
-                tool_config
-                    .tools_available
-                    .iter()
-                    .map(|tool| tool.into())
-                    .collect(),
-            );
+            let tools = Some(tool_config.tools_available.iter().map(Into::into).collect());
             let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
             (tools, tool_choice, parallel_tool_calls)
@@ -574,7 +571,7 @@ pub(super) fn prepare_groq_tools<'a>(
 /// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
 pub(super) fn tensorzero_to_groq_system_message<'a>(
     system: Option<&'a str>,
-    json_mode: &ModelInferenceRequestJsonMode,
+    json_mode: ModelInferenceRequestJsonMode,
     messages: &[GroqRequestMessage<'a>],
 ) -> Option<GroqRequestMessage<'a>> {
     match system {
@@ -604,7 +601,7 @@ pub(super) fn tensorzero_to_groq_system_message<'a>(
             }
             .into()
         }
-        None => match *json_mode {
+        None => match json_mode {
             ModelInferenceRequestJsonMode::On => {
                 Some(GroqRequestMessage::System(GroqSystemRequestMessage {
                     content: Cow::Owned("Respond using JSON.".to_string()),
@@ -632,7 +629,7 @@ fn tensorzero_to_groq_user_messages(
     let mut messages = Vec::new();
     let mut user_content_blocks = Vec::new();
 
-    for block in content_blocks.iter() {
+    for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
                 user_content_blocks.push(GroqContentBlock::Text {
@@ -694,7 +691,7 @@ fn tensorzero_to_groq_assistant_messages(
     let mut assistant_content_blocks = Vec::new();
     let mut assistant_tool_calls = Vec::new();
 
-    for block in content_blocks.iter() {
+    for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
                 assistant_content_blocks.push(GroqContentBlock::Text {
@@ -776,7 +773,7 @@ enum GroqResponseFormat<'a> {
 }
 
 impl<'a> GroqResponseFormat<'a> {
-    fn new(json_mode: &ModelInferenceRequestJsonMode, output_schema: Option<&'a Value>) -> Self {
+    fn new(json_mode: ModelInferenceRequestJsonMode, output_schema: Option<&'a Value>) -> Self {
         match json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 GroqResponseFormat::JsonObject {
@@ -917,14 +914,15 @@ impl<'a> GroqRequest<'a> {
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<GroqRequest<'a>, Error> {
         let response_format = Some(GroqResponseFormat::new(
-            &request.json_mode,
+            request.json_mode,
             request.output_schema,
         ));
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
         let mut messages = prepare_groq_messages(request)?;
 
@@ -1214,7 +1212,7 @@ fn groq_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
@@ -2164,17 +2162,17 @@ mod tests {
         // Test JSON mode On
         let json_mode = ModelInferenceRequestJsonMode::On;
         let output_schema = None;
-        let format = GroqResponseFormat::new(&json_mode, output_schema);
+        let format = GroqResponseFormat::new(json_mode, output_schema);
         assert_eq!(format, GroqResponseFormat::JsonObject { schema: None });
 
         // Test JSON mode Off
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let format = GroqResponseFormat::new(&json_mode, output_schema);
+        let format = GroqResponseFormat::new(json_mode, output_schema);
         assert_eq!(format, GroqResponseFormat::Text);
 
         // Test JSON mode Strict with no schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let format = GroqResponseFormat::new(&json_mode, output_schema);
+        let format = GroqResponseFormat::new(json_mode, output_schema);
         assert_eq!(format, GroqResponseFormat::JsonObject { schema: None });
 
         // Test JSON mode Strict with schema
@@ -2186,7 +2184,7 @@ mod tests {
             }
         });
         let output_schema = Some(&json_schema);
-        let format = GroqResponseFormat::new(&json_mode, output_schema);
+        let format = GroqResponseFormat::new(json_mode, output_schema);
         assert_eq!(
             format,
             GroqResponseFormat::JsonObject {
@@ -2201,7 +2199,7 @@ mod tests {
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages: Vec<GroqRequestMessage> = vec![];
-        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, json_mode, &messages);
         assert_eq!(result, None);
 
         // Test Case 2: system is Some, json_mode is On, messages contain "json"
@@ -2223,7 +2221,7 @@ mod tests {
         let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Borrowed("System instructions"),
         }));
-        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 3: system is Some, json_mode is On, messages do not contain "json"
@@ -2246,7 +2244,7 @@ mod tests {
         let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Owned(expected_content),
         }));
-        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 4: system is Some, json_mode is Off
@@ -2268,7 +2266,7 @@ mod tests {
         let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Borrowed("System instructions"),
         }));
-        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 5: system is Some, json_mode is Strict
@@ -2290,7 +2288,7 @@ mod tests {
         let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Borrowed("System instructions"),
         }));
-        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 6: system contains "json", json_mode is On
@@ -2304,7 +2302,7 @@ mod tests {
         let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
         }));
-        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 7: system is None, json_mode is On
@@ -2326,7 +2324,7 @@ mod tests {
         let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Owned("Respond using JSON.".to_string()),
         }));
-        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 8: system is None, json_mode is Strict
@@ -2346,7 +2344,7 @@ mod tests {
             }),
         ];
 
-        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, json_mode, &messages);
         assert!(result.is_none());
 
         // Test Case 9: system is None, json_mode is On, with empty messages
@@ -2356,7 +2354,7 @@ mod tests {
         let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Owned("Respond using JSON.".to_string()),
         }));
-        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 10: system is None, json_mode is Off, with messages containing "json"
@@ -2368,7 +2366,7 @@ mod tests {
             }],
         })];
         let expected = None;
-        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
     }
 

@@ -26,13 +26,13 @@
   },
   "license": "Apache-2.0",
   "devDependencies": {
-    "@eslint/js": "^9.23.0",
+    "@eslint/js": "^9.30.1",
     "@napi-rs/cli": "^2.18.4",
-    "@types/node": "^20.19.1",
-    "eslint": "^9.23.0",
-    "prettier": "^3.5.3",
-    "typescript-eslint": "^8.29.0",
-    "vitest": "^3.1.1"
+    "@types/node": "^20.19.4",
+    "eslint": "^9.30.1",
+    "prettier": "^3.6.2",
+    "typescript-eslint": "^8.36.0",
+    "vitest": "^3.2.4"
   },
   "vitest": {
     "testTimeout": 180000
@@ -42,11 +42,11 @@
   },
   "scripts": {
     "artifacts": "napi artifacts",
-    "build-bindings": "find lib/bindings -type f \\( -name '*.ts' ! -name 'index.ts' \\) -o \\( -name '*.js' ! -name 'check-exports.js' ! -name 'generate-index.js' \\) -delete && find lib/bindings -type d -name 'serde_json' -exec rm -rf {} + 2>/dev/null || true && cd ../.. && TS_RS_EXPORT_DIR=\"../internal/tensorzero-node/lib/bindings\" cargo tsbuild && cd internal/tensorzero-node && node -e 'import(\"./lib/bindings/generate-index.js\").then(m => m.generateIndex())' && prettier --write \"lib/bindings/**/*.ts\"",
-    "build": "pnpm run build-bindings && napi build --platform --release --js index.cjs && tsc",
-    "build:debug": "pnpm run build-bindings && napi build --platform && tsc",
-    "build:ts": "pnpm run build-bindings && tsc",
-    "check-exports": "cd lib/bindings && node check-exports.js",
+    "build-bindings": "./build-bindings.sh",
+    "build": "napi build --platform --release --js index.cjs && tsc",
+    "build:debug": "napi build --platform && tsc",
+    "build:ts": "tsc",
+    "check-exports": "cd lib && node check-exports.js",
     "prepublishOnly": "napi prepublish -t npm",
     "test": "vitest",
     "typecheck": "tsc",

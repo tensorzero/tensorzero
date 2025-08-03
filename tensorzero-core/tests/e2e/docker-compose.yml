@@ -22,6 +22,20 @@ services:
       start_interval: 1s
       timeout: 1s
 
+  mock-inference-provider:
+    build:
+      context: ../../../
+      dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
+    environment:
+      RUST_LOG: debug
+    ports:
+      - "3030:3030"
+    healthcheck:
+      test: wget --spider --tries 1 http://localhost:3030/status
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
   minio:
     image: bitnami/minio:2025.4.22
     ports:
@@ -63,6 +77,8 @@ services:
       clickhouse:
         condition: service_healthy
     command: ["--default-config"]
+    extra_hosts:
+      - "howdy.tensorzero.com:127.0.0.1"
     healthcheck:
       test:
         [
@@ -83,10 +99,11 @@ services:
       - ../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
     environment:
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-      CLICKHOUSE_HOST: clickhouse
-      CLICKHOUSE_PASSWORD: chpassword
-      CLICKHOUSE_USER: chuser
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PASSWORD=chpassword
+      - CLICKHOUSE_USER=chuser
+      - TENSORZERO_SKIP_LARGE_FIXTURES
     depends_on:
       gateway:
         condition: service_healthy
@@ -98,7 +115,7 @@ services:
         "cd /fixtures && ./load_fixtures.sh tensorzero_e2e_tests && sleep infinity",
       ]
     healthcheck:
-      test: ["CMD", "test", "-f", "/tmp/load_complete.marker"]
+      test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
       retries: 48 # Retry for up to 4 minutes

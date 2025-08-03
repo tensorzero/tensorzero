@@ -79,8 +79,8 @@ async def test_async_basic_inference(async_client):
     )
     usage = result.usage
     assert usage.prompt_tokens == 10
-    assert usage.completion_tokens == 10
-    assert usage.total_tokens == 20
+    assert usage.completion_tokens == 1
+    assert usage.total_tokens == 11
     assert result.choices[0].finish_reason == "stop"
     assert result.service_tier is None
 
@@ -143,8 +143,8 @@ async def test_async_inference_cache(async_client):
     )
     usage = result.usage
     assert usage.prompt_tokens == 10
-    assert usage.completion_tokens == 10
-    assert usage.total_tokens == 20
+    assert usage.completion_tokens == 1
+    assert usage.total_tokens == 11
 
     # Test caching
     result = await async_client.chat.completions.create(
@@ -379,7 +379,7 @@ async def test_async_inference_streaming_nonexistent_function(async_client):
     assert exc_info.value.status_code == 404
     assert (
         str(exc_info.value)
-        == "Error code: 404 - {'error': 'Unknown function: does_not_exist'}"
+        == "Error code: 404 - {'error': 'Unknown function: does_not_exist', 'error_json': {'UnknownFunction': {'name': 'does_not_exist'}}}"
     )
 
 
@@ -411,7 +411,7 @@ async def test_async_inference_streaming_missing_function(async_client):
     assert exc_info.value.status_code == 400
     assert (
         str(exc_info.value)
-        == "Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: function_name (passed in model field after \"tensorzero::function_name::\") cannot be empty'}"
+        == """Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: function_name (passed in model field after "tensorzero::function_name::") cannot be empty', 'error_json': {'InvalidOpenAICompatibleRequest': {'message': 'function_name (passed in model field after "tensorzero::function_name::") cannot be empty'}}}"""
     )
 
 
@@ -443,7 +443,7 @@ async def test_async_inference_streaming_malformed_function(async_client):
     assert exc_info.value.status_code == 400
     assert (
         str(exc_info.value)
-        == "Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: `model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.'}"
+        == """Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: `model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.', 'error_json': {'InvalidOpenAICompatibleRequest': {'message': '`model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.'}}}"""
     )
 
 
@@ -538,7 +538,7 @@ async def test_async_tool_call_inference(async_client):
     assert tool_call.function.arguments == '{"location":"Brooklyn","units":"celsius"}'
     usage = result.usage
     assert usage.prompt_tokens == 10
-    assert usage.completion_tokens == 10
+    assert usage.completion_tokens == 1
     assert result.choices[0].finish_reason == "tool_calls"
 
 
@@ -582,7 +582,7 @@ async def test_async_malformed_tool_call_inference(async_client):
     assert tool_call.function.arguments == '{"location":"Brooklyn","units":"Celsius"}'
     usage = result.usage
     assert usage.prompt_tokens == 10
-    assert usage.completion_tokens == 10
+    assert usage.completion_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -652,8 +652,7 @@ async def test_async_tool_call_streaming(async_client):
 
 @pytest.mark.asyncio
 async def test_async_json_streaming(async_client):
-    # We don't actually have a streaming JSON function implemented in `dummy.rs` but it doesn't matter for this test since
-    # TensorZero doesn't parse the JSON output of the function for streaming calls.
+    # Pick a variant that doesn't have a dummy provider streaming special-case
     messages = [
         {
             "role": "system",
@@ -672,7 +671,10 @@ async def test_async_json_streaming(async_client):
         },
     ]
     stream = await async_client.chat.completions.create(
-        extra_body={"tensorzero::episode_id": str(uuid7())},
+        extra_body={
+            "tensorzero::episode_id": str(uuid7()),
+            "tensorzero::variant_name": "test-diff-schema",
+        },
         messages=messages,
         model="tensorzero::function_name::json_success",
         stream=True,
@@ -706,7 +708,8 @@ async def test_async_json_streaming(async_client):
         previous_inference_id = chunk.id
         previous_episode_id = chunk.episode_id
         assert (
-            chunk.model == "tensorzero::function_name::json_success::variant_name::test"
+            chunk.model
+            == "tensorzero::function_name::json_success::variant_name::test-diff-schema"
         )
         if i + 1 < len(chunks):
             assert chunk.choices[0].delta.content == expected_text[i]
@@ -782,7 +785,7 @@ async def test_async_json_success_developer(async_client):
     assert result.choices[0].message.content == '{"answer":"Hello"}'
     assert result.choices[0].message.tool_calls is None
     assert result.usage.prompt_tokens == 10
-    assert result.usage.completion_tokens == 10
+    assert result.usage.completion_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -815,7 +818,7 @@ async def test_async_json_success_non_deprecated(async_client):
     assert result.choices[0].message.content == '{"answer":"Hello"}'
     assert result.choices[0].message.tool_calls is None
     assert result.usage.prompt_tokens == 10
-    assert result.usage.completion_tokens == 10
+    assert result.usage.completion_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -848,7 +851,7 @@ async def test_async_json_success(async_client):
     assert result.choices[0].message.content == '{"answer":"Hello"}'
     assert result.choices[0].message.tool_calls is None
     assert result.usage.prompt_tokens == 10
-    assert result.usage.completion_tokens == 10
+    assert result.usage.completion_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -902,7 +905,7 @@ async def test_async_json_success_strict(async_client):
     assert result.choices[0].message.content == '{"response":"Hello"}'
     assert result.choices[0].message.tool_calls is None
     assert result.usage.prompt_tokens == 10
-    assert result.usage.completion_tokens == 10
+    assert result.usage.completion_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -945,7 +948,7 @@ async def test_async_json_success_json_object(async_client):
     assert result.choices[0].message.content == '{"response":"Hello"}'
     assert result.choices[0].message.tool_calls is None
     assert result.usage.prompt_tokens == 10
-    assert result.usage.completion_tokens == 10
+    assert result.usage.completion_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -1008,6 +1011,96 @@ async def test_async_json_invalid_system(async_client):
         )
     assert (
         "Invalid request to OpenAI-compatible endpoint: System message must be a text content block"
+        in str(exc_info.value)
+    )
+
+
+@pytest.mark.asyncio
+async def test_missing_text_fields(async_client):
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text"}],
+        },
+    ]
+    with pytest.raises(BadRequestError) as exc_info:
+        await async_client.chat.completions.create(
+            messages=messages,
+            model="tensorzero::function_name::json_success",
+        )
+    assert (
+        'Invalid request to OpenAI-compatible endpoint: Invalid content block: Either `text` or `tensorzero::arguments` must be set when using `"type": "text"`'
+        in str(exc_info.value)
+    )
+
+
+@pytest.mark.asyncio
+async def test_bad_content_block_type(async_client):
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "my_fake_type", "my": "other_field"}],
+        },
+    ]
+    with pytest.raises(BadRequestError) as exc_info:
+        await async_client.chat.completions.create(
+            messages=messages,
+            model="tensorzero::function_name::json_success",
+        )
+    assert (
+        "Invalid request to OpenAI-compatible endpoint: Invalid content block: unknown variant `my_fake_type`, expected one of `text`, `image_url`, `file`"
+        in str(exc_info.value)
+    )
+
+
+@pytest.mark.asyncio
+async def test_invalid_tensorzero_text_block(async_client):
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "My other text",
+                    "tensorzero::arguments": {"country": "Japan"},
+                }
+            ],
+        },
+    ]
+    with pytest.raises(BadRequestError) as exc_info:
+        await async_client.chat.completions.create(
+            messages=messages,
+            model="tensorzero::function_name::json_success",
+        )
+    assert (
+        'Invalid request to OpenAI-compatible endpoint: Invalid TensorZero content block: Only one of `text` or `tensorzero::arguments` can be set when using `"type": "text"`'
         in str(exc_info.value)
     )
 
@@ -1120,7 +1213,7 @@ async def test_async_json_failure(async_client):
     )
     assert result.choices[0].message.tool_calls is None
     assert result.usage.prompt_tokens == 10
-    assert result.usage.completion_tokens == 10
+    assert result.usage.completion_tokens == 1
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,6 @@
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { Input } from "~/components/ui/input";
+import { logger } from "~/utils/logger";
 
 type NumberInputWithButtonsProps = {
   value: number | null | "";
@@ -40,7 +41,7 @@ export function NumberInputWithButtons({
 
           const coercedValue = Number(e.target.value);
           if (!isValidNumber(coercedValue)) {
-            console.warn(`Invalid number input value: ${coercedValue}`);
+            logger.warn(`Invalid number input value: ${coercedValue}`);
           } else {
             onChange(coercedValue);
           }

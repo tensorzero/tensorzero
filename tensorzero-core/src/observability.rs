@@ -37,7 +37,7 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
     );
 
     if let Some(exporter) = override_exporter {
-        provider = provider.with_simple_exporter(exporter)
+        provider = provider.with_simple_exporter(exporter);
     } else {
         provider = provider.with_batch_exporter(
             opentelemetry_otlp::SpanExporter::builder()
@@ -154,7 +154,10 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
                 tracing_opentelemetry_instrumentation_sdk::http::http_server::make_span_from_request(
                     req,
                 );
-            let route = req.extensions().get::<MatchedPath>().map(|mp| mp.as_str());
+            let route = req
+                .extensions()
+                .get::<MatchedPath>()
+                .map(MatchedPath::as_str);
             if let Some(route) = route {
                 span.record("http.route", route);
             }

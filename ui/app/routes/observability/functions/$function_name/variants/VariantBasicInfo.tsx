@@ -3,8 +3,8 @@ import type {
   BestOfNSamplingConfig,
   DiclConfig,
   MixtureOfNConfig,
-} from "~/utils/config/variant";
-import type { FunctionType } from "~/utils/config/function";
+  FunctionConfig,
+} from "tensorzero-node";
 import {
   BasicInfoLayout,
   BasicInfoItem,
@@ -17,7 +17,7 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 interface BasicInfoProps {
   variantConfig: VariantConfig;
   function_name: string;
-  function_type: FunctionType;
+  function_type: FunctionConfig["type"];
 }
 
 export default function BasicInfo({
@@ -63,7 +63,7 @@ export default function BasicInfo({
             </BasicInfoItemContent>
           </BasicInfoItem>
 
-          {variantConfig.temperature !== undefined && (
+          {variantConfig.temperature && (
             <BasicInfoItem>
               <BasicInfoItemTitle>Temperature</BasicInfoItemTitle>
               <BasicInfoItemContent>
@@ -72,7 +72,7 @@ export default function BasicInfo({
             </BasicInfoItem>
           )}
 
-          {variantConfig.top_p !== undefined && (
+          {variantConfig.top_p && (
             <BasicInfoItem>
               <BasicInfoItemTitle>Top P</BasicInfoItemTitle>
               <BasicInfoItemContent>
@@ -81,7 +81,7 @@ export default function BasicInfo({
             </BasicInfoItem>
           )}
 
-          {variantConfig.max_tokens !== undefined && (
+          {variantConfig.max_tokens && (
             <BasicInfoItem>
               <BasicInfoItemTitle>Max Tokens</BasicInfoItemTitle>
               <BasicInfoItemContent>
@@ -90,7 +90,7 @@ export default function BasicInfo({
             </BasicInfoItem>
           )}
 
-          {variantConfig.presence_penalty !== undefined && (
+          {variantConfig.presence_penalty && (
             <BasicInfoItem>
               <BasicInfoItemTitle>Presence Penalty</BasicInfoItemTitle>
               <BasicInfoItemContent>
@@ -99,7 +99,7 @@ export default function BasicInfo({
             </BasicInfoItem>
           )}
 
-          {variantConfig.frequency_penalty !== undefined && (
+          {variantConfig.frequency_penalty && (
             <BasicInfoItem>
               <BasicInfoItemTitle>Frequency Penalty</BasicInfoItemTitle>
               <BasicInfoItemContent>
@@ -108,7 +108,7 @@ export default function BasicInfo({
             </BasicInfoItem>
           )}
 
-          {variantConfig.seed !== undefined && (
+          {variantConfig.seed && (
             <BasicInfoItem>
               <BasicInfoItemTitle>Seed</BasicInfoItemTitle>
               <BasicInfoItemContent>
@@ -120,7 +120,7 @@ export default function BasicInfo({
       )}
 
       {/* --- BEST OF N SAMPLING --- */}
-      {variantConfig.type === "experimental_best_of_n_sampling" &&
+      {variantConfig.type === "best_of_n_sampling" &&
         (() => {
           const config = variantConfig as BestOfNSamplingConfig;
           return (
@@ -132,7 +132,7 @@ export default function BasicInfo({
                 </BasicInfoItemContent>
               </BasicInfoItem>
 
-              {config.evaluator.temperature !== undefined && (
+              {config.evaluator.temperature && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Temperature</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -141,7 +141,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.evaluator.top_p !== undefined && (
+              {config.evaluator.top_p && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Top P</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -150,7 +150,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.evaluator.max_tokens !== undefined && (
+              {config.evaluator.max_tokens && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Max Tokens</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -159,7 +159,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.evaluator.presence_penalty !== undefined && (
+              {config.evaluator.presence_penalty && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Presence Penalty</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -170,7 +170,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.evaluator.frequency_penalty !== undefined && (
+              {config.evaluator.frequency_penalty && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Frequency Penalty</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -181,7 +181,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.evaluator.seed !== undefined && (
+              {config.evaluator.seed && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Seed</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -220,7 +220,7 @@ export default function BasicInfo({
         })()}
 
       {/* --- DYNAMIC IN-CONTEXT LEARNING --- */}
-      {variantConfig.type === "experimental_dynamic_in_context_learning" &&
+      {variantConfig.type === "dicl" &&
         (() => {
           const config = variantConfig as DiclConfig;
           return (
@@ -246,7 +246,7 @@ export default function BasicInfo({
                 </BasicInfoItemContent>
               </BasicInfoItem>
 
-              {config.temperature !== undefined && (
+              {config.temperature && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Temperature</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -255,7 +255,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.top_p !== undefined && (
+              {config.top_p && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Top P</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -264,7 +264,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.max_tokens !== undefined && (
+              {config.max_tokens && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Max Tokens</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -273,7 +273,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.presence_penalty !== undefined && (
+              {config.presence_penalty && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Presence Penalty</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -282,7 +282,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.frequency_penalty !== undefined && (
+              {config.frequency_penalty && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Frequency Penalty</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -291,7 +291,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.seed !== undefined && (
+              {config.seed && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Seed</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -304,7 +304,7 @@ export default function BasicInfo({
         })()}
 
       {/* --- MIXTURE OF N --- */}
-      {variantConfig.type === "experimental_mixture_of_n" &&
+      {variantConfig.type === "mixture_of_n" &&
         (() => {
           const config = variantConfig as MixtureOfNConfig;
           return (
@@ -316,7 +316,7 @@ export default function BasicInfo({
                 </BasicInfoItemContent>
               </BasicInfoItem>
 
-              {config.fuser.temperature !== undefined && (
+              {config.fuser.temperature && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Temperature</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -325,7 +325,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.fuser.top_p !== undefined && (
+              {config.fuser.top_p && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Top P</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -334,7 +334,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.fuser.max_tokens !== undefined && (
+              {config.fuser.max_tokens && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Max Tokens</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -343,7 +343,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.fuser.presence_penalty !== undefined && (
+              {config.fuser.presence_penalty && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Presence Penalty</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -352,7 +352,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.fuser.frequency_penalty !== undefined && (
+              {config.fuser.frequency_penalty && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Frequency Penalty</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -361,7 +361,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.fuser.seed !== undefined && (
+              {config.fuser.seed && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Seed</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -397,12 +397,14 @@ export default function BasicInfo({
         })()}
 
       {/* Weight */}
-      <BasicInfoItem>
-        <BasicInfoItemTitle>Weight</BasicInfoItemTitle>
-        <BasicInfoItemContent>
-          <Chip label={variantConfig.weight.toString()} />
-        </BasicInfoItemContent>
-      </BasicInfoItem>
+      {variantConfig.weight !== null && (
+        <BasicInfoItem>
+          <BasicInfoItemTitle>Weight</BasicInfoItemTitle>
+          <BasicInfoItemContent>
+            <Chip label={variantConfig.weight.toString()} />
+          </BasicInfoItemContent>
+        </BasicInfoItem>
+      )}
     </BasicInfoLayout>
   );
 }

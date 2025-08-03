@@ -1,13 +1,13 @@
 import { z } from "zod";
 import {
   contentBlockOutputSchema,
-  contentBlockSchema,
   inputSchema,
   jsonInferenceOutputSchema,
   displayInputSchema,
   type ContentBlockOutput,
   type JsonInferenceOutput,
   displayModelInferenceInputMessageSchema,
+  modelInferenceOutputContentBlockSchema,
 } from "./common";
 import { JSONValueSchema } from "../tensorzero";
 
@@ -195,7 +195,7 @@ export const parsedModelInferenceRowSchema = modelInferenceRowSchema
   })
   .extend({
     input_messages: z.array(displayModelInferenceInputMessageSchema),
-    output: z.array(contentBlockSchema),
+    output: z.array(modelInferenceOutputContentBlockSchema),
   });
 
 export type ParsedModelInferenceRow = z.infer<

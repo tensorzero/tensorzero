@@ -15,8 +15,8 @@ import type {
   Role,
   TextInput,
 } from "./clickhouse/common";
-import type { FunctionConfig } from "./config/function";
-import { tensorZeroClient } from "./tensorzero.server";
+import type { FunctionConfig } from "tensorzero-node";
+import { getTensorZeroClient } from "./tensorzero.server";
 
 export async function resolveInput(
   input: Input,
@@ -90,6 +90,8 @@ async function resolveContent(
     case "tool_call":
     case "tool_result":
     case "raw_text":
+    case "thought":
+    case "unknown":
       return content;
     case "text":
       return prepareDisplayText(content, role, functionConfig);
@@ -145,6 +147,8 @@ async function resolveModelInferenceContent(
     case "tool_call":
     case "tool_result":
     case "raw_text":
+    case "thought":
+    case "unknown":
       return content;
     // Convert legacy 'image' content block to 'file' when resolving input
     case "image":
@@ -185,7 +189,7 @@ async function resolveModelInferenceContent(
   }
 }
 async function resolveFile(content: FileContent): Promise<ResolvedBase64File> {
-  const object = await tensorZeroClient.getObject(content.storage_path);
+  const object = await getTensorZeroClient().getObject(content.storage_path);
   const json = JSON.parse(object);
   const dataURL = `data:${content.file.mime_type};base64,${json.data}`;
   return {
@@ -215,8 +219,8 @@ function prepareDisplayText(
   // True if the function has a schema for the role (user or assistant)
   const hasSchemaForRole =
     role === "user"
-      ? functionConfig.user_schema !== undefined
-      : functionConfig.assistant_schema !== undefined;
+      ? functionConfig.user_schema !== null
+      : functionConfig.assistant_schema !== null;
   if (hasSchemaForRole) {
     return {
       type: "structured_text",

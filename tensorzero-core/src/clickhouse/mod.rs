@@ -13,7 +13,7 @@ use url::Url;
 
 pub mod migration_manager;
 pub mod query_builder;
-#[cfg(any(test, feature = "e2e_tests"))]
+#[cfg(any(test, feature = "e2e_tests", feature = "optimization_tests"))]
 pub mod test_helpers;
 
 use crate::config_parser::Config;
@@ -35,6 +35,61 @@ pub enum ClickHouseConnectionInfo {
         database: String,
         client: Client,
     },
+}
+
+pub fn make_clickhouse_http_client() -> Result<Client, Error> {
+    Client::builder()
+        // https://github.com/ClickHouse/clickhouse-rs/blob/56c5dd3fc95693acc5aa3d02db1f910a26fe5b1c/src/http_client.rs#L45
+        .pool_idle_timeout(Duration::from_secs(2))
+        // https://github.com/ClickHouse/clickhouse-rs/blob/56c5dd3fc95693acc5aa3d02db1f910a26fe5b1c/src/http_client.rs#L41
+        .tcp_keepalive(Some(Duration::from_secs(60)))
+        .build()
+        .map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseConnection {
+                message: format!("Failed to build ClickHouse HTTP client: {e}"),
+            })
+        })
+}
+
+/// Defines all of the ClickHouse tables that we write to from Rust
+/// This will be used to implement per-table ClickHouse write batching.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TableName {
+    BatchModelInference,
+    BatchRequest,
+    ChatInference,
+    ChatInferenceDatapoint,
+    JsonInference,
+    JsonInferenceDatapoint,
+    ModelInference,
+    ModelInferenceCache,
+    DeploymentID,
+    TensorZeroMigration,
+    BooleanMetricFeedback,
+    FloatMetricFeedback,
+    DemonstrationFeedback,
+    CommentFeedback,
+}
+
+impl TableName {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TableName::BatchModelInference => "BatchModelInference",
+            TableName::BatchRequest => "BatchRequest",
+            TableName::ChatInference => "ChatInference",
+            TableName::ChatInferenceDatapoint => "ChatInferenceDatapoint",
+            TableName::JsonInference => "JsonInference",
+            TableName::JsonInferenceDatapoint => "JsonInferenceDatapoint",
+            TableName::ModelInference => "ModelInference",
+            TableName::ModelInferenceCache => "ModelInferenceCache",
+            TableName::DeploymentID => "DeploymentID",
+            TableName::TensorZeroMigration => "TensorZeroMigration",
+            TableName::BooleanMetricFeedback => "BooleanMetricFeedback",
+            TableName::FloatMetricFeedback => "FloatMetricFeedback",
+            TableName::DemonstrationFeedback => "DemonstrationFeedback",
+            TableName::CommentFeedback => "CommentFeedback",
+        }
+    }
 }
 
 impl ClickHouseConnectionInfo {
@@ -78,7 +133,7 @@ impl ClickHouseConnectionInfo {
         let connection_info = Self::Production {
             database_url,
             database,
-            client: Client::new(),
+            client: make_clickhouse_http_client()?,
         };
         // If the connection is unhealthy, we won't be able to run / check migrations. So we just fail here.
         connection_info.health().await?;
@@ -107,18 +162,18 @@ impl ClickHouseConnectionInfo {
     pub async fn write(
         &self,
         rows: &[impl Serialize + Send + Sync],
-        table: &str,
+        table: TableName,
     ) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
             Self::Mock { mock_data, .. } => {
-                write_mock(rows, table, &mut mock_data.write().await).await
+                write_mock(rows, table.as_str(), &mut mock_data.write().await).await
             }
             Self::Production {
                 database_url,
                 client,
                 ..
-            } => write_production(database_url, client, rows, table).await,
+            } => write_production(database_url, client, rows, table.as_str()).await,
         }
     }
 
@@ -202,10 +257,22 @@ impl ClickHouseConnectionInfo {
         &self,
         query: String,
         parameters: &HashMap<&str, &str>,
-    ) -> Result<String, Error> {
+    ) -> Result<ClickHouseResponse, Error> {
         match self {
-            Self::Disabled => Ok("".to_string()),
-            Self::Mock { .. } => Ok("".to_string()),
+            Self::Disabled => Ok(ClickHouseResponse {
+                response: String::new(),
+                metadata: ClickHouseResponseMetadata {
+                    read_rows: 0,
+                    written_rows: 0,
+                },
+            }),
+            Self::Mock { .. } => Ok(ClickHouseResponse {
+                response: String::new(),
+                metadata: ClickHouseResponseMetadata {
+                    read_rows: 0,
+                    written_rows: 0,
+                },
+            }),
             Self::Production {
                 database_url,
                 client,
@@ -225,7 +292,7 @@ impl ClickHouseConnectionInfo {
                 database_url
                     .query_pairs_mut()
                     .append_pair("alter_sync", "2");
-                let response = client
+                let res = client
                     .post(database_url)
                     .body(query)
                     .send()
@@ -235,16 +302,44 @@ impl ClickHouseConnectionInfo {
                             message: DisplayOrDebugGateway::new(e).to_string(),
                         })
                     })?;
-                let status = response.status();
+                let status = res.status();
 
-                let response_body = response.text().await.map_err(|e| {
+                // Get the ClickHouse summary info from the headers
+                let metadata = if let Some(summary) = res.headers().get("x-clickhouse-summary") {
+                    // NOTE: X-Clickhouse-Summary is a ClickHouse-specific header that contains information about the query execution.
+                    // It is not formally specified in the ClickHouse documentation so we only warn if it isn't working but won't error here.
+                    let summary_str = summary.to_str().map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseQuery {
+                            message: format!("Failed to parse x-clickhouse-summary header: {e}"),
+                        })
+                    })?;
+
+                    serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(
+                        |e| {
+                            Error::new(ErrorDetails::ClickHouseQuery {
+                                message: format!("Failed to deserialize x-clickhouse-summary: {e}"),
+                            })
+                        },
+                    )?
+                } else {
+                    tracing::warn!("No x-clickhouse-summary header found in ClickHouse response");
+                    ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    }
+                };
+
+                let response_body = res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
                         message: DisplayOrDebugGateway::new(e).to_string(),
                     })
                 })?;
 
                 match status {
-                    reqwest::StatusCode::OK => Ok(response_body),
+                    reqwest::StatusCode::OK => Ok(ClickHouseResponse {
+                        response: response_body,
+                        metadata,
+                    }),
                     _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
                         message: response_body,
                     })),
@@ -253,7 +348,10 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn run_query_synchronous_no_params(&self, query: String) -> Result<String, Error> {
+    pub async fn run_query_synchronous_no_params(
+        &self,
+        query: String,
+    ) -> Result<ClickHouseResponse, Error> {
         self.run_query_synchronous(query, &HashMap::default()).await
     }
 
@@ -268,7 +366,7 @@ impl ClickHouseConnectionInfo {
     ) -> Result<ClickHouseResponse, Error> {
         match self {
             Self::Disabled | Self::Mock { .. } => Ok(ClickHouseResponse {
-                response: "".to_string(),
+                response: String::new(),
                 metadata: ClickHouseResponseMetadata {
                     read_rows: 0,
                     written_rows: 0,
@@ -350,8 +448,8 @@ impl ClickHouseConnectionInfo {
 
     pub async fn create_database(&self) -> Result<(), Error> {
         match self {
-            Self::Disabled => Ok(()),
-            Self::Mock { .. } => Ok(()),
+            Self::Disabled => {}
+            Self::Mock { .. } => {}
             Self::Production {
                 database_url,
                 database,
@@ -396,18 +494,41 @@ impl ClickHouseConnectionInfo {
                 })?;
 
                 match status {
-                    reqwest::StatusCode::OK => Ok(()),
-                    _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
-                        message: response_body,
-                    })),
+                    reqwest::StatusCode::OK => {}
+                    _ => {
+                        return Err(Error::new(ErrorDetails::ClickHouseQuery {
+                            message: response_body,
+                        }))
+                    }
                 }
             }
         }
+        // Note - we do *not* run this as a normal migration
+        // We decided to add this table after we had already created lots of migrations.
+        // We create this table immediately after creating the database, so that
+        // we can insert rows into it when running migrations
+        self.run_query_synchronous_no_params(
+            r"CREATE TABLE IF NOT EXISTS TensorZeroMigration (
+                migration_id UInt32,
+                migration_name String,
+                gateway_version String,
+                gateway_git_sha String,
+                applied_at DateTime64(6, 'UTC') DEFAULT now(),
+                execution_time_ms UInt64,
+                extra_data Nullable(String)
+            )
+            ENGINE = MergeTree()
+            PRIMARY KEY (migration_id)"
+                .to_string(),
+        )
+        .await
+        .map(|_| ())?;
+        Ok(())
     }
 
     pub async fn list_inferences(
         &self,
-        config: &Config<'_>,
+        config: &Config,
         opts: &ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInference>, Error> {
         let (sql, params) = generate_list_inferences_sql(config, opts)?;
@@ -417,14 +538,17 @@ impl ClickHouseConnectionInfo {
             .collect();
         let response = self.run_query_synchronous(sql, &params_map).await?;
         let inferences = response
+            .response
             .trim()
             .lines()
             .map(|line| {
-                serde_json::from_str::<StoredInference>(line).map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to deserialize response: {e:?}"),
+                serde_json::from_str::<query_builder::ClickHouseStoredInference>(line)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseQuery {
+                            message: format!("Failed to deserialize response: {e:?}"),
+                        })
                     })
-                })
+                    .and_then(query_builder::ClickHouseStoredInference::try_into)
             })
             .collect::<Result<Vec<StoredInference>, Error>>()?;
         Ok(inferences)
@@ -437,6 +561,7 @@ impl ClickHouseConnectionInfo {
 /// These may contain single quotes and backslashes, for example, if the user input contains doubly-serialized JSON.
 /// This function will escape single quotes and backslashes in the input string so that the comparison will be accurate.
 pub fn escape_string_for_clickhouse_literal(s: &str) -> String {
+    #![expect(clippy::needless_raw_string_hashes)]
     s.replace(r#"\"#, r#"\\"#).replace(r#"'"#, r#"\'"#)
 }
 
@@ -534,7 +659,7 @@ fn set_clickhouse_format_settings(database_url: &mut Url) {
         }
     }
 
-    for setting in OVERRIDDEN_SETTINGS.iter() {
+    for setting in &OVERRIDDEN_SETTINGS {
         database_url.query_pairs_mut().append_pair(setting, "0");
     }
     database_url.query_pairs_mut().finish();
@@ -583,7 +708,10 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
     // username, password, and query-strings are optional, so we don't need to validate them
 
     // Validate that the path is either empty or ends with the database name (a single segment)
-    let mut path_segments: Vec<_> = url.path_segments().map(|s| s.collect()).unwrap_or_default();
+    let mut path_segments: Vec<_> = url
+        .path_segments()
+        .map(Iterator::collect)
+        .unwrap_or_default();
     if let Some(last) = path_segments.last() {
         if last.is_empty() {
             path_segments.pop();
@@ -615,6 +743,7 @@ pub struct ExternalDataInfo {
     pub data: String,      // Must be valid ClickHouse data in the given format
 }
 
+#[derive(Debug)]
 pub struct ClickHouseResponse {
     pub response: String,
     pub metadata: ClickHouseResponseMetadata,
@@ -622,8 +751,10 @@ pub struct ClickHouseResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct ClickHouseResponseMetadata {
+    #[serde(default)]
     #[serde(deserialize_with = "deserialize_u64_from_str")]
     pub read_rows: u64,
+    #[serde(default)]
     #[serde(deserialize_with = "deserialize_u64_from_str")]
     pub written_rows: u64,
 }
@@ -640,7 +771,7 @@ where
 /// Currently only used in the query builder.
 /// TODO: use across the codebase.
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 pub enum ClickhouseFormat {
     #[default]
@@ -741,6 +872,7 @@ mod tests {
     #[test]
     fn test_escape_string_for_clickhouse_comparison() {
         // Test basic escaping of single quotes
+        #![expect(clippy::needless_raw_string_hashes)]
         assert_eq!(
             escape_string_for_clickhouse_literal("test's string"),
             r#"test\'s string"#

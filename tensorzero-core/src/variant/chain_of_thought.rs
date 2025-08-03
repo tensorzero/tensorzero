@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -23,7 +21,7 @@ use crate::{
 
 use super::{InferenceConfig, ModelUsedInfo, Variant};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct ChainOfThoughtConfig {
@@ -31,17 +29,19 @@ pub struct ChainOfThoughtConfig {
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct UninitializedChainOfThoughtConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,
 }
 
 impl LoadableConfig<ChainOfThoughtConfig> for UninitializedChainOfThoughtConfig {
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<ChainOfThoughtConfig, Error> {
+    fn load(self) -> Result<ChainOfThoughtConfig, Error> {
         Ok(ChainOfThoughtConfig {
-            inner: self.inner.load(base_path)?,
+            inner: self.inner.load()?,
         })
     }
 }
@@ -52,7 +52,7 @@ impl Variant for ChainOfThoughtConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -105,7 +105,6 @@ impl Variant for ChainOfThoughtConfig {
             inference_id: json_result.inference_id,
             created: json_result.created,
             output,
-            usage: json_result.usage,
             model_inference_results: json_result.model_inference_results,
             output_schema: original_output_schema.clone(),
             inference_params: json_result.inference_params,
@@ -119,7 +118,7 @@ impl Variant for ChainOfThoughtConfig {
         _input: &ResolvedInput,
         _models: &'request InferenceModels<'_>,
         _function: &FunctionConfig,
-        _inference_config: &'request InferenceConfig<'static, 'request>,
+        _inference_config: &'request InferenceConfig<'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -169,7 +168,7 @@ impl Variant for ChainOfThoughtConfig {
         _input: &[ResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
-        _inference_configs: &'a [InferenceConfig<'a, 'a>],
+        _inference_configs: &'a [InferenceConfig<'a>],
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -206,7 +205,7 @@ fn parse_thinking_output(
         Some(parsed) => {
             let Some(thinking) = parsed
                 .get_mut("thinking")
-                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                .and_then(|v| v.as_str().map(str::to_string))
             else {
                 tracing::warn!(
                     "Chain of thought variant received a parsed output that didn't contain a `thinking` field. {}",
@@ -236,16 +235,18 @@ fn parse_thinking_output(
                 output
                     .auxiliary_content
                     .push(ContentBlockOutput::Thought(Thought {
-                        text: thinking,
+                        text: Some(thinking),
                         signature: None,
+                        provider_type: None,
                     }));
                 return Ok(output);
             };
             output.auxiliary_content.insert(
                 json_block_index,
                 ContentBlockOutput::Thought(Thought {
-                    text: thinking,
+                    text: Some(thinking),
                     signature: None,
+                    provider_type: None,
                 }),
             );
             Ok(output)
@@ -336,8 +337,9 @@ mod tests {
         assert_eq!(
             out.auxiliary_content[0],
             ContentBlockOutput::Thought(Thought {
-                text: "step by step".to_string(),
+                text: Some("step by step".to_string()),
                 signature: None,
+                provider_type: None,
             })
         );
 
@@ -349,8 +351,9 @@ mod tests {
                 "response": {"answer": "the ultimate answer is 42"}
             })),
             auxiliary_content: vec![ContentBlockOutput::Thought(Thought {
-                text: "existing thinking".to_string(),
+                text: Some("existing thinking".to_string()),
                 signature: None,
+                provider_type: None,
             })],
             json_block_index: Some(0),
         };
@@ -374,15 +377,17 @@ mod tests {
         assert_eq!(
             out.auxiliary_content[0],
             ContentBlockOutput::Thought(Thought {
-                text: "new thinking process".to_string(),
+                text: Some("new thinking process".to_string()),
                 signature: None,
+                provider_type: None,
             })
         );
         assert_eq!(
             out.auxiliary_content[1],
             ContentBlockOutput::Thought(Thought {
-                text: "existing thinking".to_string(),
+                text: Some("existing thinking".to_string()),
                 signature: None,
+                provider_type: None,
             })
         );
     }

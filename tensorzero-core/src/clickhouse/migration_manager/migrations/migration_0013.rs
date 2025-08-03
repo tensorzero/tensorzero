@@ -82,7 +82,7 @@ impl Migration for Migration0013<'_> {
             .clickhouse
             .run_query_synchronous_no_params(query)
             .await?;
-        if !result.contains("UInt128") {
+        if !result.response.contains("UInt128") {
             return Err(ErrorDetails::ClickHouseMigration {
                 id: "0013".to_string(),
                 message:
@@ -96,7 +96,7 @@ impl Migration for Migration0013<'_> {
             .clickhouse
             .run_query_synchronous_no_params(query)
             .await?;
-        if !result.contains("UInt128") {
+        if !result.response.contains("UInt128") {
             return Err(ErrorDetails::ClickHouseMigration {
                 id: "0013".to_string(),
                 message:
@@ -110,7 +110,7 @@ impl Migration for Migration0013<'_> {
             .clickhouse
             .run_query_synchronous_no_params(query)
             .await?;
-        if !result.contains("1") {
+        if !result.response.contains("1") {
             return Ok(true);
         }
         Ok(false)
@@ -134,6 +134,7 @@ impl Migration for Migration0013<'_> {
             .clickhouse
             .run_query_synchronous_no_params(query)
             .await?
+            .response
             .trim()
             .parse()
             .map_err(|e| {
@@ -147,6 +148,7 @@ impl Migration for Migration0013<'_> {
             .clickhouse
             .run_query_synchronous_no_params(query)
             .await?
+            .response
             .trim()
             .parse()
             .map_err(|e| {
@@ -189,7 +191,7 @@ impl Migration for Migration0013<'_> {
         // let _ = self.clickhouse.run_query_synchronous(query, None).await?;
         // Create the new tables with UInt128 primary keys
         // Create the `InferenceById` table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS InferenceById
             (
                 id_uint UInt128,
@@ -199,13 +201,13 @@ impl Migration for Migration0013<'_> {
                 function_type Enum8('chat' = 1, 'json' = 2)
             ) ENGINE = MergeTree()
             ORDER BY id_uint;
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
         // Create the `InferenceByEpisodeId` table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS InferenceByEpisodeId
             (
                 episode_id_uint UInt128,
@@ -216,33 +218,33 @@ impl Migration for Migration0013<'_> {
             )
             ENGINE = MergeTree()
             ORDER BY (episode_id_uint, id_uint);
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
         // Create the `uint_to_uuid` function
-        let query = r#"CREATE FUNCTION IF NOT EXISTS uint_to_uuid AS (x) -> reinterpretAsUUID(
+        let query = r"CREATE FUNCTION IF NOT EXISTS uint_to_uuid AS (x) -> reinterpretAsUUID(
             concat(
                 substring(reinterpretAsString(x), 9, 8),
                 substring(reinterpretAsString(x), 1, 8)
             )
-        );"#;
+        );";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
-        let view_where_clause = if !clean_start {
-            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
-        } else {
+        let view_where_clause = if clean_start {
             String::new()
+        } else {
+            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         };
         // Create the materialized views for the `InferenceById` table
         // IMPORTANT: The function_type column is now correctly set to 'chat'
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByIdView
             TO InferenceById
             AS
@@ -254,7 +256,7 @@ impl Migration for Migration0013<'_> {
                     'chat' AS function_type
                 FROM ChatInference
                 {view_where_clause};
-            "#
+            "
         );
         let _ = self
             .clickhouse
@@ -263,7 +265,7 @@ impl Migration for Migration0013<'_> {
 
         // IMPORTANT: The function_type column is now correctly set to 'json'
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByIdView
             TO InferenceById
             AS
@@ -275,7 +277,7 @@ impl Migration for Migration0013<'_> {
                     'json' AS function_type
                 FROM JsonInference
                 {view_where_clause};
-            "#
+            "
         );
         let _ = self
             .clickhouse
@@ -285,7 +287,7 @@ impl Migration for Migration0013<'_> {
         // Create the materialized view for the `InferenceByEpisodeId` table from ChatInference
         // IMPORTANT: The function_type column is now correctly set to 'chat'
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByEpisodeIdView
             TO InferenceByEpisodeId
             AS
@@ -297,7 +299,7 @@ impl Migration for Migration0013<'_> {
                     'chat' as function_type
                 FROM ChatInference
                 {view_where_clause};
-            "#
+            "
         );
         let _ = self
             .clickhouse
@@ -307,7 +309,7 @@ impl Migration for Migration0013<'_> {
         // Create the materialized view for the `InferenceByEpisodeId` table from JsonInference
         // IMPORTANT: The function_type column is now correctly set to 'json'
         let query = format!(
-            r#"
+            r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByEpisodeIdView
             TO InferenceByEpisodeId
             AS
@@ -319,7 +321,7 @@ impl Migration for Migration0013<'_> {
                     'json' as function_type
                 FROM JsonInference
                 {view_where_clause};
-            "#
+            "
         );
         let _ = self
             .clickhouse

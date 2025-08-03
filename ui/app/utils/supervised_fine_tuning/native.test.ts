@@ -10,7 +10,11 @@ const clickhouseUrl = process.env.TENSORZERO_CLICKHOUSE_URL;
 if (!clickhouseUrl) {
   throw new Error("TENSORZERO_CLICKHOUSE_URL is not set");
 }
-const client = await TensorZeroClient.build(configPath, clickhouseUrl);
+const client = await TensorZeroClient.buildEmbedded(
+  configPath,
+  clickhouseUrl,
+  undefined,
+);
 
 describe("native sft", () => {
   // NOTE: This test hits a fake server so you can run it anytime without paying OpenAI
@@ -39,13 +43,13 @@ describe("native sft", () => {
         seed: null,
         suffix: null,
       },
+      order_by: null,
     });
 
     let status = await client.experimentalPollOptimization(job);
-    while (status.type !== "completed") {
+    while (status.status !== "completed") {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       status = await client.experimentalPollOptimization(job);
     }
-    console.log(status);
-  });
+  }, 10000); // timeout in ms
 });

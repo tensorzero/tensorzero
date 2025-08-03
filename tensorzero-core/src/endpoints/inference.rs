@@ -9,7 +9,8 @@ use object_store::{ObjectStore, PutMode, PutOptions};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::borrow::Cow;
+use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -20,8 +21,8 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
-use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::{Config, ObjectStoreInfo};
+use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::config_parser::{Config, ObjectStoreInfo, UninitializedVariantInfo};
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -32,16 +33,19 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
-    collect_chunks, Base64File, ChatInferenceDatabaseInsert, CollectChunksArgs,
-    ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
-    InferenceResultChunk, InferenceResultStream, Input, InternalJsonInferenceOutput,
-    JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
-    RequestMessage, ResolvedInput, ResolvedInputMessageContent, Usage,
+    collect_chunks, Base64File, ChatInferenceDatabaseInsert, ChatInferenceResultChunk,
+    CollectChunksArgs, ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason,
+    InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
+    InternalJsonInferenceOutput, JsonInferenceDatabaseInsert, JsonInferenceOutput,
+    JsonInferenceResultChunk, ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput,
+    ResolvedInputMessageContent, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
+use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::variant::chat_completion::ChatCompletionConfig;
+use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
 use super::dynamic_evaluation_run::validate_inference_episode_id_and_apply_dynamic_evaluation_run;
@@ -105,6 +109,8 @@ pub struct Params {
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    #[serde(default)]
+    pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
 }
 
 #[derive(Clone, Debug)]
@@ -142,6 +148,7 @@ pub async fn inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        ..
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
@@ -197,7 +204,7 @@ pub struct InferenceIds {
     )
 )]
 pub async fn inference(
-    config: Arc<Config<'static>>,
+    config: Arc<Config>,
     http_client: &reqwest::Client,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
@@ -235,12 +242,11 @@ pub async fn inference(
     tracing::Span::current().record("episode_id", episode_id.to_string());
 
     let (function, function_name) = find_function(&params, &config)?;
-    // Collect the function variant names as a Vec<&str>
-    let mut candidate_variant_names: Vec<&str> =
-        function.variants().keys().map(AsRef::as_ref).collect();
+    let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
+        function.variants().clone().into_iter().collect();
 
     // If the function has no variants, return an error
-    if candidate_variant_names.is_empty() {
+    if candidate_variants.is_empty() {
         return Err(ErrorDetails::InvalidFunctionVariants {
             message: format!("Function `{function_name}` has no variants"),
         }
@@ -250,38 +256,28 @@ pub async fn inference(
     // Validate the input
     function.validate_inference_params(&params)?;
 
-    let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
-
-    // If a variant is pinned, only that variant should be attempted
-    if let Some(ref variant_name) = params.variant_name {
-        candidate_variant_names.retain(|k| k == variant_name);
-
-        // If the pinned variant doesn't exist, return an error
-        if candidate_variant_names.is_empty() {
-            return Err(ErrorDetails::UnknownVariant {
-                name: variant_name.to_string(),
-            }
-            .into());
-        }
-        params.tags.insert(
-            "tensorzero::variant_pinned".to_string(),
-            variant_name.to_string(),
-        );
-    } else {
-        // Remove all zero-weight variants - these can only be used if explicitly pinned above
-        candidate_variant_names.retain(|name| {
-            if let Some(variant) = function.variants().get(*name) {
-                // Retain 'None' and positive-weight variants, discarding zero-weight variants
-                variant.inner.weight().is_none_or(|w| w > 0.0)
-            } else {
-                // Keep missing variants - later code will error if we try to use them
-                true
-            }
-        });
-    }
-
     // Should we store the results?
     let dryrun = params.dryrun.unwrap_or(false);
+    if params.internal_dynamic_variant_config.is_some() && !dryrun {
+        return Err(ErrorDetails::InvalidRequest {
+            message:
+                "If `internal_dynamic_variant_config` is used, `dryrun` must also be set to true"
+                    .to_string(),
+        }
+        .into());
+    }
+
+    let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
+    let mut templates = Cow::Borrowed(&config.templates);
+
+    prepare_candidate_variants(
+        &mut candidate_variants,
+        &mut params.tags,
+        params.variant_name.as_deref(),
+        params.internal_dynamic_variant_config,
+        &mut templates,
+    )?;
+    let templates = &*templates;
 
     // Increment the request count if we're not in dryrun mode
     if !dryrun {
@@ -300,24 +296,11 @@ pub async fn inference(
     let stream = params.stream.unwrap_or(false);
 
     // Keep track of which variants failed
-    let mut variant_errors = std::collections::HashMap::new();
+    let mut variant_errors: HashMap<String, Error> = HashMap::new();
 
     // Set up inference config
     let output_schema = params.output_schema.map(DynamicJSONSchema::new);
-    let mut inference_config = InferenceConfig {
-        function_name: &function_name,
-        variant_name: None,
-        templates: &config.templates,
-        tool_config: tool_config.as_ref(),
-        dynamic_output_schema: output_schema.as_ref(),
-        ids: InferenceIds {
-            inference_id,
-            episode_id,
-        },
-        extra_cache_key: None,
-        extra_body: Default::default(),
-        extra_headers: Default::default(),
-    };
+
     let inference_clients = InferenceClients {
         http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
@@ -337,19 +320,25 @@ pub async fn inference(
         })
         .await?;
     // Keep sampling variants until one succeeds
-    while !candidate_variant_names.is_empty() {
-        let (variant_name, variant) = sample_variant(
-            &mut candidate_variant_names,
-            function.variants(),
-            &function_name,
-            &episode_id,
-        )?;
+    while !candidate_variants.is_empty() {
+        let (variant_name, variant) =
+            sample_variant(&mut candidate_variants, &function_name, &episode_id)?;
         // Will be edited by the variant as part of making the request so we must clone here
         let variant_inference_params = params.params.clone();
-
-        inference_config.variant_name = Some(variant_name);
-        inference_config.extra_body = params.extra_body.clone();
-        inference_config.extra_headers = params.extra_headers.clone();
+        let inference_config = InferenceConfig {
+            function_name: &function_name,
+            variant_name: &variant_name,
+            templates,
+            tool_config: tool_config.as_ref(),
+            dynamic_output_schema: output_schema.as_ref(),
+            ids: InferenceIds {
+                inference_id,
+                episode_id,
+            },
+            extra_cache_key: None,
+            extra_body: Cow::Borrowed(&params.extra_body),
+            extra_headers: Cow::Borrowed(&params.extra_headers),
+        };
         if stream {
             let result = variant
                 .infer_stream(
@@ -370,20 +359,18 @@ pub async fn inference(
                     tracing::warn!(
                         "functions.{function_name:?}.variants.{variant_name:?} failed during inference: {e}",
                         function_name = params.function_name,
-                        variant_name = variant_name,
+                        variant_name = inference_config.variant_name,
                     );
-                    variant_errors.insert(variant_name.to_string(), e);
+                    variant_errors.insert(inference_config.variant_name.to_string(), e);
                     continue;
                 }
             };
-
-            let extra_body = inference_config.extra_body.clone();
-            let extra_headers = inference_config.extra_headers.clone();
-
+            let extra_body = inference_config.extra_body.into_owned();
+            let extra_headers = inference_config.extra_headers.into_owned();
             // Create InferenceMetadata for a streaming inference
             let inference_metadata = InferenceMetadata {
                 function_name: function_name.to_string(),
-                variant_name: variant_name.to_string(),
+                variant_name: inference_config.variant_name.to_string(),
                 inference_id,
                 episode_id,
                 input: resolved_input.clone(),
@@ -433,21 +420,21 @@ pub async fn inference(
                     tracing::warn!(
                         "functions.{function_name}.variants.{variant_name} failed during inference: {e}",
                         function_name = function_name,
-                        variant_name = variant_name,
+                        variant_name = inference_config.variant_name,
                     );
-                    variant_errors.insert(variant_name.to_string(), e);
+                    variant_errors.insert(inference_config.variant_name.to_string(), e);
                     continue;
                 }
             };
 
             if !dryrun {
                 // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
-                let extra_body = inference_config.extra_body.clone();
-                let extra_headers = inference_config.extra_headers.clone();
                 let result_to_write = result.clone();
+                let extra_body = inference_config.extra_body.into_owned();
+                let extra_headers = inference_config.extra_headers.into_owned();
                 let write_metadata = InferenceDatabaseInsertMetadata {
                     function_name: function_name.to_string(),
-                    variant_name: variant_name.to_string(),
+                    variant_name: inference_config.variant_name.to_string(),
                     episode_id,
                     tool_config,
                     processing_time: Some(start_time.elapsed()),
@@ -485,7 +472,7 @@ pub async fn inference(
                 result.set_original_response(None);
             }
 
-            let response = InferenceResponse::new(result, episode_id, variant_name.to_string());
+            let response = InferenceResponse::new(result, episode_id, variant_name);
 
             return Ok(InferenceOutput::NonStreaming(response));
         }
@@ -503,13 +490,17 @@ pub async fn inference(
 /// If `model_name` is specified, then we use the special 'default' function
 /// Returns the function config and the function name
 fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig>, String), Error> {
-    match (&params.function_name, &params.model_name) {
+    match (
+        &params.function_name,
+        &params.model_name,
+        &params.internal_dynamic_variant_config,
+    ) {
         // Get the function config or return an error if it doesn't exist
-        (Some(function_name), None) => Ok((
+        (Some(function_name), None, _) => Ok((
             config.get_function(function_name)?.into_owned(),
             function_name.to_string(),
         )),
-        (None, Some(model_name)) => {
+        (None, Some(model_name), None) => {
             if params.variant_name.is_some() {
                 return Err(ErrorDetails::InvalidInferenceTarget {
                     message: "`variant_name` cannot be provided when using `model_name`"
@@ -528,13 +519,13 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                 Arc::new(FunctionConfig::Chat(FunctionConfigChat {
                     variants: [(
                         model_name.clone(),
-                        VariantInfo {
+                        Arc::new(VariantInfo {
                             timeouts: Default::default(),
                             inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
                                 model: (&**model_name).into(),
                                 ..Default::default()
                             }),
-                        },
+                        }),
                     )]
                     .into_iter()
                     .collect(),
@@ -549,12 +540,17 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))
         }
-        (Some(_), Some(_)) => Err(ErrorDetails::InvalidInferenceTarget {
+        (Some(_), Some(_), None) => Err(ErrorDetails::InvalidInferenceTarget {
             message: "Only one of `function_name` or `model_name` can be provided".to_string(),
         }
         .into()),
-        (None, None) => Err(ErrorDetails::InvalidInferenceTarget {
+        (None, None, None) => Err(ErrorDetails::InvalidInferenceTarget {
             message: "Either `function_name` or `model_name` must be provided".to_string(),
+        }
+        .into()),
+        (_, _, Some(_)) => Err(ErrorDetails::InvalidInferenceTarget {
+            message: "If a dynamic variant config is passed, `function_name` must be specified."
+                .to_string(),
         }
         .into()),
     }
@@ -562,13 +558,17 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
 
 fn create_stream(
     function: Arc<FunctionConfig>,
-    config: Arc<Config<'static>>,
+    config: Arc<Config>,
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
+        let mut extra_usage = Some(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).sum());
+        if extra_usage == Some(Usage { input_tokens: 0, output_tokens: 0 }) {
+            extra_usage = None;
+        }
         let mut inference_ttft = None;
         while let Some(chunk) = stream.next().await {
             if inference_ttft.is_none() {
@@ -577,11 +577,42 @@ fn create_stream(
             match chunk {
                 Ok(chunk) => {
                     buffer.push(chunk.clone());
-                    if let Some(chunk) = prepare_response_chunk(&metadata, chunk) {
+                    if let Some(chunk) = prepare_response_chunk(&metadata, chunk, &mut extra_usage) {
                         yield Ok(chunk);
                     }
                 }
                 Err(e) => yield Err(e),
+            }
+        }
+        // We didn't find an existing chunk to add 'extra_usage' (either because the underlying
+        // stream had no usage information, or because we returned zero usage due to caching)
+        if let Some(extra_usage) = extra_usage {
+            let usage_chunk = match &*function {
+                FunctionConfig::Chat(_model_provider) => {
+                    InferenceResultChunk::Chat(ChatInferenceResultChunk {
+                        created: 0,
+                        content: vec![],
+                        usage: Some(extra_usage),
+                        finish_reason: None,
+                        latency: Duration::from_millis(0),
+                        raw_response: String::new(),
+                    })
+                }
+                FunctionConfig::Json(_) => {
+                    InferenceResultChunk::Json(JsonInferenceResultChunk {
+                        thought: None,
+                        created: 0,
+                        usage: Some(extra_usage),
+                        latency: Duration::from_millis(0),
+                        raw: None,
+                        raw_response: String::new(),
+                        finish_reason: None,
+                    })
+                }
+            };
+            buffer.push(usage_chunk.clone());
+            if let Some(chunk) = prepare_response_chunk(&metadata, usage_chunk, &mut None) {
+                yield Ok(chunk);
             }
         }
         if !metadata.dryrun {
@@ -620,7 +651,7 @@ fn create_stream(
             let config = config.clone();
             let async_write = config.gateway.observability.async_writes;
             let write_future = async move {
-                let templates = &config.templates;
+                let templates = Cow::Borrowed(&config.templates);
                 let collect_chunks_args = CollectChunksArgs {
                     value: buffer,
                     inference_id,
@@ -636,7 +667,7 @@ fn create_stream(
                     function_name: &function_name,
                     variant_name: &variant_name,
                     dynamic_output_schema,
-                    templates,
+                    templates: &templates,
                     tool_config: tool_config.as_ref(),
                     cached,
                     extra_body: extra_body.clone(),
@@ -686,6 +717,7 @@ fn create_stream(
 fn prepare_response_chunk(
     metadata: &InferenceMetadata,
     chunk: InferenceResultChunk,
+    extra_usage: &mut Option<Usage>,
 ) -> Option<InferenceResponseChunk> {
     InferenceResponseChunk::new(
         chunk,
@@ -694,6 +726,7 @@ fn prepare_response_chunk(
         metadata.variant_name.clone(),
         metadata.cached,
         metadata.include_original_response,
+        extra_usage,
     )
 }
 
@@ -787,7 +820,7 @@ async fn write_file(
 
 async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    config: &Config<'_>,
+    config: &Config,
     input: ResolvedInput,
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
@@ -818,7 +851,7 @@ async fn write_inference(
         // Write the model responses to the ModelInference table
         for response in model_responses {
             let _ = clickhouse_connection_info
-                .write(&[response], "ModelInference")
+                .write(&[response], TableName::ModelInference)
                 .await;
         }
         // Write the inference to the Inference table
@@ -827,14 +860,14 @@ async fn write_inference(
                 let chat_inference =
                     ChatInferenceDatabaseInsert::new(result, input.clone(), metadata);
                 let _ = clickhouse_connection_info
-                    .write(&[chat_inference], "ChatInference")
+                    .write(&[chat_inference], TableName::ChatInference)
                     .await;
             }
             InferenceResult::Json(result) => {
                 let json_inference =
                     JsonInferenceDatabaseInsert::new(result, input.clone(), metadata);
                 let _ = clickhouse_connection_info
-                    .write(&[json_inference], "JsonInference")
+                    .write(&[json_inference], TableName::JsonInference)
                     .await;
             }
         }
@@ -879,13 +912,14 @@ pub struct JsonInferenceResponse {
 
 impl InferenceResponse {
     pub fn new(inference_result: InferenceResult, episode_id: Uuid, variant_name: String) -> Self {
+        let usage = inference_result.usage_considering_cached();
         match inference_result {
             InferenceResult::Chat(result) => InferenceResponse::Chat(ChatInferenceResponse {
                 inference_id: result.inference_id,
                 episode_id,
                 variant_name,
                 content: result.content,
-                usage: result.usage,
+                usage,
                 original_response: result.original_response,
                 finish_reason: result.finish_reason,
             }),
@@ -897,7 +931,7 @@ impl InferenceResponse {
                     episode_id,
                     variant_name,
                     output,
-                    usage: result.usage,
+                    usage,
                     original_response: result.original_response,
                     finish_reason: result.finish_reason,
                 })
@@ -1002,7 +1036,34 @@ impl InferenceResponseChunk {
         variant_name: String,
         cached: bool,
         include_original_response: bool,
+        extra_usage: &mut Option<Usage>,
     ) -> Option<Self> {
+        let mut result_usage = if cached {
+            // When our outer inference result is cached, don't
+            // add `extra_usage` to it. We'll append a final usage chunk
+            // in `create_stream` if needed
+            Some(ZERO_USAGE)
+        } else {
+            inference_result.usage().copied()
+        };
+        // The first time we encounter an empty chunk that already has usage information set,
+        // add `extra_usage` to the chunk.
+        // If we never encounter any empty chunks with usage, we'll append one ourselves
+        // in `create_stream`
+        // We do this in both cached and non-cached mode, so that our decision to emit
+        // an extra usage chunk is consistent across both modes.
+        if let Some(result_usage) = &mut result_usage {
+            let is_empty = match &inference_result {
+                InferenceResultChunk::Chat(result) => result.content.is_empty(),
+                InferenceResultChunk::Json(result) => result.raw.is_none(),
+            };
+            if is_empty {
+                if let Some(extra_usage) = extra_usage.take() {
+                    result_usage.input_tokens += extra_usage.input_tokens;
+                    result_usage.output_tokens += extra_usage.output_tokens;
+                }
+            }
+        }
         Some(match inference_result {
             InferenceResultChunk::Chat(result) => {
                 InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
@@ -1012,11 +1073,7 @@ impl InferenceResponseChunk {
                     content: result.content,
                     // Token usage is intended to represent 'billed tokens',
                     // so set it to zero if the result is cached
-                    usage: if cached {
-                        Some(ZERO_USAGE)
-                    } else {
-                        result.usage
-                    },
+                    usage: result_usage,
                     finish_reason: result.finish_reason,
                     original_chunk: include_original_response.then_some(result.raw_response),
                 })
@@ -1032,11 +1089,7 @@ impl InferenceResponseChunk {
                     raw: result.raw.unwrap_or_default(),
                     // Token usage is intended to represent 'billed tokens',
                     // so set it to zero if the result is cached
-                    usage: if cached {
-                        Some(ZERO_USAGE)
-                    } else {
-                        result.usage
-                    },
+                    usage: result_usage,
                     finish_reason: result.finish_reason,
                     original_chunk: include_original_response.then_some(result.raw_response),
                 })
@@ -1146,6 +1199,73 @@ impl ChatCompletionInferenceParams {
     }
 }
 
+fn prepare_candidate_variants(
+    candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+    tags: &mut HashMap<String, String>,
+    pinned_variant_name: Option<&str>,
+    dynamic_variant_config: Option<UninitializedVariantInfo>,
+    template_config: &mut Cow<'_, TemplateConfig>,
+) -> Result<(), Error> {
+    match (pinned_variant_name, dynamic_variant_config) {
+        // If a variant is pinned, only that variant should be attempted
+        (Some(variant_name), None) => {
+            candidate_variants.retain(|k, _| k == variant_name);
+
+            // If the pinned variant doesn't exist, return an error
+            if candidate_variants.is_empty() {
+                return Err(ErrorDetails::UnknownVariant {
+                    name: variant_name.to_string(),
+                }
+                .into());
+            }
+            tags.insert(
+                "tensorzero::variant_pinned".to_string(),
+                variant_name.to_string(),
+            );
+        }
+        (None, Some(dynamic_variant_config)) => {
+            // Replace the variant config with just the dynamic variant
+            let candidate_variant_info = load_dynamic_variant_info(dynamic_variant_config)?;
+
+            // Replace templates in the template config with the ones passed in
+            // We Clone here so that we can still reference the old templates that don't conflict
+            let mut dynamic_template_config: TemplateConfig = template_config.clone().into_owned();
+            for path_with_contents in candidate_variant_info.get_all_template_paths() {
+                let template_name = path_with_contents.path.get_template_key();
+                if dynamic_template_config.contains_template(&template_name) {
+                    return Err(ErrorDetails::InvalidDynamicTemplatePath {
+                        name: template_name,
+                    }
+                    .into());
+                }
+                dynamic_template_config
+                    .add_template(template_name, path_with_contents.contents.clone())?;
+            }
+            *template_config = Cow::Owned(dynamic_template_config);
+            candidate_variants.clear();
+            candidate_variants.insert(
+                "tensorzero::dynamic_variant".to_string(),
+                Arc::new(candidate_variant_info),
+            );
+        }
+        (None, None) => {
+            // Remove all zero-weight variants - these can only be used if explicitly pinned above
+            candidate_variants.retain(|_, variant| {
+                // Retain 'None' and positive-weight variants, discarding zero-weight variants
+                variant.inner.weight().is_none_or(|w| w > 0.0)
+            });
+        }
+        _ => {
+            return Err(ErrorDetails::InvalidRequest {
+                message: "`variant_name` and `internal_dynamic_variant_config` cannot both be set."
+                    .to_string(),
+            }
+            .into())
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1171,7 +1291,7 @@ mod tests {
             created: 0,
             usage: None,
             finish_reason: Some(FinishReason::Stop),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(100),
         });
         let raw_request = "raw request".to_string();
@@ -1203,7 +1323,7 @@ mod tests {
             include_original_response: false,
         };
 
-        let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
+        let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
         match result {
             InferenceResponseChunk::Chat(c) => {
                 assert_eq!(c.inference_id, inference_metadata.inference_id);
@@ -1224,7 +1344,7 @@ mod tests {
             thought: Some("Thought 1".to_string()),
             created: 0,
             usage: None,
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(100),
             finish_reason: Some(FinishReason::Stop),
         });
@@ -1256,7 +1376,7 @@ mod tests {
             include_original_response: false,
         };
 
-        let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
+        let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
         match result {
             InferenceResponseChunk::Json(c) => {
                 assert_eq!(c.inference_id, inference_metadata.inference_id);

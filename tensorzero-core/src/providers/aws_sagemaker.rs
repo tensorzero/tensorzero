@@ -16,6 +16,7 @@ use aws_sdk_sagemakerruntime::types::ResponseStream;
 use aws_smithy_types::error::display::DisplayErrorContext;
 use eventsource_stream::{EventStreamError, Eventsource};
 use futures::StreamExt;
+use serde::Serialize;
 use std::time::Instant;
 
 use super::aws_common;
@@ -26,11 +27,16 @@ const PROVIDER_NAME: &str = "AWS Sagemaker";
 const PROVIDER_TYPE: &str = "aws_sagemaker";
 
 // NB: If you add `Clone` someday, you'll need to wrap client in Arc
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct AWSSagemakerProvider {
     endpoint_name: String,
+    #[serde(skip)]
     client: aws_sdk_sagemakerruntime::Client,
-    hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
+    #[serde(skip)] // TODO: add a way to Serialize the WrappedProvider
+    pub hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
+    #[serde(skip)]
     base_config: aws_sdk_sagemakerruntime::config::Builder,
 }
 

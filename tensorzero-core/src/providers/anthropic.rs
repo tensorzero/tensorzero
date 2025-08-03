@@ -33,6 +33,7 @@ use crate::model::{
     build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
     ModelProvider,
 };
+use crate::providers;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -50,15 +51,18 @@ lazy_static! {
 }
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const PROVIDER_NAME: &str = "Anthropic";
-const PROVIDER_TYPE: &str = "anthropic";
+pub const PROVIDER_TYPE: &str = "anthropic";
 
 fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("ANTHROPIC_API_KEY".to_string())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct AnthropicProvider {
     model_name: String,
+    #[serde(skip)]
     credentials: AnthropicCredentials,
 }
 
@@ -473,8 +477,11 @@ enum AnthropicMessageContent<'a> {
         content: Vec<AnthropicMessageContent<'a>>,
     },
     Thinking {
-        thinking: &'a str,
+        thinking: Option<&'a str>,
         signature: Option<&'a str>,
+    },
+    RedactedThinking {
+        data: &'a str,
     },
     ToolUse {
         id: &'a str,
@@ -568,12 +575,22 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, AnthropicMessag
                     )))
                 }
             }
-            ContentBlock::Thought(thought) => Ok(Some(FlattenUnknown::Normal(
-                AnthropicMessageContent::Thinking {
-                    thinking: &thought.text,
-                    signature: thought.signature.as_deref(),
-                },
-            ))),
+            ContentBlock::Thought(thought) => {
+                if let Some(text) = thought.text.as_deref() {
+                    Ok(Some(FlattenUnknown::Normal(
+                        AnthropicMessageContent::Thinking {
+                            thinking: Some(text),
+                            signature: thought.signature.as_deref(),
+                        },
+                    )))
+                } else if let Some(signature) = thought.signature.as_deref() {
+                    Ok(Some(FlattenUnknown::Normal(
+                        AnthropicMessageContent::RedactedThinking { data: signature },
+                    )))
+                } else {
+                    Ok(None)
+                }
+            }
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
@@ -596,7 +613,7 @@ impl<'a> TryFrom<&'a RequestMessage> for AnthropicMessage<'a> {
         let content: Vec<FlattenUnknown<AnthropicMessageContent>> = inference_message
             .content
             .iter()
-            .map(|block| block.try_into())
+            .map(TryInto::try_into)
             .collect::<Result<Vec<Option<FlattenUnknown<AnthropicMessageContent>>>, _>>()?
             .into_iter()
             .flatten()
@@ -648,7 +665,7 @@ impl<'a> AnthropicRequestBody<'a> {
             .iter()
             .map(AnthropicMessage::try_from)
             .collect::<Result<Vec<_>, _>>()?;
-        let messages = prepare_messages(request_messages)?;
+        let messages = prepare_messages(request_messages);
         let messages = if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
@@ -666,12 +683,7 @@ impl<'a> AnthropicRequestBody<'a> {
             if matches!(c.tool_choice, ToolChoice::None) {
                 None
             } else {
-                Some(
-                    c.tools_available
-                        .iter()
-                        .map(|tool| tool.into())
-                        .collect::<Vec<_>>(),
-                )
+                Some(c.tools_available.iter().map(Into::into).collect::<Vec<_>>())
             }
         });
 
@@ -700,7 +712,9 @@ impl<'a> AnthropicRequestBody<'a> {
 /// Modifies the message array to satisfy Anthropic API requirements by:
 /// - Prepending a default User message with "[listening]" if the first message is not from a User
 /// - Appending a default User message with "[listening]" if the last message is from an Assistant
-fn prepare_messages(mut messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMessage>, Error> {
+fn prepare_messages(
+    mut messages: Vec<AnthropicMessage>,
+) -> std::vec::Vec<providers::anthropic::AnthropicMessage<'_>> {
     // Anthropic also requires that there is at least one message and it is a User message.
     // If it's not we will prepend a default User message.
     match messages.first() {
@@ -734,7 +748,7 @@ fn prepare_messages(mut messages: Vec<AnthropicMessage>) -> Result<Vec<Anthropic
             });
         }
     }
-    Ok(messages)
+    messages
 }
 
 fn prefill_json_message(messages: Vec<AnthropicMessage>) -> Vec<AnthropicMessage> {
@@ -816,6 +830,9 @@ pub enum AnthropicContentBlock {
         thinking: String,
         signature: String,
     },
+    RedactedThinking {
+        data: String,
+    },
     ToolUse {
         id: String,
         name: String,
@@ -851,9 +868,17 @@ fn convert_to_output(
             thinking,
             signature,
         }) => Ok(ContentBlockOutput::Thought(Thought {
-            text: thinking,
+            text: Some(thinking),
             signature: Some(signature),
+            provider_type: Some(PROVIDER_TYPE.to_string()),
         })),
+        FlattenUnknown::Normal(AnthropicContentBlock::RedactedThinking { data }) => {
+            Ok(ContentBlockOutput::Thought(Thought {
+                text: None,
+                signature: Some(data),
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+            }))
+        }
         FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown {
             data: data.into_owned(),
             model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
@@ -966,7 +991,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
                 raw_response,
                 usage: response.usage.into(),
                 latency,
-                finish_reason: response.stop_reason.map(|s| s.into()),
+                finish_reason: response.stop_reason.map(AnthropicStopReason::into),
             },
         ))
     }
@@ -1106,6 +1131,7 @@ fn anthropic_to_tensorzero_stream_message(
                         text: Some(thinking),
                         signature: None,
                         id: index.to_string(),
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,
                     raw_message,
@@ -1119,6 +1145,7 @@ fn anthropic_to_tensorzero_stream_message(
                         text: None,
                         signature: Some(signature),
                         id: index.to_string(),
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,
                     raw_message,
@@ -1153,7 +1180,7 @@ fn anthropic_to_tensorzero_stream_message(
                         id,
                         raw_name: Some(name),
                         // As far as I can tell this is always {} so we ignore
-                        raw_arguments: "".to_string(),
+                        raw_arguments: String::new(),
                     })],
                     None,
                     raw_message,
@@ -1169,12 +1196,27 @@ fn anthropic_to_tensorzero_stream_message(
                     text: Some(thinking),
                     signature: Some(signature),
                     id: index.to_string(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 })],
                 None,
                 raw_message,
                 message_latency,
                 None,
             ))),
+            AnthropicContentBlock::RedactedThinking { data } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: None,
+                        signature: Some(data),
+                        id: index.to_string(),
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
         },
         AnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
         AnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
@@ -1194,7 +1236,7 @@ fn anthropic_to_tensorzero_stream_message(
                 Some(usage.into()),
                 raw_message,
                 message_latency,
-                delta.stop_reason.map(|s| s.into()),
+                delta.stop_reason.map(AnthropicStopReason::into),
             )))
         }
         AnthropicStreamMessage::MessageStart { message } => {
@@ -1726,7 +1768,7 @@ mod tests {
 
         // Test case 1: Empty messages - should add listening message
         let messages = vec![];
-        let result = prepare_messages(messages).unwrap();
+        let result = prepare_messages(messages);
         assert_eq!(result, vec![listening_message.clone()]);
 
         // Test case 2: First message is Assistant - should prepend listening message
@@ -1744,7 +1786,7 @@ mod tests {
                 })],
             },
         ];
-        let result = prepare_messages(messages).unwrap();
+        let result = prepare_messages(messages);
         assert_eq!(
             result,
             vec![
@@ -1779,7 +1821,7 @@ mod tests {
                 })],
             },
         ];
-        let result = prepare_messages(messages).unwrap();
+        let result = prepare_messages(messages);
         assert_eq!(
             result,
             vec![
@@ -1820,7 +1862,7 @@ mod tests {
                 })],
             },
         ];
-        let result = prepare_messages(messages.clone()).unwrap();
+        let result = prepare_messages(messages.clone());
         assert_eq!(result, messages);
 
         // Test case 5: Both first Assistant and last Assistant - should add listening messages at both ends
@@ -1844,7 +1886,7 @@ mod tests {
                 })],
             },
         ];
-        let result = prepare_messages(messages).unwrap();
+        let result = prepare_messages(messages);
         assert_eq!(
             result,
             vec![
@@ -1878,7 +1920,7 @@ mod tests {
                 text: "Hi",
             })],
         }];
-        let result = prepare_messages(messages).unwrap();
+        let result = prepare_messages(messages);
         assert_eq!(
             result,
             vec![
@@ -1900,7 +1942,7 @@ mod tests {
                 text: "Hello",
             })],
         }];
-        let result = prepare_messages(messages.clone()).unwrap();
+        let result = prepare_messages(messages.clone());
         assert_eq!(result, messages);
     }
 
@@ -2346,7 +2388,7 @@ mod tests {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool1".to_string());
                 assert_eq!(tool_call.raw_name, Some("calculator".to_string()));
-                assert_eq!(tool_call.raw_arguments, "".to_string());
+                assert_eq!(tool_call.raw_arguments, String::new());
             }
             _ => panic!("Expected a tool call content block"),
         }
@@ -2626,7 +2668,7 @@ mod tests {
             content: vec![],
             created: 0,
             usage: None,
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
         };
@@ -2643,7 +2685,7 @@ mod tests {
         let chunk = ProviderInferenceResponseChunk {
             created: 0,
             usage: None,
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
             content: vec![ContentBlockChunk::Text(TextChunk {
@@ -2665,7 +2707,7 @@ mod tests {
         let chunk = ProviderInferenceResponseChunk {
             created: 0,
             usage: None,
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
             content: vec![
@@ -2687,7 +2729,7 @@ mod tests {
         let chunk = ProviderInferenceResponseChunk {
             created: 0,
             usage: None,
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
             content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {

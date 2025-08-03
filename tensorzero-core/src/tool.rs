@@ -74,6 +74,8 @@ impl Tool {
     }
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ToolConfig {
     Static(Arc<StaticToolConfig>),
@@ -83,6 +85,8 @@ pub enum ToolConfig {
 }
 
 /// Contains the configuration information for a specific tool
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[derive(Debug, PartialEq, Serialize)]
 pub struct StaticToolConfig {
     pub description: String,
@@ -92,6 +96,8 @@ pub struct StaticToolConfig {
 }
 
 /// Contains the configuration information for a tool defined at runtime
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct DynamicToolConfig {
     pub description: String,
@@ -102,6 +108,8 @@ pub struct DynamicToolConfig {
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImplicitToolConfig {
     pub parameters: StaticJSONSchema,
@@ -109,6 +117,8 @@ pub struct ImplicitToolConfig {
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement for a JSON schema that is dynamically passed at inference time
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DynamicImplicitToolConfig {
     pub parameters: DynamicJSONSchema,
@@ -118,6 +128,8 @@ pub struct DynamicImplicitToolConfig {
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ToolCallConfig {
     pub tools_available: Vec<ToolConfig>,
     pub tool_choice: ToolChoice,
@@ -206,13 +218,14 @@ impl ToolCallConfig {
             .parallel_tool_calls
             .or(function_parallel_tool_calls);
 
-        let tool_call_config_option = match tools_available.is_empty() {
-            true => None,
-            false => Some(Self {
+        let tool_call_config_option = if tools_available.is_empty() {
+            None
+        } else {
+            Some(Self {
                 tools_available,
                 tool_choice,
                 parallel_tool_calls,
-            }),
+            })
         };
 
         Ok(tool_call_config_option)
@@ -574,7 +587,7 @@ impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
             tools_available: tool_call_config
                 .tools_available
                 .into_iter()
-                .map(|tool| tool.into())
+                .map(ToolConfig::into)
                 .collect(),
             tool_choice: tool_call_config.tool_choice,
             parallel_tool_calls: tool_call_config.parallel_tool_calls,
@@ -1191,7 +1204,7 @@ mod tests {
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.id, "123");
 
-        assert!(logs_contain("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object."))
+        assert!(logs_contain("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object."));
     }
 
     #[tokio::test]

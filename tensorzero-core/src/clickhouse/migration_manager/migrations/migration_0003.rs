@@ -64,13 +64,13 @@ impl Migration for Migration0003<'_> {
 
         for table in tables {
             let query = format!(
-                r#"SELECT EXISTS(
+                r"SELECT EXISTS(
                     SELECT 1
                     FROM system.columns
                     WHERE database = '{database}'
                       AND table = '{table}'
                       AND name = 'tags'
-                )"#
+                )"
             );
             match self.clickhouse.run_query_synchronous_no_params(query).await {
                 Err(e) => {
@@ -81,7 +81,7 @@ impl Migration for Migration0003<'_> {
                     .into());
                 }
                 Ok(response) => {
-                    if response.trim() != "1" {
+                    if response.response.trim() != "1" {
                         return Ok(true);
                     }
                 }
@@ -107,7 +107,7 @@ impl Migration for Migration0003<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `FeedbackTag` table
-        let query = r#"
+        let query = r"
             CREATE TABLE IF NOT EXISTS FeedbackTag
             (
                 metric_name LowCardinality(String),
@@ -116,43 +116,43 @@ impl Migration for Migration0003<'_> {
                 feedback_id UUID, -- must be a UUIDv7
             ) ENGINE = MergeTree()
             ORDER BY (metric_name, key, value);
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `BooleanMetricFeedback` table
-        let query = r#"
+        let query = r"
             ALTER TABLE BooleanMetricFeedback
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `CommentFeedback` table
-        let query = r#"
+        let query = r"
             ALTER TABLE CommentFeedback
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `DemonstrationFeedback` table
-        let query = r#"
+        let query = r"
             ALTER TABLE DemonstrationFeedback
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `FloatMetricFeedback` table
-        let query = r#"
+        let query = r"
             ALTER TABLE FloatMetricFeedback
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -162,7 +162,7 @@ impl Migration for Migration0003<'_> {
         // We do not need to handle the case where there are already tags in the table since we created those columns just now.
         // So, we don't worry about timestamps for cutting over to the materialized views.
         // Create the materialized view for the `FeedbackTag` table from BooleanMetricFeedback
-        let query = r#"
+        let query = r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackTagView
             TO FeedbackTag
             AS
@@ -173,14 +173,14 @@ impl Migration for Migration0003<'_> {
                     id as feedback_id
                 FROM BooleanMetricFeedback
                 ARRAY JOIN mapKeys(tags) as key
-            "#;
+            ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from CommentFeedback
-        let query = r#"
+        let query = r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS CommentFeedbackTagView
             TO FeedbackTag
             AS
@@ -191,14 +191,14 @@ impl Migration for Migration0003<'_> {
                     id as feedback_id
                 FROM CommentFeedback
                 ARRAY JOIN mapKeys(tags) as key
-            "#;
+            ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from DemonstrationFeedback
-        let query = r#"
+        let query = r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS DemonstrationFeedbackTagView
             TO FeedbackTag
             AS
@@ -209,14 +209,14 @@ impl Migration for Migration0003<'_> {
                     id as feedback_id
                 FROM DemonstrationFeedback
                 ARRAY JOIN mapKeys(tags) as key
-            "#;
+            ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from FloatMetricFeedback
-        let query = r#"
+        let query = r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackTagView
             TO FeedbackTag
             AS
@@ -227,7 +227,7 @@ impl Migration for Migration0003<'_> {
                     id as feedback_id
                 FROM FloatMetricFeedback
                 ARRAY JOIN mapKeys(tags) as key
-            "#;
+            ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
