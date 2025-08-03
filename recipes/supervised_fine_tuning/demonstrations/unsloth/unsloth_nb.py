@@ -217,6 +217,24 @@ tokenizer = get_chat_template(
 
 
 # %%
+def tensorzero_to_chatml_tools(tools: Optional[List[Any]]) -> List[Dict[str, Any]]:
+    """Convert TensorZero tools to OpenAI format."""
+    chatml_tools: List[Dict[str, Any]] = []
+    if tools:
+        for tool in tools:
+            chatml_tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.parameters,
+                    },
+                }
+            )
+    return chatml_tools
+
+
 def message_to_chatml(message: OutputMessage) -> Optional[List[Dict[str, Any]]]:
     chatml_messages: List[Dict[str, Any]] = []
     assert message.role in ["user", "assistant"], f"Invalid role: {message.role}"
@@ -315,9 +333,14 @@ for rendered_inference in rendered_inferences:
     for message in model_input.messages:
         messages.extend(message_to_chatml(message))
     messages.append(output_to_chatml(rendered_inference.output))
-    tokenized_messages = tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=False
-    )
+    # Add tools if available
+    payload = {"messages": messages, "tokenize": False, "add_generation_prompt": False}
+    if rendered_inference.tool_params:
+        tools = tensorzero_to_chatml_tools(
+            rendered_inference.tool_params.tools_available
+        )
+        payload["tools"] = tools
+    tokenized_messages = tokenizer.apply_chat_template(**payload)
 
     # Drop conversations that have unknown content
     if all(msg is not None for msg in messages):
