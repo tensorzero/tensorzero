@@ -8,6 +8,7 @@ import type {
   ClientInputMessage,
   ClientInputMessageContent,
   JsonValue,
+  VariantInfo,
 } from "tensorzero-node";
 import type {
   InputMessageContent as TensorZeroContent,
@@ -289,9 +290,10 @@ interface ClickHouseDatapointActionArgs {
   // Optional fields for json / chat datapoints
   tool_params?: ToolCallConfigDatabaseInsert;
   output_schema?: JsonValue;
-  variant: string;
+  variant?: string;
   cache_options: CacheParamsOptions;
   dryrun: boolean;
+  editedVariantInfo?: VariantInfo;
 }
 
 export function prepareInferenceActionRequest(
@@ -357,7 +359,7 @@ export function prepareInferenceActionRequest(
       ...baseParams,
       function_name: args.functionName,
       input: resolvedInputToClientInput(args.input),
-      variant_name: args.variant,
+      variant_name: args.variant || null,
       output_schema: args.output_schema || null,
       tool_choice: tool_choice || null,
       dryrun: true,

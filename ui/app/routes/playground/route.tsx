@@ -262,6 +262,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     inputs,
     selectedVariants,
     serverInferences,
+    editedVariants,
   );
 
   const functionConfig = useFunctionConfig(functionName);
@@ -307,7 +308,13 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
         <FunctionSelector
           selected={functionName}
           onSelect={(value) =>
-            updateSearchParams({ functionName: value, variant: null })
+            // If the function is changed, we should reset all selectors since
+            // the variant is no longer valid and the dataset may not be.
+            updateSearchParams({
+              functionName: value,
+              variant: null,
+              dataset: null,
+            })
           }
           functions={useAllFunctionConfigs()}
         />
@@ -566,6 +573,7 @@ function useClientInferences(
   inputs: DisplayInput[] | undefined,
   selectedVariants: string[],
   serverInferences: NestedPromiseMap<InferenceResponse>,
+  editedVariants: Map<string, VariantInfo>,
 ) {
   const { map, setPromise, setMap } =
     useNestedPromiseMap<InferenceResponse>(serverInferences);
@@ -611,12 +619,27 @@ function useClientInferences(
           variantMap = new Map();
           newMap.set(variant, variantMap);
         }
+        let variantPin: string | undefined;
+        let editedVariantInfo: VariantInfo | undefined;
+        if (isEditedVariantName(variant)) {
+          // Instead of setting the variant for inference, we'll send the VariantInfo
+          variantPin = undefined;
+          editedVariantInfo = editedVariants.get(variant);
+          if (!editedVariantInfo) {
+            throw new Error(
+              `Variant ${variant} not found in editedVariants Map`,
+            );
+          }
+        } else {
+          variantPin = variant;
+          editedVariantInfo = undefined;
+        }
 
         const request = prepareInferenceActionRequest({
           source: "clickhouse_datapoint",
           input,
           functionName,
-          variant: variant,
+          variant: variantPin,
           tool_params:
             datapoint?.type === "chat"
               ? (datapoint.tool_params ?? undefined)
@@ -628,6 +651,7 @@ function useClientInferences(
             enabled: "off",
           },
           dryrun: true,
+          editedVariantInfo,
         });
         const formData = new FormData();
         formData.append("data", JSON.stringify(request));
@@ -646,7 +670,14 @@ function useClientInferences(
 
       return newMap;
     });
-  }, [functionName, datapoints, inputs, selectedVariants, setMap]);
+  }, [
+    functionName,
+    datapoints,
+    inputs,
+    selectedVariants,
+    setMap,
+    editedVariants,
+  ]);
 
   return { map, setPromise, setMap };
 }
@@ -757,13 +788,17 @@ function updateVariantWithEdited(
   beginning with "tensorzero::edited::" are edited variants.
   If the current variant is already "tensorzero::edited::*" we can reuse the existing name.
 
+  We add a random identifier so that each edit gives a new name.
+
   This function checks if this is needed and then returns the new variant name.
 */
 function getNewVariantName(currentVariantName: string): string {
   if (isEditedVariantName(currentVariantName)) {
     return currentVariantName;
   }
-  return `tensorzero::edited::${currentVariantName}`;
+  // generate a random identifier here so that each edit is unique
+  const randomId = Math.random().toString(36).substring(2, 15);
+  return `tensorzero::edited::${randomId}::${currentVariantName}`;
 }
 
 function isEditedVariantName(variantName: string): boolean {
@@ -795,7 +830,8 @@ function swapElementInArray(
 
 function getDisplayVariantName(variantName: string): string {
   if (isEditedVariantName(variantName)) {
-    return variantName.replace("tensorzero::edited::", "") + " (edited)";
+    const match = variantName.match(/^tensorzero::edited::[^:]*::(.*)$/);
+    return match ? match[1] : "Error: malformed variant name.";
   }
   return variantName;
 }
