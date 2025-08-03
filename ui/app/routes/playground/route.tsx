@@ -366,7 +366,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                               to={`/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variant)}`}
                               className="max-w-full truncate font-mono text-blue-600 hover:text-blue-800 hover:underline"
                             >
-                              {variant}
+                              {getDisplayVariantName(variant)}
                             </Link>
                             <EditButton
                               onClick={() => {
@@ -791,4 +791,11 @@ function swapElementInArray(
   newArray[index] = newElement;
 
   return newArray;
+}
+
+function getDisplayVariantName(variantName: string): string {
+  if (isEditedVariantName(variantName)) {
+    return variantName.replace("tensorzero::edited::", "") + " (edited)";
+  }
+  return variantName;
 }
