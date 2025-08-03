@@ -38,6 +38,8 @@ import { safeParseInt } from "~/utils/common";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import type { InferenceResponse } from "tensorzero-node";
 import { EditButton } from "~/components/utils/EditButton";
+import { VariantEditor } from "~/components/function/variant/VariantEditor";
+import { logger } from "~/utils/logger";
 
 const DEFAULT_LIMIT = 5;
 
@@ -218,6 +220,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const [editedVariants, setEditedVariants] = useState<
     Map<string, VariantInfo>
   >(new Map());
+  const [editingVariant, setEditingVariant] = useState<string | null>(null);
   const { searchParams, loadingVariants } = useMemo(() => {
     if (navigation.state !== "loading") {
       return {
@@ -367,7 +370,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                             </Link>
                             <EditButton
                               onClick={() => {
-                                // TODO: Handle edit action
+                                setEditingVariant(variant);
                               }}
                               disabled={!isChatCompletion}
                               tooltip={
@@ -476,6 +479,63 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
             />
           </>
         )}
+      {editingVariant &&
+        (() => {
+          // First check if it's an edited variant
+          const edited = editedVariants.get(editingVariant);
+          if (edited) {
+            return (
+              <VariantEditor
+                variantInfo={edited}
+                confirmVariantInfo={(newVariantInfo) => {
+                  updateVariantWithEdited(
+                    editingVariant,
+                    newVariantInfo,
+                    selectedVariants,
+                    editedVariants,
+                    setEditedVariants,
+                    updateSearchParams,
+                  );
+                  setEditingVariant(null);
+                }}
+                isOpen={true}
+                onClose={() => setEditingVariant(null)}
+                variantName={editingVariant}
+              />
+            );
+          }
+
+          // Otherwise get from function config
+          const original = functionConfig?.variants?.[editingVariant];
+          if (original) {
+            return (
+              <VariantEditor
+                variantInfo={original}
+                confirmVariantInfo={(newVariantInfo) => {
+                  updateVariantWithEdited(
+                    editingVariant,
+                    newVariantInfo,
+                    selectedVariants,
+                    editedVariants,
+                    setEditedVariants,
+                    updateSearchParams,
+                  );
+                  setEditingVariant(null);
+                }}
+                isOpen={true}
+                onClose={() => setEditingVariant(null)}
+                variantName={editingVariant}
+              />
+            );
+          }
+
+          // This shouldn't happen, but handle gracefully
+          logger.warn(
+            `Could not find variant ${editingVariant} in either edited variants or function config`,
+          );
+          setEditingVariant(null);
+          return null;
+        })()}
     </PageLayout>
   );
 }
@@ -659,29 +719,6 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 }
 
 /*
- * Given an array of strings, an existing string element, and a new string element
- * returns a new array with the new element in place of the existing one.
- * Throws an error if the existing element is not found in the array.
- * Useful for editing variants.
- */
-function swapElementInArray(
-  existing: string,
-  newElement: string,
-  array: string[],
-): string[] {
-  const index = array.indexOf(existing);
-
-  if (index === -1) {
-    throw new Error(`Element "${existing}" not found in array`);
-  }
-
-  const newArray = [...array];
-  newArray[index] = newElement;
-
-  return newArray;
-}
-
-/*
 Updates the page with a new edited variant.
 There are several pieces of state that need to be updated in order to reflect an edited variant:
 * the name of the new variant needs to be calculated.
@@ -703,6 +740,16 @@ function updateVariantWithEdited(
   ) => void,
 ) {
   const newVariantName = getNewVariantName(currentVariantName);
+  const newEditedVariant = newVariantConfig;
+  const newEditedVariants = new Map(editedVariants);
+  newEditedVariants.set(newVariantName, newEditedVariant);
+  setEditedVariants(newEditedVariants);
+  const newSelectedVariants = swapElementInArray(
+    selectedVariants,
+    currentVariantName,
+    newVariantName,
+  );
+  updateSearchParams({ variant: newSelectedVariants });
 }
 
 /*
@@ -713,8 +760,35 @@ function updateVariantWithEdited(
   This function checks if this is needed and then returns the new variant name.
 */
 function getNewVariantName(currentVariantName: string): string {
-  if (currentVariantName.startsWith("tensorzero::edited::")) {
+  if (isEditedVariantName(currentVariantName)) {
     return currentVariantName;
   }
   return `tensorzero::edited::${currentVariantName}`;
+}
+
+function isEditedVariantName(variantName: string): boolean {
+  return variantName.startsWith("tensorzero::edited::");
+}
+
+/*
+ * Given an array of strings, an existing string element, and a new string element
+ * returns a new array with the new element in place of the existing one.
+ * Throws an error if the existing element is not found in the array.
+ * Useful for editing variants.
+ */
+function swapElementInArray(
+  array: string[],
+  existing: string,
+  newElement: string,
+): string[] {
+  const index = array.indexOf(existing);
+
+  if (index === -1) {
+    throw new Error(`Element "${existing}" not found in array`);
+  }
+
+  const newArray = [...array];
+  newArray[index] = newElement;
+
+  return newArray;
 }
