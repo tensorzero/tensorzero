@@ -194,13 +194,6 @@ pub async fn start_batch_inference_handler(
 
     // Keep track of which variants failed
     let mut variant_errors = std::collections::HashMap::new();
-    let inference_config = BatchInferenceConfig::new(
-        &config.templates,
-        &tool_configs,
-        batch_dynamic_output_schemas,
-        &params.function_name,
-        params.variant_name.as_deref(),
-    );
 
     let cache_options = CacheOptions {
         max_age_s: None,
@@ -242,8 +235,7 @@ pub async fn start_batch_inference_handler(
             message: "batch episode_ids unexpectedly empty. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
         }))?;
 
-    let inference_configs = inference_config.inference_configs(&episode_ids, &inference_ids);
-    while !candidate_variant_names.is_empty() {
+    while !candidate_variants.is_empty() {
         // We sample the same variant for the whole batch
         let (variant_name, variant) = sample_variant(
             &mut candidate_variants,
@@ -299,7 +291,7 @@ pub async fn start_batch_inference_handler(
             resolved_inputs,
             result,
             write_metadata,
-            &inference_config,
+            &tool_configs,
             &inference_configs,
         )
         .await?;
@@ -566,8 +558,8 @@ async fn write_start_batch_inference<'a>(
     inputs: Vec<ResolvedInput>,
     result: StartBatchModelInferenceWithMetadata<'a>,
     metadata: BatchInferenceDatabaseInsertMetadata<'a>,
-    inference_config: &BatchInferenceConfig<'a>,
-    inference_configs: &[InferenceConfig<'a, 'a>],
+    tool_configs: &[Option<ToolCallConfig>],
+    inference_configs: &[InferenceConfig<'a>],
 ) -> Result<(Uuid, Vec<Uuid>), Error> {
     // Collect all the data into BatchInferenceRow structs
     let inference_rows = izip!(
