@@ -4,7 +4,7 @@ This example demonstrates how to finetune a vision-language model (VLM) using Te
 
 To keep things simple, we'll tackle a naive task: classifying arXiv papers based on an image of the paper's first page, without providing any instructions about the taxonomy of the categories.
 Before fine-tuning, unsurprisingly, the model completely fails at this task due to the lack of context (e.g. with outputs such as `{"category": "Academic Paper"}`).
-After fine-tuning, the model achieves perfect accuracy on a held-out test set (e.g. with outputs such as `{"category": "cs.CV"}`).
+After fine-tuning, the model achieves high accuracy on a held-out test set (e.g. with outputs such as `{"category": "cs.CV"}`).
 
 ## Getting Started
 
@@ -60,4 +60,4 @@ retries = { num_retries = 2, max_delay_s = 10 }
 ```
 
 Restart the gateway to apply the configuration changes and re-run the notebook with the `finetuned` variant.
-You'll notice that the model now achieves perfect accuracy on the held-out test set.
+You'll notice that the model now achieves high accuracy on the held-out test set.
