@@ -443,7 +443,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                                 datapoint={datapoint}
                                 variantName={variant}
                                 isLoading={loadingVariants.has(variant)}
-                                serverInference={map
+                                inferencePromise={map
                                   .get(variant)
                                   ?.get(datapoint.id)}
                                 setPromise={setPromise}

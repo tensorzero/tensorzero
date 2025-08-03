@@ -12,7 +12,7 @@ import type { Datapoint, InferenceResponse } from "tensorzero-node";
 interface DatapointPlaygroundOutputProps {
   datapoint: Datapoint;
   variantName: string;
-  serverInference: Promise<InferenceResponse> | undefined;
+  inferencePromise: Promise<InferenceResponse> | undefined;
   isLoading?: boolean;
   setPromise: (
     variantName: string,
@@ -26,7 +26,7 @@ const DatapointPlaygroundOutput = memo(
   function DatapointPlaygroundOutput({
     datapoint,
     variantName,
-    serverInference,
+    inferencePromise,
     setPromise,
     input,
     functionName,
@@ -56,7 +56,7 @@ const DatapointPlaygroundOutput = memo(
       </Button>
     );
 
-    if (!serverInference) {
+    if (!inferencePromise) {
       return isLoading ? (
         loadingIndicator
       ) : (
@@ -73,7 +73,7 @@ const DatapointPlaygroundOutput = memo(
       <div className="group relative">
         <Suspense fallback={loadingIndicator}>
           <Await
-            resolve={serverInference}
+            resolve={inferencePromise}
             errorElement={
               <>
                 {refreshButton}
@@ -117,7 +117,7 @@ const DatapointPlaygroundOutput = memo(
       prevProps.datapoint.id === nextProps.datapoint.id &&
       prevProps.variantName === nextProps.variantName &&
       prevProps.functionName === nextProps.functionName &&
-      prevProps.serverInference === nextProps.serverInference &&
+      prevProps.inferencePromise === nextProps.inferencePromise &&
       prevProps.setPromise === nextProps.setPromise &&
       JSON.stringify(prevProps.input) === JSON.stringify(nextProps.input)
     );
