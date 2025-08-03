@@ -21,7 +21,10 @@ import {
 } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
-import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
+import type {
+  Datapoint as TensorZeroDatapoint,
+  VariantInfo,
+} from "tensorzero-node";
 import type { DisplayInput } from "~/utils/clickhouse/common";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "~/components/ui/button";
@@ -211,6 +214,9 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const [currentSearchParams, setSearchParams] = useSearchParams();
+  const [editedVariants, setEditedVariants] = useState<
+    Map<string, VariantInfo>
+  >(new Map());
   const { searchParams, loadingVariants } = useMemo(() => {
     if (navigation.state !== "loading") {
       return {
