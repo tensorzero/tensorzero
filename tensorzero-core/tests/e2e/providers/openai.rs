@@ -1087,6 +1087,7 @@ async fn test_embedding_request() {
         toml::from_str::<UninitializedEmbeddingProviderConfig>(provider_config_serialized)
             .expect("Failed to deserialize EmbeddingProviderConfig")
             .load(&ProviderTypesConfig::default())
+            .await
             .unwrap();
     assert!(matches!(
         provider_config,
@@ -1203,6 +1204,7 @@ async fn test_embedding_sanity_check() {
         toml::from_str::<UninitializedEmbeddingProviderConfig>(provider_config_serialized)
             .expect("Failed to deserialize EmbeddingProviderConfig")
             .load(&ProviderTypesConfig::default())
+            .await
             .unwrap();
     let client = Client::new();
     let embedding_request_a = EmbeddingRequest {

@@ -21,7 +21,7 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { Badge } from "~/components/ui/badge";
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
 import {
   prepareInferenceActionRequest,
@@ -37,7 +37,7 @@ import {
   getDatasetCounts,
   staleDatapoint,
 } from "~/utils/clickhouse/datasets.server";
-import { getConfig } from "~/utils/config/index.server";
+import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { logger } from "~/utils/logger";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
@@ -77,7 +77,10 @@ export async function action({ request }: ActionFunctionArgs) {
   const parsedFormData: ParsedDatasetRow =
     ParsedDatasetRowSchema.parse(cleanedData);
   const config = await getConfig();
-  const functionConfig = config.functions[parsedFormData.function_name];
+  const functionConfig = await getFunctionConfig(
+    parsedFormData.function_name,
+    config,
+  );
   if (!functionConfig) {
     return new Response(
       `Failed to find function config for function ${parsedFormData.function_name}`,
@@ -198,7 +201,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [output, setOutput] = useState<typeof datapoint.output>(
     datapoint.output,
   );
-  const config = useConfig();
   const [isEditing, setIsEditing] = useState(false);
 
   const canSave = useMemo(() => {
@@ -259,9 +261,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     }
   };
 
-  const variants = Object.keys(
-    config.functions[datapoint.function_name]?.variants || {},
-  );
+  const functionConfig = useFunctionConfig(datapoint.function_name);
+  const variants = Object.keys(functionConfig?.variants || {});
 
   const variantInferenceFetcher = useInferenceActionFetcher();
   const variantSource = "datapoint";

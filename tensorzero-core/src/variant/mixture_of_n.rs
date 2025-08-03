@@ -1,5 +1,4 @@
 use std::fmt;
-use std::path::Path;
 
 use futures::future::join_all;
 use rand::Rng;
@@ -49,8 +48,10 @@ pub struct MixtureOfNConfig {
     pub fuser: FuserConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct UninitializedMixtureOfNConfig {
     #[serde(default)]
     pub weight: Option<f64>,
@@ -72,21 +73,23 @@ pub struct FuserConfig {
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct UninitializedFuserConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,
 }
 
 impl LoadableConfig<MixtureOfNConfig> for UninitializedMixtureOfNConfig {
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<MixtureOfNConfig, Error> {
+    fn load(self) -> Result<MixtureOfNConfig, Error> {
         Ok(MixtureOfNConfig {
             weight: self.weight,
             timeout_s: self.timeout_s,
             candidates: self.candidates,
             fuser: FuserConfig {
-                inner: self.fuser.inner.load(base_path)?,
+                inner: self.fuser.inner.load()?,
             },
         })
     }
@@ -98,7 +101,7 @@ impl Variant for MixtureOfNConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -131,7 +134,7 @@ impl Variant for MixtureOfNConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -193,7 +196,7 @@ impl Variant for MixtureOfNConfig {
                     variant_name: variant_name.to_string(),
                     message: e.to_string(),
                 })
-            })?
+            })?;
         }
         // Validate the evaluator variant
         self.fuser
@@ -222,7 +225,7 @@ impl Variant for MixtureOfNConfig {
         _input: &[ResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
-        _inference_configs: &'a [InferenceConfig<'a, 'a>],
+        _inference_configs: &'a [InferenceConfig<'a>],
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -371,7 +374,7 @@ impl MixtureOfNConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult>, Error> {
         // Get all the variants we are going to infer
@@ -400,7 +403,7 @@ impl MixtureOfNConfig {
                 // However, the 'A, C' and 'C, D' evaluations will all have distinct cache keys:
                 // (A, 2), (C, 3), (C, 2), (D, 4)
                 let mut config = inference_config.clone();
-                config.variant_name = Some(candidate);
+                config.variant_name = candidate;
                 config.extra_cache_key = Some(format!("candidate_{i}"));
                 Ok((candidate.to_string(), variant, config))
             })
@@ -439,7 +442,7 @@ impl MixtureOfNConfig {
             match result {
                 Ok(inner_result) => {
                     if let Ok(res) = inner_result {
-                        successful_results.push(res)
+                        successful_results.push(res);
                     }
                 }
                 Err(_timeout_error) => {
@@ -463,7 +466,7 @@ impl MixtureOfNConfig {
         input: &ResolvedInput,
         function: &'a FunctionConfig,
         models: &'a ModelTable,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         mut candidates: Vec<InferenceResult>,
         stream: bool,
@@ -559,7 +562,7 @@ async fn inner_fuse_candidates<'a, 'request>(
     input: &'request ResolvedInput,
     models: &'a ModelTable,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'a, 'request>,
+    inference_config: &'request InferenceConfig<'request>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult],
 ) -> Result<InferenceResult, Error> {
@@ -610,7 +613,7 @@ async fn inner_fuse_candidates_stream<'a, 'request>(
     input: &'request ResolvedInput,
     models: &'a ModelTable,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'a, 'request>,
+    inference_config: &'request InferenceConfig<'request>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult],
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -698,7 +701,6 @@ impl FuserConfig {
     ///
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
     fn prepare_candidate_message(
-        &self,
         templates: &TemplateConfig,
         candidates: &[InferenceResult],
     ) -> Result<(RequestMessage, Vec<usize>), Error> {
@@ -759,7 +761,7 @@ impl FuserConfig {
         &'a self,
         input: &'request ResolvedInput,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
         stream: bool,
@@ -769,7 +771,7 @@ impl FuserConfig {
     {
         // Do this before we prepare the system message so we can use the correct max index in the system message
         let (candidate_message, included_indices) =
-            self.prepare_candidate_message(inference_config.templates, candidates)?;
+            Self::prepare_candidate_message(inference_config.templates, candidates)?;
         let max_index = included_indices.len().saturating_sub(1);
         let system = Some(self.prepare_system_message(
             inference_config.templates,
@@ -818,6 +820,7 @@ impl FuserConfig {
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
+                .into_owned()
                 .filter(inference_config.variant_name),
         };
         let model_inference_request = prepare_model_inference_request(
@@ -1013,15 +1016,6 @@ mod tests {
     async fn test_prepare_candidate_message() {
         let templates = get_test_template_config();
 
-        // Create an FuserConfig
-        let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
-                model: "dummy".into(),
-                weight: Some(1.0),
-                ..Default::default()
-            },
-        };
-
         // Prepare some candidate InferenceResults
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -1092,7 +1086,7 @@ mod tests {
         let candidates = vec![candidate1, candidate2];
 
         // Call prepare_candidate_message
-        let result = fuser_config.prepare_candidate_message(&templates, &candidates);
+        let result = FuserConfig::prepare_candidate_message(&templates, &candidates);
         assert!(result.is_ok());
         let (request_message, included_indices) = result.unwrap();
         assert_eq!(included_indices, vec![0, 1]);
@@ -1106,15 +1100,6 @@ mod tests {
     #[tokio::test]
     async fn test_prepare_candidate_message_json() {
         let templates = get_test_template_config();
-
-        // Create a FuserConfig
-        let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
-                model: "dummy_json".into(),
-                weight: Some(1.0),
-                ..Default::default()
-            },
-        };
 
         // Prepare some candidate InferenceResults - some valid, some malformed
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
@@ -1188,7 +1173,7 @@ mod tests {
         let candidates = vec![candidate1, candidate2];
 
         // Call prepare_candidate_message
-        let result = fuser_config.prepare_candidate_message(&templates, &candidates);
+        let result = FuserConfig::prepare_candidate_message(&templates, &candidates);
         assert!(result.is_ok());
         let (request_message, included_indices) = result.unwrap();
 
@@ -1342,7 +1327,7 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,

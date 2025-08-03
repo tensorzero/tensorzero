@@ -497,7 +497,7 @@ impl InferenceProvider for OpenAIProvider {
             get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         request_url
             .path_segments_mut()
-            .map_err(|_| {
+            .map_err(|()| {
                 Error::new(ErrorDetails::Inference {
                     message: "Failed to get mutable path segments".to_string(),
                 })
@@ -1132,7 +1132,7 @@ pub fn prepare_openai_messages<'a>(
     provider_type: &str,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut openai_messages = Vec::with_capacity(messages.len());
-    for message in messages.iter() {
+    for message in messages {
         openai_messages.extend(tensorzero_to_openai_messages(message, provider_type)?);
     }
     if let Some(system_msg) =
@@ -1244,7 +1244,7 @@ fn tensorzero_to_openai_user_messages<'a>(
     let mut messages = Vec::new();
     let mut user_content_blocks = Vec::new();
 
-    for block in content_blocks.iter() {
+    for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
                 user_content_blocks.push(OpenAIContentBlock::Text {
@@ -1443,11 +1443,11 @@ enum OpenAIResponseFormat {
 
 impl OpenAIResponseFormat {
     fn new(
-        json_mode: &ModelInferenceRequestJsonMode,
+        json_mode: ModelInferenceRequestJsonMode,
         output_schema: Option<&Value>,
         model: &str,
     ) -> Option<Self> {
-        if model.contains("3.5") && *json_mode == ModelInferenceRequestJsonMode::Strict {
+        if model.contains("3.5") && json_mode == ModelInferenceRequestJsonMode::Strict {
             return Some(OpenAIResponseFormat::JsonObject);
         }
 
@@ -1670,7 +1670,7 @@ impl<'a> OpenAIRequest<'a> {
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<OpenAIRequest<'a>, Error> {
         let response_format =
-            OpenAIResponseFormat::new(&request.json_mode, request.output_schema, model);
+            OpenAIResponseFormat::new(request.json_mode, request.output_schema, model);
         let stream_options = if request.stream {
             Some(StreamOptions {
                 include_usage: true,
@@ -3309,17 +3309,17 @@ mod tests {
         // Test JSON mode On
         let json_mode = ModelInferenceRequestJsonMode::On;
         let output_schema = None;
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = OpenAIResponseFormat::new(json_mode, output_schema, "gpt-4o");
         assert_eq!(format, Some(OpenAIResponseFormat::JsonObject));
 
         // Test JSON mode Off
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = OpenAIResponseFormat::new(json_mode, output_schema, "gpt-4o");
         assert_eq!(format, None);
 
         // Test JSON mode Strict with no schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = OpenAIResponseFormat::new(json_mode, output_schema, "gpt-4o");
         assert_eq!(format, Some(OpenAIResponseFormat::JsonObject));
 
         // Test JSON mode Strict with schema
@@ -3331,7 +3331,7 @@ mod tests {
             }
         });
         let output_schema = Some(&schema);
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = OpenAIResponseFormat::new(json_mode, output_schema, "gpt-4o");
         match format {
             Some(OpenAIResponseFormat::JsonSchema { json_schema }) => {
                 assert_eq!(json_schema["schema"], schema);
@@ -3350,7 +3350,7 @@ mod tests {
             }
         });
         let output_schema = Some(&schema);
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-3.5-turbo");
+        let format = OpenAIResponseFormat::new(json_mode, output_schema, "gpt-3.5-turbo");
         assert_eq!(format, Some(OpenAIResponseFormat::JsonObject));
     }
 

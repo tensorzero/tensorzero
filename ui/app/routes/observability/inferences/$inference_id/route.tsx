@@ -32,7 +32,7 @@ import { TagsTable } from "~/components/utils/TagsTable";
 import { ModelInferencesTable } from "./ModelInferencesTable";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import {
@@ -47,6 +47,7 @@ import { useToast } from "~/hooks/use-toast";
 import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
+  type VariantResponseInfo,
 } from "~/routes/api/tensorzero/inference.utils";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { TryWithVariantButton } from "~/components/inference/TryWithVariantButton";
@@ -54,6 +55,7 @@ import { AddToDatasetButton } from "./AddToDatasetButton";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
+import { DemonstrationFeedbackButton } from "~/components/feedback/DemonstrationFeedbackButton";
 import { logger } from "~/utils/logger";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
@@ -89,7 +91,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // If there is a freshly inserted feedback, ClickHouse may take some time to
   // update the feedback table as it is eventually consistent.
-  // In this case, we poll for the feedback item until it is found but time out and log a warning.
+  // In this case, we poll for the feedback item until it is found but eventually time out and log a warning.
   const feedbackDataPromise = newFeedbackId
     ? pollForFeedbackItem(inference_id, newFeedbackId, pageSize)
     : queryFeedbackByTargetId({
@@ -267,10 +269,8 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   const num_feedbacks = feedback.length;
 
-  const config = useConfig();
-  const variants = Object.keys(
-    config.functions[inference.function_name]?.variants || {},
-  );
+  const functionConfig = useFunctionConfig(inference.function_name);
+  const variants = Object.keys(functionConfig?.variants || {});
   const addToDatasetFetcher = useFetcher<typeof action>();
   const addToDatasetError =
     addToDatasetFetcher.state === "idle" && addToDatasetFetcher.data?.error
@@ -283,6 +283,25 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       navigate(data.redirectTo);
     }
   }, [addToDatasetFetcher.data, addToDatasetFetcher.state, navigate]);
+
+  const demonstrationFeedbackFetcher = useFetcher<typeof action>();
+  const demonstrationFeedbackFormError =
+    demonstrationFeedbackFetcher.state === "idle"
+      ? (demonstrationFeedbackFetcher.data?.error ?? null)
+      : null;
+  useEffect(() => {
+    const currentState = demonstrationFeedbackFetcher.state;
+    const data = demonstrationFeedbackFetcher.data;
+    if (currentState === "idle" && data?.redirectTo) {
+      navigate(data.redirectTo);
+      setOpenModal(null);
+      setSelectedVariant(null);
+    }
+  }, [
+    demonstrationFeedbackFetcher.data,
+    demonstrationFeedbackFetcher.state,
+    navigate,
+  ]);
 
   const handleAddToDataset = (
     dataset: string,
@@ -486,7 +505,30 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
           selectedVariant={selectedVariant}
           source={variantSource}
-        />
+        >
+          {variantInferenceFetcher.data?.info && (
+            <demonstrationFeedbackFetcher.Form method="post">
+              <input type="hidden" name="_action" value="addFeedback" />
+              <input type="hidden" name="metricName" value="demonstration" />
+              <input type="hidden" name="inferenceId" value={inference.id} />
+              <input
+                type="hidden"
+                name="value"
+                value={JSON.stringify(
+                  prepareDemonstrationFromVariantOutput(
+                    variantInferenceFetcher.data.info,
+                  ),
+                )}
+              />
+              <DemonstrationFeedbackButton
+                isSubmitting={
+                  demonstrationFeedbackFetcher.state === "submitting"
+                }
+                submissionError={demonstrationFeedbackFormError}
+              />
+            </demonstrationFeedbackFetcher.Form>
+          )}
+        </VariantResponseModal>
       )}
       <Toaster />
     </PageLayout>
@@ -553,4 +595,20 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </div>
     </div>
   );
+}
+
+function prepareDemonstrationFromVariantOutput(
+  variantOutput: VariantResponseInfo,
+) {
+  const output = variantOutput.output;
+  // output can either be a JsonInferenceOutput or a ContentBlockOutput[] (or undefined)
+  // if it is a JsonInferenceOutput, we need to take the Parsed field and throw if it is missing
+  // if it is a ContentBlockOutput[], we can return as is
+  if (Array.isArray(output)) {
+    return output;
+  } else if (output && "parsed" in output) {
+    return output.parsed;
+  } else {
+    throw new Error("Invalid variant output");
+  }
 }

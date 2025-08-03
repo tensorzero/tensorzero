@@ -52,6 +52,14 @@ pub fn set_unstable_error_json(unstable_error_json: bool) -> Result<(), Error> {
     })
 }
 
+pub fn warn_discarded_cache_write(raw_response: &str) {
+    if *DEBUG.get().unwrap_or(&false) {
+        tracing::warn!("Skipping cache write due to invalid output:\nRaw response: {raw_response}");
+    } else {
+        tracing::warn!("Skipping cache write due to invalid output");
+    }
+}
+
 pub fn warn_discarded_thought_block(provider_type: &str, thought: &Thought) {
     if *DEBUG.get().unwrap_or(&false) {
         tracing::warn!("Provider type `{provider_type}` does not support input thought blocks, discarding: {thought:?}");
@@ -127,6 +135,8 @@ impl Error {
     }
 }
 
+// Expect for derive Serialize
+#[expect(clippy::trivially_copy_pass_by_ref)]
 fn serialize_status<S>(code: &Option<StatusCode>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -253,6 +263,9 @@ pub enum ErrorDetails {
         mode: String,
         message: String,
     },
+    InvalidDynamicTemplatePath {
+        name: String,
+    },
     InvalidEncodedJobHandle,
     InvalidJobHandle {
         message: String,
@@ -271,7 +284,7 @@ pub enum ErrorDetails {
         variant_name: String,
     },
     VariantTimeout {
-        variant_name: Option<String>,
+        variant_name: String,
         timeout: Duration,
         streaming: bool,
     },
@@ -531,6 +544,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidDynamicTemplatePath { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidEncodedJobHandle => tracing::Level::WARN,
             ErrorDetails::InvalidJobHandle { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidRenderedStoredInference { .. } => tracing::Level::ERROR,
@@ -635,6 +649,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicEvaluationRun { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidDynamicTemplatePath { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceOutputSource { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
@@ -752,11 +767,7 @@ impl std::fmt::Display for ErrorDetails {
                 timeout,
                 streaming,
             } => {
-                let variant_description = if let Some(variant_name) = variant_name {
-                    format!("Variant `{variant_name}`")
-                } else {
-                    "Unknown variant".to_string()
-                };
+                let variant_description = format!("Variant `{variant_name}`");
                 if *streaming {
                     write!(f, "{variant_description} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})")
                 } else {
@@ -951,6 +962,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Dynamic evaluation run not found for episode id: {episode_id}",
                 )
+            }
+            ErrorDetails::InvalidDynamicTemplatePath { name } => {
+                write!(f, "Invalid dynamic template path: {name}. There is likely a duplicate template in the config.")
             }
             ErrorDetails::InvalidEncodedJobHandle => {
                 write!(

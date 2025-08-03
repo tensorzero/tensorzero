@@ -230,7 +230,7 @@ pub static DUMMY_STREAMING_TOOL_RESPONSE: [&str; 5] = [
 ];
 
 pub static DUMMY_STREAMING_JSON_RESPONSE: [&str; 5] =
-    [r#"{"name""#, r#":"John""#, r#","age""#, r#":30"#, r#"}"#];
+    [r#"{"name""#, r#":"John""#, r#","age""#, r":30", r"}"];
 
 pub static DUMMY_RAW_REQUEST: &str = "raw request";
 
@@ -331,6 +331,11 @@ impl InferenceProvider for DummyProvider {
                 name: "get_temperature".to_string(),
                 #[expect(clippy::unwrap_used)]
                 arguments: serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
+                id: "0".to_string(),
+            })],
+            "invalid_tool_arguments" => vec![ContentBlockOutput::ToolCall(ToolCall {
+                name: "get_temperature".to_string(),
+                arguments: "Not valid 'JSON'".to_string(),
                 id: "0".to_string(),
             })],
             "reasoner" => vec![

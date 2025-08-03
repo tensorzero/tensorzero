@@ -17,8 +17,17 @@ jobs:
       - name: Save `ui` container
         run: docker save tensorzero/ui:sha-${{ github.sha }} > ui-container.tar
 
-      - name: Upload `ui` container as an artifact
+      - name: Upload `ui` container as an artifact to Namespace
         uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
+        with:
+          name: build-ui-container
+          path: ui-container.tar
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: false
+
+      - name: Upload `ui` container as an artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: build-ui-container
           path: ui-container.tar
