@@ -793,12 +793,14 @@ function updateVariantWithEdited(
   This function checks if this is needed and then returns the new variant name.
 */
 function getNewVariantName(currentVariantName: string): string {
+  let originalVariantName = currentVariantName;
   if (isEditedVariantName(currentVariantName)) {
-    return currentVariantName;
+    originalVariantName =
+      extractOriginalVariantNameFromEdited(currentVariantName);
   }
   // generate a random identifier here so that each edit is unique
   const randomId = Math.random().toString(36).substring(2, 15);
-  return `tensorzero::edited::${randomId}::${currentVariantName}`;
+  return `tensorzero::edited::${randomId}::${originalVariantName}`;
 }
 
 function isEditedVariantName(variantName: string): boolean {
@@ -830,8 +832,19 @@ function swapElementInArray(
 
 function getDisplayVariantName(variantName: string): string {
   if (isEditedVariantName(variantName)) {
-    const match = variantName.match(/^tensorzero::edited::[^:]*::(.*)$/);
-    return match ? match[1] : "Error: malformed variant name.";
+    const originalVariantName =
+      extractOriginalVariantNameFromEdited(variantName);
+    return originalVariantName + " (edited)";
   }
   return variantName;
+}
+
+function extractOriginalVariantNameFromEdited(
+  editedVariantName: string,
+): string {
+  const match = editedVariantName.match(/^tensorzero::edited::[^:]*::(.*)$/);
+  if (!match) {
+    throw Error("Malformed variant name");
+  }
+  return match[1];
 }
