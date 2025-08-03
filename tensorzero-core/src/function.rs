@@ -1,4 +1,3 @@
-#[cfg(feature = "pyo3")]
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -17,7 +16,7 @@ use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
@@ -343,7 +342,7 @@ impl FunctionConfig {
         inference_id: Uuid,
         content_blocks: Vec<ContentBlockOutput>,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
-        inference_config: &'request InferenceConfig<'_, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         inference_params: InferenceParams,
         original_response: Option<String>,
     ) -> Result<InferenceResult, Error> {
@@ -388,7 +387,7 @@ impl FunctionConfig {
                 // If the parsed output fails validation, we log the error and set `parsed_output` to None
                 let parsed_output = match parsed_output {
                     Some(parsed_output) => match output_schema.validate(&parsed_output).await {
-                        Ok(_) => Some(parsed_output),
+                        Ok(()) => Some(parsed_output),
                         Err(_) => None,
                     },
                     None => None,
@@ -478,7 +477,7 @@ impl FunctionConfig {
         }
         match self {
             FunctionConfig::Chat(params) => {
-                for tool in params.tools.iter() {
+                for tool in &params.tools {
                     static_tools.get(tool).ok_or_else(|| Error::new(ErrorDetails::Config {
                         message: format!("`functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
                     }))?;
@@ -547,7 +546,7 @@ fn validate_all_text_input(
     }?;
     for (index, message) in input.messages.iter().enumerate() {
         // Only for Text blocks, not RawText blocks since we don't validate those
-        for block in message.content.iter() {
+        for block in &message.content {
             if let InputMessageContent::Text(kind) = block {
                 let content = match kind {
                     TextKind::Arguments { arguments } => {
@@ -595,16 +594,22 @@ fn validate_single_message(
 }
 
 /// Sample a variant from the function based on variant weights (uniform random selection)
-pub fn sample_variant<'a>(
-    candidate_variant_names: &mut Vec<&'a str>,
-    variants: &'a HashMap<String, Arc<VariantInfo>>,
+/// This function pops the sampled variant from the candidate variants map.
+/// NOTE: We use a BTreeMap to ensure that the variants are sorted by their names and the
+/// sampling choices are deterministic given an episode ID.
+pub fn sample_variant(
+    candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     function_name: &str,
     episode_id: &Uuid,
-) -> Result<(&'a str, &'a Arc<VariantInfo>), Error> {
+) -> Result<(String, Arc<VariantInfo>), Error> {
+    if candidate_variants.is_empty() {
+        return Err(Error::new(ErrorDetails::InvalidFunctionVariants {
+            message: format!("Function `{function_name}` has no variants"),
+        }));
+    }
     // Compute the total weight of variants present in variant_names
-    let total_weight = candidate_variant_names
-        .iter()
-        .filter_map(|name| variants.get(*name))
+    let total_weight = candidate_variants
+        .values()
         .map(|variant| variant.inner.weight().unwrap_or(0.0))
         .sum::<f64>();
 
@@ -613,71 +618,62 @@ pub fn sample_variant<'a>(
     //       but there's a chance we pin a weight-zero variant in the config.
     //       This check also ensures that we catch any regressions we might introduce in the future.
     if total_weight <= 0. {
-        if candidate_variant_names.is_empty() {
-            return Err(Error::new(ErrorDetails::InvalidFunctionVariants {
-                message: format!("Function `{function_name}` has no variants"),
-            }));
-        }
         // Perform uniform sampling if total weight is non-positive
         let random_index = (get_uniform_value(function_name, episode_id)
-            * candidate_variant_names.len() as f64)
+            * candidate_variants.len() as f64)
             .floor() as usize;
-        // Reorders this list (in place) by swapping the element at index with the last element.
-        // This should not matter and is more efficient than `remove`
-        let sampled_variant_name = if random_index < candidate_variant_names.len() {
-            // could panic if random_index is out of bounds
-            candidate_variant_names.swap_remove(random_index)
-        } else {
+        let Some(sampled_variant_name) = candidate_variants.keys().nth(random_index).cloned()
+        else {
             return Err(Error::new(ErrorDetails::InvalidFunctionVariants {
                 message: format!(
-                    "Invalid index {} for function `{}` with {} variants",
-                    random_index,
-                    function_name,
-                    candidate_variant_names.len()
+                    "Invalid index {random_index} for function `{function_name}` with {} variants. {IMPOSSIBLE_ERROR_MESSAGE}",
+                    candidate_variants.len()
                 ),
             }));
         };
-        let variant = variants.get(sampled_variant_name).ok_or_else(|| {
+        return candidate_variants.remove_entry(&sampled_variant_name).ok_or_else(|| {
             Error::new(ErrorDetails::InvalidFunctionVariants {
                 message: format!(
-                    "Function `{function_name}` has no variant `{sampled_variant_name}`"
-                ),
+                    "Function `{function_name}` has no variant for the sampled variant `{sampled_variant_name}`. {IMPOSSIBLE_ERROR_MESSAGE}"
+                )
             })
-        })?;
-        return Ok((sampled_variant_name, variant));
+        });
     }
 
     // Sample a random threshold between 0 and the total weight
     let random_threshold = get_uniform_value(function_name, episode_id) * total_weight;
 
     // Iterate over the variants to find the one that corresponds to the sampled threshold
-    let mut cumulative_weight = 0.;
-    let mut sampled_variant_name = "";
-    for (i, variant_name) in candidate_variant_names.iter().enumerate() {
-        let variant = variants.get(*variant_name).ok_or_else(|| {
-            Error::new(ErrorDetails::InvalidFunctionVariants {
-                message: format!("Function `{function_name}` has no variant `{variant_name}`"),
+    let variant_to_remove = {
+        let mut cumulative_weight = 0.0;
+        candidate_variants
+            .iter()
+            .find(|(_, variant)| {
+                cumulative_weight += variant.inner.weight().unwrap_or(0.0);
+                cumulative_weight > random_threshold
             })
-        })?;
-        cumulative_weight += variant.inner.weight().unwrap_or(0.0);
-        if cumulative_weight > random_threshold {
-            sampled_variant_name = candidate_variant_names.swap_remove(i);
-            break;
-        }
+            .map(|(name, _)| name.clone()) // Clone the key
+    };
+
+    if let Some(variant_name) = variant_to_remove {
+        return candidate_variants.remove_entry(&variant_name).ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidFunctionVariants {
+                message: format!(
+                    "Function `{function_name}` has no variant for the sampled variant `{variant_name}`. {IMPOSSIBLE_ERROR_MESSAGE}"
+                )
+            })
+        });
     }
 
     // If we didn't find a variant (which should only happen due to rare numerical precision issues),
-    // use the last variant as a fallback
-    if sampled_variant_name.is_empty() {
-        sampled_variant_name = candidate_variant_names.swap_remove(variants.len() - 1);
-    }
-
-    let variant = variants.get(sampled_variant_name).ok_or_else(|| {
+    // pop an arbitrary variant as a fallback
+    candidate_variants.pop_first().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidFunctionVariants {
-            message: format!("Function `{function_name}` has no variant `{sampled_variant_name}`"),
+            message: format!(
+                "Function `{function_name}` has no variants. {IMPOSSIBLE_ERROR_MESSAGE}"
+            ),
         })
-    })?;
-    Ok((sampled_variant_name, variant))
+    })
 }
 
 /// Implements a uniform distribution over the interval [0, 1) using a hash function.
@@ -710,9 +706,9 @@ mod tests {
     use super::*;
     use crate::config_parser::path::TomlRelativePath;
     use serde_json::json;
+    use std::io::Write;
     use std::time::Duration;
     use std::time::Instant;
-    use std::{io::Write, path::PathBuf};
     use tempfile::NamedTempFile;
     use tracing_test::traced_test;
 
@@ -731,10 +727,10 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        StaticJSONSchema::from_path(
-            TomlRelativePath::new_for_tests(temp_file.path().to_owned()),
-            PathBuf::new(),
-        )
+        StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+            temp_file.path().to_owned(),
+            None,
+        ))
         .expect("Failed to create schema")
     }
 
@@ -1544,7 +1540,7 @@ mod tests {
     #[test]
     fn test_sample_variant() {
         // Helper function to create a HashMap of variant names to their weights
-        fn create_variants(variant_weights: &[(&str, f64)]) -> HashMap<String, Arc<VariantInfo>> {
+        fn create_variants(variant_weights: &[(&str, f64)]) -> BTreeMap<String, Arc<VariantInfo>> {
             variant_weights
                 .iter()
                 .map(|&(name, weight)| {
@@ -1566,7 +1562,7 @@ mod tests {
         // Helper function to test the distribution of variant weights by sampling them many times
         // and checking if the observed distribution is close to the expected distribution
         fn test_variant_distribution(
-            variants: &HashMap<String, Arc<VariantInfo>>,
+            variants: &BTreeMap<String, Arc<VariantInfo>>,
             sample_size: usize,
             tolerance: f64,
         ) {
@@ -1577,14 +1573,9 @@ mod tests {
             let mut counts: HashMap<String, usize> = HashMap::new();
 
             for _ in 0..sample_size {
-                let mut variant_names = variants.keys().map(AsRef::as_ref).collect();
-                let (variant_name, _) = sample_variant(
-                    &mut variant_names,
-                    variants,
-                    "test_function",
-                    &Uuid::now_v7(),
-                )
-                .unwrap();
+                let mut variants = variants.clone();
+                let (variant_name, _) =
+                    sample_variant(&mut variants, "test_function", &Uuid::now_v7()).unwrap();
                 *counts.entry(variant_name.to_string()).or_insert(0) += 1;
             }
 
@@ -1623,14 +1614,9 @@ mod tests {
         let mut counts: HashMap<String, usize> = HashMap::new();
 
         for _ in 0..sample_size {
-            let mut variant_names = variants.keys().map(AsRef::as_ref).collect();
-            let (variant_name, _) = sample_variant(
-                &mut variant_names,
-                &variants,
-                "test_function",
-                &Uuid::now_v7(),
-            )
-            .unwrap();
+            let mut variants = variants.clone();
+            let (variant_name, _) =
+                sample_variant(&mut variants, "test_function", &Uuid::now_v7()).unwrap();
             *counts.entry(variant_name.to_string()).or_insert(0) += 1;
         }
 
@@ -1788,7 +1774,7 @@ mod tests {
             },
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             templates: &templates,
             dynamic_output_schema: None,
             extra_body: Default::default(),
@@ -2099,7 +2085,7 @@ mod tests {
             },
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             templates: &templates,
             dynamic_output_schema: Some(&dynamic_output_schema),
             extra_body: Default::default(),
@@ -2484,7 +2470,7 @@ mod tests {
         assert_eq!(json_block_index, Some(0));
         match &auxiliary_content[0] {
             ContentBlockOutput::Thought(t) => {
-                assert_eq!(t.text, Some("final thought".to_string()))
+                assert_eq!(t.text, Some("final thought".to_string()));
             }
             _ => panic!("Expected Thought block"),
         }
