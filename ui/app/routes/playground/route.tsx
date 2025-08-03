@@ -34,6 +34,7 @@ import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
 import { safeParseInt } from "~/utils/common";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import type { InferenceResponse } from "tensorzero-node";
+import { EditButton } from "~/components/utils/EditButton";
 
 const DEFAULT_LIMIT = 5;
 
@@ -341,33 +342,51 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                     Datapoints
                   </div>
                   <div className="grid auto-cols-[minmax(480px,1fr)] grid-flow-col">
-                    {selectedVariants.map((variant) => (
-                      <div
-                        key={variant}
-                        className="flex items-center justify-between gap-2 border-r p-4 font-mono font-medium last:border-r-0"
-                      >
-                        <Link
-                          to={`/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variant)}`}
-                          className="max-w-full truncate font-mono text-blue-600 hover:text-blue-800 hover:underline"
+                    {selectedVariants.map((variant) => {
+                      const variantConfig = functionConfig?.variants?.[variant];
+                      const isChatCompletion =
+                        variantConfig?.inner.type === "chat_completion";
+                      return (
+                        <div
+                          key={variant}
+                          className="flex items-center justify-between gap-2 border-r p-4 font-mono font-medium last:border-r-0"
                         >
-                          {variant}
-                        </Link>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            updateSearchParams({
-                              variant: selectedVariants.filter(
-                                (v) => v !== variant,
-                              ),
-                            });
-                          }}
-                        >
-                          <span className="sr-only">Remove {variant}</span>
-                          <X aria-hidden />
-                        </Button>
-                      </div>
-                    ))}
+                          <div className="flex items-center gap-2">
+                            <Link
+                              to={`/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variant)}`}
+                              className="max-w-full truncate font-mono text-blue-600 hover:text-blue-800 hover:underline"
+                            >
+                              {variant}
+                            </Link>
+                            <EditButton
+                              onClick={() => {
+                                // TODO: Handle edit action
+                              }}
+                              disabled={!isChatCompletion}
+                              tooltip={
+                                isChatCompletion
+                                  ? "Edit variant"
+                                  : "Editing is currently only supported for Chat Completion variants"
+                              }
+                            />
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              updateSearchParams({
+                                variant: selectedVariants.filter(
+                                  (v) => v !== variant,
+                                ),
+                              });
+                            }}
+                          >
+                            <span className="sr-only">Remove {variant}</span>
+                            <X aria-hidden />
+                          </Button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
