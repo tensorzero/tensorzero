@@ -194,8 +194,9 @@ It also requires a one-time build of a WebAssembly module from Rust source code 
 Here are the steps in order to run or test the UI assuming you have the prerequisites installed and this repository checked out:
 
 1. Install dependencies: `pnpm install`
-2. Build the WebAssembly module following instructions in `ui/app/utils/minijinja/README.md`.
-3. Create a `ui/.env` file and set the following environment variables for the server:
+2. Build the internal N-API client for TensorZero using `pnpm -r build`. If you have changed your Rust code, you may also have to run `pnpm build-bindings` from `internal/tensorzero-node`.
+3. Create a `ui/fixtures/.env` following the `ui/fixtures/.env.example`.
+4. Create a `ui/.env` file and set the following environment variables for the server:
 
 ```bash
 OPENAI_API_KEY=<your-key>
@@ -205,7 +206,7 @@ TENSORZERO_CLICKHOUSE_URL=<your-clickhouse-url> # For testing, set to http://chu
 TENSORZERO_UI_CONFIG_PATH=<path-to-config-file> # For testing, set to ./fixtures/config/tensorzero.toml
 ```
 
-4. Run the dependencies: `docker compose -f ui/fixtures/docker-compose.yml up --build --force-recreate`
+5. Run the dependencies: `docker compose -f ui/fixtures/docker-compose.yml up --build --force-recreate`
    (you can omit these last 2 flags to skip the build step, but they ensure you're using the latest gateway)
 
 With the dependencies running, you can run the tests with `pnpm ui:test` and the Playwright tests with `pnpm ui:test:e2e`.

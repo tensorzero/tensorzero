@@ -43,6 +43,7 @@ describe("native sft", () => {
         seed: null,
         suffix: null,
       },
+      order_by: null,
     });
 
     let status = await client.experimentalPollOptimization(job);
@@ -50,6 +51,5 @@ describe("native sft", () => {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       status = await client.experimentalPollOptimization(job);
     }
-    console.log(status);
   }, 10000); // timeout in ms
 });

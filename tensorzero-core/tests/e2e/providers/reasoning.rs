@@ -993,5 +993,10 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
         ContentBlock::Thought(thought) => thought,
         _ => panic!("Expected a thought block"),
     };
-    assert!(thought.text.to_lowercase().contains("tokyo"));
+    assert!(thought
+        .text
+        .as_ref()
+        .unwrap()
+        .to_lowercase()
+        .contains("tokyo"));
 }

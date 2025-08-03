@@ -25,9 +25,11 @@ async fn main() -> Result<()> {
     let result = run_evaluation(args, evaluation_run_id, &mut writer).await;
 
     match &result {
-        Ok(_) => info!(evaluation_run_id = %evaluation_run_id, "Evaluation completed successfully"),
+        Ok(()) => {
+            info!(evaluation_run_id = %evaluation_run_id, "Evaluation completed successfully");
+        }
         Err(e) => {
-            tracing::error!(evaluation_run_id = %evaluation_run_id, error = %e, "Evaluation failed")
+            tracing::error!(evaluation_run_id = %evaluation_run_id, error = %e, "Evaluation failed");
         }
     }
 

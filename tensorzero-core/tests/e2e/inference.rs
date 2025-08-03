@@ -1707,6 +1707,50 @@ async fn e2e_test_inference_original_response_non_stream() {
 }
 
 #[tokio::test]
+async fn test_gateway_template_base_path() {
+    let gateway = make_embedded_gateway_with_config(&format!(
+        r#"
+[functions.my_test]
+type = "chat"
+system_schema = "{root}/fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.my_test.variants.my_variant]
+type = "chat_completion"
+system_template = "{root}/fixtures/config/functions/basic_test/prompt/relative_system_template.minijinja"
+model = "dummy::good"
+
+[gateway.template_filesystem_access]
+enabled = true
+base_path = "{root}"
+    "#,
+        root = env!("CARGO_MANIFEST_DIR")
+    ))
+    .await;
+
+    let params = ClientInferenceParams {
+        function_name: Some("my_test".to_string()),
+        input: ClientInput {
+            system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "Please write me a sentence about Megumin making an explosion."
+                        .to_string(),
+                })],
+            }],
+        },
+        include_original_response: true,
+        ..Default::default()
+    };
+
+    // Request should be successful
+    let response = gateway.inference(params.clone()).await.unwrap();
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(_)) = response else {
+        panic!("Expected non-streaming response, got {response:?}");
+    };
+}
+
+#[tokio::test]
 async fn test_gateway_template_no_fs_access() {
     // We use an embedded client so that we can control the number of
     // requests to the flaky judge.
@@ -1748,7 +1792,7 @@ model = "dummy::good"
         .unwrap_err()
         .to_string();
     assert!(
-        err.contains("Could not load template 'extra_templates/foo.minijinja' - if this a dynamic template included from the filesystem, please set [gateway.enable_template_filesystem_access] to `true`"),
+        err.contains("Could not load template 'extra_templates/foo.minijinja' - if this a dynamic template included from the filesystem, please set `gateway.template_filesystem_access.enabled` to `true`"),
         "Unexpected error: {err}"
     );
 }
@@ -3303,8 +3347,8 @@ async fn test_client_adjust_tool_call() {
     };
 
     bad_gateway.inference(params.clone()).await.unwrap_err();
-    let stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":"{\"location\":\"Brooklyn\",\"units\":\"celsius\"}","id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[]}"#;
-    let non_stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":{"location":"Brooklyn","units":"celsius"},"id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[]}"#;
+    let stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":"{\"location\":\"Brooklyn\",\"units\":\"celsius\"}","id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[],"internal_dynamic_variant_config":null}"#;
+    let non_stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":{"location":"Brooklyn","units":"celsius"},"id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[],"internal_dynamic_variant_config":null}"#;
 
     // With an invalid gateway url, we shouldn't get a version
     assert_eq!(bad_gateway.get_gateway_version().await, None);

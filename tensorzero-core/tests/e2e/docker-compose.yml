@@ -77,6 +77,8 @@ services:
       clickhouse:
         condition: service_healthy
     command: ["--default-config"]
+    extra_hosts:
+      - "howdy.tensorzero.com:127.0.0.1"
     healthcheck:
       test:
         [
@@ -113,7 +115,7 @@ services:
         "cd /fixtures && ./load_fixtures.sh tensorzero_e2e_tests && sleep infinity",
       ]
     healthcheck:
-      test: ["CMD", "test", "-f", "/tmp/load_complete.marker"]
+      test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
       retries: 48 # Retry for up to 4 minutes

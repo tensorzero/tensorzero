@@ -30,7 +30,7 @@ use crate::providers::helpers::{
 use crate::providers::openai::check_api_base_suffix;
 
 const PROVIDER_NAME: &str = "vLLM";
-const PROVIDER_TYPE: &str = "vllm";
+pub const PROVIDER_TYPE: &str = "vllm";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -330,11 +330,12 @@ impl<'a> VLLMRequest<'a> {
             ) => Some(schema),
             _ => None,
         };
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
         let messages = prepare_vllm_messages(request)?;
 
@@ -435,7 +436,7 @@ pub(super) fn prepare_vllm_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
-    for message in request.messages.iter() {
+    for message in &request.messages {
         messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
     }
     if let Some(system_msg) = tensorzero_to_vllm_system_message(request.system.as_deref()) {

@@ -371,7 +371,7 @@ impl<'a> FireworksRequest<'a> {
         };
         let messages = prepare_fireworks_messages(request.system.as_deref(), &request.messages)?;
         let (tools, tool_choice, _) = prepare_openai_tools(request);
-        let tools = tools.map(|t| t.into_iter().map(|tool| tool.into()).collect());
+        let tools = tools.map(|t| t.into_iter().map(OpenAITool::into).collect());
 
         Ok(FireworksRequest {
             messages,
@@ -395,7 +395,7 @@ pub fn prepare_fireworks_messages<'a>(
     messages: &'a [RequestMessage],
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut output_messages = Vec::with_capacity(messages.len());
-    for message in messages.iter() {
+    for message in messages {
         output_messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
     }
     if let Some(system_msg) = tensorzero_to_fireworks_system_message(system) {
@@ -623,7 +623,7 @@ fn fireworks_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(OpenAIUsage::into);
     let mut finish_reason = None;
     let mut content = vec![];
     if let Some(choice) = chunk.choices.pop() {
@@ -645,6 +645,7 @@ fn fireworks_to_tensorzero_chunk(
                                 text: Some(text.to_string()),
                                 signature: None,
                                 id: thinking_state.get_id(),
+                                provider_type: Some(PROVIDER_TYPE.to_string()),
                             }));
                         }
                     }
@@ -749,8 +750,9 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 process_think_blocks(&raw_text, parse_think_blocks, PROVIDER_TYPE)?;
             if let Some(reasoning) = extracted_reasoning {
                 content.push(ContentBlockOutput::Thought(Thought {
-                    text: reasoning,
+                    text: Some(reasoning),
                     signature: None,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             if !clean_text.is_empty() {
@@ -773,7 +775,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 raw_response,
                 usage,
                 latency,
-                finish_reason: finish_reason.map(|r| r.into()),
+                finish_reason: finish_reason.map(FireworksFinishReason::into),
             },
         ))
     }
@@ -859,7 +861,7 @@ mod tests {
         // First block should be a thought
         match &inference_response.output[0] {
             ContentBlockOutput::Thought(thought) => {
-                assert_eq!(thought.text, "This is reasoning");
+                assert_eq!(thought.text, Some("This is reasoning".to_string()));
                 assert_eq!(thought.signature, None);
             }
             _ => panic!("Expected a thought block"),
@@ -868,7 +870,7 @@ mod tests {
         // Second block should be text
         match &inference_response.output[1] {
             ContentBlockOutput::Text(text) => {
-                assert_eq!(text.text, "Hello  world");
+                assert_eq!(text.text, "Hello  world".to_string());
             }
             _ => panic!("Expected a text block"),
         }

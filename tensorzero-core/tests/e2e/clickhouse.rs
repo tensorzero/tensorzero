@@ -3,10 +3,8 @@
 use std::cell::Cell;
 use std::future::Future;
 use std::sync::Arc;
-use std::time::Duration;
 
 use paste::paste;
-use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::json;
 use tensorzero_core::clickhouse::migration_manager::migration_trait::Migration;
@@ -30,9 +28,11 @@ use tensorzero_core::clickhouse::migration_manager::{
     self, make_all_migrations, MigrationRecordDatabaseInsert,
 };
 use tensorzero_core::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
-use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::clickhouse::{
+    make_clickhouse_http_client, ClickHouseConnectionInfo, TableName,
+};
 
-struct DeleteDbOnDrop {
+pub struct DeleteDbOnDrop {
     database: String,
     client: ClickHouseConnectionInfo,
     allow_db_missing: bool,
@@ -60,7 +60,7 @@ impl Drop for DeleteDbOnDrop {
                         .unwrap();
                 }
                 eprintln!("Database dropped: {database}");
-            })
+            });
         });
     }
 }
@@ -71,7 +71,7 @@ impl Drop for DeleteDbOnDrop {
 /// happen even if the test panics).
 /// This helps to reduce peak disk usage on CI.
 /// If `allow_db_missing` is true, then we'll use 'DROP DATABASE IF EXISTS' instead of 'DROP DATABASE'
-fn get_clean_clickhouse(allow_db_missing: bool) -> (ClickHouseConnectionInfo, DeleteDbOnDrop) {
+pub fn get_clean_clickhouse(allow_db_missing: bool) -> (ClickHouseConnectionInfo, DeleteDbOnDrop) {
     let database = format!(
         "tensorzero_e2e_tests_migration_manager_{}",
         Uuid::now_v7().simple()
@@ -83,15 +83,7 @@ fn get_clean_clickhouse(allow_db_missing: bool) -> (ClickHouseConnectionInfo, De
     let clickhouse = ClickHouseConnectionInfo::Production {
         database_url: SecretString::from(clickhouse_url.to_string()),
         database: database.clone(),
-        // This is a hack to work around an issue with ClickHouse Cloud where long-lived connections
-        // are abruptly closed by the server.
-        // If it occurs again, re-enable this line.
-        // client: Client::builder().pool_max_idle_per_host(0).build().unwrap(),
-        // See https://github.com/ClickHouse/clickhouse-rs/blob/abf7448e54261c586be849c48291b9321f506b2f/src/http_client.rs#L45
-        client: Client::builder()
-            .pool_idle_timeout(Duration::from_secs(3))
-            .build()
-            .unwrap(),
+        client: make_clickhouse_http_client().unwrap(),
     };
     (
         clickhouse.clone(),
@@ -196,6 +188,8 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     let insert_futures = [
         ("large_chat_inference_v2.parquet", "ChatInference"),
         ("large_json_inference_v2.parquet", "JsonInference"),
+        ("large_chat_model_inference_v2.parquet", "ModelInference"),
+        ("large_json_model_inference_v2.parquet", "ModelInference"),
         (
             "large_chat_boolean_feedback.parquet",
             "BooleanMetricFeedback",
@@ -239,9 +233,9 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
                 database,
                 "--query",
                 &format!(
-                    r#"
+                    r"
         INSERT INTO {table} FROM INFILE '/s3-fixtures/{file}' FORMAT Parquet
-    "#
+    "
                 ),
             ]);
             assert!(
@@ -502,7 +496,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26
+        25, 26, 27
     ]
 );
 
@@ -584,6 +578,8 @@ async fn test_clickhouse_migration_manager() {
                     "Migration {name} should not have succeeded (because it wasn't applied)"
                 );
             }
+            assert!(!logs_contain("Materialized view `CumulativeUsageView` was not written because it was recently created"),
+                "CumulativeUsage backfilling failed.");
 
             let run_migration = || async {
                 migration_manager::run_migration(
@@ -675,7 +671,7 @@ async fn test_clickhouse_migration_manager() {
         // for each element in the array.
         [
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 26
+            24, 25, 26, 27
         ]
     );
     let rows = get_all_migration_records(&clickhouse).await;
@@ -710,6 +706,23 @@ async fn test_clickhouse_migration_manager() {
     }
     run_all(&clickhouse, &migrations).await;
     let new_rows = get_all_migration_records(&clickhouse).await;
+
+    let response = clickhouse
+        .run_query_synchronous_no_params(
+            "SELECT count FROM CumulativeUsage FINAL WHERE type='input_tokens'".to_string(),
+        )
+        .await
+        .unwrap();
+    let input_token_total: u64 = response.response.trim().parse().unwrap();
+    assert_eq!(input_token_total, 200000000);
+    let response = clickhouse
+        .run_query_synchronous_no_params(
+            "SELECT count FROM CumulativeUsage FINAL WHERE type='output_tokens'".to_string(),
+        )
+        .await
+        .unwrap();
+    let output_token_total: u64 = response.response.trim().parse().unwrap();
+    assert_eq!(output_token_total, 200000000);
     // Since we've already ran all of the migrations, we shouldn't have written any new records
 
     assert_eq!(new_rows, rows);
@@ -741,7 +754,7 @@ async fn test_bad_clickhouse_write() {
     let payload =
         json!({"target_id": Uuid::now_v7(), "value": true, "name": "test", "id": Uuid::now_v7()});
     let err = clickhouse
-        .write(&[payload], "BooleanMetricFeedback")
+        .write(&[payload], TableName::BooleanMetricFeedback)
         .await
         .unwrap_err();
     assert!(
@@ -768,7 +781,7 @@ async fn test_deployment_id_oldest() {
             &[serde_json::json!({
                 "deployment_id": new_deployment_id,
             })],
-            "DeploymentID",
+            TableName::DeploymentID,
         )
         .await
         .unwrap();
@@ -844,13 +857,13 @@ async fn test_migration_0013_old_table() {
     ];
 
     // Run migrations up to right before 0013
-    for migration in migrations.iter() {
+    for migration in &migrations {
         migration_manager::run_migration(&clickhouse, migration.as_ref(), true)
             .await
             .unwrap();
     }
     // Manually create a table that should not exist
-    let query = r#"
+    let query = r"
         CREATE TABLE IF NOT EXISTS InferenceById
         (
             id UUID, -- must be a UUIDv7
@@ -860,7 +873,7 @@ async fn test_migration_0013_old_table() {
             function_type Enum('chat' = 1, 'json' = 2)
         ) ENGINE = MergeTree()
         ORDER BY id;
-    "#;
+    ";
     let _ = clickhouse
         .run_query_synchronous_no_params(query.to_string())
         .await
@@ -922,7 +935,7 @@ async fn test_migration_0013_data_no_table() {
     ];
 
     // Run migrations up to right before 0013
-    for migration in migrations.iter() {
+    for migration in &migrations {
         migration_manager::run_migration(&clickhouse, migration.as_ref(), true)
             .await
             .unwrap();
@@ -930,10 +943,10 @@ async fn test_migration_0013_data_no_table() {
 
     // Add a row to the JsonInference table (would be very odd to have data in this table
     // but not an InferenceById table).
-    let query = r#"
+    let query = r"
         INSERT INTO JsonInference (id, function_name, variant_name, episode_id, input, output, output_schema, inference_params, processing_time_ms)
         VALUES (generateUUIDv7(), 'test_function', 'test_variant', generateUUIDv7(), 'input', 'output', 'output_schema', 'params', 100)
-    "#;
+    ";
     let _ = clickhouse
         .run_query_synchronous_no_params(query.to_string())
         .await

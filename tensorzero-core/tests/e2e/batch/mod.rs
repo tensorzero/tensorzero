@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde_json::json;
-use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::clickhouse::{ClickHouseConnectionInfo, TableName};
 use tensorzero_core::config_parser::Config;
 /// End-to-end tests for particular internal functionality in the batch inference endpoint
 /// These are not tests of the public API (those should go in tests/e2e/providers/batch.rs)
@@ -103,7 +103,7 @@ async fn test_get_batch_request() {
     };
     let rows = vec![row];
     clickhouse
-        .write(&rows, "BatchModelInference")
+        .write(&rows, TableName::BatchModelInference)
         .await
         .unwrap();
     // Sleep a bit to ensure the write has propagated
@@ -261,7 +261,7 @@ async fn write_2_batch_model_inference_rows(
     };
     let rows = vec![row1, row2];
     clickhouse
-        .write(&rows, "BatchModelInference")
+        .write(&rows, TableName::BatchModelInference)
         .await
         .unwrap();
     rows
@@ -338,7 +338,7 @@ async fn test_write_read_completed_batch_inference_chat() {
     let output_1 = ProviderBatchInferenceOutput {
         id: inference_id1,
         output: vec!["hello world".to_string().into()],
-        raw_response: "".to_string(),
+        raw_response: String::new(),
         usage: Usage {
             input_tokens: 10,
             output_tokens: 20,
@@ -349,7 +349,7 @@ async fn test_write_read_completed_batch_inference_chat() {
     let output_2 = ProviderBatchInferenceOutput {
         id: inference_id2,
         output: vec!["goodbye world".to_string().into()],
-        raw_response: "".to_string(),
+        raw_response: String::new(),
         usage: Usage {
             input_tokens: 20,
             output_tokens: 30,
@@ -367,7 +367,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             .unwrap();
 
     // Sort inferences by inference_id to ensure consistent ordering
-    inference_responses.sort_by_key(|response| response.inference_id());
+    inference_responses.sort_by_key(tensorzero::InferenceResponse::inference_id);
 
     assert_eq!(inference_responses.len(), 2);
     let inference_response_1 = &inference_responses[0];
@@ -382,7 +382,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             );
             match &chat_inference_response.content[0] {
                 ContentBlockChatOutput::Text(text_block) => {
-                    assert_eq!(text_block.text, "hello world")
+                    assert_eq!(text_block.text, "hello world");
                 }
                 _ => panic!("Unexpected content block type"),
             }
@@ -397,7 +397,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             assert_eq!(chat_inference_response.inference_id, inference_id2);
             match &chat_inference_response.content[0] {
                 ContentBlockChatOutput::Text(text_block) => {
-                    assert_eq!(text_block.text, "goodbye world")
+                    assert_eq!(text_block.text, "goodbye world");
                 }
                 _ => panic!("Unexpected content block type"),
             }
@@ -540,7 +540,7 @@ async fn test_write_read_completed_batch_inference_json() {
     let output_1 = ProviderBatchInferenceOutput {
         id: inference_id1,
         output: vec!["{\"answer\": \"hello world\"}".to_string().into()],
-        raw_response: "".to_string(),
+        raw_response: String::new(),
         usage: Usage {
             input_tokens: 10,
             output_tokens: 20,
@@ -551,7 +551,7 @@ async fn test_write_read_completed_batch_inference_json() {
     let output_2 = ProviderBatchInferenceOutput {
         id: inference_id2,
         output: vec!["{\"response\": \"goodbye world\"}".to_string().into()],
-        raw_response: "".to_string(),
+        raw_response: String::new(),
         usage: Usage {
             input_tokens: 20,
             output_tokens: 30,

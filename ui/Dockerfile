@@ -49,16 +49,6 @@ RUN tar -vxf /tmp/packages.tar -C .
 
 RUN pnpm install --frozen-lockfile --prod
 
-# ========== minijinja-build-env ==========
-
-FROM rust:latest AS minijinja-build-env
-
-COPY . /build
-
-WORKDIR /build/ui/app/utils/minijinja
-RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-RUN wasm-pack build --features console_error_panic_hook
-
 # ========== tensorzero-node-build-env ==========
 
 FROM rust:latest AS tensorzero-node-build-env
@@ -70,7 +60,6 @@ COPY . /build
 WORKDIR /build/internal/tensorzero-node
 
 RUN pnpm install --frozen-lockfile && pnpm run build
-
 
 # ========== evaluations-build-env ==========
 
@@ -103,8 +92,6 @@ COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/*linux*.no
 
 COPY . .
 
-COPY --from=minijinja-build-env /build/ui/app/utils/minijinja/pkg ./ui/app/utils/minijinja/pkg
-
 RUN pnpm --filter=tensorzero-ui run build
 
 # ========== ui ==========
@@ -113,7 +100,7 @@ FROM base AS ui
 
 RUN useradd -m -s /bin/sh ui
 
-RUN apt-get update && apt-get install -y curl python3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl wget python3 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -145,7 +132,10 @@ USER ui
 EXPOSE 4000
 
 ENV HOST=0.0.0.0
-ENV TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
+ENV NODE_ENV=production
+ENV PORT=4000
 ENV RUST_LOG=warn
+ENV TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
 
 ENTRYPOINT ["./entrypoint.sh"]
+HEALTHCHECK --start-period=10s --start-interval=1s --timeout=1s CMD wget --no-verbose --tries=1 --spider http://localhost:4000/api/tensorzero/status

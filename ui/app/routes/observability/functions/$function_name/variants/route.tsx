@@ -8,10 +8,10 @@ import {
 import type { LoaderFunctionArgs, RouteHandle } from "react-router";
 import BasicInfo from "./VariantBasicInfo";
 import VariantTemplate from "./VariantTemplate";
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import PageButtons from "~/components/utils/PageButtons";
 import VariantInferenceTable from "./VariantInferenceTable";
-import { getConfig } from "~/utils/config/index.server";
+import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import {
   countInferencesForVariant,
   queryInferenceTableBoundsByVariantName,
@@ -21,7 +21,7 @@ import {
   getVariantPerformances,
   type TimeWindowUnit,
 } from "~/utils/clickhouse/function";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { getInferenceTableName } from "~/utils/clickhouse/common";
@@ -55,7 +55,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
-  const function_config = config.functions[function_name];
+  const function_config = await getFunctionConfig(function_name, config);
   if (!function_config) {
     throw data(`Function ${function_name} not found`, { status: 404 });
   }
@@ -134,8 +134,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
   } = loaderData;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const config = useConfig();
-  const function_config = config.functions[function_name];
+  const function_config = useFunctionConfig(function_name);
   if (!function_config) {
     throw new Response(
       "Function not found. This likely means there is data in ClickHouse from an old TensorZero config.",
@@ -192,6 +191,15 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
+  const metricsExcludingDemonstrations = useMemo(
+    () => ({
+      metrics: metricsWithFeedback.metrics.filter(
+        ({ metric_type }) => metric_type !== "demonstration",
+      ),
+    }),
+    [metricsWithFeedback],
+  );
+
   const [time_granularity, setTimeGranularity] =
     useState<TimeWindowUnit>("week");
   const handleTimeGranularityChange = (granularity: TimeWindowUnit) => {
@@ -217,7 +225,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
         <SectionLayout>
           <SectionHeader heading="Metrics" />
           <MetricSelector
-            metricsWithFeedback={metricsWithFeedback}
+            metricsWithFeedback={metricsExcludingDemonstrations}
             selectedMetric={metric_name || ""}
             onMetricChange={handleMetricChange}
           />

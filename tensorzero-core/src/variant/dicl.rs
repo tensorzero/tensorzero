@@ -1,11 +1,9 @@
-use std::fs;
-use std::path::Path;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::config_parser::path::TomlRelativePath;
 use crate::config_parser::LoadableConfig;
 use crate::config_parser::PathWithContents;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
@@ -62,15 +60,17 @@ pub struct DiclConfig {
     pub retries: RetryConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct UninitializedDiclConfig {
     #[serde(default)]
     pub weight: Option<f64>,
     pub embedding_model: String,
     pub k: u32, // k as in k-nearest neighbors
     pub model: String,
-    pub system_instructions: Option<PathBuf>,
+    pub system_instructions: Option<TomlRelativePath>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub stop_sequences: Option<Vec<String>>,
@@ -93,7 +93,7 @@ impl Variant for DiclConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -107,11 +107,7 @@ impl Variant for DiclConfig {
                 models.embedding_models,
                 clients,
                 inference_config.function_name,
-                inference_config.variant_name.ok_or_else(|| {
-                    Error::new(ErrorDetails::InvalidDiclConfig {
-                        message: "missing variant_name".to_string(),
-                    })
-                })?,
+                inference_config.variant_name,
                 function,
             )
             .await?;
@@ -159,7 +155,7 @@ impl Variant for DiclConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -173,11 +169,7 @@ impl Variant for DiclConfig {
                 models.embedding_models,
                 clients,
                 inference_config.function_name,
-                inference_config.variant_name.ok_or_else(|| {
-                    Error::new(ErrorDetails::InvalidDiclConfig {
-                        message: "missing variant_name".to_string(),
-                    })
-                })?,
+                inference_config.variant_name,
                 function,
             )
             .await?;
@@ -271,7 +263,7 @@ impl Variant for DiclConfig {
         _input: &[ResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
-        _inference_configs: &'a [InferenceConfig<'a, 'a>],
+        _inference_configs: &'a [InferenceConfig<'a>],
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -357,12 +349,12 @@ impl DiclConfig {
                 .join(",")
         );
         let query = format!(
-            r#"SELECT input, output, cosineDistance(embedding, {}) as distance
+            r"SELECT input, output, cosineDistance(embedding, {}) as distance
                    FROM DynamicInContextLearningExample
                    WHERE function_name='{}' AND variant_name='{}'
                    ORDER BY distance ASC
                    LIMIT {}
-                   FORMAT JSONEachRow"#,
+                   FORMAT JSONEachRow",
             formatted_embedding, function_name, variant_name, self.k
         );
 
@@ -403,7 +395,7 @@ impl DiclConfig {
     /// The second message is an Assistant message with the output as native output blocks
     ///   - For chat messages, this is a simple vector of ContentBlocks
     ///   - For JSON messages, this is a single JSON output block (as Text)
-    fn prepare_message(&self, example: &Example) -> Result<Vec<RequestMessage>, Error> {
+    fn prepare_message(example: &Example) -> Result<Vec<RequestMessage>, Error> {
         let mut messages = Vec::new();
         let input = match example {
             Example::Chat(chat_example) => chat_example.input.clone(),
@@ -430,7 +422,7 @@ impl DiclConfig {
                 .output
                 .clone()
                 .into_iter()
-                .map(|x| x.into())
+                .map(ContentBlockChatOutput::into)
                 .collect(),
             Example::Json(json_example) => {
                 vec![json_example.output.raw.clone().unwrap_or_default().into()]
@@ -445,7 +437,7 @@ impl DiclConfig {
         Ok(messages)
     }
 
-    fn prepare_input_message(&self, input: &ResolvedInput) -> Result<RequestMessage, Error> {
+    fn prepare_input_message(input: &ResolvedInput) -> Result<RequestMessage, Error> {
         let content = vec![serde_json::to_string(&input)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
@@ -466,7 +458,7 @@ impl DiclConfig {
         input: &ResolvedInput,
         examples: &[Example],
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         stream: bool,
         inference_params: &mut InferenceParams,
     ) -> Result<ModelInferenceRequest<'request>, Error>
@@ -497,11 +489,11 @@ impl DiclConfig {
         }
         let messages = examples
             .iter()
-            .map(|example| self.prepare_message(example))
+            .map(Self::prepare_message)
             .collect::<Result<Vec<Vec<RequestMessage>>, _>>()?
             .into_iter()
             .flatten()
-            .chain(std::iter::once(self.prepare_input_message(input)?))
+            .chain(std::iter::once(Self::prepare_input_message(input)?))
             .collect::<Vec<_>>();
 
         let system = Some(self.system_instructions.clone());
@@ -533,6 +525,7 @@ impl DiclConfig {
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
+                .into_owned()
                 .filter(inference_config.variant_name),
         };
         prepare_model_inference_request(
@@ -612,19 +605,9 @@ pub fn default_system_instructions() -> String {
 }
 
 impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
-    /// Since the system instructions are optional and may be a path to a file,
-    /// we need to load them here so that we can use the base_path to resolve
-    /// any relative paths.
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<DiclConfig, Error> {
+    fn load(self) -> Result<DiclConfig, Error> {
         let system_instructions = match self.system_instructions {
-            Some(path) => {
-                let path = base_path.as_ref().join(path);
-                fs::read_to_string(path).map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!("Failed to read system instructions: {e}"),
-                    })
-                })?
-            }
+            Some(path) => path.read()?,
             None => default_system_instructions(),
         };
 
@@ -665,9 +648,6 @@ mod tests {
 
     #[test]
     fn test_prepare_message() {
-        // Create an instance of DiclConfig (assuming default implementation is available)
-        let dicl_config = DiclConfig::default();
-
         // ---------- Test with ChatExample ----------
 
         // Mock Input data
@@ -708,7 +688,7 @@ mod tests {
             output: chat_output.clone(),
         });
 
-        let chat_messages = dicl_config.prepare_message(&chat_example).unwrap();
+        let chat_messages = DiclConfig::prepare_message(&chat_example).unwrap();
 
         assert_eq!(chat_messages.len(), 2);
 
@@ -723,8 +703,10 @@ mod tests {
         );
 
         // Second message should be from Assistant with content blocks
-        let expected_content: Vec<ContentBlock> =
-            chat_output.into_iter().map(|x| x.into()).collect();
+        let expected_content: Vec<ContentBlock> = chat_output
+            .into_iter()
+            .map(ContentBlockChatOutput::into)
+            .collect();
 
         assert_eq!(chat_messages[1].role, Role::Assistant);
         assert_eq!(chat_messages[1].content, expected_content);
@@ -742,7 +724,7 @@ mod tests {
             output: json_output.clone(),
         });
 
-        let json_messages = dicl_config.prepare_message(&json_example).unwrap();
+        let json_messages = DiclConfig::prepare_message(&json_example).unwrap();
 
         // Assertions for JsonExample
         assert_eq!(json_messages.len(), 2);
@@ -767,9 +749,6 @@ mod tests {
 
     #[test]
     fn test_prepare_input_message() {
-        // Create an instance of DiclConfig (assuming default implementation is available)
-        let dicl_config = DiclConfig::default();
-
         // Mock Input data
         let input_data = ResolvedInput {
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
@@ -797,7 +776,7 @@ mod tests {
         };
 
         // Call the prepare_input_message function
-        let request_message = dicl_config.prepare_input_message(&input_data).unwrap();
+        let request_message = DiclConfig::prepare_input_message(&input_data).unwrap();
 
         // The role should be User
         assert_eq!(request_message.role, Role::User);
