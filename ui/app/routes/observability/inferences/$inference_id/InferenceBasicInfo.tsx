@@ -2,7 +2,7 @@ import type {
   ParsedInferenceRow,
   ParsedModelInferenceRow,
 } from "~/utils/clickhouse/inference";
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import {
   BasicInfoLayout,
@@ -14,7 +14,7 @@ import Chip from "~/components/ui/Chip";
 import {
   Timer,
   Calendar,
-  Input,
+  InputIcon,
   Output,
   Cached,
 } from "~/components/icons/Icons";
@@ -46,10 +46,9 @@ export default function BasicInfo({
   inferenceUsage,
   modelInferences = [],
 }: BasicInfoProps) {
-  const config = useConfig();
+  const functionConfig = useFunctionConfig(inference.function_name);
   const variantType =
-    config.functions[inference.function_name]?.variants[inference.variant_name]
-      ?.type;
+    functionConfig?.variants[inference.variant_name]?.inner.type;
 
   // Create timestamp tooltip
   const timestampTooltip = createTimestampTooltip(inference.timestamp);
@@ -110,7 +109,7 @@ export default function BasicInfo({
         <BasicInfoItemTitle>Usage</BasicInfoItemTitle>
         <BasicInfoItemContent>
           <Chip
-            icon={<Input className="text-fg-tertiary" />}
+            icon={<InputIcon className="text-fg-tertiary" />}
             label={`${inferenceUsage?.input_tokens ?? ""} tok`}
             tooltip="Input Tokens"
           />

@@ -11,17 +11,18 @@ use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tensorzero_core::howdy::setup_howdy;
 use tokio::signal;
 use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
 
-use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
-use tensorzero_internal::config_parser::Config;
-use tensorzero_internal::endpoints;
-use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_internal::error;
-use tensorzero_internal::gateway_util;
-use tensorzero_internal::observability::{self, LogFormat, RouterExt};
+use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::config_parser::Config;
+use tensorzero_core::endpoints;
+use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
+use tensorzero_core::error;
+use tensorzero_core::gateway_util;
+use tensorzero_core::observability::{self, LogFormat, RouterExt};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -87,7 +88,7 @@ async fn main() {
         .await
         .expect_pretty("Failed to set up logs");
 
-    let git_sha = tensorzero_internal::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
+    let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
 
@@ -157,18 +158,30 @@ async fn main() {
             }
         }
 
-        delayed_log_config
-            .delayed_otel
-            .enable_otel()
-            .expect_pretty("Failed to enable OpenTelemetry");
-
-        tracing::info!("Enabled OpenTelemetry OTLP export");
+        match delayed_log_config.delayed_otel {
+            Ok(delayed_otel) => {
+                delayed_otel
+                    .enable_otel()
+                    .expect_pretty("Failed to enable OpenTelemetry");
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Could not enable OpenTelemetry export due to previous error: `{e}`. Exiting."
+                );
+                std::process::exit(1);
+            }
+        }
+    } else if let Err(e) = delayed_log_config.delayed_otel {
+        tracing::warn!(
+            "[gateway.export.otlp.traces.enabled] is `false`, so ignoring OpenTelemetry error: `{e}`"
+        );
     }
 
     // Initialize AppState
     let app_state = gateway_util::AppStateData::new(config.clone())
         .await
         .expect_pretty("Failed to initialize AppState");
+    setup_howdy(app_state.clickhouse_connection_info.clone());
 
     // Create a new observability_enabled_pretty string for the log message below
     let observability_enabled_pretty = match &app_state.clickhouse_connection_info {
@@ -183,8 +196,10 @@ async fn main() {
 
     // Set debug mode
     error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");
+    error::set_unstable_error_json(config.gateway.unstable_error_json)
+        .expect_pretty("Failed to set unstable error JSON");
 
-    let router = Router::new()
+    let api_routes = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
         .route(
             "/batch_inference",
@@ -223,6 +238,10 @@ async fn main() {
             get(endpoints::datasets::list_datapoints_handler),
         )
         .route(
+            "/datasets/{dataset_name}",
+            delete(endpoints::datasets::stale_dataset_handler),
+        )
+        .route(
             "/datasets/{dataset_name}/datapoints/{datapoint_id}",
             get(endpoints::datasets::get_datapoint_handler),
         )
@@ -250,6 +269,30 @@ async fn main() {
             "/metrics",
             get(move || std::future::ready(metrics_handle.render())),
         )
+        .route(
+            "/experimental_optimization_workflow",
+            post(endpoints::optimization::launch_optimization_workflow_handler),
+        )
+        .route(
+            "/experimental_optimization/{job_handle}",
+            get(endpoints::optimization::poll_optimization_handler),
+        );
+
+    let base_path = config.gateway.base_path.as_deref().unwrap_or("/");
+    if !base_path.starts_with("/") {
+        tracing::error!("[gateway.base_path] must start with a `/` : `{base_path}`");
+        std::process::exit(1);
+    }
+    let base_path = base_path.trim_end_matches("/");
+
+    // The path was just `/` (or multiple slashes)
+    let router = if base_path.is_empty() {
+        Router::new().merge(api_routes)
+    } else {
+        Router::new().nest(base_path, api_routes)
+    };
+
+    let router = router
         .fallback(endpoints::fallback::handle_404)
         .layer(axum::middleware::from_fn(add_version_header))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
@@ -280,21 +323,40 @@ async fn main() {
             std::process::exit(1);
         }
     };
+
     // This will give us the chosen port if the user specified a port of 0
     let actual_bind_address = listener
         .local_addr()
         .expect_pretty("Failed to get bind address from listener");
 
-    let config_path_pretty = if let Some(path) = &config_path {
-        format!("config file `{}`", path.to_string_lossy())
+    // Print the bind address
+    tracing::info!("TensorZero Gateway is listening on {actual_bind_address}");
+
+    // Print the base path if set
+    if base_path.is_empty() {
+        tracing::info!("├ API Base Path: /");
     } else {
-        "no config file".to_string()
-    };
+        tracing::info!("├ API Base Path: {base_path}");
+    }
 
-    tracing::info!(
-        "TensorZero Gateway is listening on {actual_bind_address} with {config_path_pretty} and observability {observability_enabled_pretty}.",
-    );
+    // Print the configuration being used
+    if let Some(path) = &config_path {
+        tracing::info!("├ Configuration: {}", path.to_string_lossy());
+    } else {
+        tracing::info!("├ Configuration: default");
+    }
 
+    // Print whether observability is enabled
+    tracing::info!("├ Observability: {observability_enabled_pretty}");
+
+    // Print whether OpenTelemetry is enabled
+    if config.gateway.export.otlp.traces.enabled {
+        tracing::info!("└ OpenTelemetry: enabled");
+    } else {
+        tracing::info!("└ OpenTelemetry: disabled");
+    }
+
+    // Start the server
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())
         .await
@@ -331,13 +393,13 @@ pub async fn shutdown_signal() {
     let hangup = std::future::pending::<()>();
 
     tokio::select! {
-        _ = ctrl_c => {
+        () = ctrl_c => {
             tracing::info!("Received Ctrl+C signal");
         }
-        _ = terminate => {
+        () = terminate => {
             tracing::info!("Received SIGTERM signal");
         }
-        _ = hangup => {
+        () = hangup => {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             tracing::info!("Received SIGHUP signal");
         }

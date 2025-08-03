@@ -1,0 +1,15 @@
+# Test configuration for testing ClickHouse requirement
+# This config explicitly enables observability, which requires ClickHouse
+
+[gateway.observability]
+enabled = true
+
+# Minimal function definition for a valid config
+[functions.test_function]
+type = "chat"
+
+[functions.test_function.variants.test_variant]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "templates/system_template.minijinja"
+user_template = "templates/user_template.minijinja"

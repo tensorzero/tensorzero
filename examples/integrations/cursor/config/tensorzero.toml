@@ -29,12 +29,20 @@ extra_body = [{ pointer = "/temperature", value = 1.0 }]
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
-[metrics.min_ted]
+
+[metrics.average_ted_ratio]
 type = "float"
 level = "inference"
 optimize = "min"
 
-[metrics.ted_ratio]
+# this is just to observe, probably not to optimize
+[metrics.num_code_blocks]
+type = "float"
+level = "inference"
+optimize = "max"
+
+# As a measurement of how much code was output
+[metrics.total_tree_size]
 type = "float"
 level = "inference"
 optimize = "max"

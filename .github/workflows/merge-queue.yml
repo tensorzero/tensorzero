@@ -4,12 +4,8 @@ run-name: Merge Queue Checks for ${{ github.ref }}
 on:
   workflow_dispatch:
   merge_group:
-
-# See 'general.yml' for more details. Note that we use a difference concurrency group,
-# so that general.yml and merge-queue.yml can run in parallel.
-concurrency:
-  group: ${{ (github.event_name == 'merge_group' && 'merge-group-merge-checks') || github.run_id }}
-  cancel-in-progress: true
+  schedule:
+    - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -78,11 +74,6 @@ jobs:
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
 
       - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
-        with:
-          cache-provider: "buildjet"
-
       # Start testing workload identity federation credentials once the SDK adds support: https://github.com/googleapis/google-cloud-rust/issues/1342
 
       # - uses: 'google-github-actions/auth@v2'
@@ -120,7 +111,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
           tool: cargo-nextest
 
@@ -133,10 +124,17 @@ jobs:
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
+      - name: Download provider-proxy cache
+        # When running as a cron job, don't use the provider-proxy cache.
+        # The cron job is used to gather information about provider flakiness.
+        if: github.event_name != 'schedule'
+        run: |
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/download-provider-proxy-cache.sh
+
       - name: Launch ClickHouse container for E2E tests
         run: |
           # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait || true
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
 
       - name: Launch the provider-proxy cache for E2E tests
         run: |
@@ -155,40 +153,17 @@ jobs:
       # The 'CARGO_NEXTEST_FLAKY_TESTS' variable allows us to mark tests as flaky without merging a PR (if a provider happens to break or goes down)
       # We run the tests without the flaky tests, and require them to pass
       - name: Run all tests (including E2E tests)
+        # When running from a cron job (the 'schedule' event), use '--no-fail-fast' so that we get full coverage of flaky providers.
         run: |
-          TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-e2e --profile ci ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "not (${{ vars.CARGO_NEXTEST_FLAKY_TESTS }})"
+          TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-e2e ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "not (${{ vars.CARGO_NEXTEST_FLAKY_TESTS }})" ${{ github.event_name == 'schedule' && '--no-fail-fast' || '' }}
 
       # As a separate step, we run just the flaky tests, and allow them to fail.
       # This lets us see if any flaky tests have started succeeding (by looking at the job output),
       # so that we can decide to mark them as non-flaky.
       # - name: Run flaky E2E tests
       #   run: |
-      #     TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-e2e --profile ci --no-fail-fast ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}"
+      #     TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-e2e --no-fail-fast ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}"
       #   continue-on-error: true
-
-      - name: Print e2e logs
-        if: always()
-        run: cat e2e_logs.txt
-
-      - name: Print provider-proxy logs
-        if: always()
-        run: cat provider_proxy_logs.txt
-
-      - name: Print vLLM modal logs
-        if: always()
-        run: cat vllm_modal_logs.txt
-
-      - name: Print SGLang modal logs
-        if: always()
-        run: cat sglang_modal_logs.txt
-
-      - name: Upload provider-proxy cache
-        if: ${{ false }} # Change to `if: ${{ always() }}` to start uploading the cache
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: provider-proxy-cache
-          path: ./ci/provider-proxy-cache/
-
       - name: Install Python for python async client tests
         run: uv python install 3.9
 
@@ -232,6 +207,34 @@ jobs:
           echo "Killing gateway with pid $GATEWAY_PID"
           kill $GATEWAY_PID
 
+      - name: Check e2e logs for deprecation warnings
+        run: |
+          ! grep -i "Deprecation Warning" e2e_logs.txt
+
+      - name: Print e2e logs
+        if: always()
+        run: cat e2e_logs.txt
+
+      - name: Print provider-proxy logs
+        if: always()
+        run: cat provider_proxy_logs.txt
+
+      - name: Print vLLM modal logs
+        if: always()
+        run: cat vllm_modal_logs.txt
+
+      - name: Print SGLang modal logs
+        if: always()
+        run: cat sglang_modal_logs.txt
+
+      - name: Upload provider-proxy cache
+        # Only upload the cache when we're running from a 'good' run
+        # (a merge queue entry which passed this check, or a cron job)
+        # This prevents manual workflow runs from modifying the cache
+        if: github.event_name == 'merge_group' || github.event_name == 'schedule'
+        run: |
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/upload-provider-proxy-cache.sh
+
   check-production-docker-container:
     runs-on: ubuntu-latest
     steps:
@@ -242,12 +245,13 @@ jobs:
       - name: Launch ClickHouse container for E2E tests
         run: |
           # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait || true
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
 
       - name: Set up .env file for production deployment tests
         run: |
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
+          echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> examples/production-deployment/.env
 
       - name: Run docker compose for production deployment tests
         run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
@@ -258,7 +262,7 @@ jobs:
       - name: Take down docker compose for production deployment tests
         run: |
           docker compose -f examples/production-deployment/docker-compose.yml down
-          docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml down
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-live-tests-passed:

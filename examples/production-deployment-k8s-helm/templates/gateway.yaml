@@ -48,12 +48,21 @@ spec:
           volumeMounts:
             - name: config-volume
               mountPath: /app/config
+            {{- if .Values.persistence.enabled }}
+            - name: storage-volume
+              mountPath: {{ .Values.persistence.mountPath }}
+            {{- end }}
           resources:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
       volumes:
         - name: config-volume
           configMap:
             name: {{ include "tensorzero.fullname" . }}
+        {{- if .Values.persistence.enabled }}
+        - name: storage-volume
+          persistentVolumeClaim:
+            claimName: {{ include "tensorzero.fullname" . }}-storage
+        {{- end }}
       {{- with .Values.gateway.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

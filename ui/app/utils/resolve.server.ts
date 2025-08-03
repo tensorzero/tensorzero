@@ -1,30 +1,31 @@
 import type {
+  DisplayInput,
+  DisplayInputMessage,
+  DisplayInputMessageContent,
+  DisplayMissingFunctionTextInput,
+  DisplayUnstructuredTextInput,
+  DisplayStructuredTextInput,
   FileContent,
-  ModelInferenceInput,
+  Input,
+  InputMessage,
+  InputMessageContent,
   ModelInferenceInputMessage,
   ModelInferenceInputMessageContent,
   ResolvedBase64File,
-  ResolvedInputMessageContent,
+  Role,
+  TextInput,
 } from "./clickhouse/common";
-import type { InputMessageContent } from "./clickhouse/common";
-import type { ResolvedInputMessage } from "./clickhouse/common";
-import type { InputMessage } from "./clickhouse/common";
-import type { ResolvedInput } from "./clickhouse/common";
-import type { Input } from "./clickhouse/common";
-import { tensorZeroClient } from "./tensorzero.server";
+import type { FunctionConfig } from "tensorzero-node";
+import { getTensorZeroClient } from "./tensorzero.server";
 
-export async function resolveInput(input: Input): Promise<ResolvedInput> {
-  const resolvedMessages = await resolveMessages(input.messages);
-  return {
-    ...input,
-    messages: resolvedMessages,
-  };
-}
-
-export async function resolveModelInferenceInput(
-  input: ModelInferenceInput,
-): Promise<ResolvedInput> {
-  const resolvedMessages = await resolveMessages(input.messages);
+export async function resolveInput(
+  input: Input,
+  functionConfig: FunctionConfig | null,
+): Promise<DisplayInput> {
+  const resolvedMessages = await resolveMessages(
+    input.messages,
+    functionConfig,
+  );
   return {
     ...input,
     messages: resolvedMessages,
@@ -33,17 +34,18 @@ export async function resolveModelInferenceInput(
 
 export async function resolveMessages(
   messages: InputMessage[],
-): Promise<ResolvedInputMessage[]> {
+  functionConfig: FunctionConfig | null,
+): Promise<DisplayInputMessage[]> {
   return Promise.all(
     messages.map(async (message) => {
-      return resolveMessage(message);
+      return resolveMessage(message, functionConfig);
     }),
   );
 }
 
 export async function resolveModelInferenceMessages(
   messages: ModelInferenceInputMessage[],
-): Promise<ResolvedInputMessage[]> {
+): Promise<DisplayInputMessage[]> {
   return Promise.all(
     messages.map(async (message) => {
       return resolveModelInferenceMessage(message);
@@ -52,10 +54,11 @@ export async function resolveModelInferenceMessages(
 }
 async function resolveMessage(
   message: InputMessage,
-): Promise<ResolvedInputMessage> {
+  functionConfig: FunctionConfig | null,
+): Promise<DisplayInputMessage> {
   const resolvedContent = await Promise.all(
     message.content.map(async (content) => {
-      return resolveContent(content);
+      return resolveContent(content, message.role, functionConfig);
     }),
   );
   return {
@@ -66,7 +69,7 @@ async function resolveMessage(
 
 async function resolveModelInferenceMessage(
   message: ModelInferenceInputMessage,
-): Promise<ResolvedInputMessage> {
+): Promise<DisplayInputMessage> {
   const resolvedContent = await Promise.all(
     message.content.map(async (content) => {
       return resolveModelInferenceContent(content);
@@ -80,13 +83,18 @@ async function resolveModelInferenceMessage(
 
 async function resolveContent(
   content: InputMessageContent,
-): Promise<ResolvedInputMessageContent> {
+  role: Role,
+  functionConfig: FunctionConfig | null,
+): Promise<DisplayInputMessageContent> {
   switch (content.type) {
-    case "text":
     case "tool_call":
     case "tool_result":
     case "raw_text":
+    case "thought":
+    case "unknown":
       return content;
+    case "text":
+      return prepareDisplayText(content, role, functionConfig);
     case "image":
       try {
         return {
@@ -100,6 +108,11 @@ async function resolveContent(
         };
       } catch (error) {
         return {
+          file: {
+            url: content.image.url,
+            mime_type: content.image.mime_type,
+          },
+          storage_path: content.storage_path,
           type: "file_error",
           error: error instanceof Error ? error.message : String(error),
         };
@@ -112,6 +125,7 @@ async function resolveContent(
         };
       } catch (error) {
         return {
+          ...content,
           type: "file_error",
           error: error instanceof Error ? error.message : String(error),
         };
@@ -121,16 +135,20 @@ async function resolveContent(
 
 async function resolveModelInferenceContent(
   content: ModelInferenceInputMessageContent,
-): Promise<ResolvedInputMessageContent> {
+): Promise<DisplayInputMessageContent> {
   switch (content.type) {
     case "text":
+      // Do not use prepareDisplayText here because these are model inferences and should be post-templating
+      // and will always be unstructured text.
       return {
-        type: "text",
-        value: content.text,
+        type: "unstructured_text",
+        text: content.text,
       };
     case "tool_call":
     case "tool_result":
     case "raw_text":
+    case "thought":
+    case "unknown":
       return content;
     // Convert legacy 'image' content block to 'file' when resolving input
     case "image":
@@ -146,6 +164,11 @@ async function resolveModelInferenceContent(
         };
       } catch (error) {
         return {
+          file: {
+            url: null,
+            mime_type: content.image.mime_type,
+          },
+          storage_path: content.storage_path,
           type: "file_error",
           error: error instanceof Error ? error.message : String(error),
         };
@@ -158,6 +181,7 @@ async function resolveModelInferenceContent(
         };
       } catch (error) {
         return {
+          ...content,
           type: "file_error",
           error: error instanceof Error ? error.message : String(error),
         };
@@ -165,11 +189,46 @@ async function resolveModelInferenceContent(
   }
 }
 async function resolveFile(content: FileContent): Promise<ResolvedBase64File> {
-  const object = await tensorZeroClient.getObject(content.storage_path);
+  const object = await getTensorZeroClient().getObject(content.storage_path);
   const json = JSON.parse(object);
   const dataURL = `data:${content.file.mime_type};base64,${json.data}`;
   return {
-    url: dataURL,
+    dataUrl: dataURL,
     mime_type: content.file.mime_type,
+  };
+}
+
+// In the current data model we can't distinguish between a message being a structured one from a schema
+// or an unstructured one without a schema without knowing the function config.
+// So as we prepare the input for display, we check this and return an unambiguous type of structured or unstructured text.
+function prepareDisplayText(
+  textBlock: TextInput,
+  role: Role,
+  functionConfig: FunctionConfig | null,
+):
+  | DisplayUnstructuredTextInput
+  | DisplayStructuredTextInput
+  | DisplayMissingFunctionTextInput {
+  if (!functionConfig) {
+    return {
+      type: "missing_function_text",
+      value: textBlock.value,
+    };
+  }
+
+  // True if the function has a schema for the role (user or assistant)
+  const hasSchemaForRole =
+    role === "user"
+      ? functionConfig.user_schema !== null
+      : functionConfig.assistant_schema !== null;
+  if (hasSchemaForRole) {
+    return {
+      type: "structured_text",
+      arguments: textBlock.value,
+    };
+  }
+  return {
+    type: "unstructured_text",
+    text: textBlock.value,
   };
 }

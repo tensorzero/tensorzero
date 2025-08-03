@@ -1,4 +1,3 @@
-import { VERSION } from "~/utils/version";
 import { useTensorZeroStatusFetcher } from "~/routes/api/tensorzero/status";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
@@ -7,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
  */
 export default function TensorZeroStatusIndicator() {
   const { status, isLoading } = useTensorZeroStatusFetcher();
-  const uiVersion = VERSION;
+  const uiVersion = __APP_VERSION__;
 
   // Extract server version from status if available
   const serverVersion = status?.version || "";

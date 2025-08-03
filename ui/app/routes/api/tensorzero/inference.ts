@@ -1,22 +1,22 @@
 import { ZodError } from "zod";
-import {
-  InferenceRequestSchema,
-  HttpError as TensorZeroHttpError,
-} from "~/utils/tensorzero";
-import { tensorZeroClient } from "~/utils/tensorzero.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type {
   ResolvedFileContent,
-  ResolvedInput,
-  ResolvedInputMessageContent,
+  DisplayInput,
+  DisplayInputMessageContent,
 } from "~/utils/clickhouse/common";
 import type {
   InferenceResponse,
+  InputMessageContent as TensorZeroContent,
+  ImageContent as TensorZeroImage,
+  InputMessage as TensorZeroMessage,
   Input as TensorZeroInput,
 } from "~/utils/tensorzero";
-import type { ResolvedInputMessage } from "~/utils/clickhouse/common";
-import type { InputMessage as TensorZeroMessage } from "~/utils/tensorzero";
-import type { InputMessageContent as TensorZeroContent } from "~/utils/tensorzero";
-import type { ImageContent as TensorZeroImage } from "~/utils/tensorzero";
+import type { DisplayInputMessage } from "~/utils/clickhouse/common";
+import {
+  isTensorZeroServerError,
+  InferenceRequestSchema,
+} from "~/utils/tensorzero";
 import { JSONParseError } from "~/utils/common";
 import type { Route } from "./+types/inference";
 
@@ -35,11 +35,8 @@ export async function action({ request }: Route.ActionArgs): Promise<Response> {
     if (error instanceof ZodError) {
       return Response.json({ error: error.issues }, { status: 400 });
     }
-    if (error instanceof TensorZeroHttpError) {
-      return Response.json(
-        { error: error.message },
-        { status: error.response.status },
-      );
+    if (isTensorZeroServerError(error)) {
+      return Response.json({ error: error.message }, { status: error.status });
     }
     return Response.json({ error: "Server error" }, { status: 500 });
   }
@@ -61,14 +58,14 @@ async function handleInferenceAction(
     throw result.error;
   }
 
-  return await tensorZeroClient.inference({
+  return await getTensorZeroClient().inference({
     ...result.data,
     stream: false,
   });
 }
 
 export function resolvedInputToTensorZeroInput(
-  input: ResolvedInput,
+  input: DisplayInput,
 ): TensorZeroInput {
   return {
     ...input,
@@ -77,7 +74,7 @@ export function resolvedInputToTensorZeroInput(
 }
 
 function resolvedInputMessageToTensorZeroMessage(
-  message: ResolvedInputMessage,
+  message: DisplayInputMessage,
 ): TensorZeroMessage {
   return {
     ...message,
@@ -88,25 +85,29 @@ function resolvedInputMessageToTensorZeroMessage(
 }
 
 function resolvedInputMessageContentToTensorZeroContent(
-  content: ResolvedInputMessageContent,
+  content: DisplayInputMessageContent,
 ): TensorZeroContent {
   switch (content.type) {
-    case "text":
-      // If the text is string then send it as {"type": "text", "text": "..."}
-      // If it is an object then send it as {"type": "text", "arguments": {...}}
-      if (typeof content.value === "string") {
-        return {
-          type: "text",
-          text: content.value,
-        };
-      }
+    case "structured_text":
       return {
         type: "text",
-        arguments: content.value,
+        arguments: content.arguments,
+      };
+    case "unstructured_text":
+      return {
+        type: "text",
+        text: content.text,
+      };
+    case "missing_function_text":
+      return {
+        type: "text",
+        text: content.value,
       };
     case "raw_text":
     case "tool_call":
     case "tool_result":
+    case "thought":
+    case "unknown":
       return content;
     case "file":
       return resolvedFileContentToTensorZeroFile(content);
@@ -118,7 +119,7 @@ function resolvedInputMessageContentToTensorZeroContent(
 function resolvedFileContentToTensorZeroFile(
   content: ResolvedFileContent,
 ): TensorZeroImage {
-  const data = content.file.url.split(",")[1];
+  const data = content.file.dataUrl.split(",")[1];
   return {
     type: "image",
     mime_type: content.file.mime_type,

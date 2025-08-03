@@ -10,25 +10,28 @@ import {
   type SnippetTab,
 } from "~/components/layout/SnippetLayout";
 import {
-  CodeMessage,
   EmptyMessage,
   TextMessage,
   ToolCallMessage,
 } from "~/components/layout/SnippetContent";
+import { CodeEditor } from "../ui/code-editor";
+
+// IMPORTANT: THIS VERSION HAS `maxHeight` IN THE PROPS WHICH THE OTHER VERSIONS DO NOT HAVE
 
 /*
-NOTE: This is the new output component but it is not editable yet so we are rolling
-it out across the UI incrementally.
+  NOTE: This is the new output component but it is not editable yet so we are rolling
+  it out across the UI incrementally.
 */
 
-type ChatInferenceOutputRenderingData = ContentBlockOutput[];
+export type ChatInferenceOutputRenderingData = ContentBlockOutput[];
 
-interface JsonInferenceOutputRenderingData extends JsonInferenceOutput {
+export interface JsonInferenceOutputRenderingData extends JsonInferenceOutput {
   schema?: Record<string, unknown>;
 }
 
 interface OutputProps {
   output: ChatInferenceOutputRenderingData | JsonInferenceOutputRenderingData;
+  maxHeight?: number;
 }
 
 function isJsonInferenceOutput(
@@ -37,7 +40,10 @@ function isJsonInferenceOutput(
   return "raw" in output;
 }
 
-function renderJsonInferenceOutput(output: JsonInferenceOutputRenderingData) {
+function renderJsonInferenceOutput(
+  output: JsonInferenceOutputRenderingData,
+  maxHeight?: number,
+) {
   const tabs: SnippetTab[] = [
     {
       id: "parsed",
@@ -58,35 +64,37 @@ function renderJsonInferenceOutput(output: JsonInferenceOutputRenderingData) {
     });
   }
 
-  // Set default tab to Parsed if it has content, otherwise Raw
+  // Set default tab to "Parsed" if it's available, otherwise "Raw"
   const defaultTab = output.parsed ? "parsed" : "raw";
 
   return (
     <SnippetTabs tabs={tabs} defaultTab={defaultTab}>
       {(activeTab) => (
-        <SnippetContent>
+        <SnippetContent maxHeight={maxHeight}>
           {activeTab === "parsed" ? (
-            <SnippetMessage>
+            <>
               {output.parsed ? (
-                <CodeMessage
-                  content={JSON.stringify(output.parsed, null, 2)}
-                  showLineNumbers={true}
+                <CodeEditor
+                  allowedLanguages={["json"]}
+                  value={JSON.stringify(output.parsed, null, 2)}
+                  readOnly
                 />
               ) : (
                 <EmptyMessage message="The inference output failed to parse against the schema." />
               )}
-            </SnippetMessage>
+            </>
           ) : activeTab === "raw" ? (
-            <SnippetMessage>
-              <CodeMessage content={output.raw} showLineNumbers={true} />
-            </SnippetMessage>
+            <CodeEditor
+              allowedLanguages={["json"]}
+              value={output.raw}
+              readOnly
+            />
           ) : (
-            <SnippetMessage>
-              <CodeMessage
-                content={JSON.stringify(output.schema, null, 2)}
-                showLineNumbers={true}
-              />
-            </SnippetMessage>
+            <CodeEditor
+              allowedLanguages={["json"]}
+              value={JSON.stringify(output.schema, null, 2)}
+              readOnly
+            />
           )}
         </SnippetContent>
       )}
@@ -94,14 +102,17 @@ function renderJsonInferenceOutput(output: JsonInferenceOutputRenderingData) {
   );
 }
 
-function renderChatInferenceOutput(output: ChatInferenceOutputRenderingData) {
+function renderChatInferenceOutput(
+  output: ChatInferenceOutputRenderingData,
+  maxHeight?: number,
+) {
   return (
-    <SnippetContent>
-      <SnippetMessage>
-        {output.length === 0 ? (
-          <EmptyMessage message="No output messages found" />
-        ) : (
-          output.map((block, index) => {
+    <SnippetContent maxHeight={maxHeight}>
+      {output.length === 0 ? (
+        <EmptyMessage message="The output was empty" />
+      ) : (
+        <SnippetMessage>
+          {output.map((block, index) => {
             switch (block.type) {
               case "text":
                 return (
@@ -111,28 +122,32 @@ function renderChatInferenceOutput(output: ChatInferenceOutputRenderingData) {
                 return (
                   <ToolCallMessage
                     key={index}
-                    toolName={block.name ?? ""}
-                    toolArguments={JSON.stringify(block.arguments, null, 2)}
-                    // TODO: if arguments is null, display raw arguments without parsing
+                    toolName={block.name}
+                    toolRawName={block.raw_name}
+                    toolArguments={
+                      block.arguments &&
+                      JSON.stringify(block.arguments, null, 2)
+                    }
+                    toolRawArguments={block.raw_arguments}
                     toolCallId={block.id}
                   />
                 );
               default:
                 return null;
             }
-          })
-        )}
-      </SnippetMessage>
+          })}
+        </SnippetMessage>
+      )}
     </SnippetContent>
   );
 }
 
-export default function Output({ output }: OutputProps) {
+export default function Output({ output, maxHeight }: OutputProps) {
   return (
     <SnippetLayout>
       {isJsonInferenceOutput(output)
-        ? renderJsonInferenceOutput(output)
-        : renderChatInferenceOutput(output)}
+        ? renderJsonInferenceOutput(output, maxHeight)
+        : renderChatInferenceOutput(output, maxHeight)}
     </SnippetLayout>
   );
 }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { FunctionConfig } from "../config/function";
+import type { FunctionConfig } from "tensorzero-node";
 
 export const roleSchema = z.enum(["user", "assistant"]);
 export type Role = z.infer<typeof roleSchema>;
@@ -9,6 +9,34 @@ export const textInputSchema = z.object({
   value: z.any(), // Value type from Rust maps to any in TS
 });
 export type TextInput = z.infer<typeof textInputSchema>;
+
+// The three display text types below handle the scenario
+// where the function 1) does not use schemas
+export const displayUnstructuredTextInputSchema = z.object({
+  type: z.literal("unstructured_text"),
+  text: z.string(),
+});
+export type DisplayUnstructuredTextInput = z.infer<
+  typeof displayUnstructuredTextInputSchema
+>;
+
+// 2) uses schemas
+export const displayStructuredTextInputSchema = z.object({
+  type: z.literal("structured_text"),
+  arguments: z.any(),
+});
+export type DisplayStructuredTextInput = z.infer<
+  typeof displayStructuredTextInputSchema
+>;
+
+// 3) is missing from the config so we don't know
+export const displayMissingFunctionTextInputSchema = z.object({
+  type: z.literal("missing_function_text"),
+  value: z.any(),
+});
+export type DisplayMissingFunctionTextInput = z.infer<
+  typeof displayMissingFunctionTextInputSchema
+>;
 
 export const modelInferenceTextInputSchema = z.object({
   type: z.literal("text"),
@@ -23,6 +51,20 @@ export const rawTextInputSchema = z.object({
   value: z.string(),
 });
 export type RawTextInput = z.infer<typeof rawTextInputSchema>;
+
+export const thoughtSchema = z.object({
+  type: z.literal("thought"),
+  text: z.string().nullable(),
+  signature: z.string().nullable(),
+});
+export type Thought = z.infer<typeof thoughtSchema>;
+
+export const unknownSchema = z.object({
+  type: z.literal("unknown"),
+  data: z.any(),
+  model_provider_name: z.string().nullable(),
+});
+export type Unknown = z.infer<typeof unknownSchema>;
 
 export const toolCallSchema = z
   .object({
@@ -59,13 +101,18 @@ export const toolResultContentSchema = z
 export type ToolResultContent = z.infer<typeof toolResultContentSchema>;
 
 export const base64FileSchema = z.object({
-  url: z.string().nullable(),
+  url: z.string().url().nullable(),
   mime_type: z.string(),
 });
 export type Base64File = z.infer<typeof base64FileSchema>;
 
 export const resolvedBase64FileSchema = z.object({
-  url: z.string(),
+  dataUrl: z
+    .string()
+    .url()
+    .refine((url) => url.startsWith("data:"), {
+      message: "Data URL must start with 'data:'",
+    }),
   mime_type: z.string(),
 });
 export type ResolvedBase64File = z.infer<typeof resolvedBase64FileSchema>;
@@ -125,6 +172,8 @@ export type ResolvedFileContent = z.infer<typeof resolvedFileContentSchema>;
 
 export const resolvedFileContentErrorSchema = z.object({
   type: z.literal("file_error"),
+  file: base64FileSchema,
+  storage_path: storagePathSchema,
   error: z.string(),
 });
 export type ResolvedImageContentError = z.infer<
@@ -139,6 +188,8 @@ export const inputMessageContentSchema = z.discriminatedUnion("type", [
   imageContentSchema,
   fileContentSchema,
   rawTextInputSchema,
+  thoughtSchema,
+  unknownSchema,
 ]);
 export type InputMessageContent = z.infer<typeof inputMessageContentSchema>;
 
@@ -151,23 +202,29 @@ export const modelInferenceInputMessageContentSchema = z.discriminatedUnion(
     imageContentSchema,
     fileContentSchema,
     rawTextInputSchema,
+    thoughtSchema,
+    unknownSchema,
   ],
 );
 export type ModelInferenceInputMessageContent = z.infer<
   typeof modelInferenceInputMessageContentSchema
 >;
 
-export const resolvedInputMessageContentSchema = z.discriminatedUnion("type", [
-  textInputSchema,
+export const displayInputMessageContentSchema = z.discriminatedUnion("type", [
+  displayUnstructuredTextInputSchema,
+  displayStructuredTextInputSchema,
+  displayMissingFunctionTextInputSchema,
   toolCallContentSchema,
   toolResultContentSchema,
   resolvedFileContentSchema,
   resolvedFileContentErrorSchema,
   rawTextInputSchema,
+  thoughtSchema,
+  unknownSchema,
 ]);
 
-export type ResolvedInputMessageContent = z.infer<
-  typeof resolvedInputMessageContentSchema
+export type DisplayInputMessageContent = z.infer<
+  typeof displayInputMessageContentSchema
 >;
 
 export const inputMessageSchema = z
@@ -188,13 +245,30 @@ export type ModelInferenceInputMessage = z.infer<
   typeof modelInferenceInputMessageSchema
 >;
 
-export const resolvedInputMessageSchema = z
+export const displayModelInferenceInputMessageContentSchema =
+  z.discriminatedUnion("type", [
+    displayUnstructuredTextInputSchema,
+    toolCallContentSchema,
+    toolResultContentSchema,
+    resolvedFileContentSchema,
+    resolvedFileContentErrorSchema,
+  ]);
+
+export const displayModelInferenceInputMessageSchema = z.object({
+  role: roleSchema,
+  content: z.array(displayModelInferenceInputMessageContentSchema),
+});
+export type DisplayModelInferenceInputMessage = z.infer<
+  typeof displayModelInferenceInputMessageSchema
+>;
+
+export const displayInputMessageSchema = z
   .object({
     role: roleSchema,
-    content: z.array(resolvedInputMessageContentSchema),
+    content: z.array(displayInputMessageContentSchema),
   })
   .strict();
-export type ResolvedInputMessage = z.infer<typeof resolvedInputMessageSchema>;
+export type DisplayInputMessage = z.infer<typeof displayInputMessageSchema>;
 
 export const inputSchema = z
   .object({
@@ -212,13 +286,13 @@ export const modelInferenceInputSchema = z
   .strict();
 export type ModelInferenceInput = z.infer<typeof modelInferenceInputSchema>;
 
-export const resolvedInputSchema = z
+export const displayInputSchema = z
   .object({
     system: z.any().optional(), // Value type from Rust maps to any in TS
-    messages: z.array(resolvedInputMessageSchema).default([]),
+    messages: z.array(displayInputMessageSchema).default([]),
   })
   .strict();
-export type ResolvedInput = z.infer<typeof resolvedInputSchema>;
+export type DisplayInput = z.infer<typeof displayInputSchema>;
 
 // Types for main intermediate representations (content blocks and request messages)
 export const textContentSchema = z.object({
@@ -270,6 +344,15 @@ export const contentBlockOutputSchema = z.discriminatedUnion("type", [
 
 export type ContentBlockOutput = z.infer<typeof contentBlockOutputSchema>;
 
+export const modelInferenceOutputContentBlockSchema = z.discriminatedUnion(
+  "type",
+  [textContentSchema, toolCallContentSchema],
+);
+
+export type ModelInferenceOutputContentBlock = z.infer<
+  typeof modelInferenceOutputContentBlockSchema
+>;
+
 export const InferenceTableName = {
   CHAT: "ChatInference",
   JSON: "JsonInference",
@@ -294,13 +377,100 @@ export function getInferenceTableName(
       return InferenceTableName.JSON;
   }
 }
+
 export const TableBoundsSchema = z.object({
   first_id: z.string().uuid().nullable(), // UUIDv7 string
   last_id: z.string().uuid().nullable(), // UUIDv7 string
 });
 export type TableBounds = z.infer<typeof TableBoundsSchema>;
 
+export const TableBoundsWithCountSchema = TableBoundsSchema.extend({
+  count: z.number(),
+});
+export type TableBoundsWithCount = z.infer<typeof TableBoundsWithCountSchema>;
+
+export const FeedbackBoundsSchema = TableBoundsSchema.extend({
+  by_type: z.object({
+    boolean: TableBoundsSchema,
+    float: TableBoundsSchema,
+    demonstration: TableBoundsSchema,
+    comment: TableBoundsSchema,
+  }),
+});
+export type FeedbackBounds = z.infer<typeof FeedbackBoundsSchema>;
+
 export const CountSchema = z.object({
   count: z.number(),
 });
 export type Count = z.infer<typeof CountSchema>;
+
+/**
+ * Converts the display input message content to the input message content.
+ * This is useful for the case where we've edited a datapoint and need to convert
+ * the display form back into something we can write to ClickHouse.
+ */
+
+function displayInputMessageContentToInputMessageContent(
+  content: DisplayInputMessageContent,
+): InputMessageContent {
+  switch (content.type) {
+    case "unstructured_text":
+      return { type: "text", value: content.text };
+    case "structured_text":
+      return { type: "text", value: content.arguments };
+    case "missing_function_text":
+      return { type: "text", value: content.value };
+    case "tool_call":
+      return content;
+    case "tool_result":
+      return content;
+    case "file":
+      return {
+        ...content,
+        file: {
+          url: content.file.dataUrl,
+          mime_type: content.file.mime_type,
+        },
+        type: "file",
+      };
+    case "file_error":
+      return {
+        ...content,
+        type: "file",
+      };
+    case "raw_text":
+      return content;
+    case "thought":
+      return content;
+    case "unknown":
+      return content;
+  }
+}
+
+/**
+ * Converts the display input message to the input message.
+ * This is useful for the case where we've edited a datapoint and need to convert
+ * the display form back into something we can write to ClickHouse.
+ */
+function displayInputMessageToInputMessage(
+  message: DisplayInputMessage,
+): InputMessage {
+  return {
+    role: message.role,
+    content: message.content.map(
+      displayInputMessageContentToInputMessageContent,
+    ),
+  };
+}
+
+/**
+ * Converts the display input to the input.
+ * This is useful for the case where we've edited a datapoint and need to convert
+ * the display form back into something we can write to ClickHouse.
+ */
+export function displayInputToInput(displayInput: DisplayInput): Input {
+  return {
+    system: displayInput.system,
+    messages: displayInput.messages.map(displayInputMessageToInputMessage),
+  };
+}

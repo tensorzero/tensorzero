@@ -31,8 +31,6 @@ env:
 on:
   workflow_dispatch:
   workflow_call:
-  schedule:
-    - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 
 jobs:
   batch-tests:
@@ -65,10 +63,10 @@ jobs:
 
       - name: Wake up ClickHouse cloud (for batch tests)
         run: |
-          curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES'
+          curl "${{ secrets.CLICKHOUSE_CLOUD_URL }}" --retry 4 --retry-all-errors --data-binary 'SHOW DATABASES'
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
           tool: cargo-nextest
 
@@ -83,7 +81,7 @@ jobs:
 
       - name: Launch the gateway for batch tests
         run: |
-          curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES'
+          curl "${{ secrets.CLICKHOUSE_CLOUD_URL }}" --retry 4 --retry-all-errors --data-binary 'SHOW DATABASES'
           cargo run-e2e > batch_logs.txt 2>&1 &
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
           while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do

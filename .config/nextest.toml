@@ -11,13 +11,39 @@ slow-timeout = { period = "10s", terminate-after = 3 }
 # On CI, we use the 'ci' profile, which runs all tests.
 default-filter = "not test(no_aws_credentials)"
 
-[profile.ci]
+# Profiles config
+# We use these profiles to define our major test groups.
+# By using `default-filter` to specify our tests, we can further restrict the tests
+# by using command-line '-E' flags, which are *intersected* with the default-filter
+# If we instead defined these as cargo aliases with '-E' flags, then any additional
+# command-line flags would be unioned with the predefined '-E' flags from the alias,
+# which would prevent us from excluding more tests
+# The profile can be set with '--profile <profile-name>' when using 'cargo nextest run',
+# We also define cargo aliases for common use-cases (e.g. `cargo test-e2e`)
+[profile.e2e]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
-default-filter = "all()"
+default-filter = "not (test(batch)) and not (test(test_dummy_only) | test(clickhouse))"
 
-[[profile.ci.overrides]]
-filter = 'binary(e2e) and (test(providers::aws_bedrock::) or test(providers::aws_sagemaker))'
-retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
+[profile.batch]
+default-filter = 'test(batch)'
+
+[profile.clickhouse]
+default-filter = 'test(test_dummy_only) | test(clickhouse)'
+
+[profile.optimization]
+default-filter = 'binary(optimization-live)'
+
+[profile.optimization-mock]
+default-filter = 'binary(optimization-mock)'
+
+
+[[profile.optimization.overrides]]
+# Settings for running optimization tests
+# We may have to update this as we add faster optimization methods that shouldn't
+# take as long
+filter = 'test(slow_optimization)'
+slow-timeout = { period = "21600s", terminate-after = 1 }
+retries = { count = 0, backoff = "fixed", delay = "0s" }
 
 # Note: use the following commands to debug test groups:
 # cargo nextest show-config test-groups
@@ -26,10 +52,10 @@ retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max
 # Run E2E provider tests sequentially to avoid rate limits
 [test-groups]
 e2e_aws_bedrock = { max-threads = 2 }
-e2e_fireworks = { max-threads = 1 }
 e2e_aws_sagemaker_tgi = { max-threads = 1 }
 # Our Sagemaker instance seems to be able to handle 2 concurrent requests
 e2e_aws_sagemaker_openai = { max-threads = 2 }
+e2e_groq = { max-threads = 1 }
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::aws_bedrock::)'
@@ -44,8 +70,10 @@ filter = 'binary(e2e) and test(providers::aws_sagemaker_tgi::)'
 test-group = 'e2e_aws_sagemaker_tgi'
 
 [[profile.default.overrides]]
-filter = 'binary(e2e) and test(providers::fireworks::)'
-test-group = 'e2e_fireworks'
+filter = 'binary(e2e) and test(providers::groq::)'
+test-group = 'e2e_groq'
+# We have a low rate limit on Groq, so we often need to retry several times
+retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::vllm::)'
@@ -53,6 +81,8 @@ slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::sglang::)'
+# The model we run on SGLang often fails to emit valid tool calls, so we need many retries
+retries = { backoff = "fixed", count = 8, delay = "10s", jitter = true }
 slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]
@@ -76,3 +106,7 @@ slow-timeout = { period = "500s", terminate-after = 1 }
 filter = 'not binary(e2e)'
 retries = 0
 slow-timeout = { period = "10s", terminate-after = 1 }
+
+[[profile.default.overrides]]
+filter = 'binary(e2e) and (test(providers::aws_bedrock::) or test(providers::aws_sagemaker))'
+retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }

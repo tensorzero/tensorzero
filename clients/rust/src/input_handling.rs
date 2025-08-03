@@ -1,10 +1,9 @@
 use futures::future::try_join_all;
 use serde_json::Value;
-use tensorzero_internal::error::Error;
 
 use crate::{Client, ClientInput, ClientInputMessage, ClientInputMessageContent, TensorZeroError};
-use tensorzero_internal::tool::{ToolCall, ToolCallInput};
-use tensorzero_internal::{
+use tensorzero_core::tool::{ToolCall, ToolCallInput};
+use tensorzero_core::{
     error::ErrorDetails,
     inference::types::{
         storage::StoragePath, File, ResolvedInput, ResolvedInputMessage,
@@ -60,7 +59,7 @@ async fn resolved_input_message_content_to_client_input_message_content(
                 arguments: o,
             })),
             _ => Err(TensorZeroError::Other {
-                source: tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+                source: tensorzero_core::error::Error::new(ErrorDetails::Serialization {
                     message: "Text types must be a string or an object".to_string(),
                 })
                 .into(),
@@ -103,66 +102,6 @@ async fn resolved_input_message_content_to_client_input_message_content(
     }
 }
 
-/// Since we store the input in the database in the form of ResolvedInput but without e.g. images inside,
-/// we need to reresolve the input when we retrieve it from the database.
-/// Resolves images in place.
-pub async fn reresolve_input_for_fine_tuning(
-    input: &mut ResolvedInput,
-    client: &Client,
-) -> Result<(), TensorZeroError> {
-    let mut file_fetch_tasks = Vec::new();
-
-    for (message_index, message) in input.messages.iter_mut().enumerate() {
-        // First pass: identify files to fetch and collect tasks
-        for (content_index, content) in message.content.iter_mut().enumerate() {
-            if let ResolvedInputMessageContent::File(file_with_path) = content {
-                if file_with_path.file.data.is_none() {
-                    let storage_path = file_with_path.storage_path.clone();
-                    let fut = async move {
-                        let result = fetch_file_data(storage_path, client).await?;
-                        Ok((message_index, content_index, result))
-                    };
-                    file_fetch_tasks.push(fut);
-                }
-            }
-        }
-    }
-
-    // Execute fetch tasks concurrently for the current message
-    if !file_fetch_tasks.is_empty() {
-        let fetched_data_results = try_join_all(file_fetch_tasks).await?;
-
-        // Second pass: update the content with fetched data
-        for (message_index, content_index, fetched_data) in fetched_data_results {
-            if let Some(message) = input.messages.get_mut(message_index) {
-                if let Some(ResolvedInputMessageContent::File(file_with_path)) =
-                    message.content.get_mut(content_index)
-                {
-                    file_with_path.file.data = Some(fetched_data);
-                } else {
-                    return Err(TensorZeroError::Other {
-                        source: Error::new(ErrorDetails::Serialization {
-                            message:
-                                "Content type changed or index invalid during input reresolution"
-                                    .to_string(),
-                        })
-                        .into(),
-                    });
-                }
-            } else {
-                return Err(TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::Serialization {
-                        message: "Message index invalid during input reresolution".to_string(),
-                    })
-                    .into(),
-                });
-            }
-        }
-    }
-
-    Ok(())
-}
-
 async fn fetch_file_data(
     storage_path: StoragePath,
     client: &Client,
@@ -175,7 +114,7 @@ async fn fetch_file_data(
 mod tests {
     use object_store::path::Path;
 
-    use tensorzero_internal::inference::types::{
+    use tensorzero_core::inference::types::{
         resolved_input::FileWithPath, storage::StorageKind, Base64File,
     };
     use url::Url;
@@ -229,7 +168,7 @@ mod tests {
                 endpoint: Some("test-endpoint".to_string()),
                 allow_http: Some(true),
                 #[cfg(feature = "e2e_tests")]
-                prefix: "".to_string(),
+                prefix: String::new(),
             },
         };
 

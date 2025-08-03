@@ -1,4 +1,4 @@
-import { useDatasetCountFetcher } from "~/routes/api/datasets/count_inserts.route";
+import { useDatasetInsertCountFetcher } from "~/routes/api/datasets/count_inserts.route";
 import type { DatasetBuilderFormValues } from "./types";
 import type { Control } from "react-hook-form";
 
@@ -9,7 +9,7 @@ export function DatasetCountDisplay({
   control: Control<DatasetBuilderFormValues>;
   setCountToInsert: (count: number | null) => void;
 }) {
-  const { count, isLoading } = useDatasetCountFetcher(control);
+  const { count, isLoading } = useDatasetInsertCountFetcher(control);
 
   if (isLoading) {
     return <div>Loading...</div>;

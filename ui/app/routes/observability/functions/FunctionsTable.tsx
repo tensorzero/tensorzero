@@ -7,7 +7,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { FunctionConfig } from "~/utils/config/function";
+import type { FunctionConfig } from "tensorzero-node";
 import type { FunctionCountInfo } from "~/utils/clickhouse/inference.server";
 import { TableItemTime, TableItemFunction } from "~/components/ui/TableItems";
 
@@ -15,7 +15,9 @@ export default function FunctionsTable({
   functions,
   countsInfo,
 }: {
-  functions: Record<string, FunctionConfig>;
+  functions: {
+    [x: string]: FunctionConfig | undefined;
+  };
   countsInfo: FunctionCountInfo[];
 }) {
   // Create a union of all function names from both data sources.

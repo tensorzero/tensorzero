@@ -38,12 +38,12 @@
 - Launch the TensorZero Gateway in performance mode (without observability):
 
   ```bash
-  cargo run --profile performance --bin gateway tensorzero-internal/tests/load/tensorzero-without-observability.toml
+  cargo run --profile performance --bin gateway tensorzero-core/tests/load/tensorzero-without-observability.toml
   ```
 
 - Run the benchmark:
   ```bash
-  sh tensorzero-internal/tests/load/simple/run.sh
+  sh tensorzero-core/tests/load/simple/run.sh
   ```
 
 #### LiteLLM Gateway (LiteLLM Proxy)
@@ -51,11 +51,11 @@
 - Launch the LiteLLM Gateway:
 
   ```
-  litellm --config tensorzero-internal/tests/load/simple-litellm/config.yaml --num_workers=4
+  litellm --config tensorzero-core/tests/load/simple-litellm/config.yaml --num_workers=4
   ```
 
 - Run the benchmark:
 
   ```bash
-  sh tensorzero-internal/tests/load/simple-litellm/run.sh
+  sh tensorzero-core/tests/load/simple-litellm/run.sh
   ```

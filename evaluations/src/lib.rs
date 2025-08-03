@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 use std::io::Write;
 use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
@@ -15,10 +16,10 @@ use tensorzero::{
     ClientInferenceParams, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
     InferenceResponse,
 };
-use tensorzero_internal::cache::CacheEnabledMode;
-use tensorzero_internal::config_parser::MetricConfigOptimize;
-use tensorzero_internal::evaluations::{EvaluationConfig, EvaluatorConfig};
-use tensorzero_internal::{
+use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::config_parser::MetricConfigOptimize;
+use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
+use tensorzero_core::{
     clickhouse::ClickHouseConnectionInfo, config_parser::Config, endpoints::datasets::Datapoint,
     function::FunctionConfig,
 };
@@ -121,6 +122,7 @@ pub async fn run_evaluation(
             config_file: Some(args.config_file),
             clickhouse_url: Some(clickhouse_url.clone()),
             timeout: None,
+            verify_credentials: true,
         }),
     }
     .build()
@@ -414,6 +416,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         internal: true,
         extra_body: Default::default(),
         extra_headers: Default::default(),
+        internal_dynamic_variant_config: None,
     };
     debug!("Making inference request");
     let inference_result = clients.tensorzero_client.inference(params).await?;
@@ -463,7 +466,7 @@ impl ThrottledTensorZeroClient {
     }
 
     async fn inference(&self, params: ClientInferenceParams) -> Result<InferenceOutput> {
-        let _permit = self.semaphore.acquire().await;
+        let _permit = self.semaphore.acquire().await?;
         let inference_output = self.client.inference(params).await?;
         Ok(inference_output)
     }
@@ -476,7 +479,7 @@ impl ThrottledTensorZeroClient {
 
 #[cfg(test)]
 mod tests {
-    use tensorzero_internal::evaluations::ExactMatchConfig;
+    use tensorzero_core::evaluations::ExactMatchConfig;
 
     use super::*;
 

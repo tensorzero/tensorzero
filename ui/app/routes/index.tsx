@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, type RouteHandle } from "react-router";
 import { Card } from "~/components/ui/card";
 import { PageLayout } from "~/components/layout/PageLayout";
 import {
@@ -20,7 +20,7 @@ import {
   countInferencesByFunction,
   countEpisodes,
 } from "~/utils/clickhouse/inference.server";
-import { getConfig } from "~/utils/config/index.server";
+import { getAllFunctionConfigs } from "~/utils/config/index.server";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import { useConfig } from "~/context/config";
@@ -29,6 +29,10 @@ import {
   countDynamicEvaluationProjects,
   countDynamicEvaluationRuns,
 } from "~/utils/clickhouse/dynamic_evaluations.server";
+
+export const handle: RouteHandle = {
+  hideBreadcrumbs: true,
+};
 
 interface DirectoryCardProps {
   source: string;
@@ -45,7 +49,7 @@ function DirectoryCard({
 }: DirectoryCardProps) {
   return (
     <Link to={source} className="block">
-      <Card className="group border-border hover:border-border-hover flex w-full flex-row items-center gap-3 rounded-xl border p-4 hover:shadow-[0_0_0_3px_rgba(0,0,0,0.05)]">
+      <Card className="border-border hover:border-border-hover group flex w-full flex-row items-center gap-3 rounded-xl border p-4 hover:shadow-[0_0_0_3px_rgba(0,0,0,0.05)]">
         <div className="bg-bg-tertiary h-8 w-8 rounded-lg p-2">
           <Icon className="text-fg-secondary group-hover:text-fg-primary transition-colors" />
         </div>
@@ -87,7 +91,6 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
 export async function loader() {
   const [
     countsInfo,
-    config,
     numEpisodes,
     datasetCounts,
     numEvaluationRuns,
@@ -95,15 +98,14 @@ export async function loader() {
     numDynamicEvaluationRunProjects,
   ] = await Promise.all([
     countInferencesByFunction(),
-    getConfig(),
     countEpisodes(),
-    getDatasetCounts(),
+    getDatasetCounts({}),
     countTotalEvaluationRuns(),
     countDynamicEvaluationRuns(),
     countDynamicEvaluationProjects(),
   ]);
   const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
-  const numFunctions = Object.keys(config.functions).length;
+  const numFunctions = Object.keys(getAllFunctionConfigs()).length;
   const numDatasets = datasetCounts.length;
 
   return {

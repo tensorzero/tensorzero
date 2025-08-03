@@ -1,5 +1,9 @@
 import type { Route } from "./+types/route";
-import { isRouteErrorResponse, useNavigate } from "react-router";
+import {
+  isRouteErrorResponse,
+  useNavigate,
+  type RouteHandle,
+} from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
@@ -14,6 +18,11 @@ import {
 } from "~/utils/clickhouse/dynamic_evaluations.server";
 import BasicInfo from "./DynamicEvaluationRunBasicInfo";
 import DynamicEvaluationRunEpisodesTable from "./DynamicEvaluationRunEpisodesTable";
+import { logger } from "~/utils/logger";
+
+export const handle: RouteHandle = {
+  crumb: (match) => ["Runs", match.params.run_id!],
+};
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -97,7 +106,7 @@ export default function DynamicEvaluationRunSummaryPage({
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

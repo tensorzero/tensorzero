@@ -1,13 +1,13 @@
 import { z } from "zod";
 import {
   contentBlockOutputSchema,
-  contentBlockSchema,
   inputSchema,
   jsonInferenceOutputSchema,
-  resolvedInputMessageSchema,
-  resolvedInputSchema,
+  displayInputSchema,
   type ContentBlockOutput,
   type JsonInferenceOutput,
+  displayModelInferenceInputMessageSchema,
+  modelInferenceOutputContentBlockSchema,
 } from "./common";
 import { JSONValueSchema } from "../tensorzero";
 
@@ -148,11 +148,11 @@ export type ParsedJsonInferenceRow = z.infer<
 export const parsedInferenceRowSchema = z.discriminatedUnion("function_type", [
   parsedChatInferenceRowSchema.extend({
     function_type: z.literal("chat"),
-    input: resolvedInputSchema,
+    input: displayInputSchema,
   }),
   parsedJsonInferenceRowSchema.extend({
     function_type: z.literal("json"),
-    input: resolvedInputSchema,
+    input: displayInputSchema,
   }),
 ]);
 
@@ -194,8 +194,8 @@ export const parsedModelInferenceRowSchema = modelInferenceRowSchema
     output: true,
   })
   .extend({
-    input_messages: z.array(resolvedInputMessageSchema),
-    output: z.array(contentBlockSchema),
+    input_messages: z.array(displayModelInferenceInputMessageSchema),
+    output: z.array(modelInferenceOutputContentBlockSchema),
   });
 
 export type ParsedModelInferenceRow = z.infer<
