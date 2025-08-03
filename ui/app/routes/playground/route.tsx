@@ -214,6 +214,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const [currentSearchParams, setSearchParams] = useSearchParams();
+  // TODO for reviewers: would it be better to serialize the edited variant configs as URL params?
   const [editedVariants, setEditedVariants] = useState<
     Map<string, VariantInfo>
   >(new Map());
@@ -655,4 +656,65 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </PageLayout>
     );
   }
+}
+
+/*
+ * Given an array of strings, an existing string element, and a new string element
+ * returns a new array with the new element in place of the existing one.
+ * Throws an error if the existing element is not found in the array.
+ * Useful for editing variants.
+ */
+function swapElementInArray(
+  existing: string,
+  newElement: string,
+  array: string[],
+): string[] {
+  const index = array.indexOf(existing);
+
+  if (index === -1) {
+    throw new Error(`Element "${existing}" not found in array`);
+  }
+
+  const newArray = [...array];
+  newArray[index] = newElement;
+
+  return newArray;
+}
+
+/*
+Updates the page with a new edited variant.
+There are several pieces of state that need to be updated in order to reflect an edited variant:
+* the name of the new variant needs to be calculated.
+  Otherwise, we generate a new name by prepending "tensorzero::edited::" to the original name.
+* the editedVariants Map needs to contain the definition of the edited variant so that it can
+  be used for inference and possibly edited further
+* the search params need to be updated to remove the previous edited variant name and instead have the new one
+*/
+function updateVariantWithEdited(
+  currentVariantName: string,
+  newVariantConfig: VariantInfo,
+  selectedVariants: string[],
+  editedVariants: Map<string, VariantInfo>,
+  setEditedVariants: React.Dispatch<
+    React.SetStateAction<Map<string, VariantInfo>>
+  >,
+  updateSearchParams: (
+    updates: Record<string, string | string[] | null>,
+  ) => void,
+) {
+  const newVariantName = getNewVariantName(currentVariantName);
+}
+
+/*
+  We use the convention that variants
+  beginning with "tensorzero::edited::" are edited variants.
+  If the current variant is already "tensorzero::edited::*" we can reuse the existing name.
+
+  This function checks if this is needed and then returns the new variant name.
+*/
+function getNewVariantName(currentVariantName: string): string {
+  if (currentVariantName.startsWith("tensorzero::edited::")) {
+    return currentVariantName;
+  }
+  return `tensorzero::edited::${currentVariantName}`;
 }
