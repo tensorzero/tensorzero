@@ -1134,11 +1134,11 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_key_location,
             } => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, api_key_location)?),
-            UninitializedProviderConfig::Mistral {
+            UninitializedProviderConfig::Llama {
                 model_name,
                 api_key_location,
             } => ProviderConfig::Llama(LlamaProvider::new(model_name, api_key_location)?),
-            UninitializedProviderConfig::Llama {
+            UninitializedProviderConfig::Mistral {
                 model_name,
                 api_key_location,
             } => ProviderConfig::Mistral(MistralProvider::new(model_name, api_key_location)?),
