@@ -40,6 +40,7 @@ import type { InferenceResponse } from "tensorzero-node";
 import { EditButton } from "~/components/utils/EditButton";
 import { VariantEditor } from "~/components/function/variant/VariantEditor";
 import { logger } from "~/utils/logger";
+import { isEditedVariantName } from "./utils";
 
 const DEFAULT_LIMIT = 5;
 
@@ -460,6 +461,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                                 setPromise={setPromise}
                                 input={inputs[index]}
                                 functionName={functionName}
+                                editedVariants={editedVariants}
                               />
                             </div>
                           );
@@ -801,10 +803,6 @@ function getNewVariantName(currentVariantName: string): string {
   // generate a random identifier here so that each edit is unique
   const randomId = Math.random().toString(36).substring(2, 15);
   return `tensorzero::edited::${randomId}::${originalVariantName}`;
-}
-
-function isEditedVariantName(variantName: string): boolean {
-  return variantName.startsWith("tensorzero::edited::");
 }
 
 /*

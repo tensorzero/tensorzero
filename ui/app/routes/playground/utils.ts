@@ -2,8 +2,13 @@ import type { DisplayInput } from "~/utils/clickhouse/common";
 import type {
   Datapoint as TensorZeroDatapoint,
   InferenceResponse,
+  VariantInfo,
 } from "tensorzero-node";
 import { prepareInferenceActionRequest } from "../api/tensorzero/inference.utils";
+
+export function isEditedVariantName(variantName: string): boolean {
+  return variantName.startsWith("tensorzero::edited::");
+}
 
 export function refreshClientInference(
   setPromise: (
@@ -15,12 +20,30 @@ export function refreshClientInference(
   datapoint: TensorZeroDatapoint,
   variantName: string,
   functionName: string,
+  editedVariants: Map<string, VariantInfo>,
 ) {
+  // Check if this is an edited variant
+  let variantPin: string | undefined;
+  let editedVariantInfo: VariantInfo | undefined;
+  if (isEditedVariantName(variantName)) {
+    // Instead of setting the variant for inference, we'll send the VariantInfo
+    variantPin = undefined;
+    editedVariantInfo = editedVariants.get(variantName);
+    if (!editedVariantInfo) {
+      throw new Error(
+        `Variant ${variantName} not found in editedVariants Map`,
+      );
+    }
+  } else {
+    variantPin = variantName;
+    editedVariantInfo = undefined;
+  }
+
   const request = prepareInferenceActionRequest({
     source: "clickhouse_datapoint",
     input,
     functionName,
-    variant: variantName,
+    variant: variantPin,
     tool_params:
       datapoint?.type === "chat"
         ? (datapoint.tool_params ?? undefined)
@@ -31,6 +54,7 @@ export function refreshClientInference(
       enabled: "off",
     },
     dryrun: true,
+    editedVariantInfo,
   });
   // The API endpoint takes form data so we need to stringify it and send as data
   const formData = new FormData();
