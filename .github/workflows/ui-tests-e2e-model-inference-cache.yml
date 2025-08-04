@@ -104,6 +104,15 @@ jobs:
           docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml down
           docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml rm -f
 
+
+      - name: Upload new model inference cache
+        if: inputs.regen_cache == true
+        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
+        with:
+          name: model-inference-cache
+          path: |
+            ui/fixtures/model_inference_cache_e2e.jsonl
+
       - name: Start dependency Docker containers and apply fixtures
         working-directory: ui
         run: |
@@ -168,14 +177,6 @@ jobs:
             ui/playwright-report/
             ui/test-results/
           retention-days: 7
-
-      - name: Upload new model inference cache
-        if: always()
-        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
-        with:
-          name: model-inference-cache
-          path: |
-            ui/fixtures/model_inference_cache_e2e.jsonl
 
       - name: Exit if tests failed
         if: steps.e2e_tests.outcome == 'failure'
