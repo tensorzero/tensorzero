@@ -34,6 +34,7 @@ import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
 import { safeParseInt } from "~/utils/common";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import type { InferenceResponse } from "tensorzero-node";
+import { getExtraInferenceOptions } from "~/utils/env.server";
 
 const DEFAULT_LIMIT = 5;
 
@@ -164,6 +165,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         enabled: "off",
       },
       dryrun: true,
+      ...getExtraInferenceOptions(),
     });
     const nativeClient = await getNativeTensorZeroClient();
     const inferenceResponse = await nativeClient.inference(request);
