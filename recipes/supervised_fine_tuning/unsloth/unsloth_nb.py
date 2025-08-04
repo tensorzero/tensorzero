@@ -20,7 +20,7 @@ CONFIG_PATH = "../../../../examples/data-extraction-ner/config/tensorzero.toml"
 
 FUNCTION_NAME = "extract_entities"
 
-METRIC_NAME = "exact_match"
+METRIC_NAME = "jaccard_similarity"
 
 # The name of the variant to use to grab the templates used for fine-tuning
 TEMPLATE_VARIANT_NAME = "gpt_4o_mini"  # It's OK that this variant uses a different model than the one we're fine-tuning
@@ -322,7 +322,11 @@ for rendered_inference in rendered_inferences:
         messages.extend(message_to_chatml(message))
     messages.append(output_to_chatml(rendered_inference.output))
     # Add tools if available
-    payload = {"messages": messages, "tokenize": False, "add_generation_prompt": False}
+    payload = {
+        "conversation": messages,
+        "tokenize": False,
+        "add_generation_prompt": False,
+    }
     if rendered_inference.tool_params:
         tools = tensorzero_to_chatml_tools(
             rendered_inference.tool_params.tools_available
@@ -500,7 +504,7 @@ if USE_LORA:
         print(stdout)
 
 # %% [markdown]
-# Once the model is deployed, you can add the fine-tuned model to your config file.
+# Once the model is deployed, you can add the fine-tuned model and a new variant to your config file.
 
 # %%
 model_config = {
@@ -515,41 +519,6 @@ model_config = {
 }
 
 print(toml.dumps(model_config))
-
-# %% [markdown]
-# Finally, add a new variant to your function to use the fine-tuned model.
-
-# %%
-config = tensorzero_client.experimental_get_config()
-
-variant = config["functions"][FUNCTION_NAME]["variants"][TEMPLATE_VARIANT_NAME]
-
-variant
-
-# %%
-variant_config = {
-    "type": "chat_completion",
-    "weight": 0,
-    "model": model_identifier,
-}
-
-system_template = variant.get("system_template")
-if system_template:
-    variant_config["system_template"] = system_template
-
-user_template = variant.get("user_template")
-if user_template:
-    variant_config["user_template"] = user_template
-
-assistant_template = variant.get("assistant_template")
-if assistant_template:
-    variant_config["assistant_template"] = assistant_template
-
-full_variant_config = {
-    "functions": {FUNCTION_NAME: {"variants": {model_identifier: variant_config}}}
-}
-
-print(toml.dumps(full_variant_config))
 
 # %% [markdown]
 # You're all set!
