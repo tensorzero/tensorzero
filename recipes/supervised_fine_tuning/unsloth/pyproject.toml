@@ -14,5 +14,5 @@ dependencies = [
     "pandas",
     "toml",
     "unsloth",
-    "tensorzero>=2025.6.1",
+    "tensorzero",
 ]

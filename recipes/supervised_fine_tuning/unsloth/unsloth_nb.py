@@ -20,8 +20,13 @@ CONFIG_PATH = "../../../../examples/data-extraction-ner/config/tensorzero.toml"
 
 FUNCTION_NAME = "extract_entities"
 
+METRIC_NAME = "exact_match"
+
 # The name of the variant to use to grab the templates used for fine-tuning
 TEMPLATE_VARIANT_NAME = "gpt_4o_mini"  # It's OK that this variant uses a different model than the one we're fine-tuning
+
+# If the metric is a float metric, you can set the threshold to filter the data
+FLOAT_METRIC_THRESHOLD = 0.5
 
 # Fraction of the data to use for validation
 VAL_FRACTION = 0.2
@@ -102,7 +107,6 @@ import os
 import subprocess
 import tempfile
 import warnings
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -111,6 +115,7 @@ import toml
 from datasets import Dataset
 from tensorzero import (
     ContentBlock,
+    FloatMetricFilter,
     RawText,
     TensorZeroGateway,
     Text,
@@ -125,41 +130,6 @@ from trl import SFTTrainer
 from unsloth import FastLanguageModel, is_bfloat16_supported
 from unsloth.chat_templates import get_chat_template
 
-# %%
-TENSORZERO_GATEWAY_URL = "http://localhost:3000"
-
-# %% [markdown]
-# Load the TensorZero configuration file.
-
-# %%
-config_path = Path(CONFIG_PATH)
-
-assert config_path.exists(), f"{CONFIG_PATH} does not exist"
-assert config_path.is_file(), f"{CONFIG_PATH} is not a file"
-
-with config_path.open("r") as f:
-    config = toml.load(f)
-
-# %% [markdown]
-# Retrieve the configuration for the variant with the templates we'll use for fine-tuning.
-#
-
-# %%
-assert "functions" in config, "No `[functions]` section found in config"
-assert FUNCTION_NAME in config["functions"], (
-    f"No function named `{FUNCTION_NAME}` found in config"
-)
-assert "variants" in config["functions"][FUNCTION_NAME], (
-    f"No variants section found for function `{FUNCTION_NAME}`"
-)
-assert TEMPLATE_VARIANT_NAME in config["functions"][FUNCTION_NAME]["variants"], (
-    f"No variant named `{TEMPLATE_VARIANT_NAME}` found in function `{FUNCTION_NAME}`"
-)
-
-variant = config["functions"][FUNCTION_NAME]["variants"][TEMPLATE_VARIANT_NAME]
-
-variant
-
 # %% [markdown]
 # Load and render the stored inferences
 
@@ -171,13 +141,31 @@ tensorzero_client = TensorZeroGateway.build_embedded(
 )
 
 # %% [markdown]
+# Set the metric filter as needed
+
+# %%
+comparison_operator = ">="
+metric_node = FloatMetricFilter(
+    metric_name=METRIC_NAME,
+    value=FLOAT_METRIC_THRESHOLD,
+    comparison_operator=comparison_operator,
+)
+# metric_node = BooleanMetricFilter(
+#     metric_name=METRIC_NAME,
+#     value=True  # or False
+# )
+
+metric_node
+
+# %% [markdown]
 # Query the inferences and feedback from ClickHouse.
 
 # %%
 stored_inferences = tensorzero_client.experimental_list_inferences(
     function_name=FUNCTION_NAME,
     variant_name=None,
-    output_source="demonstration",
+    output_source="inference",  # could also be "demonstration"
+    filters=metric_node,
     limit=MAX_SAMPLES,
 )
 
@@ -530,6 +518,13 @@ print(toml.dumps(model_config))
 
 # %% [markdown]
 # Finally, add a new variant to your function to use the fine-tuned model.
+
+# %%
+config = tensorzero_client.experimental_get_config()
+
+variant = config["functions"][FUNCTION_NAME]["variants"][TEMPLATE_VARIANT_NAME]
+
+variant
 
 # %%
 variant_config = {
