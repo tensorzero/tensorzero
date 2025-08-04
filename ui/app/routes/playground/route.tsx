@@ -14,17 +14,10 @@ import { useFunctionConfig, useAllFunctionConfigs } from "~/context/config";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
 import { listDatapoints } from "~/utils/tensorzero.server";
-import { VariantFilter } from "~/components/function/variant/variant-filter";
-import {
-  prepareInferenceActionRequest,
-  tensorZeroResolvedInputToInput,
-} from "~/routes/api/tensorzero/inference.utils";
+import { tensorZeroResolvedInputToInput } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
-import type {
-  Datapoint as TensorZeroDatapoint,
-  VariantInfo,
-} from "tensorzero-node";
+import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 import type { DisplayInput } from "~/utils/clickhouse/common";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "~/components/ui/button";
@@ -39,9 +32,15 @@ import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.serv
 import type { InferenceResponse } from "tensorzero-node";
 import { EditButton } from "~/components/utils/EditButton";
 import { VariantEditor } from "~/components/function/variant/VariantEditor";
-import { logger } from "~/utils/logger";
-import { isEditedVariantName } from "./utils";
-import { getExtraInferenceOptions } from "~/utils/env.server";
+import {
+  getDisplayVariantName,
+  getNewVariantName,
+  getVariants,
+  preparePlaygroundInferenceRequest,
+  SelectedVariantsSchema,
+  type PlaygroundVariantInfo,
+} from "./utils";
+import { BuiltinVariantFilter } from "./BuiltInVariantSelector";
 
 const DEFAULT_LIMIT = 5;
 
@@ -108,7 +107,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     });
   }
   const datasetName = searchParams.get("datasetName");
-  const selectedVariants = searchParams.getAll("variant");
+  const variants = getVariants(searchParams);
 
   let datapoints, totalDatapoints;
   try {
@@ -154,27 +153,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     input: DisplayInput,
     datapoint: TensorZeroDatapoint,
     functionName: string,
-    variantName: string,
+    variantInfo: PlaygroundVariantInfo,
   ) => {
-    const request = prepareInferenceActionRequest({
-      source: "clickhouse_datapoint",
-      input,
+    const request = preparePlaygroundInferenceRequest(
+      variantInfo,
       functionName,
-      variant: variantName,
-      tool_params:
-        datapoint?.type === "chat"
-          ? (datapoint.tool_params ?? undefined)
-          : undefined,
-      output_schema:
-        datapoint?.type === "json" ? datapoint.output_schema : null,
-      // The default is write_only but we do off in the playground
-      cache_options: {
-        max_age_s: null,
-        enabled: "off",
-      },
-      dryrun: true,
-      ...getExtraInferenceOptions(),
-    });
+      datapoint,
+      input,
+    );
     const nativeClient = await getNativeTensorZeroClient();
     const inferenceResponse = await nativeClient.inference(request);
     return inferenceResponse;
@@ -187,16 +173,16 @@ export async function loader({ request }: Route.LoaderArgs) {
     string,
     Map<string, Promise<InferenceResponse>>
   >();
-  for (const variant of selectedVariants) {
-    serverInferences.set(variant, new Map());
+  for (const variant of variants) {
+    serverInferences.set(variant.name, new Map());
   }
   if (datapoints && inputs && functionName) {
     for (let index = 0; index < datapoints.length; index++) {
       const datapoint = datapoints[index];
       const input = inputs[index];
-      for (const variant of selectedVariants) {
+      for (const variant of variants) {
         serverInferences
-          .get(variant)
+          .get(variant.name)
           ?.set(
             datapoint.id,
             serverInference(input, datapoint, functionName, variant),
@@ -220,11 +206,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const [currentSearchParams, setSearchParams] = useSearchParams();
-  // TODO for reviewers: would it be better to serialize the edited variant configs as URL params?
-  const [editedVariants, setEditedVariants] = useState<
-    Map<string, VariantInfo>
-  >(new Map());
-  const [editingVariant, setEditingVariant] = useState<string | null>(null);
+  const [editingVariant, setEditingVariant] =
+    useState<PlaygroundVariantInfo | null>(null);
   const { searchParams, loadingVariants } = useMemo(() => {
     if (navigation.state !== "loading") {
       return {
@@ -234,12 +217,16 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     }
 
     const nextSearchParams = new URLSearchParams(navigation.location?.search);
-    const currentVariants = new Set(currentSearchParams.getAll("variant"));
-    const nextVariants = new Set(nextSearchParams.getAll("variant"));
+    // TODO: this is wrong
+    const currentVariants = getVariants(currentSearchParams);
+    const currentVariantNames = new Set<string>(
+      currentVariants.map((variant) => variant.name),
+    );
+    const nextVariants = getVariants(nextSearchParams);
     const loadingVariants = new Set<string>();
     for (const variant of nextVariants) {
-      if (!currentVariants.has(variant)) {
-        loadingVariants.add(variant);
+      if (!currentVariantNames.has(variant.name)) {
+        loadingVariants.add(variant.name);
       }
     }
 
@@ -248,7 +235,17 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
       loadingVariants,
     };
   }, [navigation, currentSearchParams]);
-  const selectedVariants = searchParams.getAll("variant");
+  let variants: PlaygroundVariantInfo[] = [];
+  const result = SelectedVariantsSchema.safeParse(
+    searchParams.get("variants") ?? [],
+  );
+  if (!result.success) {
+    const errorDetails = result.error.issues
+      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+      .join("; ");
+    throw data(`Invalid variants parameter: ${errorDetails}`, { status: 400 });
+  }
+  variants = result.data;
 
   const {
     functionName,
@@ -264,9 +261,8 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     functionName,
     datapoints,
     inputs,
-    selectedVariants,
+    variants,
     serverInferences,
-    editedVariants,
   );
 
   const functionConfig = useFunctionConfig(functionName);
@@ -275,13 +271,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
       status: 404,
     });
   }
-  const variants = functionConfig?.variants ?? undefined;
-  const variantData = variants
-    ? Object.entries(variants).map(([variantName]) => ({
-        name: variantName,
-        color: undefined,
-      }))
-    : [];
+  const configuredVariants = functionConfig?.variants ?? undefined;
 
   const updateSearchParams = (
     updates: Record<string, string | string[] | null>,
@@ -335,20 +325,38 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
       </div>
       <div className="flex max-w-180 flex-col gap-2">
         <Label>Variants</Label>
-        <VariantFilter
+        {/*<VariantFilter
           disabled={!functionName || !datasetName}
           variants={variantData}
-          selectedValues={selectedVariants}
+          selectedValues={variants
+            .filter((variant) => variant.type === "builtin")
+            .map((variant) => variant.name)}
+          // TODO: This component takes setSelectedValues: React.Dispatch<React.SetStateAction<string[]>>;
+          // However, our data structure is to set `variants` to JSON.stringify(variants), i.e.
+          // a stringified PlaygroundVariantInfo[].
+          //
+          // When a new string is passed from this selector, we need to add it as a BuiltInVariantInfo to this array
           setSelectedValues={(valuesOrUpdater) => {
+            const currentBuiltinNames = variants
+              .filter((variant) => variant.type === "builtin")
+              .map((variant) => variant.name);
             const newValues =
               typeof valuesOrUpdater === "function"
-                ? valuesOrUpdater(selectedVariants)
+                ? valuesOrUpdater(currentBuiltinNames)
                 : valuesOrUpdater;
-            updateSearchParams({ variant: newValues });
+            updateSearchParams({ variants: newValues });
           }}
+        />*/}
+        <BuiltinVariantFilter
+          variants={variants}
+          updateSearchParams={updateSearchParams}
+          builtInVariantNames={
+            configuredVariants ? Object.keys(configuredVariants) : []
+          }
+          disabled={!functionName || !datasetName}
         />
       </div>
-      {selectedVariants.length > 0 &&
+      {variants.length > 0 &&
         datapoints &&
         datapoints.length > 0 &&
         datasetName &&
@@ -363,29 +371,36 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                     Datapoints
                   </div>
                   <div className="grid auto-cols-[minmax(480px,1fr)] grid-flow-col">
-                    {selectedVariants.map((variant) => {
-                      const variantConfig = functionConfig?.variants?.[variant];
-                      const isChatCompletion =
-                        variantConfig?.inner.type === "chat_completion";
+                    {variants.map((variant) => {
+                      const isEditable =
+                        variant.type === "edited" ||
+                        functionConfig?.variants?.[variant.name]?.inner.type ===
+                          "chat_completion";
                       return (
                         <div
-                          key={variant}
+                          key={variant.name}
                           className="flex items-center justify-between gap-2 border-r p-4 font-mono font-medium last:border-r-0"
                         >
                           <div className="flex items-center gap-2">
-                            <Link
-                              to={`/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variant)}`}
-                              className="max-w-full truncate font-mono text-blue-600 hover:text-blue-800 hover:underline"
-                            >
-                              {getDisplayVariantName(variant)}
-                            </Link>
+                            {variant.type === "builtin" ? (
+                              <Link
+                                to={`/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variant.name)}`}
+                                className="max-w-full truncate font-mono text-blue-600 hover:text-blue-800 hover:underline"
+                              >
+                                {getDisplayVariantName(variant)}
+                              </Link>
+                            ) : (
+                              <span className="max-w-full truncate font-mono text-gray-500">
+                                {getDisplayVariantName(variant)}
+                              </span>
+                            )}
                             <EditButton
                               onClick={() => {
                                 setEditingVariant(variant);
                               }}
-                              disabled={!isChatCompletion}
+                              disabled={!isEditable}
                               tooltip={
-                                isChatCompletion
+                                isEditable
                                   ? "Edit variant"
                                   : "Editing is currently only supported for Chat Completion variants"
                               }
@@ -396,13 +411,15 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                             size="icon"
                             onClick={() => {
                               updateSearchParams({
-                                variant: selectedVariants.filter(
-                                  (v) => v !== variant,
+                                variants: JSON.stringify(
+                                  variants.filter((v) => v !== variant),
                                 ),
                               });
                             }}
                           >
-                            <span className="sr-only">Remove {variant}</span>
+                            <span className="sr-only">
+                              Remove {variant.name}
+                            </span>
                             <X aria-hidden />
                           </Button>
                         </div>
@@ -448,7 +465,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                         </div>
                       </div>
                       <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
-                        {selectedVariants.map((variant) => {
+                        {variants.map((variant) => {
                           return (
                             <div
                               key={`${datapoint.id}-${variant}`}
@@ -456,15 +473,14 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                             >
                               <DatapointPlaygroundOutput
                                 datapoint={datapoint}
-                                variantName={variant}
-                                isLoading={loadingVariants.has(variant)}
+                                variant={variant}
+                                isLoading={loadingVariants.has(variant.name)}
                                 inferencePromise={map
-                                  .get(variant)
+                                  .get(variant.name)
                                   ?.get(datapoint.id)}
                                 setPromise={setPromise}
                                 input={inputs[index]}
                                 functionName={functionName}
-                                editedVariants={editedVariants}
                               />
                             </div>
                           );
@@ -494,59 +510,50 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
       {editingVariant &&
         (() => {
           // First check if it's an edited variant
-          const edited = editedVariants.get(editingVariant);
-          if (edited) {
-            return (
-              <VariantEditor
-                variantInfo={edited}
-                confirmVariantInfo={(newVariantInfo) => {
-                  updateVariantWithEdited(
-                    editingVariant,
-                    newVariantInfo,
-                    selectedVariants,
-                    editedVariants,
-                    setEditedVariants,
-                    updateSearchParams,
-                  );
-                  setEditingVariant(null);
-                }}
-                isOpen={true}
-                onClose={() => setEditingVariant(null)}
-                variantName={editingVariant}
-              />
+          const variantInfo = (() => {
+            switch (editingVariant.type) {
+              case "builtin":
+                return configuredVariants?.[editingVariant.name];
+              case "edited":
+                return editingVariant.config;
+              default:
+                return undefined;
+            }
+          })();
+          if (!variantInfo) {
+            throw new Error(
+              `Failed to get VariantInfo for ${editingVariant.name}`,
             );
           }
-
-          // Otherwise get from function config
-          const original = functionConfig?.variants?.[editingVariant];
-          if (original) {
-            return (
-              <VariantEditor
-                variantInfo={original}
-                confirmVariantInfo={(newVariantInfo) => {
-                  updateVariantWithEdited(
-                    editingVariant,
-                    newVariantInfo,
-                    selectedVariants,
-                    editedVariants,
-                    setEditedVariants,
-                    updateSearchParams,
-                  );
-                  setEditingVariant(null);
-                }}
-                isOpen={true}
-                onClose={() => setEditingVariant(null)}
-                variantName={editingVariant}
-              />
-            );
-          }
-
-          // This shouldn't happen, but handle gracefully
-          logger.warn(
-            `Could not find variant ${editingVariant} in either edited variants or function config`,
+          return (
+            <VariantEditor
+              variantInfo={variantInfo}
+              confirmVariantInfo={(newVariantInfo) => {
+                const newVariantName = getNewVariantName(editingVariant.name);
+                const newPlaygroundVariantInfo = {
+                  type: "edited",
+                  name: newVariantName,
+                  config: newVariantInfo,
+                };
+                const newVariants = variants.map((variant) =>
+                  variant.name === editingVariant.name
+                    ? newPlaygroundVariantInfo
+                    : variant,
+                );
+                setEditingVariant(null);
+                updateSearchParams({
+                  variants: JSON.stringify(newVariants),
+                });
+              }}
+              isOpen={true}
+              onClose={() => setEditingVariant(null)}
+              variantName={
+                editingVariant.name
+                  ? getDisplayVariantName(editingVariant)
+                  : undefined
+              }
+            />
           );
-          setEditingVariant(null);
-          return null;
         })()}
     </PageLayout>
   );
@@ -576,9 +583,8 @@ function useClientInferences(
   functionName: string | null,
   datapoints: TensorZeroDatapoint[] | undefined,
   inputs: DisplayInput[] | undefined,
-  selectedVariants: string[],
+  variants: PlaygroundVariantInfo[],
   serverInferences: NestedPromiseMap<InferenceResponse>,
-  editedVariants: Map<string, VariantInfo>,
 ) {
   const { map, setPromise, setMap } =
     useNestedPromiseMap<InferenceResponse>(serverInferences);
@@ -590,7 +596,7 @@ function useClientInferences(
     // First check if we need any updates
     let needsUpdate = false;
     const updates: Array<{
-      variant: string;
+      variant: PlaygroundVariantInfo;
       datapoint: TensorZeroDatapoint;
       input: DisplayInput;
     }> = [];
@@ -598,14 +604,18 @@ function useClientInferences(
     // Use a ref to access the current map without including it in dependencies
     setMap((prevMap) => {
       // Check each required combination
-      selectedVariants.forEach((variant) => {
-        const variantMap = prevMap.get(variant);
+      variants.forEach((variant) => {
+        const variantMap = prevMap.get(variant.name);
 
         datapoints.forEach((datapoint, index) => {
           const existingPromise = variantMap?.get(datapoint.id);
           if (!existingPromise) {
             needsUpdate = true;
-            updates.push({ variant, datapoint, input: inputs[index] });
+            updates.push({
+              variant,
+              datapoint,
+              input: inputs[index],
+            });
           }
         });
       });
@@ -619,48 +629,19 @@ function useClientInferences(
 
       // Apply updates
       updates.forEach(({ variant, datapoint, input }) => {
-        let variantMap = newMap.get(variant);
+        let variantMap = newMap.get(variant.name);
         if (!variantMap) {
           variantMap = new Map();
-          newMap.set(variant, variantMap);
+          newMap.set(variant.name, variantMap);
         }
-        let variantPin: string | undefined;
-        let editedVariantInfo: VariantInfo | undefined;
-        if (isEditedVariantName(variant)) {
-          // Instead of setting the variant for inference, we'll send the VariantInfo
-          variantPin = undefined;
-          editedVariantInfo = editedVariants.get(variant);
-          if (!editedVariantInfo) {
-            throw new Error(
-              `Variant ${variant} not found in editedVariants Map`,
-            );
-          }
-        } else {
-          variantPin = variant;
-          editedVariantInfo = undefined;
-        }
-
-        const request = prepareInferenceActionRequest({
-          source: "clickhouse_datapoint",
-          input,
+        const inferenceRequest = preparePlaygroundInferenceRequest(
+          variant,
           functionName,
-          variant: variantPin,
-          tool_params:
-            datapoint?.type === "chat"
-              ? (datapoint.tool_params ?? undefined)
-              : undefined,
-          output_schema:
-            datapoint?.type === "json" ? datapoint.output_schema : null,
-          // The default is write_only but we do off in the playground
-          cache_options: {
-            max_age_s: null,
-            enabled: "off",
-          },
-          dryrun: true,
-          editedVariantInfo,
-        });
+          datapoint,
+          input,
+        );
         const formData = new FormData();
-        formData.append("data", JSON.stringify(request));
+        formData.append("data", JSON.stringify(inferenceRequest));
         const responsePromise = fetch("/api/tensorzero/inference", {
           method: "POST",
           body: formData,
@@ -676,14 +657,7 @@ function useClientInferences(
 
       return newMap;
     });
-  }, [
-    functionName,
-    datapoints,
-    inputs,
-    selectedVariants,
-    setMap,
-    editedVariants,
-  ]);
+  }, [functionName, datapoints, inputs, setMap, variants]);
 
   return { map, setPromise, setMap };
 }
@@ -753,100 +727,4 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </PageLayout>
     );
   }
-}
-
-/*
-Updates the page with a new edited variant.
-There are several pieces of state that need to be updated in order to reflect an edited variant:
-* the name of the new variant needs to be calculated.
-  Otherwise, we generate a new name by prepending "tensorzero::edited::" to the original name.
-* the editedVariants Map needs to contain the definition of the edited variant so that it can
-  be used for inference and possibly edited further
-* the search params need to be updated to remove the previous edited variant name and instead have the new one
-*/
-function updateVariantWithEdited(
-  currentVariantName: string,
-  newVariantConfig: VariantInfo,
-  selectedVariants: string[],
-  editedVariants: Map<string, VariantInfo>,
-  setEditedVariants: React.Dispatch<
-    React.SetStateAction<Map<string, VariantInfo>>
-  >,
-  updateSearchParams: (
-    updates: Record<string, string | string[] | null>,
-  ) => void,
-) {
-  const newVariantName = getNewVariantName(currentVariantName);
-  const newEditedVariant = newVariantConfig;
-  const newEditedVariants = new Map(editedVariants);
-  newEditedVariants.set(newVariantName, newEditedVariant);
-  setEditedVariants(newEditedVariants);
-  const newSelectedVariants = swapElementInArray(
-    selectedVariants,
-    currentVariantName,
-    newVariantName,
-  );
-  updateSearchParams({ variant: newSelectedVariants });
-}
-
-/*
-  We use the convention that variants
-  beginning with "tensorzero::edited::" are edited variants.
-  If the current variant is already "tensorzero::edited::*" we can reuse the existing name.
-
-  We add a random identifier so that each edit gives a new name.
-
-  This function checks if this is needed and then returns the new variant name.
-*/
-function getNewVariantName(currentVariantName: string): string {
-  let originalVariantName = currentVariantName;
-  if (isEditedVariantName(currentVariantName)) {
-    originalVariantName =
-      extractOriginalVariantNameFromEdited(currentVariantName);
-  }
-  // generate a random identifier here so that each edit is unique
-  const randomId = Math.random().toString(36).substring(2, 15);
-  return `tensorzero::edited::${randomId}::${originalVariantName}`;
-}
-
-/*
- * Given an array of strings, an existing string element, and a new string element
- * returns a new array with the new element in place of the existing one.
- * Throws an error if the existing element is not found in the array.
- * Useful for editing variants.
- */
-function swapElementInArray(
-  array: string[],
-  existing: string,
-  newElement: string,
-): string[] {
-  const index = array.indexOf(existing);
-
-  if (index === -1) {
-    throw new Error(`Element "${existing}" not found in array`);
-  }
-
-  const newArray = [...array];
-  newArray[index] = newElement;
-
-  return newArray;
-}
-
-function getDisplayVariantName(variantName: string): string {
-  if (isEditedVariantName(variantName)) {
-    const originalVariantName =
-      extractOriginalVariantNameFromEdited(variantName);
-    return originalVariantName + " (edited)";
-  }
-  return variantName;
-}
-
-function extractOriginalVariantNameFromEdited(
-  editedVariantName: string,
-): string {
-  const match = editedVariantName.match(/^tensorzero::edited::[^:]*::(.*)$/);
-  if (!match) {
-    throw Error("Malformed variant name");
-  }
-  return match[1];
 }

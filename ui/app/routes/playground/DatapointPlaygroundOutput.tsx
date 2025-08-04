@@ -5,17 +5,13 @@ import { Refresh } from "~/components/icons/Icons";
 import NewOutput from "~/components/inference/NewOutput";
 import { Button } from "~/components/ui/button";
 import { CodeEditor } from "~/components/ui/code-editor";
-import { refreshClientInference } from "./utils";
+import { refreshClientInference, type PlaygroundVariantInfo } from "./utils";
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import type {
-  Datapoint,
-  InferenceResponse,
-  VariantInfo,
-} from "tensorzero-node";
+import type { Datapoint, InferenceResponse } from "tensorzero-node";
 
 interface DatapointPlaygroundOutputProps {
   datapoint: Datapoint;
-  variantName: string;
+  variant: PlaygroundVariantInfo;
   inferencePromise: Promise<InferenceResponse> | undefined;
   isLoading?: boolean;
   setPromise: (
@@ -25,18 +21,16 @@ interface DatapointPlaygroundOutputProps {
   ) => void;
   input: DisplayInput;
   functionName: string;
-  editedVariants: Map<string, VariantInfo>;
 }
 const DatapointPlaygroundOutput = memo(
   function DatapointPlaygroundOutput({
     datapoint,
-    variantName,
+    variant,
     inferencePromise,
     setPromise,
     input,
     functionName,
     isLoading,
-    editedVariants,
   }: DatapointPlaygroundOutputProps) {
     const loadingIndicator = (
       <div className="flex min-h-[8rem] items-center justify-center">
@@ -53,9 +47,8 @@ const DatapointPlaygroundOutput = memo(
             setPromise,
             input,
             datapoint,
-            variantName,
+            variant,
             functionName,
-            editedVariants,
           );
         }}
       >
@@ -122,12 +115,12 @@ const DatapointPlaygroundOutput = memo(
   (prevProps, nextProps) => {
     return (
       prevProps.datapoint.id === nextProps.datapoint.id &&
-      prevProps.variantName === nextProps.variantName &&
+      prevProps.variant.name === nextProps.variant.name &&
       prevProps.functionName === nextProps.functionName &&
       prevProps.inferencePromise === nextProps.inferencePromise &&
       prevProps.setPromise === nextProps.setPromise &&
       JSON.stringify(prevProps.input) === JSON.stringify(nextProps.input) &&
-      prevProps.editedVariants === nextProps.editedVariants
+      prevProps.isLoading === nextProps.isLoading
     );
   },
 );
