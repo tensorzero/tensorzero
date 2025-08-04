@@ -306,7 +306,7 @@ async fn test_not_filter() {
 async fn test_simple_time_filter() {
     let client = make_embedded_gateway().await;
     let filter_node = InferenceFilterTreeNode::Time(TimeNode {
-        time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
+        time: DateTime::from_timestamp(1_672_531_200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
         comparison_operator: TimeComparisonOperator::GreaterThan,
     });
     let order_by = vec![
@@ -398,7 +398,7 @@ async fn test_combined_time_and_tag_filter() {
         children: vec![
             InferenceFilterTreeNode::Time(TimeNode {
                 // 2025-04-14 23:30:00 UTC (should exclude some of these elements)
-                time: DateTime::from_timestamp(1744673400, 0).unwrap(),
+                time: DateTime::from_timestamp(1_744_673_400, 0).unwrap(),
                 comparison_operator: TimeComparisonOperator::GreaterThanOrEqual,
             }),
             InferenceFilterTreeNode::Tag(TagNode {
@@ -426,6 +426,6 @@ async fn test_combined_time_and_tag_filter() {
         };
         assert_eq!(chat_inference.function_name, "write_haiku");
         assert_eq!(chat_inference.tags["tensorzero::evaluation_name"], "haiku");
-        assert!(chat_inference.timestamp >= DateTime::from_timestamp(1744673400, 0).unwrap());
+        assert!(chat_inference.timestamp >= DateTime::from_timestamp(1_744_673_400, 0).unwrap());
     }
 }

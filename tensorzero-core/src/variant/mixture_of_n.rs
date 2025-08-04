@@ -859,6 +859,7 @@ mod tests {
         minijinja_util::tests::get_test_template_config,
         model::{ModelConfig, ModelProvider, ProviderConfig},
         providers::dummy::DummyProvider,
+        testing::ONE_THRU_SIX,
         tool::{ToolCallConfig, ToolCallOutput, ToolChoice},
     };
 
@@ -1587,7 +1588,7 @@ mod tests {
                         text: "Second text message".to_string(),
                     }),
                 ],
-                created: 123456,
+                created: ONE_THRU_SIX,
                 model_inference_results: vec![],
                 inference_params: InferenceParams::default(),
                 original_response: Some("My raw response".to_string()),
@@ -1636,7 +1637,7 @@ mod tests {
                         text: "Second text message".to_string(),
                     }),
                 ],
-                created: 123456,
+                created: ONE_THRU_SIX,
                 usage: Some(Usage {
                     input_tokens: 10,
                     output_tokens: 20,

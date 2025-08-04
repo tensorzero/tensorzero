@@ -860,7 +860,7 @@ mod tests {
     use serde_json::json;
     use std::path::Path;
 
-    use crate::{inference::types::Text, tool::ToolChoice};
+    use crate::{inference::types::Text, testing::JAN_1_2023, tool::ToolChoice};
 
     use super::*;
 
@@ -1598,13 +1598,13 @@ FORMAT JSONEachRow";
         let filter_node = InferenceFilterTreeNode::And {
             children: vec![
                 InferenceFilterTreeNode::Time(TimeNode {
-                    time: DateTime::from_timestamp(1609459200, 0).unwrap(), // 2021-01-01 00:00:00 UTC
+                    time: DateTime::from_timestamp(1_609_459_200, 0).unwrap(), // 2021-01-01 00:00:00 UTC
                     comparison_operator: TimeComparisonOperator::GreaterThan,
                 }),
                 InferenceFilterTreeNode::Or {
                     children: vec![
                         InferenceFilterTreeNode::Time(TimeNode {
-                            time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
+                            time: DateTime::from_timestamp(JAN_1_2023, 0).unwrap(), // 2023-01-01 00:00:00 UTC
                             comparison_operator: TimeComparisonOperator::LessThan,
                         }),
                         InferenceFilterTreeNode::And {
@@ -2204,7 +2204,7 @@ FORMAT JSONEachRow";
     async fn test_simple_time_filter() {
         let config = get_e2e_config().await;
         let filter_node = InferenceFilterTreeNode::Time(TimeNode {
-            time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
+            time: DateTime::from_timestamp(JAN_1_2023, 0).unwrap(), // 2023-01-01 00:00:00 UTC
             comparison_operator: TimeComparisonOperator::GreaterThan,
         });
         let opts = ListInferencesParams {
@@ -2263,7 +2263,7 @@ FORMAT JSONEachRow";
 
         for (op, expected_op_str) in operators {
             let filter_node = InferenceFilterTreeNode::Time(TimeNode {
-                time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
+                time: DateTime::from_timestamp(JAN_1_2023, 0).unwrap(), // 2023-01-01 00:00:00 UTC
                 comparison_operator: op,
             });
             let opts = ListInferencesParams {
@@ -2317,7 +2317,7 @@ FORMAT JSONEachRow",
         let filter_node = InferenceFilterTreeNode::And {
             children: vec![
                 InferenceFilterTreeNode::Time(TimeNode {
-                    time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
+                    time: DateTime::from_timestamp(JAN_1_2023, 0).unwrap(), // 2023-01-01 00:00:00 UTC
                     comparison_operator: TimeComparisonOperator::GreaterThanOrEqual,
                 }),
                 InferenceFilterTreeNode::Tag(TagNode {

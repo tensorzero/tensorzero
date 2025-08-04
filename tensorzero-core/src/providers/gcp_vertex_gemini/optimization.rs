@@ -252,6 +252,7 @@ mod tests {
         inference::types::{ContentBlockChatOutput, ModelInput, RequestMessage, Role, Text},
         model::CredentialLocation,
         providers::gcp_vertex_gemini::GCPVertexGeminiContentPart,
+        testing::MAY_3_2021,
     };
     use serde_json::json;
 
@@ -340,7 +341,7 @@ mod tests {
         let succeeded_model = json!({
             "name": "projects/test-project/locations/us-central1/tuningJobs/12345",
             "state": "JOB_STATE_SUCCEEDED",
-            "createTime": "1620000000",
+            "createTime": MAY_3_2021.to_string(),
             "tunedModel": {
                 "model": "projects/test-project/locations/us-central1/models/gemini-1.5-flash-001-tuned-12345",
                 "endpoint": "projects/test-project/locations/us-central1/endpoints/67890"
@@ -372,7 +373,7 @@ mod tests {
         let succeeded_no_endpoint = json!({
             "name": "projects/test-project/locations/us-central1/tuningJobs/12358",
             "state": "JOB_STATE_SUCCEEDED",
-            "createTime": "1620000000",
+            "createTime": MAY_3_2021.to_string(),
             "tunedModel": {
                 "model": "projects/test-project/locations/us-central1/models/gemini-1.5-flash-001-tuned-12345"
                 // No endpoint field
@@ -407,7 +408,7 @@ mod tests {
         let running = json!({
             "name": "projects/test-project/locations/us-central1/tuningJobs/12346",
             "state": "JOB_STATE_RUNNING",
-            "createTime": "1620000000",
+            "createTime": MAY_3_2021.to_string(),
             "tuning_data_statistics": {
                 "supervisedTuningDataStats": {
                     "tuningDatasetExampleCount": 1000,
@@ -430,7 +431,7 @@ mod tests {
         let failed = json!({
             "name": "projects/test-project/locations/us-central1/tuningJobs/12347",
             "state": "JOB_STATE_FAILED",
-            "createTime": "1620000000",
+            "createTime": MAY_3_2021.to_string(),
             "tuning_data_statistics": {
                 "supervisedTuningDataStats": {
                     "tuningDatasetExampleCount": 1000,
@@ -453,7 +454,7 @@ mod tests {
         let queued = json!({
             "name": "projects/test-project/locations/us-central1/tuningJobs/12348",
             "state": "JOB_STATE_QUEUED",
-            "createTime": "1620000000",
+            "createTime": MAY_3_2021.to_string(),
             "tuning_data_statistics": {
                 "supervisedTuningDataStats": {
                     "tuningDatasetExampleCount": 1000,
@@ -476,7 +477,7 @@ mod tests {
         let pending = json!({
             "name": "projects/test-project/locations/us-central1/tuningJobs/12349",
             "state": "JOB_STATE_PENDING",
-            "createTime": "1620000000",
+            "createTime": MAY_3_2021.to_string(),
             "tuning_data_statistics": {
                 "supervisedTuningDataStats": {
                     "tuningDatasetExampleCount": 1000,
@@ -499,7 +500,7 @@ mod tests {
         let pending_with_model_no_endpoint = json!({
             "name": "projects/test-project/locations/us-central1/tuningJobs/12357",
             "state": "JOB_STATE_PENDING",
-            "createTime": "1620000000",
+            "createTime": MAY_3_2021.to_string(),
             "tunedModel": {
                 "model": "projects/test-project/locations/us-central1/models/gemini-1.5-flash-001-tuned-12345"
                 // No endpoint field - this is the key part of the test
@@ -528,7 +529,7 @@ mod tests {
         let cancelled = json!({
             "name": "projects/test-project/locations/us-central1/tuningJobs/12350",
             "state": "JOB_STATE_CANCELLED",
-            "createTime": "1620000000",
+            "createTime": MAY_3_2021.to_string(),
             "tuning_data_statistics": {
                 "supervisedTuningDataStats": {
                     "tuningDatasetExampleCount": 1000,
@@ -551,7 +552,7 @@ mod tests {
         let paused = json!({
             "name": "projects/test-project/locations/us-central1/tuningJobs/12351",
             "state": "JOB_STATE_PAUSED",
-            "createTime": "1620000000",
+            "createTime": MAY_3_2021.to_string(),
             "tuning_data_statistics": {
                 "supervisedTuningDataStats": {
                     "tuningDatasetExampleCount": 1000,
@@ -574,7 +575,7 @@ mod tests {
         let expired = json!({
             "name": "projects/test-project/locations/us-central1/tuningJobs/12352",
             "state": "JOB_STATE_EXPIRED",
-            "createTime": "1620000000",
+            "createTime": MAY_3_2021.to_string(),
             "tuning_data_statistics": {
                 "supervisedTuningDataStats": {
                     "tuningDatasetExampleCount": 1000,
@@ -597,7 +598,7 @@ mod tests {
         let updating = json!({
             "name": "projects/test-project/locations/us-central1/tuningJobs/12353",
             "state": "JOB_STATE_UPDATING",
-            "createTime": "1620000000",
+            "createTime": MAY_3_2021.to_string(),
             "tuning_data_statistics": {
                 "supervisedTuningDataStats": {
                     "tuningDatasetExampleCount": 1000,
@@ -620,7 +621,7 @@ mod tests {
         let partially_succeeded = json!({
             "name": "projects/test-project/locations/us-central1/tuningJobs/12354",
             "state": "JOB_STATE_PARTIALLY_SUCCEEDED",
-            "createTime": "1620000000",
+            "createTime": MAY_3_2021.to_string(),
             "tuning_data_statistics": {
                 "supervisedTuningDataStats": {
                     "tuningDatasetExampleCount": 1000,
@@ -644,7 +645,7 @@ mod tests {
         let succeeded_missing_model = json!({
             "name": "projects/test-project/locations/us-central1/tuningJobs/12355",
             "state": "JOB_STATE_SUCCEEDED",
-            "createTime": "1620000000",
+            "createTime": MAY_3_2021.to_string(),
             "tuning_data_statistics": {
                 "supervisedTuningDataStats": {
                     "tuningDatasetExampleCount": 1000,
@@ -666,7 +667,7 @@ mod tests {
         // Test for missing status field - this would fail deserialization of GCPVertexGeminiFineTuningJob
         let missing_status = json!({
             "name": "projects/test-project/locations/us-central1/tuningJobs/12356",
-            "createTime": "1620000000",
+            "createTime": MAY_3_2021.to_string(),
             "tuning_data_statistics": {
                 "supervisedTuningDataStats": {
                     "tuningDatasetExampleCount": 1000,
