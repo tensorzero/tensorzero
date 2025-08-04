@@ -4,9 +4,10 @@ version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "datamodel-code-generator>=0.32.0",
     "ipykernel",
     "jupyter",
     "markdownify",
-    "tensorzero",
+    # "tensorzero",
     "wikipedia",
 ]

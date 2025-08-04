@@ -1,12 +1,15 @@
-from tensorzero.agents import with_tensorzero_agents_patched
-
-from tools import think, search_wikipedia, load_wikipedia_page, answer_question
 import os
-import dotenv
 from datetime import datetime
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+import dotenv
+from tensorzero.agents import (
+    TensorZeroAgent,
+    TensorZeroRunner,
+    with_tensorzero_agents_patched,
+)
 
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+from config.generated.function_identifiers import FunctionIdentifierEnum as Id
 
 dotenv.load_dotenv()
 
@@ -15,23 +18,7 @@ clickhouse_url = os.getenv("TENSORZERO_CLICKHOUSE_URL")
 print(gateway_url, clickhouse_url)
 
 
-def create_rag_agent():
-    from agents import Agent, ModelSettings
-
-    """Create a multi-hop RAG agent using pure OpenAI Agents SDK."""
-
-    return Agent(
-        name="Multi-hop RAG Agent",
-        # This is the function name from tensorzero.toml
-        model="tensorzero::function_name::multi_hop_rag_agent_openai_v1",
-        tools=[think, search_wikipedia, load_wikipedia_page, answer_question],
-        model_settings=ModelSettings(extra_body={"tensorzero::episode_id": None}),
-    )
-
-
 async def ask_question(question: str, verbose: bool = False) -> str:
-    from agents import Runner, RunConfig, ModelSettings
-
     """
     Ask a question to the multi-hop RAG agent using pure Agents SDK.
 
@@ -42,25 +29,22 @@ async def ask_question(question: str, verbose: bool = False) -> str:
     Returns:
         The agent's answer
     """
-    agent = create_rag_agent()
+    agent = TensorZeroAgent.from_identifier(
+        Id.MULTI_HOP_RAG_AGENT_OPENAI_V1, generated_pkg="config.generated"
+    )
 
     if verbose:
         print(f"\n🤖 Asking agent: {question}")
 
     # Use the Agents SDK Runner - this handles the entire tool loop automatically
-    result = await Runner.run(
+    runner = TensorZeroRunner.for_identifier(
+        Id.MULTI_HOP_RAG_AGENT_OPENAI_V1, generated_pkg="config.generated"
+    )
+    result = await runner.run(
         agent,
         # TODO:The SDK requires a user message. Maybe it's worth inheriting from the base Runner class to clean up the interface a bit
         "",
-        run_config=RunConfig(
-            model_settings=ModelSettings(
-                metadata={
-                    "tensorzero::arguments::date": datetime.now().strftime("%Y-%m-%d"),
-                    "tensorzero::arguments::question": question,
-                }
-            )
-        ),
-        max_turns=15,
+        system={"date": datetime.now().strftime("%Y-%m-%d"), "question": question},
     )
     # TODO: We need a way of clearing the episode_id after each run. Maybe another advantage of inheriting from the base Runner class
     if verbose:

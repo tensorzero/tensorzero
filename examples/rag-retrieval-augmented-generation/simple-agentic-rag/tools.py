@@ -4,8 +4,8 @@ These tools are implemented as function_tools that can be used by agents.
 """
 
 import wikipedia
-from markdownify import markdownify
 from agents import function_tool
+from markdownify import markdownify
 
 
 @function_tool
