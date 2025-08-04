@@ -106,9 +106,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     });
   }
   const datasetName = searchParams.get("datasetName");
-  console.log("getting variants");
   const variants = getVariants(searchParams);
-  console.log("got variants");
 
   let datapoints, totalDatapoints;
   try {
@@ -191,7 +189,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       }
     }
   }
-  console.log("Loader worked");
   return {
     functionName,
     datasetName,
@@ -219,7 +216,6 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
 
     const nextSearchParams = new URLSearchParams(navigation.location?.search);
     // TODO: this is wrong
-    console.log("AAAAAAAA");
     const currentVariants = getVariants(currentSearchParams);
     const currentVariantNames = new Set<string>(
       currentVariants.map((variant) => variant.name),
@@ -298,8 +294,8 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
             // the variant is no longer valid and the dataset may not be.
             updateSearchParams({
               functionName: value,
-              variant: null,
-              dataset: null,
+              variants: null,
+              datasetName: null,
             })
           }
           functions={useAllFunctionConfigs()}
@@ -317,28 +313,6 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
       </div>
       <div className="flex max-w-180 flex-col gap-2">
         <Label>Variants</Label>
-        {/*<VariantFilter
-          disabled={!functionName || !datasetName}
-          variants={variantData}
-          selectedValues={variants
-            .filter((variant) => variant.type === "builtin")
-            .map((variant) => variant.name)}
-          // TODO: This component takes setSelectedValues: React.Dispatch<React.SetStateAction<string[]>>;
-          // However, our data structure is to set `variants` to JSON.stringify(variants), i.e.
-          // a stringified PlaygroundVariantInfo[].
-          //
-          // When a new string is passed from this selector, we need to add it as a BuiltInVariantInfo to this array
-          setSelectedValues={(valuesOrUpdater) => {
-            const currentBuiltinNames = variants
-              .filter((variant) => variant.type === "builtin")
-              .map((variant) => variant.name);
-            const newValues =
-              typeof valuesOrUpdater === "function"
-                ? valuesOrUpdater(currentBuiltinNames)
-                : valuesOrUpdater;
-            updateSearchParams({ variants: newValues });
-          }}
-        />*/}
         <BuiltinVariantFilter
           variants={variants}
           updateSearchParams={updateSearchParams}

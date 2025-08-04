@@ -367,7 +367,7 @@ export function prepareInferenceActionRequest(
       variant_name: args.variant || null,
       output_schema: args.output_schema || null,
       tool_choice: tool_choice || null,
-      dryrun: true,
+      dryrun: args.dryrun,
       parallel_tool_calls: parallel_tool_calls || null,
       additional_tools: tools_available || null,
       cache_options: args.cache_options,

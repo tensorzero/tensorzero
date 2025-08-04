@@ -82,7 +82,6 @@ export function getVariants(searchParams: URLSearchParams): SelectedVariants {
     });
   }
 
-  console.log("getting variants", parsedVariants);
   const result = SelectedVariantsSchema.safeParse(parsedVariants);
 
   if (!result.success) {

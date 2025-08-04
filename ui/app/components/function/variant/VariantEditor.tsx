@@ -132,6 +132,7 @@ export function VariantEditor({
           {/* Templates Section */}
           <div className="space-y-6">
             <h3 className="text-lg font-semibold">Templates</h3>
+            {/* TODO before editing: fix the case where if you clear a template the template is no longer editable */}
 
             <div className="space-y-2">
               <Label>System Template</Label>
