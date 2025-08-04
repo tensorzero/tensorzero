@@ -92,8 +92,7 @@ services:
       start_period: 1s
       start_interval: 1s
       timeout: 1s
-    ports:
-      - "3000:3000" # Gateway port
+    
   fixtures:
     build:
       dockerfile: ../../../ui/fixtures/Dockerfile
