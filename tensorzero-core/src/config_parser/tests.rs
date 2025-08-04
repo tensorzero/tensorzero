@@ -2271,6 +2271,6 @@ async fn test_glob_relative_path() {
 
 #[tokio::test]
 async fn test_invalid_glob() {
-    let err = ConfigFileGlob::new("/fake/tensorzero-config-test/path/to/fake.toml".to_string())
+    let err = ConfigFileGlob::new("/fake/tensorzero-config-test/path/to/**/fake.toml".to_string())
         .unwrap_err();
 }
