@@ -2,9 +2,7 @@ import os
 from datetime import datetime
 
 import dotenv
-from tensorzero.agents import (
-    with_tensorzero_agents_patched,
-)
+from tensorzero.agents import TensorZeroAgentsRunner, with_tensorzero_agents_patched
 from tools import answer_question, load_wikipedia_page, search_wikipedia, think
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -27,7 +25,7 @@ async def ask_question(question: str, verbose: bool = False) -> str:
     Returns:
         The agent's answer
     """
-    from agents import Agent, ModelSettings, RunConfig, Runner
+    from agents import Agent, ModelSettings
     from config.generated.schemas.system_schema_model import Model as SystemModel
     from config.generated.schemas.user_schema_model import Model as UserModel
 
@@ -45,18 +43,11 @@ async def ask_question(question: str, verbose: bool = False) -> str:
     # Use the Agents SDK Runner - this handles the entire tool loop automatically
     system_model = SystemModel(date=datetime.now().strftime("%Y-%m-%d"))
     user_model = UserModel(question=question)
-    result = await Runner.run(
+    result = await TensorZeroAgentsRunner.run(
         agent,
-        # TODO:The SDK requires a user message. Maybe it's worth inheriting from the base Runner class to clean up the interface a bit
-        "",
-        run_config=RunConfig(
-            model_settings=ModelSettings(
-                metadata=system_model.to_args_dict() | user_model.to_args_dict()
-            )
-        ),
+        {"system": system_model, "user": user_model},
         max_turns=15,
     )
-    # TODO: We need a way of clearing the episode_id after each run. Maybe another advantage of inheriting from the base Runner class
     if verbose:
         print(f"\n✅ Agent response: {result.final_output}")
 

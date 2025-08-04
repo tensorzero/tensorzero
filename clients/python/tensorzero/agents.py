@@ -1,7 +1,7 @@
 import contextvars
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, TypedDict
 
 import toml
 from pydantic import BaseModel
@@ -171,6 +171,57 @@ class TensorZeroAgentsClient(AsyncOpenAI):
     @cached_property
     def chat(self) -> TensorZeroAgentsChat:
         return TensorZeroAgentsChat(self)
+
+
+class TensorZeroAgentsRunArgs(TypedDict):
+    system: BaseModel
+    user: BaseModel
+
+
+class TensorZeroAgentsRunner(agents.Runner):
+    @classmethod
+    async def run(
+        cls,
+        starting_agent: agents.Agent[agents.TContext],
+        input: str | list[agents.TResponseInputItem] | TensorZeroAgentsRunArgs,
+        *,
+        context: agents.TContext | None = None,
+        max_turns: int = agents.run.DEFAULT_MAX_TURNS,
+        hooks: agents.RunHooks[agents.TContext] | None = None,
+        run_config: agents.RunConfig | None = None,
+        previous_response_id: str | None = None,
+        session: agents.Session | None = None,
+    ) -> agents.RunResult:
+        tz_context = _tensorzero_context.get()
+        assert tz_context is not None, (
+            "TensorZeroAgentsRunner must be called within a with_tensorzero_agents_patched context"
+        )
+
+        if isinstance(input, dict):
+            args = input["system"].model_dump() | input["user"].model_dump()
+            args = {f"tensorzero::arguments::{k}": v for k, v in args.items()}
+            existing_run_config = run_config or agents.run.RunConfig()
+            existing_model_settings = (
+                existing_run_config.model_settings or agents.run.ModelSettings()
+            )
+            existing_model_settings.metadata = (
+                existing_model_settings.metadata or {}
+            ) | args
+            run_config = agents.run.RunConfig(model_settings=existing_model_settings)
+        else:
+            run_config = run_config or agents.run.RunConfig()
+        result = await super().run(
+            starting_agent,
+            "",
+            context=context,
+            max_turns=max_turns,
+            hooks=hooks,
+            run_config=run_config,
+            previous_response_id=previous_response_id,
+            session=session,
+        )
+        tz_context.episode_id = None
+        return result
 
 
 @asynccontextmanager
