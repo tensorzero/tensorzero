@@ -3323,6 +3323,16 @@ type = "chat"
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 
+[functions.openai_with_assistant_schema]
+type = "chat"
+assistant_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.openai_with_assistant_schema.variants.openai]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+assistant_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
