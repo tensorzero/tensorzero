@@ -1,6 +1,3 @@
-from __future__ import annotations
-
-# flake8: noqa: E402
 """TensorZero type-generation CLI.
 
 This script assists with **type-safe** usage of the TensorZero configuration
@@ -33,6 +30,8 @@ The resulting files can be *imported* in downstream projects or used directly
 as stub packages for static analysis tools such as **mypy** or **pyright**.
 """
 
+from __future__ import annotations
+
 import argparse
 import re
 import sys
@@ -54,16 +53,6 @@ try:
 except ModuleNotFoundError:  # pragma: no cover – optional dependency
     _HAS_DM_CODEGEN = False
 
-###############################################################################
-# Helpers #####################################################################
-###############################################################################
-
-
-def _snake_to_pascal(name: str) -> str:
-    """Convert *snake_case* or hyphenated names to *PascalCase* identifiers."""
-
-    return "".join(part.capitalize() for part in re.split(r"[_\-]", name))
-
 
 def _python_identifier(raw: str) -> str:
     """Sanitise a string so that it becomes a *valid* Python identifier."""
@@ -71,11 +60,6 @@ def _python_identifier(raw: str) -> str:
     ident = re.sub(r"\W|^(?=\d)", "_", raw)
     # Ensure we do not accidentally create an empty identifier.
     return ident or "_"
-
-
-###############################################################################
-# Core logic ##################################################################
-###############################################################################
 
 
 def _collect_function_identifiers(conf: dict) -> List[str]:
@@ -220,12 +204,7 @@ def _generate_schema_models(
             )
 
 
-###############################################################################
-# CLI entry-point #############################################################
-###############################################################################
-
-
-def main(argv: list[str] | None = None) -> None:  # noqa: C901 – single entry
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="tensorzero-gen",
         description="Generate typed helpers from a tensorzero.toml configuration.",
