@@ -142,9 +142,21 @@ def _generate_schema_models(
     *,
     schema_paths: Iterable[Path],
     output_dir: Path,
+    base_dir: Path,
     target_python_version: str = "3.11",
 ) -> None:
-    """Invoke *datamodel-code-generator* programmatically for each schema."""
+    """Invoke *datamodel-code-generator* programmatically for each schema.
+
+    The generated model modules mirror the directory structure of the original
+    JSON schema files relative to *base_dir*.  For example, given
+    ``prompts/build/system_schema.json`` the resulting module will be written to::
+
+        <output_dir>/prompts/build/system_schema_model.py
+
+    All intermediate directories are created as proper Python packages
+    (i.e. with ``__init__.py`` files) so that the generated models can be
+    imported via dotted paths.
+    """
 
     if not _HAS_DM_CODEGEN:
         missing = (
@@ -160,8 +172,31 @@ def _generate_schema_models(
             print(f"[WARN] schema file not found: {schema_path}", file=sys.stderr)
             continue
 
+        # Determine the destination directory relative to ``base_dir``.  If the
+        # schema lives outside *base_dir* we simply place it at the root of
+        # *output_dir*.
+        try:
+            rel_path = schema_path.relative_to(base_dir)
+        except ValueError:
+            rel_path = Path(schema_path.name)
+
+        rel_dir_parts = rel_path.parts[:-1]  # exclude file name
+        dest_dir_parts = [_python_identifier(part) for part in rel_dir_parts]
+        dest_dir = (
+            output_dir.joinpath(*dest_dir_parts) if dest_dir_parts else output_dir
+        )
+
+        # Ensure destination directory exists and is a Python package.
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        # Touch __init__.py for each package level so modules are importable.
+        pkg_path = output_dir
+        (pkg_path / "__init__.py").touch(exist_ok=True)
+        for part in dest_dir_parts:
+            pkg_path = pkg_path / part
+            (pkg_path / "__init__.py").touch(exist_ok=True)
+
         module_name = _python_identifier(schema_path.stem + "_model")
-        output_file = output_dir / f"{module_name}.py"
+        output_file = dest_dir / f"{module_name}.py"
 
         # Read once to avoid repeated IO inside the generator when given str.
         schema_str = schema_path.read_text(encoding="utf-8")
@@ -179,8 +214,7 @@ def _generate_schema_models(
                 output_model_type=DataModelType.PydanticV2BaseModel,
                 formatters=[],  # skip black/isort to avoid python-version issues
             )
-            # Now move/copy to the final destination.
-            output_dir.mkdir(parents=True, exist_ok=True)
+            # Write to final destination.
             output_file.write_text(
                 tmp_path.read_text(encoding="utf-8"), encoding="utf-8"
             )
@@ -256,7 +290,9 @@ def main(argv: list[str] | None = None) -> None:  # noqa: C901 – single entry
         if resolved_paths:
             schema_out_dir = output_dir / "schemas"
             _generate_schema_models(
-                schema_paths=resolved_paths, output_dir=schema_out_dir
+                schema_paths=resolved_paths,
+                output_dir=schema_out_dir,
+                base_dir=cfg_path.parent,
             )
             print(
                 f"[OK] generated {len(resolved_paths)} pydantic model module(s) → {schema_out_dir}"
