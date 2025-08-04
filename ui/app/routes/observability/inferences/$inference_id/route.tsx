@@ -335,16 +335,50 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   const { submit } = variantInferenceFetcher;
   const onVariantSelect = (variant: string) => {
-    setSelectedVariant(variant);
-    setOpenModal("variant-response");
-    const request = prepareInferenceActionRequest({
-      resource: inference,
-      source: variantSource,
-      variant,
-    });
-    console.log(request);
-    // TODO: handle JSON.stringify error
-    submit({ data: JSON.stringify(request) });
+    try {
+      const request = prepareInferenceActionRequest({
+        resource: inference,
+        source: variantSource,
+        variant,
+      });
+
+      // Set state and open modal only if request preparation succeeds
+      setSelectedVariant(variant);
+      setOpenModal("variant-response");
+
+      try {
+        submit({ data: JSON.stringify(request) });
+      } catch (stringifyError) {
+        logger.error("Failed to stringify request:", stringifyError);
+        toast({
+          title: "Request Error",
+          description: "Failed to prepare the request. Please try again.",
+          variant: "destructive",
+        });
+        // Reset state on error
+        setSelectedVariant(null);
+        setOpenModal(null);
+      }
+    } catch (error) {
+      logger.error("Failed to prepare inference request:", error);
+
+      // Show user-friendly error message based on the error type
+      let errorMessage = "Failed to prepare the request. Please try again.";
+      if (error instanceof Error) {
+        if (error.message.includes("Extra body is not supported")) {
+          errorMessage =
+            "This inference contains extra body parameters which are not supported in the UI.";
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+      }
+
+      toast({
+        title: "Request Preparation Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
   };
 
   const humanFeedbackFetcher = useFetcherWithReset<typeof action>();
