@@ -387,7 +387,7 @@ impl FunctionConfig {
                 // If the parsed output fails validation, we log the error and set `parsed_output` to None
                 let parsed_output = match parsed_output {
                     Some(parsed_output) => match output_schema.validate(&parsed_output).await {
-                        Ok(_) => Some(parsed_output),
+                        Ok(()) => Some(parsed_output),
                         Err(_) => None,
                     },
                     None => None,
@@ -477,7 +477,7 @@ impl FunctionConfig {
         }
         match self {
             FunctionConfig::Chat(params) => {
-                for tool in params.tools.iter() {
+                for tool in &params.tools {
                     static_tools.get(tool).ok_or_else(|| Error::new(ErrorDetails::Config {
                         message: format!("`functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
                     }))?;
@@ -546,7 +546,7 @@ fn validate_all_text_input(
     }?;
     for (index, message) in input.messages.iter().enumerate() {
         // Only for Text blocks, not RawText blocks since we don't validate those
-        for block in message.content.iter() {
+        for block in &message.content {
             if let InputMessageContent::Text(kind) = block {
                 let content = match kind {
                     TextKind::Arguments { arguments } => {

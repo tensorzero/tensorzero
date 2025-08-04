@@ -586,7 +586,7 @@ pub(super) fn prepare_openrouter_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
 ) -> Result<Vec<OpenRouterRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
-    for message in request.messages.iter() {
+    for message in &request.messages {
         messages.extend(tensorzero_to_openrouter_messages(message)?);
     }
     if let Some(system_msg) = tensorzero_to_openrouter_system_message(
@@ -688,7 +688,7 @@ fn tensorzero_to_openrouter_user_messages(
     let mut messages = Vec::new();
     let mut user_content_blocks = Vec::new();
 
-    for block in content_blocks.iter() {
+    for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
                 user_content_blocks.push(OpenRouterContentBlock::Text {
@@ -755,7 +755,7 @@ fn tensorzero_to_openrouter_assistant_messages(
     let mut assistant_content_blocks = Vec::new();
     let mut assistant_tool_calls = Vec::new();
 
-    for block in content_blocks.iter() {
+    for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
                 assistant_content_blocks.push(OpenRouterContentBlock::Text {

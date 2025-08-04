@@ -16,6 +16,18 @@ spec:
   {{- if .Values.ui.ingress.className }}
   ingressClassName: {{ .Values.ui.ingress.className }}
   {{- end }}
+  {{- if .Values.ui.ingress.tls }}
+  tls:
+    {{- range .Values.ui.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- if .secretName }}
+      secretName: {{ .secretName }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
   rules:
     {{- range .Values.ui.ingress.hosts }}
     - host: {{ .host | quote }}

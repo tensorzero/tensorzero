@@ -239,7 +239,7 @@ pub fn prepare_model_input(
         template_schema_info,
     )?;
     let mut templated_messages = Vec::with_capacity(messages.len());
-    for message in messages.iter() {
+    for message in messages {
         let template_name = match message.role {
             Role::Assistant => assistant_template_name,
             Role::User => user_template_name,
@@ -319,7 +319,7 @@ fn prepare_request_message(
             }
         }
     };
-    for block in message.content.iter() {
+    for block in &message.content {
         match block {
             ResolvedInputMessageContent::Text { value } => {
                 let text_content= match template_name {
