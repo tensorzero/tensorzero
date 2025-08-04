@@ -16,6 +16,29 @@ use crate::config_parser::{Config, ConfigFileGlob};
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 
+/// Represents an active gateway (either standalone or embedded)
+/// The contained `app_state` can be freely cloned and dropped.
+/// However, dropping the `GatewayHandle` itself will wait for any
+/// needed background tasks to exit (in the future, this will
+/// include the ClickHouse batch insert task).
+///
+/// It's insufficient to put this kind of drop logic in `AppStateData` - since
+/// it can be freely cloned, any contained `Arc`s might only be dropped when
+/// the Tokio runtime is shutting down (e.g. if a background `tokio::spawn`
+/// task looped forever without using a `CancellationToken` to exit).
+/// During runtime shutdown, it's too late to call things like `tokio::spawn_blocking`,
+/// so we may be unable to safely wait for our batch insert task to finish writing.
+///
+/// `GatewayHandle` should *not* be wrapped in an `Arc` (or given a `Clone` impl),
+/// so that it's easy for us to tell where it gets dropped.
+///
+// Using `#[non_exhaustive]` has no effect within the crate
+#[expect(clippy::manual_non_exhaustive)]
+pub struct GatewayHandle {
+    pub app_state: AppStateData,
+    _private: (),
+}
+
 /// State for the API
 #[derive(Clone)]
 // `#[non_exhaustive]` only affects downstream crates, so we can't use it here
@@ -31,7 +54,7 @@ pub struct AppStateData {
 }
 pub type AppState = axum::extract::State<AppStateData>;
 
-impl AppStateData {
+impl GatewayHandle {
     pub async fn new(config: Arc<Config>) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
             .ok()
@@ -51,9 +74,12 @@ impl AppStateData {
         let http_client = setup_http_client()?;
 
         Ok(Self {
-            config,
-            http_client,
-            clickhouse_connection_info,
+            app_state: AppStateData {
+                config,
+                http_client,
+                clickhouse_connection_info,
+                _private: (),
+            },
             _private: (),
         })
     }
@@ -64,9 +90,12 @@ impl AppStateData {
         http_client: Client,
     ) -> Self {
         Self {
-            config,
-            http_client,
-            clickhouse_connection_info,
+            app_state: AppStateData {
+                config,
+                http_client,
+                clickhouse_connection_info,
+                _private: (),
+            },
             _private: (),
         }
     }
@@ -75,10 +104,13 @@ impl AppStateData {
     pub fn new_unit_test_data(config: Arc<Config>, clickhouse_healthy: bool) -> Self {
         let http_client = reqwest::Client::new();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_mock(clickhouse_healthy);
-        AppStateData {
-            config,
-            http_client,
-            clickhouse_connection_info,
+        Self {
+            app_state: AppStateData {
+                config,
+                http_client,
+                clickhouse_connection_info,
+                _private: (),
+            },
             _private: (),
         }
     }
@@ -199,9 +231,12 @@ pub fn setup_http_client() -> Result<Client, Error> {
     })
 }
 
+// We hold on to these fields so that their Drop impls run when `ShutdownHandle` is dropped
 pub struct ShutdownHandle {
     #[expect(dead_code)]
     sender: Sender<()>,
+    #[expect(dead_code)]
+    gateway_handle: GatewayHandle,
 }
 
 /// Starts a new HTTP TensorZero gateway on an unused port, with only the openai-compatible endpoint enabled.
@@ -232,7 +267,7 @@ pub async fn start_openai_compatible_gateway(
     } else {
         Arc::new(Config::default())
     };
-    let app_state = AppStateData::new_with_clickhouse(config, clickhouse_url).await?;
+    let gateway_handle = GatewayHandle::new_with_clickhouse(config, clickhouse_url).await?;
 
     let router = Router::new()
         .route(
@@ -240,7 +275,7 @@ pub async fn start_openai_compatible_gateway(
             post(endpoints::openai_compatible::inference_handler),
         )
         .fallback(endpoints::fallback::handle_404)
-        .with_state(app_state);
+        .with_state(gateway_handle.app_state.clone());
 
     let (sender, recv) = tokio::sync::oneshot::channel::<()>();
     let shutdown_fut = async move {
@@ -252,7 +287,13 @@ pub async fn start_openai_compatible_gateway(
             .with_graceful_shutdown(shutdown_fut)
             .into_future(),
     );
-    Ok((bind_addr, ShutdownHandle { sender }))
+    Ok((
+        bind_addr,
+        ShutdownHandle {
+            sender,
+            gateway_handle,
+        },
+    ))
 }
 
 #[cfg(test)]

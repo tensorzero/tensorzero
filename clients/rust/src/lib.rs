@@ -27,7 +27,7 @@ use tensorzero_core::{
         validate_tags,
     },
     error::{Error, ErrorDetails},
-    gateway_util::{setup_clickhouse, setup_http_client, AppStateData},
+    gateway_util::{setup_clickhouse, setup_http_client, GatewayHandle},
 };
 use thiserror::Error;
 use tokio::{sync::Mutex, time::error::Elapsed};
@@ -123,7 +123,7 @@ impl HTTPGateway {
 }
 
 struct EmbeddedGateway {
-    state: AppStateData,
+    handle: GatewayHandle,
 }
 
 /// Used to construct a `Client`
@@ -314,7 +314,7 @@ impl ClientBuilder {
                 Ok(Client {
                     mode: ClientMode::EmbeddedGateway {
                         gateway: EmbeddedGateway {
-                            state: AppStateData::new_with_clickhouse_and_http_client(
+                            handle: GatewayHandle::new_with_clickhouse_and_http_client(
                                 config,
                                 clickhouse_connection_info,
                                 http_client,
@@ -331,10 +331,10 @@ impl ClientBuilder {
     }
 
     #[cfg(any(test, feature = "e2e_tests"))]
-    pub async fn build_from_state(state: AppStateData) -> Result<Client, ClientBuilderError> {
+    pub async fn build_from_state(handle: GatewayHandle) -> Result<Client, ClientBuilderError> {
         Ok(Client {
             mode: ClientMode::EmbeddedGateway {
-                gateway: EmbeddedGateway { state },
+                gateway: EmbeddedGateway { handle },
                 timeout: None,
             },
             verbose_errors: false,
@@ -387,7 +387,8 @@ impl Client {
                 gateway,
                 timeout: _,
             } => gateway
-                .state
+                .handle
+                .app_state
                 .clickhouse_connection_info
                 .health()
                 .await
@@ -419,9 +420,12 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::feedback::feedback(gateway.state.clone(), params)
-                        .await
-                        .map_err(err_to_http)
+                    tensorzero_core::endpoints::feedback::feedback(
+                        gateway.handle.app_state.clone(),
+                        params,
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
                 .await?)
             }
@@ -495,9 +499,9 @@ impl Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::inference::inference(
-                        gateway.state.config.clone(),
-                        &gateway.state.http_client,
-                        gateway.state.clickhouse_connection_info.clone(),
+                        gateway.handle.app_state.config.clone(),
+                        &gateway.handle.app_state.http_client,
+                        gateway.handle.app_state.clickhouse_connection_info.clone(),
                         params.try_into().map_err(err_to_http)?,
                     )
                     .await
@@ -543,7 +547,7 @@ impl Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::object_storage::get_object(
-                        &gateway.state.config,
+                        &gateway.handle.app_state.config,
                         storage_path,
                     )
                     .await
@@ -581,7 +585,7 @@ impl Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::dynamic_evaluation_run::dynamic_evaluation_run(
-                        gateway.state.clone(),
+                        gateway.handle.app_state.clone(),
                         params,
                     )
                     .await
@@ -611,7 +615,7 @@ impl Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::dynamic_evaluation_run::dynamic_evaluation_run_episode(
-                        gateway.state.clone(),
+                        gateway.handle.app_state.clone(),
                         run_id,
                         params,
                     )
@@ -644,9 +648,9 @@ impl Client {
                     tensorzero_core::endpoints::datasets::insert_datapoint(
                         dataset_name,
                         params,
-                        &gateway.state.config,
-                        &gateway.state.http_client,
-                        &gateway.state.clickhouse_connection_info,
+                        &gateway.handle.app_state.config,
+                        &gateway.handle.app_state.http_client,
+                        &gateway.handle.app_state.clickhouse_connection_info,
                     )
                     .await
                     .map_err(err_to_http)
@@ -695,7 +699,7 @@ impl Client {
                     tensorzero_core::endpoints::datasets::delete_datapoint(
                         dataset_name,
                         datapoint_id,
-                        &gateway.state.clickhouse_connection_info,
+                        &gateway.handle.app_state.clickhouse_connection_info,
                     )
                     .await
                     .map_err(err_to_http)
@@ -733,7 +737,7 @@ impl Client {
                 Ok(with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::list_datapoints(
                         dataset_name,
-                        &gateway.state.clickhouse_connection_info,
+                        &gateway.handle.app_state.clickhouse_connection_info,
                         function_name,
                         limit,
                         offset,
@@ -767,7 +771,7 @@ impl Client {
                     tensorzero_core::endpoints::datasets::get_datapoint(
                         dataset_name,
                         datapoint_id,
-                        &gateway.state.clickhouse_connection_info,
+                        &gateway.handle.app_state.clickhouse_connection_info,
                     )
                     .await
                     .map_err(err_to_http)
@@ -788,7 +792,7 @@ impl Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::stale_dataset(
-                        &gateway.state.clickhouse_connection_info,
+                        &gateway.handle.app_state.clickhouse_connection_info,
                         &dataset_name,
                     )
                     .await
@@ -837,9 +841,10 @@ impl Client {
             });
         };
         let inferences = gateway
-            .state
+            .handle
+            .app_state
             .clickhouse_connection_info
-            .list_inferences(&gateway.state.config, &params)
+            .list_inferences(&gateway.handle.app_state.config, &params)
             .await
             .map_err(err_to_http)?;
         Ok(inferences)
@@ -867,9 +872,13 @@ impl Client {
                 .into(),
             });
         };
-        render_samples(gateway.state.config.clone(), stored_samples, variants)
-            .await
-            .map_err(err_to_http)
+        render_samples(
+            gateway.handle.app_state.config.clone(),
+            stored_samples,
+            variants,
+        )
+        .await
+        .map_err(err_to_http)
     }
 
     /// Launch an optimization job.
@@ -881,7 +890,7 @@ impl Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 // TODO: do we want this?
                 Ok(with_embedded_timeout(*timeout, async {
-                    launch_optimization(&gateway.state.http_client, params)
+                    launch_optimization(&gateway.handle.app_state.http_client, params)
                         .await
                         .map_err(err_to_http)
                 })
@@ -907,9 +916,9 @@ impl Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     launch_optimization_workflow(
-                        &gateway.state.http_client,
-                        gateway.state.config.clone(),
-                        &gateway.state.clickhouse_connection_info,
+                        &gateway.handle.app_state.http_client,
+                        gateway.handle.app_state.config.clone(),
+                        &gateway.handle.app_state.clickhouse_connection_info,
                         params,
                     )
                     .await
@@ -959,7 +968,7 @@ impl Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::optimization::poll_optimization(
-                        &gateway.state.http_client,
+                        &gateway.handle.app_state.http_client,
                         job_handle,
                     )
                     .await
@@ -990,7 +999,9 @@ impl Client {
 
     pub fn get_config(&self) -> Result<Arc<Config>, TensorZeroError> {
         match &self.mode {
-            ClientMode::EmbeddedGateway { gateway, .. } => Ok(gateway.state.config.clone()),
+            ClientMode::EmbeddedGateway { gateway, .. } => {
+                Ok(gateway.handle.app_state.config.clone())
+            }
             ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
                 source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
                     mode: "Http".to_string(),
@@ -1165,9 +1176,9 @@ impl Client {
     }
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
-    pub fn get_app_state_data(&self) -> Option<&AppStateData> {
+    pub fn get_app_state_data(&self) -> Option<&tensorzero_core::gateway_util::AppStateData> {
         match &self.mode {
-            ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.state),
+            ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.handle.app_state),
             _ => None,
         }
     }

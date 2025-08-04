@@ -412,6 +412,7 @@ impl MetricConfigLevel {
 /// We eagerly resolve the glob pattern so that we can include all of the matched
 /// config file paths in error messages.
 #[derive(Debug)]
+#[expect(clippy::manual_non_exhaustive)]
 pub struct ConfigFileGlob {
     pub glob: String,
     pub paths: Vec<PathBuf>,
