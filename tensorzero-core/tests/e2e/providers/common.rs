@@ -1,5 +1,6 @@
 #![expect(clippy::print_stdout)]
 use std::io::Cursor;
+use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr};
 
 use aws_config::Region;
@@ -10610,6 +10611,38 @@ async fn check_short_inference_response(
         result.get("cached").unwrap().as_bool().unwrap(),
         should_be_cached
     );
+
+    // Check that our cache entry was only written once
+    if should_be_cached {
+        // Allow some time for an incorrect second cache write to happen
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        // Obtain the deduplicated and non-deduplicated counts
+        // Note that this can have false negatives (ClickHouse might decide to merge parts
+        // immediately after a duplicate insert)
+        let first_count = clickhouse
+            .run_query_synchronous_no_params("SELECT COUNT(*) FROM ModelInferenceCache".to_string())
+            .await
+            .unwrap()
+            .response
+            .trim()
+            .parse::<u64>()
+            .unwrap();
+
+        let second_count = clickhouse
+            .run_query_synchronous_no_params(
+                "SELECT COUNT(*) FROM ModelInferenceCache FINAL".to_string(),
+            )
+            .await
+            .unwrap()
+            .response
+            .trim()
+            .parse::<u64>()
+            .unwrap();
+
+        assert_ne!(first_count, 0);
+        assert_eq!(first_count, second_count);
+    }
 }
 
 pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
