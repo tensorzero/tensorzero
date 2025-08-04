@@ -415,6 +415,7 @@ impl MetricConfigLevel {
 pub struct ConfigFileGlob {
     pub glob: String,
     pub paths: Vec<PathBuf>,
+    _private: (),
 }
 
 impl ConfigFileGlob {
@@ -440,6 +441,12 @@ impl ConfigFileGlob {
                 })
             })
             .collect::<Result<Vec<PathBuf>, Error>>()?;
+        if glob_paths.is_empty() {
+            return Err(Error::new(ErrorDetails::Glob {
+                glob: glob.to_string(),
+                message: "No files matched the glob pattern. Ensure that the path exists, and contains at least one file.".to_string(),
+            }));
+        }
         // Sort the paths to avoid depending on the filesystem iteration order
         // when we merge configs. This should only the precise error message we display,
         // not whether or not the config parses successfully (or the final `Config`
@@ -448,6 +455,7 @@ impl ConfigFileGlob {
         Ok(Self {
             glob,
             paths: glob_paths,
+            _private: (),
         })
     }
 }

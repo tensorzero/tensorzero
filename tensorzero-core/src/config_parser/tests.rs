@@ -1684,14 +1684,11 @@ async fn test_bedrock_region_and_allow_auto() {
 #[traced_test]
 #[tokio::test]
 async fn test_config_load_no_config_file() {
-    let err = Config::load_and_verify_from_path(
-        &ConfigFileGlob::new_from_path(Path::new("nonexistent.toml")).unwrap(),
-    )
-    .await
-    .unwrap_err()
-    .to_string();
+    let err = &ConfigFileGlob::new_from_path(Path::new("nonexistent.toml"))
+        .unwrap_err()
+        .to_string();
     assert!(
-        err.contains("Error using glob: `nonexistent.toml`: No config files matched glob"),
+        err.contains("Error using glob: `nonexistent.toml`: No files matched the glob pattern. Ensure that the path exists, and contains at least one file."),
         "Unexpected error message: {err}"
     );
 }
