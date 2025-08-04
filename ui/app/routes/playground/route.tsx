@@ -160,6 +160,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           : undefined,
       output_schema:
         datapoint?.type === "json" ? datapoint.output_schema : null,
+      // The default is write_only but we do off in the playground
       cache_options: {
         max_age_s: null,
         enabled: "off",
@@ -539,6 +540,7 @@ function useClientInferences(
               : undefined,
           output_schema:
             datapoint?.type === "json" ? datapoint.output_schema : null,
+          // The default is write_only but we do off in the playground
           cache_options: {
             max_age_s: null,
             enabled: "off",
