@@ -716,7 +716,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
 fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
     if model_id.starts_with("claude-3-haiku@") {
         // GCP docs say 8k but that causes `max_tokens: XXX > 8192, which is the maximum allowed number of output tokens for claude-3-haiku-20250219`
-        Ok(4_192)
+        Ok(4_096)
     } else if model_id.starts_with("claude-3-5-haiku@")
         || model_id.starts_with("claude-3-5-sonnet@")
         || model_id.starts_with("claude-3-5-sonnet-v2@")
@@ -1675,7 +1675,7 @@ mod tests {
 
         let model = "claude-3-7-sonnet@20250219".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
-        assert_eq!(body.unwrap().max_tokens, 128_000);
+        assert_eq!(body.unwrap().max_tokens, 64_000);
 
         let model = "claude-3-5-sonnet-v2@20240222".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
@@ -1976,7 +1976,9 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: None,
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some(
+                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
+                ),
             }
         );
         let response_code = StatusCode::UNAUTHORIZED;
@@ -1989,7 +1991,9 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: None,
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some(
+                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
+                ),
             }
         );
         let response_code = StatusCode::TOO_MANY_REQUESTS;
@@ -2002,7 +2006,9 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: None,
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some(
+                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
+                ),
             }
         );
         let response_code = StatusCode::NOT_FOUND;
@@ -2014,7 +2020,9 @@ mod tests {
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: None,
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some(
+                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
+                ),
                 provider_type: PROVIDER_TYPE.to_string()
             }
         );
@@ -2026,7 +2034,9 @@ mod tests {
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: None,
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some(
+                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
+                ),
                 provider_type: PROVIDER_TYPE.to_string()
             }
         );
