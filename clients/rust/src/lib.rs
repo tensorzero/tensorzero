@@ -179,8 +179,13 @@ pub enum ClientBuilderError {
     NotHTTPGateway,
     #[error("Failed to configure ClickHouse: {0}")]
     Clickhouse(TensorZeroError),
-    #[error("Failed to parse config: {0}")]
-    ConfigParsing(TensorZeroError),
+    #[error("Failed to parse config: {0}.")]
+    ConfigParsingPreGlob(TensorZeroError),
+    #[error("Failed to parse config: {error}. Config file glob `{glob}` resolved to the following files:\n{paths}", glob = glob.glob,paths = glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"))]
+    ConfigParsing {
+        error: TensorZeroError,
+        glob: ConfigFileGlob,
+    },
     #[error("Failed to build HTTP client: {0}")]
     HTTPClientBuild(TensorZeroError),
     #[error("Failed to get gateway version: {0}")]
@@ -265,21 +270,23 @@ impl ClientBuilder {
                 verify_credentials,
             } => {
                 let config = if let Some(config_file) = config_file {
+                    let glob = ConfigFileGlob::new(config_file.to_string_lossy().to_string())
+                        .map_err(|e| {
+                            ClientBuilderError::ConfigParsingPreGlob(TensorZeroError::Other {
+                                source: e.into(),
+                            })
+                        })?;
                     Arc::new(
                         Config::load_from_path_optional_verify_credentials(
-                            &ConfigFileGlob::new(config_file.to_string_lossy().to_string())
-                                .map_err(|e| {
-                                    ClientBuilderError::ConfigParsing(TensorZeroError::Other {
-                                        source: e.into(),
-                                    })
-                                })?,
+                            &glob,
                             *verify_credentials,
                         )
                         .await
                         .map_err(|e| {
-                            ClientBuilderError::ConfigParsing(TensorZeroError::Other {
-                                source: e.into(),
-                            })
+                            ClientBuilderError::ConfigParsing {
+                                error: TensorZeroError::Other { source: e.into() },
+                                glob,
+                            }
                         })?,
                     )
                 } else {

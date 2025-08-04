@@ -411,6 +411,7 @@ impl MetricConfigLevel {
 /// A glob pattern together with the config file paths it resolves it
 /// We eagerly resolve the glob pattern so that we can include all of the matched
 /// config file paths in error messages.
+#[derive(Debug)]
 pub struct ConfigFileGlob {
     pub glob: String,
     pub paths: Vec<PathBuf>,
