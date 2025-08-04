@@ -36,7 +36,7 @@ import OutputRust from "~/components/inference/NewOutputRust";
 import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
 import { safeParseInt } from "~/utils/common";
-import { getExtraInferenceOptions } from "~/utils/env.server";
+import { getExtraInferenceOptions } from "~/utils/feature_flags";
 
 const DEFAULT_LIMIT = 5;
 
