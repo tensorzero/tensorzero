@@ -367,7 +367,11 @@ export function prepareInferenceActionRequest(
     };
   } else {
     // For other sources, the input is already a DisplayInput
-    if (args.source === "inference" && args.resource.extra_body) {
+    if (
+      args.source === "inference" &&
+      args.resource.extra_body &&
+      args.resource.extra_body.length > 0
+    ) {
       throw new Error("Extra body is not supported for inference in UI.");
     }
     const clientInput = resolvedInputToClientInput(args.resource.input);

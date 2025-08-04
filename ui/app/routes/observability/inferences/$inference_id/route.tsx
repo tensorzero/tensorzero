@@ -342,6 +342,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       source: variantSource,
       variant,
     });
+    console.log(request);
     // TODO: handle JSON.stringify error
     submit({ data: JSON.stringify(request) });
   };
