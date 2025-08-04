@@ -2268,3 +2268,9 @@ async fn test_glob_relative_path() {
         "My second template"
     );
 }
+
+#[tokio::test]
+async fn test_invalid_glob() {
+    let err = ConfigFileGlob::new("/fake/tensorzero-config-test/path/to/fake.toml".to_string())
+        .unwrap_err();
+}
