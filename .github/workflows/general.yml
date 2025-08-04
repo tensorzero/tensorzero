@@ -322,17 +322,6 @@ jobs:
         run: |
           uv run pyright
 
-      - name: Install wasm-pack
-        run: npm install -g wasm-pack
-
-      - name: Build minijinja WASM bindings
-        working-directory: ui/app/utils/minijinja
-        run: wasm-pack build --dev --features console_error_panic_hook
-
-      - name: Run minijinja WASM tests
-        working-directory: ui/app/utils/minijinja
-        run: wasm-pack test --node --features console_error_panic_hook
-
       - name: Build npm workspace
         run: pnpm -r build
 

@@ -52,6 +52,14 @@ pub fn set_unstable_error_json(unstable_error_json: bool) -> Result<(), Error> {
     })
 }
 
+pub fn warn_discarded_cache_write(raw_response: &str) {
+    if *DEBUG.get().unwrap_or(&false) {
+        tracing::warn!("Skipping cache write due to invalid output:\nRaw response: {raw_response}");
+    } else {
+        tracing::warn!("Skipping cache write due to invalid output");
+    }
+}
+
 pub fn warn_discarded_thought_block(provider_type: &str, thought: &Thought) {
     if *DEBUG.get().unwrap_or(&false) {
         tracing::warn!("Provider type `{provider_type}` does not support input thought blocks, discarding: {thought:?}");
