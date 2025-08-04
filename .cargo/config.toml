@@ -44,10 +44,11 @@ build-e2e = "build --bin gateway --features e2e_tests"
 run-e2e = "run --bin gateway --features e2e_tests -- --config-file tensorzero-core/tests/e2e/tensorzero.toml"
 watch-e2e = "watch -x run-e2e"
 
-# Export Typescript bindings for TensorZero
 tsbuild = [
     "test",
     "export_bindings",
     "-p",
-    "tensorzero-core"
-]
+    "tensorzero-core",
+    "-p",
+    "tensorzero",
+] # Export Typescript bindings for TensorZero
