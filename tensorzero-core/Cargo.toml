@@ -125,6 +125,8 @@ mime_guess = "2.0.5"
 indexmap = "2.10.0"
 base64 = "0.22.1"
 thiserror = "2.0.12"
+enum-map = "2.7.3"
+tokio-util = "0.7.15"
 tempfile = "3.20.0"
 
 

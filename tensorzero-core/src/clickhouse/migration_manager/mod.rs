@@ -3,7 +3,7 @@ pub mod migrations;
 
 use std::time::{Duration, Instant};
 
-use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails};
 use crate::serde_util::deserialize_u64;
@@ -136,8 +136,8 @@ async fn insert_migration_record(
     let migration_id = migration.migration_num()?;
     let migration_name = migration.name();
     clickhouse
-        .write(
-            &[MigrationRecordDatabaseInsert {
+        .write_non_batched(
+            Rows::Unserialized(&[MigrationRecordDatabaseInsert {
                 migration_id,
                 migration_name,
                 gateway_version: TENSORZERO_VERSION.to_string(),
@@ -146,7 +146,7 @@ async fn insert_migration_record(
                     .to_string(),
                 execution_time_ms: execution_time.as_millis() as u64,
                 applied_at: None,
-            }],
+            }]),
             TableName::TensorZeroMigration,
         )
         .await?;

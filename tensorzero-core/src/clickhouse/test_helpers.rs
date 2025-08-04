@@ -1,4 +1,5 @@
 #![expect(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
+use crate::config_parser::BatchWritesConfig;
 use crate::endpoints::datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint};
 use crate::endpoints::dynamic_evaluation_run::{
     DynamicEvaluationRunEpisodeRow, DynamicEvaluationRunRow,
@@ -21,7 +22,7 @@ pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
     let clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
     let start = std::time::Instant::now();
     println!("Connecting to ClickHouse");
-    let res = ClickHouseConnectionInfo::new(clickhouse_url.as_ref())
+    let res = ClickHouseConnectionInfo::new(clickhouse_url.as_ref(), BatchWritesConfig::default())
         .await
         .expect("Failed to connect to ClickHouse");
     println!("Connected to ClickHouse in {:?}", start.elapsed());
@@ -123,6 +124,33 @@ pub async fn select_json_dataset_clickhouse(
     }
 
     Some(json_rows)
+}
+
+pub async fn select_chat_inferences_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    episode_id: Uuid,
+) -> Option<Vec<Value>> {
+    #[cfg(feature = "e2e_tests")]
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query =
+        format!("SELECT * FROM ChatInference WHERE episode_id = '{episode_id}' FORMAT JSONEachRow");
+
+    let text = clickhouse_connection_info
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let json_rows: Vec<Value> = text
+        .response
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+
+    if json_rows.is_empty() {
+        None
+    } else {
+        Some(json_rows)
+    }
 }
 
 pub async fn select_chat_inference_clickhouse(

@@ -31,6 +31,7 @@ git2 = { workspace = true }
 serde_path_to_error = { workspace = true }
 tensorzero-derive = { path = "../../internal/tensorzero-derive" }
 mime = { workspace = true }
+tokio-util = "0.7.15"
 
 [lints]
 workspace = true

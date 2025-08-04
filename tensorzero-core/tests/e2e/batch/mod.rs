@@ -103,7 +103,7 @@ async fn test_get_batch_request() {
     };
     let rows = vec![row];
     clickhouse
-        .write(&rows, TableName::BatchModelInference)
+        .write_batched(&rows, TableName::BatchModelInference)
         .await
         .unwrap();
     // Sleep a bit to ensure the write has propagated
@@ -261,7 +261,7 @@ async fn write_2_batch_model_inference_rows(
     };
     let rows = vec![row1, row2];
     clickhouse
-        .write(&rows, TableName::BatchModelInference)
+        .write_batched(&rows, TableName::BatchModelInference)
         .await
         .unwrap();
     rows

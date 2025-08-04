@@ -1,3 +1,5 @@
+use std::{collections::HashSet, sync::Arc};
+
 use crate::{
     otel::{
         attrs_to_map, build_span_map, install_capturing_otel_exporter, CapturingOtelExporter,
@@ -17,6 +19,7 @@ use tensorzero::{
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::{
+    clickhouse::test_helpers::select_chat_inferences_clickhouse,
     endpoints::inference::ChatInferenceResponse,
     inference::types::{
         ContentBlock, ContentBlockOutput, File, RequestMessage, ResolvedInput,
@@ -29,6 +32,7 @@ use tensorzero_core::{
     },
     tool::{ToolCall, ToolCallInput},
 };
+use tokio::task::JoinSet;
 use tracing_test::traced_test;
 use url::Url;
 use uuid::Uuid;
@@ -3781,4 +3785,74 @@ async fn test_multiple_text_blocks_in_message() {
         input.messages[0].content[1],
         ResolvedInputMessageContent::Text { .. }
     ));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_large_write_batching() {
+    let client = Arc::new(
+        make_embedded_gateway_with_config(
+            "
+    [gateway.observability]
+    enabled = true
+    batch_writes = { enabled = true }
+    ",
+        )
+        .await,
+    );
+    let mut join_set = JoinSet::new();
+    let episode_id = Uuid::now_v7();
+    let inference_count = 1000;
+    for _ in 0..inference_count {
+        let client = client.clone();
+        join_set.spawn(async move {
+            client
+                .inference(ClientInferenceParams {
+                    episode_id: Some(episode_id),
+                    model_name: Some("dummy::my-model".to_string()),
+                    input: ClientInput {
+                        system: None,
+                        messages: vec![ClientInputMessage {
+                            role: Role::User,
+                            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                                text: "What is the name of the capital city of Japan?".to_string(),
+                            })],
+                        }],
+                    },
+                    ..Default::default()
+                })
+                .await
+                .unwrap()
+        });
+    }
+    let mut expected_inference_ids = HashSet::new();
+    while let Some(result) = join_set.join_next().await {
+        let result = result.unwrap();
+        let InferenceOutput::NonStreaming(response) = result else {
+            panic!("Expected non-streaming response");
+        };
+        expected_inference_ids.insert(response.inference_id());
+    }
+    assert_eq!(expected_inference_ids.len(), inference_count);
+
+    assert_eq!(Arc::strong_count(&client), 1);
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    let clickhouse_client = get_clickhouse().await;
+    let inferences = select_chat_inferences_clickhouse(&clickhouse_client, episode_id)
+        .await
+        .unwrap();
+    let actual_inference_ids = inferences
+        .iter()
+        .map(|i| {
+            i.get("id")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .parse::<Uuid>()
+                .unwrap()
+        })
+        .collect::<HashSet<_>>();
+
+    assert_eq!(actual_inference_ids.len(), inference_count);
+    assert_eq!(actual_inference_ids, expected_inference_ids);
 }

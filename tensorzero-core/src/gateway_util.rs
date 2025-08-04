@@ -9,6 +9,7 @@ use axum::Router;
 use reqwest::{Client, Proxy};
 use serde::de::DeserializeOwned;
 use tokio::sync::oneshot::Sender;
+use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 use crate::clickhouse::migration_manager;
@@ -37,7 +38,15 @@ use crate::error::{Error, ErrorDetails};
 #[expect(clippy::manual_non_exhaustive)]
 pub struct GatewayHandle {
     pub app_state: AppStateData,
+    pub cancel_token: CancellationToken,
     _private: (),
+}
+
+impl Drop for GatewayHandle {
+    fn drop(&mut self) {
+        tracing::info!("Shutting down gateway");
+        self.cancel_token.cancel();
+    }
 }
 
 /// State for the API
@@ -73,16 +82,18 @@ impl GatewayHandle {
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let http_client = setup_http_client()?;
+        Ok(Self::new_with_clickhouse_and_http_client(
+            config,
+            clickhouse_connection_info,
+            http_client,
+        ))
+    }
 
-        Ok(Self {
-            app_state: AppStateData {
-                config,
-                http_client,
-                clickhouse_connection_info,
-                _private: (),
-            },
-            _private: (),
-        })
+    #[cfg(test)]
+    pub fn new_unit_test_data(config: Arc<Config>, clickhouse_healthy: bool) -> Self {
+        let http_client = reqwest::Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_mock(clickhouse_healthy);
+        Self::new_with_clickhouse_and_http_client(config, clickhouse_connection_info, http_client)
     }
 
     pub fn new_with_clickhouse_and_http_client(
@@ -97,21 +108,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 _private: (),
             },
-            _private: (),
-        }
-    }
-
-    #[cfg(test)]
-    pub fn new_unit_test_data(config: Arc<Config>, clickhouse_healthy: bool) -> Self {
-        let http_client = reqwest::Client::new();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_mock(clickhouse_healthy);
-        Self {
-            app_state: AppStateData {
-                config,
-                http_client,
-                clickhouse_connection_info,
-                _private: (),
-            },
+            cancel_token: CancellationToken::new(),
             _private: (),
         }
     }
@@ -137,7 +134,11 @@ pub async fn setup_clickhouse(
         }
         // Observability enabled and ClickHouse URL provided
         (Some(true), Some(clickhouse_url)) => {
-            ClickHouseConnectionInfo::new(&clickhouse_url).await?
+            ClickHouseConnectionInfo::new(
+                &clickhouse_url,
+                config.gateway.observability.batch_writes.clone(),
+            )
+            .await?
         }
         // Observability default and no ClickHouse URL
         (None, None) => {
@@ -150,7 +151,13 @@ pub async fn setup_clickhouse(
             ClickHouseConnectionInfo::new_disabled()
         }
         // Observability default and ClickHouse URL provided
-        (None, Some(clickhouse_url)) => ClickHouseConnectionInfo::new(&clickhouse_url).await?,
+        (None, Some(clickhouse_url)) => {
+            ClickHouseConnectionInfo::new(
+                &clickhouse_url,
+                config.gateway.observability.batch_writes.clone(),
+            )
+            .await?
+        }
     };
 
     // Run ClickHouse migrations (if any) if we have a production ClickHouse connection
@@ -312,6 +319,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(false),
                 async_writes: false,
+                batch_writes: Default::default(),
             },
             bind_address: None,
             debug: false,
@@ -341,6 +349,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: None,
                 async_writes: false,
+                batch_writes: Default::default(),
             },
             unstable_error_json: false,
             ..Default::default()
@@ -367,6 +376,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(true),
                 async_writes: false,
+                batch_writes: Default::default(),
             },
             bind_address: None,
             debug: false,
@@ -392,6 +402,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(true),
                 async_writes: false,
+                batch_writes: Default::default(),
             },
             bind_address: None,
             debug: false,
@@ -419,6 +430,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(true),
                 async_writes: false,
+                batch_writes: Default::default(),
             },
             bind_address: None,
             debug: false,

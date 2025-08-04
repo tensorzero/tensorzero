@@ -851,7 +851,7 @@ async fn write_inference(
         // Write the model responses to the ModelInference table
         for response in model_responses {
             let _ = clickhouse_connection_info
-                .write(&[response], TableName::ModelInference)
+                .write_batched(&[response], TableName::ModelInference)
                 .await;
         }
         // Write the inference to the Inference table
@@ -860,14 +860,14 @@ async fn write_inference(
                 let chat_inference =
                     ChatInferenceDatabaseInsert::new(result, input.clone(), metadata);
                 let _ = clickhouse_connection_info
-                    .write(&[chat_inference], TableName::ChatInference)
+                    .write_batched(&[chat_inference], TableName::ChatInference)
                     .await;
             }
             InferenceResult::Json(result) => {
                 let json_inference =
                     JsonInferenceDatabaseInsert::new(result, input.clone(), metadata);
                 let _ = clickhouse_connection_info
-                    .write(&[json_inference], TableName::JsonInference)
+                    .write_batched(&[json_inference], TableName::JsonInference)
                     .await;
             }
         }

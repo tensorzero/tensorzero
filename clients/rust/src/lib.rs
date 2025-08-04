@@ -31,6 +31,7 @@ use tensorzero_core::{
 use thiserror::Error;
 use tokio::{sync::Mutex, time::error::Elapsed};
 use tokio_stream::StreamExt;
+use tokio_util::sync::CancellationToken;
 use url::Url;
 use uuid::Uuid;
 
@@ -288,7 +289,7 @@ impl ClientBuilder {
                                 source: e.into(),
                             })
                         })?;
-                setup_howdy(clickhouse_connection_info.clone());
+                setup_howdy(clickhouse_connection_info.clone(), CancellationToken::new());
                 let http_client = if let Some(http_client) = self.http_client {
                     http_client
                 } else {
