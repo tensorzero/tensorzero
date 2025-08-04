@@ -37,7 +37,6 @@ import {
   getNewVariantName,
   getVariants,
   preparePlaygroundInferenceRequest,
-  SelectedVariantsSchema,
   type PlaygroundVariantInfo,
 } from "./utils";
 import { BuiltinVariantFilter } from "./BuiltInVariantSelector";
@@ -107,7 +106,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     });
   }
   const datasetName = searchParams.get("datasetName");
+  console.log("getting variants");
   const variants = getVariants(searchParams);
+  console.log("got variants");
 
   let datapoints, totalDatapoints;
   try {
@@ -190,7 +191,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       }
     }
   }
-
+  console.log("Loader worked");
   return {
     functionName,
     datasetName,
@@ -218,6 +219,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
 
     const nextSearchParams = new URLSearchParams(navigation.location?.search);
     // TODO: this is wrong
+    console.log("AAAAAAAA");
     const currentVariants = getVariants(currentSearchParams);
     const currentVariantNames = new Set<string>(
       currentVariants.map((variant) => variant.name),
@@ -235,17 +237,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
       loadingVariants,
     };
   }, [navigation, currentSearchParams]);
-  let variants: PlaygroundVariantInfo[] = [];
-  const result = SelectedVariantsSchema.safeParse(
-    searchParams.get("variants") ?? [],
-  );
-  if (!result.success) {
-    const errorDetails = result.error.issues
-      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
-      .join("; ");
-    throw data(`Invalid variants parameter: ${errorDetails}`, { status: 400 });
-  }
-  variants = result.data;
+  const variants = getVariants(searchParams);
 
   const {
     functionName,

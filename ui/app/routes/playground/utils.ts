@@ -72,9 +72,18 @@ export const SelectedVariantsSchema = z.array(PlaygroundVariantInfoSchema);
 type SelectedVariants = z.infer<typeof SelectedVariantsSchema>;
 
 export function getVariants(searchParams: URLSearchParams): SelectedVariants {
-  const result = SelectedVariantsSchema.safeParse(
-    searchParams.get("variants") ?? [],
-  );
+  const variants = searchParams.get("variants") ?? "[]";
+  let parsedVariants;
+  try {
+    parsedVariants = JSON.parse(variants);
+  } catch (error) {
+    throw data(`Variant parameter must be valid JSON: ${error}`, {
+      status: 400,
+    });
+  }
+
+  console.log("getting variants", parsedVariants);
+  const result = SelectedVariantsSchema.safeParse(parsedVariants);
 
   if (!result.success) {
     const errorDetails = result.error.issues
