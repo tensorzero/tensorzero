@@ -50,7 +50,6 @@ export class TensorZeroClient {
   }
 
   async inference(params: ClientInferenceParams): Promise<InferenceResponse> {
-    console.log("Inference request received:", params);
     const paramsString = safeStringify(params);
     const responseString = await this.nativeClient.inference(paramsString);
     return JSON.parse(responseString) as InferenceResponse;

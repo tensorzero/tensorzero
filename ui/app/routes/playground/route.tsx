@@ -41,6 +41,7 @@ import { EditButton } from "~/components/utils/EditButton";
 import { VariantEditor } from "~/components/function/variant/VariantEditor";
 import { logger } from "~/utils/logger";
 import { isEditedVariantName } from "./utils";
+import { getExtraInferenceOptions } from "~/utils/env.server";
 
 const DEFAULT_LIMIT = 5;
 
@@ -166,11 +167,13 @@ export async function loader({ request }: Route.LoaderArgs) {
           : undefined,
       output_schema:
         datapoint?.type === "json" ? datapoint.output_schema : null,
+      // The default is write_only but we do off in the playground
       cache_options: {
         max_age_s: null,
         enabled: "off",
       },
       dryrun: true,
+      ...getExtraInferenceOptions(),
     });
     const nativeClient = await getNativeTensorZeroClient();
     const inferenceResponse = await nativeClient.inference(request);
@@ -648,6 +651,7 @@ function useClientInferences(
               : undefined,
           output_schema:
             datapoint?.type === "json" ? datapoint.output_schema : null,
+          // The default is write_only but we do off in the playground
           cache_options: {
             max_age_s: null,
             enabled: "off",

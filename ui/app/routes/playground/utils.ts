@@ -30,9 +30,7 @@ export function refreshClientInference(
     variantPin = undefined;
     editedVariantInfo = editedVariants.get(variantName);
     if (!editedVariantInfo) {
-      throw new Error(
-        `Variant ${variantName} not found in editedVariants Map`,
-      );
+      throw new Error(`Variant ${variantName} not found in editedVariants Map`);
     }
   } else {
     variantPin = variantName;

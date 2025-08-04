@@ -7,7 +7,11 @@ import { Button } from "~/components/ui/button";
 import { CodeEditor } from "~/components/ui/code-editor";
 import { refreshClientInference } from "./utils";
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import type { Datapoint, InferenceResponse, VariantInfo } from "tensorzero-node";
+import type {
+  Datapoint,
+  InferenceResponse,
+  VariantInfo,
+} from "tensorzero-node";
 
 interface DatapointPlaygroundOutputProps {
   datapoint: Datapoint;

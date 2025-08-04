@@ -211,9 +211,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [output, setOutput] = useState<
     ContentBlockChatOutput[] | JsonInferenceOutput | null
   >(datapoint.output ?? null);
-  // const [output, setOutput] = useState<typeof datapoint.output>(
-  //   datapoint.output,
-  // );
   const [isEditing, setIsEditing] = useState(false);
 
   const canSave = useMemo(() => {

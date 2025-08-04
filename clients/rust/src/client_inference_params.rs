@@ -70,6 +70,14 @@ pub struct ClientInferenceParams {
     /// if the fuser/judge model failed
     #[serde(default)]
     pub include_original_response: bool,
+    // NOTE: Currently, ts_rs does not handle #[serde(transparent)] correctly,
+    // so we disable the type generation for the extra_body and extra_headers fields.
+    // I tried doing a direct #[ts(type = "InferenceExtraBody[]")] and
+    // a #[ts(as = "Vec<InferenceExtraBody>")] and these would generate the types but then
+    // type checking would fail because the ClientInferenceParams struct would not be
+    // generated with the correct import.
+    //
+    // Not sure if this is solvable with the existing crate.
     #[serde(default)]
     #[ts(skip)]
     pub extra_body: UnfilteredInferenceExtraBody,
