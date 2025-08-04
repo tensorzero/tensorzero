@@ -235,6 +235,36 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
 `),
     ).toBeVisible();
   });
+
+  test("should show demonstration metric option for write_haiku function", async ({
+    page,
+  }) => {
+    await page.goto("/optimization/supervised-fine-tuning");
+
+    // Select write_haiku function
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Select a function" })
+      .click();
+    await page.getByRole("option", { name: "write_haiku" }).click();
+
+    // Open metric selector
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Select a metric" })
+      .click();
+
+    // Verify demonstration option is visible and can be selected
+    await expect(
+      page.getByText("demonstration", { exact: true }),
+    ).toBeVisible();
+    await page.getByText("demonstration", { exact: true }).click();
+
+    // Verify the metric selection is shown in the form
+    await expect(
+      page.getByRole("combobox").filter({ hasText: "demonstration" }),
+    ).toBeVisible();
+  });
 });
 
 test.describe("Error handling", () => {

@@ -333,6 +333,11 @@ impl InferenceProvider for DummyProvider {
                 arguments: serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
                 id: "0".to_string(),
             })],
+            "invalid_tool_arguments" => vec![ContentBlockOutput::ToolCall(ToolCall {
+                name: "get_temperature".to_string(),
+                arguments: "Not valid 'JSON'".to_string(),
+                id: "0".to_string(),
+            })],
             "reasoner" => vec![
                 ContentBlockOutput::Thought(Thought {
                     text: Some("hmmm".to_string()),
