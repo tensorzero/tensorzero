@@ -3,13 +3,11 @@ from datetime import datetime
 
 import dotenv
 from tensorzero.agents import (
-    TensorZeroAgent,
-    TensorZeroRunner,
     with_tensorzero_agents_patched,
 )
+from tools import answer_question, load_wikipedia_page, search_wikipedia, think
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-from config.generated.function_identifiers import FunctionIdentifierEnum as Id
 
 dotenv.load_dotenv()
 
@@ -29,22 +27,34 @@ async def ask_question(question: str, verbose: bool = False) -> str:
     Returns:
         The agent's answer
     """
-    agent = TensorZeroAgent.from_identifier(
-        Id.MULTI_HOP_RAG_AGENT_OPENAI_V1, generated_pkg="config.generated"
+    from agents import Agent, ModelSettings, RunConfig, Runner
+    from config.generated.schemas.system_schema_model import Model as SystemModel
+    from config.generated.schemas.user_schema_model import Model as UserModel
+
+    agent = Agent(
+        name="Multi-hop RAG Agent",
+        # This is the function name from tensorzero.toml
+        model="tensorzero::function_name::multi_hop_rag_agent_openai_v1",
+        tools=[think, search_wikipedia, load_wikipedia_page, answer_question],
+        model_settings=ModelSettings(extra_body={"tensorzero::episode_id": None}),
     )
 
     if verbose:
         print(f"\n🤖 Asking agent: {question}")
 
     # Use the Agents SDK Runner - this handles the entire tool loop automatically
-    runner = TensorZeroRunner.for_identifier(
-        Id.MULTI_HOP_RAG_AGENT_OPENAI_V1, generated_pkg="config.generated"
-    )
-    result = await runner.run(
+    system_model = SystemModel(date=datetime.now().strftime("%Y-%m-%d"))
+    user_model = UserModel(question=question)
+    result = await Runner.run(
         agent,
         # TODO:The SDK requires a user message. Maybe it's worth inheriting from the base Runner class to clean up the interface a bit
         "",
-        system={"date": datetime.now().strftime("%Y-%m-%d"), "question": question},
+        run_config=RunConfig(
+            model_settings=ModelSettings(
+                metadata=system_model.to_args_dict() | user_model.to_args_dict()
+            )
+        ),
+        max_turns=15,
     )
     # TODO: We need a way of clearing the episode_id after each run. Maybe another advantage of inheriting from the base Runner class
     if verbose:

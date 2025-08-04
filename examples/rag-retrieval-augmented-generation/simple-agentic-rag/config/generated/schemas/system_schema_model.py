@@ -3,11 +3,22 @@
 #   timestamp: 2025-08-04T01:35:51+00:00
 
 from __future__ import annotations
+
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict
 
 
 class Model(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     date: str
+
+    def to_args_dict(self) -> dict[str, Any]:
+        raw_dict = self.model_dump()
+        return {
+            f"tensorzero::arguments::{k}": v
+            for k, v in raw_dict.items()
+            if k != "model_config"
+        }
