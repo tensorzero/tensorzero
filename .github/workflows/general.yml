@@ -368,7 +368,8 @@ jobs:
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     strategy:
       matrix:
-        replicated: [true, false]
+        # Only include replicated: true when running in merge queue
+        replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
         clickhouse_version:
           - tag: "24.12-alpine"
             prefix: "24.12"
