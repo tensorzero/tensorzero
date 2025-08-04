@@ -1,5 +1,6 @@
 #![expect(clippy::print_stdout)]
 use std::io::Cursor;
+use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr};
 
 use aws_config::Region;
@@ -10334,13 +10335,16 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
+    // Include randomness in the prompt to force a cache miss for the first request
+    let randomness = Uuid::now_v7();
+
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
         "episode_id": episode_id,
         "input":
             {
-               "system": {"assistant_name": "Dr. Mehta"},
+               "system": {"assistant_name": format!("Dr. Mehta: {randomness}")},
                "messages": [
                 {
                     "role": "user",
@@ -10349,6 +10353,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
+        "cache_options": {"enabled": "on", "lookback_s": 10},
         "params": {
             "chat_completion": {
                 "max_tokens": 1
@@ -10374,7 +10379,14 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     println!("API response: {response_json:#?}");
 
-    check_short_inference_response(response_json, Some(episode_id), &provider, false).await;
+    check_short_inference_response(
+        randomness,
+        response_json,
+        Some(episode_id),
+        &provider,
+        false,
+    )
+    .await;
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     let episode_id = Uuid::now_v7();
@@ -10416,10 +10428,12 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     println!("API response: {response_json:#?}");
 
-    check_short_inference_response(response_json, Some(episode_id), &provider, true).await;
+    check_short_inference_response(randomness, response_json, Some(episode_id), &provider, true)
+        .await;
 }
 
 async fn check_short_inference_response(
+    randomness: Uuid,
     response_json: Value,
     episode_id: Option<Uuid>,
     provider: &E2ETestProvider,
@@ -10493,7 +10507,7 @@ async fn check_short_inference_response(
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input = json!({
-        "system": {"assistant_name": "Dr. Mehta"},
+        "system": {"assistant_name": format!("Dr. Mehta: {randomness}")},
         "messages": [
             {
                 "role": "user",
@@ -10576,7 +10590,7 @@ async fn check_short_inference_response(
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
-        "You are a helpful and friendly assistant named Dr. Mehta"
+        format!("You are a helpful and friendly assistant named Dr. Mehta: {randomness}")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
@@ -10610,6 +10624,32 @@ async fn check_short_inference_response(
         result.get("cached").unwrap().as_bool().unwrap(),
         should_be_cached
     );
+
+    // Check that our cache entry was only written once
+    if should_be_cached {
+        // Allow some time for an incorrect second cache write to happen
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        // Count the number of cache entries for this raw_request
+        // Note that this can have false negatives (ClickHouse might decide to merge parts
+        // immediately after a duplicate insert)
+        let count = clickhouse
+            .run_query_synchronous(
+                "SELECT COUNT(*) FROM ModelInferenceCache WHERE raw_request = {raw_request:String} "
+                    .to_string(),
+                &[("raw_request", result["raw_request"].as_str().unwrap())]
+                    .into_iter()
+                    .collect(),
+            )
+            .await
+            .unwrap()
+            .response
+            .trim()
+            .parse::<u64>()
+            .unwrap();
+
+        assert_eq!(count, 1);
+    }
 }
 
 pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(

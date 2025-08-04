@@ -7,7 +7,7 @@ import type {
   ClientInferenceParams,
 } from "tensorzero-node";
 import { prepareInferenceActionRequest } from "../api/tensorzero/inference.utils";
-import { getExtraInferenceOptions } from "~/utils/env.server";
+import { getExtraInferenceOptions } from "~/utils/feature_flags";
 import { data } from "react-router";
 
 export function isEditedVariantName(variantName: string): boolean {
