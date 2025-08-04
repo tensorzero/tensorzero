@@ -422,7 +422,7 @@ impl ModelConfig {
                     Ok(response) => {
                         // Perform the cache write outside of the `non_streaming_total_timeout` timeout future,
                         // (in case we ever add a blocking cache write option)
-                        if clients.cache_options.enabled.write() {
+                        if !response.cached && clients.cache_options.enabled.write() {
                             let _ = start_cache_write(
                                 clients.clickhouse_connection_info,
                                 cache_key,
