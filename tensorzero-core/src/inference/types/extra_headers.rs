@@ -41,12 +41,14 @@ pub struct UnfilteredInferenceExtraHeaders {
 }
 
 impl UnfilteredInferenceExtraHeaders {
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.headers.is_empty()
     }
 
     /// Filter the 'InferenceExtraHeader' options by variant name
     /// If the variant name is `None`, then all variant-specific extra header options are removed
+    #[must_use]
     pub fn filter(self, variant_name: &str) -> FilteredInferenceExtraHeaders {
         FilteredInferenceExtraHeaders {
             data: self
@@ -90,6 +92,7 @@ pub enum InferenceExtraHeader {
 }
 
 impl InferenceExtraHeader {
+    #[must_use]
     pub fn should_apply_variant(&self, variant_name: &str) -> bool {
         match self {
             InferenceExtraHeader::Provider { .. } => true,

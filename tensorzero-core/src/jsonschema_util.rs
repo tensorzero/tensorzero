@@ -22,6 +22,7 @@ impl<'a> JsonSchemaRef<'a> {
         }
     }
 
+    #[must_use]
     pub fn value(&'a self) -> &'a Value {
         match self {
             JsonSchemaRef::Static(schema) => schema.value,
@@ -143,6 +144,7 @@ impl PartialEq for DynamicJSONSchema {
 }
 
 impl DynamicJSONSchema {
+    #[must_use]
     pub fn new(schema: Value) -> Self {
         let compiled_schema = Arc::new(OnceCell::new());
         let this = Self {

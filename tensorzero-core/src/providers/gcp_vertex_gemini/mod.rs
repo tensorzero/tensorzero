@@ -419,6 +419,7 @@ pub fn parse_shorthand_url<'a>(
 // The global endpoint uses 'aiplatform.googleapis.com', while every other location
 // location uses '{location}-aiplatform.googleapis.com':
 // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations
+#[must_use]
 pub fn location_subdomain_prefix(location: &str) -> String {
     if location == "global" {
         String::new()
@@ -553,14 +554,17 @@ impl GCPVertexGeminiProvider {
         })
     }
 
+    #[must_use]
     pub fn model_id(&self) -> Option<&str> {
         self.model_id.as_deref()
     }
 
+    #[must_use]
     pub fn endpoint_id(&self) -> Option<&str> {
         self.endpoint_id.as_deref()
     }
 
+    #[must_use]
     pub fn model_or_endpoint_id(&self) -> &str {
         &self.model_or_endpoint_id
     }
@@ -623,6 +627,7 @@ impl GCPVertexGeminiProvider {
     }
 }
 
+#[must_use]
 pub fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::PathFromEnv("GCP_VERTEX_CREDENTIALS_PATH".to_string())
 }
