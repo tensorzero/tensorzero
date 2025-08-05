@@ -1765,6 +1765,11 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
 
 #[traced_test]
 pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProvider) {
+    // Bedrock rejects input thoughts for this model
+    if provider.model_name == "claude-3-haiku-20240307-aws-bedrock" {
+        return;
+    }
+
     let client = make_embedded_gateway().await;
     client
         .inference(ClientInferenceParams {
@@ -1795,7 +1800,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
         .await
         .unwrap();
 
-    if ["anthropic"].contains(&provider.model_provider_name.as_str()) {
+    if ["anthropic", "aws-bedrock"].contains(&provider.model_provider_name.as_str()) {
         assert!(
             !logs_contain("does not support input thought blocks"),
             "Should not have warned about dropping thought blocks"

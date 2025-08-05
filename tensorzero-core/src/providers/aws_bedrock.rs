@@ -188,7 +188,7 @@ impl InferenceProvider for AWSBedrockProvider {
                         "Error sending request to AWS Bedrock: {:?}",
                         DisplayErrorContext(&e)
                     ),
-                    raw_request: None,
+                    raw_request: get_raw_request().ok(),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
