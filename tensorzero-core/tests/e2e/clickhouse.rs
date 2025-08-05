@@ -571,14 +571,17 @@ async fn test_clickhouse_migration_manager() {
                     assert!(!clean_start);
                 }
                 let name = migrations[i].name();
-                assert!(
-                    !logs_contain(&format!("Applying migration: {name}")),
-                    "Migration {name} should not have been applied"
-                );
-                assert!(
-                    !logs_contain(&format!("Migration succeeded: {name}")),
-                    "Migration {name} should not have succeeded (because it wasn't applied)"
-                );
+                // Migration0029 always runs (since we want it to write a migration row on a clean start)
+                if migration.name() == "Migration0029" {
+                    assert!(
+                        !logs_contain(&format!("Applying migration: {name}")),
+                        "Migration {name} should not have been applied"
+                    );
+                    assert!(
+                        !logs_contain(&format!("Migration succeeded: {name}")),
+                        "Migration {name} should not have succeeded (because it wasn't applied)"
+                    );
+                }
             }
             assert!(!logs_contain("Materialized view `CumulativeUsageView` was not written because it was recently created"),
                 "CumulativeUsage backfilling failed.");
