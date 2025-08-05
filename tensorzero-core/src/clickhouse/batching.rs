@@ -113,9 +113,8 @@ impl BatchSender {
         };
         let channel = &channels[table_name];
         for row in rows {
-            // TODO - what should we do if the channel is closed?
             if let Err(e) = channel.send(row) {
-                tracing::error!("Error sending row to batch channel: {e}");
+                tracing::error!("Error sending row to batch channel: {e}. {IMPOSSIBLE_ERROR_MESSAGE}");
             }
         }
         Ok(())
