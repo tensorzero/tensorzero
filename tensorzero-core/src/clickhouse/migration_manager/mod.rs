@@ -104,7 +104,7 @@ pub fn make_all_migrations<'a>(
 /// Returns `true` if our `TensorZeroMigration` table contains exactly `all_migrations`.
 /// If the database or `TensorZeroMigration` table does not exist, or it contains either more
 /// or fewer distinct migration ids than we expect, than we return `false` to be conservative.
-/// Note that we allow multiple rows to exist per migration ids (since the migrations
+/// Note that we allow multiple rows to exist per migration id (since the migrations
 /// might have been run concurrently).
 pub async fn should_skip_migrations(
     clickhouse: &ClickHouseConnectionInfo,
@@ -156,11 +156,14 @@ pub async fn should_skip_migrations(
     migration_ids == expected_migration_ids
 }
 
-pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
+pub async fn run(
+    clickhouse: &ClickHouseConnectionInfo,
+    skip_completed_migrations: bool,
+) -> Result<(), Error> {
     clickhouse.health().await?;
 
     let migrations: Vec<Box<dyn Migration + Send + Sync>> = make_all_migrations(clickhouse);
-    if should_skip_migrations(clickhouse, &migrations).await {
+    if skip_completed_migrations && should_skip_migrations(clickhouse, &migrations).await {
         tracing::info!("All migrations have already been applied");
         return Ok(());
     }

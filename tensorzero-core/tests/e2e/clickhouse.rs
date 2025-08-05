@@ -750,13 +750,13 @@ async fn test_bad_clickhouse_write() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clean_clickhouse_start() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    migration_manager::run(&clickhouse).await.unwrap();
+    migration_manager::run(&clickhouse, false).await.unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_deployment_id_oldest() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    migration_manager::run(&clickhouse).await.unwrap();
+    migration_manager::run(&clickhouse, false).await.unwrap();
     // Add a row to the DeploymentID table and make sure that it isn't returned
     let new_deployment_id = "foo";
     clickhouse
@@ -790,7 +790,9 @@ async fn test_concurrent_clickhouse_migrations() {
     for _ in 0..num_concurrent_starts {
         let clickhouse_clone = clickhouse.clone();
         handles.push(tokio::spawn(async move {
-            migration_manager::run(&clickhouse_clone).await.unwrap();
+            migration_manager::run(&clickhouse_clone, false)
+                .await
+                .unwrap();
         }));
     }
     for handle in handles {
@@ -974,12 +976,12 @@ async fn test_migration_0013_data_no_table() {
 #[traced_test]
 async fn test_run_migrations_clean() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    migration_manager::run(&clickhouse).await.unwrap();
+    migration_manager::run(&clickhouse, false).await.unwrap();
     assert!(logs_contain("Database not found, assuming clean start"));
     assert!(!logs_contain("All migrations have already been applied"));
 
     // Run again, and we should skip all migrations
-    migration_manager::run(&clickhouse).await.unwrap();
+    migration_manager::run(&clickhouse, false).await.unwrap();
     assert!(logs_contain("All migrations have already been applied"));
 }
 
@@ -1013,7 +1015,7 @@ async fn test_run_migrations_fake_row() {
         }
     }
 
-    migration_manager::run(&clickhouse).await.unwrap();
+    migration_manager::run(&clickhouse, true).await.unwrap();
 
     // Run our fake migration to insert an unexpected row into `TensorZeroMigration`
     // A subsequent normal run of migrations should *not* skip running migrations,
@@ -1025,7 +1027,7 @@ async fn test_run_migrations_fake_row() {
     let migrations = migration_manager::make_all_migrations(&clickhouse);
     assert!(!migration_manager::should_skip_migrations(&clickhouse, &migrations).await);
 
-    migration_manager::run(&clickhouse).await.unwrap();
+    migration_manager::run(&clickhouse, true).await.unwrap();
     assert!(!logs_contain("already been applied"));
 
     let rows = migration_manager::get_all_migration_records(&clickhouse)

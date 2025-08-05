@@ -24,6 +24,8 @@ impl Migration for Migration0029<'_> {
         // on a clean start, and write out the corresponding `TensorZeroMigration` record.
         // This ensures that running from a clean start runs every migration, which allows
         // us to skip running all migrations on subsequent runs.
+        // Applying this migration from a clean start doesn't do anything, since the views
+        // don't exist.
         Ok(true)
     }
 
