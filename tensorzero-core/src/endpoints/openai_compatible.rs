@@ -673,8 +673,16 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
 enum OpenAICompatibleContentBlock {
     Text(TextContent),
-    ImageUrl { image_url: OpenAICompatibleImageUrl },
-    File { file: OpenAICompatibleFile },
+    ImageUrl {
+        image_url: OpenAICompatibleImageUrl,
+    },
+    File {
+        file: OpenAICompatibleFile,
+    },
+    #[serde(rename = "tensorzero::raw_text")]
+    RawText {
+        value: String,
+    },
 }
 
 #[derive(Deserialize, Debug)]
@@ -695,7 +703,7 @@ struct OpenAICompatibleFile {
 // Two mutually exclusive modes - the standard OpenAI text, and our special TensorZero mode
 pub enum TextContent {
     /// A normal openai text content block: `{"type": "text", "text": "Some content"}`. The `type` key comes from the parent `OpenAICompatibleContentBlock`
-    RawText { text: String },
+    Text { text: String },
     /// A special TensorZero mode: `{"type": "text", "tensorzero::arguments": {"custom_key": "custom_val"}}`.
     TensorZeroArguments {
         tensorzero_arguments: Map<String, Value>,
@@ -708,7 +716,7 @@ impl<'de> Deserialize<'de> for TextContent {
         let text = object.remove("text");
         let arguments = object.remove("tensorzero::arguments");
         match (text, arguments) {
-            (Some(text), None) => Ok(TextContent::RawText {
+            (Some(text), None) => Ok(TextContent::Text {
                 text: match text {
                     Value::String(text) => text,
                     _ => return Err(serde::de::Error::custom(
@@ -761,7 +769,8 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
             for val in a {
                 let block = serde_json::from_value::<OpenAICompatibleContentBlock>(val.clone());
                 let output = match block {
-                    Ok(OpenAICompatibleContentBlock::Text(TextContent::RawText { text })) => InputMessageContent::Text(TextKind::Text {text }),
+                    Ok(OpenAICompatibleContentBlock::RawText{ value }) => InputMessageContent::RawText { value },
+                    Ok(OpenAICompatibleContentBlock::Text(TextContent::Text { text })) => InputMessageContent::Text(TextKind::Text {text }),
                     Ok(OpenAICompatibleContentBlock::Text(TextContent::TensorZeroArguments { tensorzero_arguments })) => InputMessageContent::Text(TextKind::Arguments { arguments: tensorzero_arguments }),
                     Ok(OpenAICompatibleContentBlock::ImageUrl { image_url }) => {
                         if image_url.url.scheme() == "data" {
@@ -1435,6 +1444,26 @@ mod tests {
 
     #[test]
     fn test_convert_openai_message_content() {
+        // text content
+        let content = "Hello, world!".to_string();
+        let value = convert_openai_message_content(Value::String(content.clone())).unwrap();
+        assert_eq!(
+            value,
+            vec![InputMessageContent::Text(TextKind::Text { text: content })]
+        );
+        // tensorzero::raw_text
+        let content = json!([{
+            "type": "tensorzero::raw_text",
+            "value": "This is raw text"
+        }]);
+        let value = convert_openai_message_content(content.clone()).unwrap();
+        assert_eq!(
+            value,
+            vec![InputMessageContent::RawText {
+                value: "This is raw text".to_string()
+            }]
+        );
+        // tensorzero::arguments
         let content = json!([{
             "country": "Japan",
             "city": "Tokyo",
