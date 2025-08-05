@@ -474,7 +474,7 @@ fn bedrock_to_tensorzero_stream_message(
                                 )))
                             }
                             ReasoningContentBlockDelta::RedactedContent(_) => {
-                                tracing::warn!("Anthropic redacted thinking is not yet supported, discarding output content block");
+                                tracing::warn!("AWS Bedrock redacted thinking is not yet supported, discarding output content block");
                                 Ok(None)
                             }
                             _ => {
