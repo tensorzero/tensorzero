@@ -80,9 +80,10 @@ export default function DatasetDetailPage({
   return (
     <PageLayout>
       <PageHeader
-        heading={`Dataset ${count_info.dataset_name}`}
-        name={`${count_info.count}`}
-        />
+        heading={`Dataset`}
+        name={count_info.dataset_name}
+        count={count_info.count}
+      />
       <SectionLayout>
         <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
         <DatasetRowTable rows={rows} dataset_name={count_info.dataset_name} />
