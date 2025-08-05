@@ -5,11 +5,12 @@ use aws_sdk_bedrockruntime::types::{
     ContentBlockStart, ConversationRole, ConverseOutput as ConverseOutputType,
     ConverseStreamOutput as ConverseStreamOutputType, DocumentBlock, DocumentFormat,
     DocumentSource, ImageBlock, ImageFormat, ImageSource, InferenceConfiguration, Message,
-    SpecificToolChoice, StopReason, SystemContentBlock, Tool, ToolChoice as AWSBedrockToolChoice,
-    ToolConfiguration, ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification,
-    ToolUseBlock,
+    ReasoningContentBlock, ReasoningContentBlockDelta, SpecificToolChoice, StopReason,
+    SystemContentBlock, Tool, ToolChoice as AWSBedrockToolChoice, ToolConfiguration,
+    ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification, ToolUseBlock,
 };
 use aws_smithy_types::error::display::DisplayErrorContext;
+use aws_smithy_types::Blob;
 use aws_types::region::Region;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -35,7 +36,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, Role, Text, TextChunk, Usage,
 };
-use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs};
+use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
 use crate::inference::InferenceProvider;
 use crate::model::ModelProvider;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -414,6 +415,19 @@ fn stream_bedrock(
     })
 }
 
+// Redacted content is not exactly a signature, but it's the closest thing
+// we have in our data model. If we ever support passing thoughts back in
+// to Bedrock, we should base64-decide the input signature
+// and produce a `ReasoningContentBlock::RedactedContent`
+// We prepend a special tensorzero prefix so that we can detect this on
+// the way in, once we start supporting passing thoughts back in
+fn bedrock_redacted_to_tensorzero(redacted_content: &Blob) -> String {
+    format!(
+        "tensorzero_aws_bedrock_redacted::{}",
+        aws_smithy_types::base64::encode(redacted_content)
+    )
+}
+
 fn bedrock_to_tensorzero_stream_message(
     output: ConverseStreamOutputType,
     message_latency: Duration,
@@ -455,6 +469,47 @@ fn bedrock_to_tensorzero_stream_message(
                             message_latency,
                             None,
                         )))
+                    }
+                    ContentBlockDelta::ReasoningContent(reasoning_content) => {
+                        match &reasoning_content {
+                            ReasoningContentBlockDelta::Text(_)
+                            | ReasoningContentBlockDelta::Signature(_) => {
+                                Ok(Some(ProviderInferenceResponseChunk::new(
+                                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                                        id: message.content_block_index.to_string(),
+                                        text: reasoning_content.as_text().ok().cloned(),
+                                        signature: reasoning_content.as_signature().ok().cloned(),
+                                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                                    })],
+                                    None,
+                                    raw_message,
+                                    message_latency,
+                                    None,
+                                )))
+                            }
+                            ReasoningContentBlockDelta::RedactedContent(redacted_content) => {
+                                Ok(Some(ProviderInferenceResponseChunk::new(
+                                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                                        id: message.content_block_index.to_string(),
+                                        text: None,
+                                        signature: Some(bedrock_redacted_to_tensorzero(
+                                            redacted_content,
+                                        )),
+                                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                                    })],
+                                    None,
+                                    raw_message,
+                                    message_latency,
+                                    None,
+                                )))
+                            }
+                            _ => {
+                                tracing::warn!(
+                                    "Got unknown reasoning content block chunk type from AWS Bedrock, discarding"
+                                );
+                                Ok(None)
+                            }
+                        }
                     }
                     _ => Err(ErrorDetails::InferenceServer {
                         raw_request: None,
@@ -705,38 +760,59 @@ impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
     }
 }
 
-impl TryFrom<BedrockContentBlock> for ContentBlockOutput {
-    type Error = Error;
+fn bedrock_content_block_to_output(
+    block: BedrockContentBlock,
+) -> Result<Option<ContentBlockOutput>, Error> {
+    match block {
+        BedrockContentBlock::Text(text) => Ok(Some(text.into())),
+        BedrockContentBlock::ToolUse(tool_use) => {
+            let arguments = serde_json::to_string(&tool_use.input).map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    raw_request: None,
+                    raw_response: None,
+                    message: format!(
+                        "Error parsing tool call arguments from AWS Bedrock: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
 
-    fn try_from(block: BedrockContentBlock) -> Result<Self, Self::Error> {
-        match block {
-            BedrockContentBlock::Text(text) => Ok(text.into()),
-            BedrockContentBlock::ToolUse(tool_use) => {
-                let arguments = serde_json::to_string(&tool_use.input).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        raw_request: None,
-                        raw_response: None,
-                        message: format!(
-                            "Error parsing tool call arguments from AWS Bedrock: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
-
-                Ok(ContentBlockOutput::ToolCall(ToolCall {
-                    name: tool_use.name,
-                    arguments,
-                    id: tool_use.tool_use_id,
-                }))
-            }
-            _ => Err(Error::new(ErrorDetails::TypeConversion {
-                message: format!(
-                    "Unsupported content block type for AWS Bedrock: {}",
-                    std::any::type_name_of_val(&block)
-                ),
-            })),
+            Ok(Some(ContentBlockOutput::ToolCall(ToolCall {
+                name: tool_use.name,
+                arguments,
+                id: tool_use.tool_use_id,
+            })))
         }
+        BedrockContentBlock::ReasoningContent(reasoning_content) => match reasoning_content {
+            ReasoningContentBlock::ReasoningText(reasoning_text) => {
+                Ok(Some(ContentBlockOutput::Thought(Thought {
+                    text: Some(reasoning_text.text.clone()),
+                    signature: reasoning_text.signature().map(ToString::to_string),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                })))
+            }
+            ReasoningContentBlock::RedactedContent(redacted_content) => {
+                Ok(Some(ContentBlockOutput::Thought(Thought {
+                    text: None,
+                    signature: Some(bedrock_redacted_to_tensorzero(&redacted_content)),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                })))
+            }
+            _ => {
+                tracing::warn!(
+                    "Got unknown reasoning content block type from AWS Bedrock, discarding"
+                );
+                Ok(None)
+            }
+        },
+
+        _ => Err(Error::new(ErrorDetails::TypeConversion {
+            message: format!(
+                "Unsupported content block type for AWS Bedrock: {}",
+                std::any::type_name_of_val(&block)
+            ),
+        })),
     }
 }
 
@@ -833,7 +909,8 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             })?
             .content
             .into_iter()
-            .map(TryInto::try_into)
+            .map(bedrock_content_block_to_output)
+            .filter_map(Result::transpose)
             .collect::<Result<Vec<ContentBlockOutput>, _>>()?;
 
         if model_id.contains("claude")
