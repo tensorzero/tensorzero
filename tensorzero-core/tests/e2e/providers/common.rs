@@ -1709,10 +1709,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "llama" => {
             assert!(
-                res["error"]
-                    .as_str()
-                    .unwrap()
-                    .contains("401 Unauthorized"),
+                res["error"].as_str().unwrap().contains("401 Unauthorized") || res["error"].as_str().unwrap().contains("Authentication Error"),
                 "Unexpected error: {res}"
             );
         }

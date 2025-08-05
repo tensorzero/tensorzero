@@ -124,7 +124,7 @@ impl InferenceProvider for LlamaProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_url = "https://api.llama.com/openai/v1/chat/completions".to_string();
+        let request_url = "https://api.llama.com/v1/chat/completions".to_string();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
 
@@ -232,7 +232,7 @@ impl InferenceProvider for LlamaProvider {
                     ),
                 })
             })?;
-        let request_url = "https://api.llama.com/openai/v1/chat/completions".to_string();
+        let request_url = "https://api.llama.com/v1/chat/completions".to_string();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_builder = http_client.post(request_url);
