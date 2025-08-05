@@ -74,6 +74,7 @@ export async function getFunctionConfig(functionName: string, config?: Config) {
  */
 export async function getAllFunctionConfigs(config?: Config) {
   const cfg = config || (await getConfig());
+  console.log("getAllFunctionConfigs", cfg.functions);
 
   return cfg.functions;
 }

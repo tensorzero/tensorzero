@@ -3,7 +3,6 @@ members = [
     "tensorzero-core",
     "tensorzero-core/tests/mock-inference-provider",
     "gateway",
-    "ui/app/utils/minijinja",
     "internal/tensorzero-node",
     "clients/rust",
     "clients/python",
@@ -15,7 +14,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.7.5"
+version = "2025.8.0"
 rust-version = "1.86.0"
 license = "Apache-2.0"
 
@@ -74,7 +73,9 @@ unsafe_code = "forbid"
 allow_attributes = "deny"
 dbg_macro = "deny"
 expect_used = "deny"
+explicit_iter_loop = "deny"
 if_not_else = "deny"
+ignored_unit_patterns = "deny"
 manual_string_new = "deny"
 match_bool = "deny"
 needless_raw_string_hashes = "deny"
@@ -87,6 +88,7 @@ todo = "deny"
 trivially_copy_pass_by_ref = "deny"
 unimplemented = "deny"
 uninlined_format_args = "deny"
+unnecessary_wraps = "deny"
 unreachable = "deny"
 unused_self = "deny"
 unwrap_used = "deny"
@@ -96,6 +98,3 @@ inherits = "release"
 lto = "fat"
 codegen-units = 1
 incremental = false
-
-[profile.release.package.minijinja-bindings]
-opt-level = "s"

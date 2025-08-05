@@ -235,8 +235,6 @@ pub async fn start_batch_inference_handler(
             message: "batch episode_ids unexpectedly empty. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
         }))?;
 
-    // Spent a while fighting the borrow checker here, gave up
-    // The issue is that inference_config holds the ToolConfigs and ModelInferenceRequest has lifetimes that conflict with the inference_config
     while !candidate_variants.is_empty() {
         // We sample the same variant for the whole batch
         let (variant_name, variant) = sample_variant(
@@ -297,7 +295,6 @@ pub async fn start_batch_inference_handler(
             &inference_configs,
         )
         .await?;
-
         return Ok(Json(PrepareBatchInferenceOutput {
             batch_id,
             inference_ids,
@@ -562,7 +559,7 @@ async fn write_start_batch_inference<'a>(
     result: StartBatchModelInferenceWithMetadata<'a>,
     metadata: BatchInferenceDatabaseInsertMetadata<'a>,
     tool_configs: &[Option<ToolCallConfig>],
-    inference_configs: &[InferenceConfig<'a, 'a>],
+    inference_configs: &[InferenceConfig<'a>],
 ) -> Result<(Uuid, Vec<Uuid>), Error> {
     // Collect all the data into BatchInferenceRow structs
     let inference_rows = izip!(

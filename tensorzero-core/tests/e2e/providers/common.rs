@@ -1,5 +1,6 @@
 #![expect(clippy::print_stdout)]
 use std::io::Cursor;
+use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr};
 
 use aws_config::Region;
@@ -1770,6 +1771,13 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
 
 #[traced_test]
 pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProvider) {
+    // Bedrock rejects input thoughts for these models
+    if provider.model_name == "claude-3-haiku-20240307-aws-bedrock"
+        || provider.model_name == "deepseek-r1-aws-bedrock"
+    {
+        return;
+    }
+
     let client = make_embedded_gateway().await;
     client
         .inference(ClientInferenceParams {
@@ -1800,7 +1808,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
         .await
         .unwrap();
 
-    if ["anthropic"].contains(&provider.model_provider_name.as_str()) {
+    if ["anthropic", "aws-bedrock"].contains(&provider.model_provider_name.as_str()) {
         assert!(
             !logs_contain("does not support input thought blocks"),
             "Should not have warned about dropping thought blocks"
@@ -2371,7 +2379,14 @@ pub async fn check_simple_inference_response(
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let content = response_json.get("content").unwrap().as_array().unwrap();
+    let mut content = response_json
+        .get("content")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .clone();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    content.retain(|c| c.get("type").unwrap().as_str().unwrap() != "thought");
     assert_eq!(content.len(), 1);
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -2438,7 +2453,9 @@ pub async fn check_simple_inference_response(
     assert_eq!(input, correct_input);
 
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    let mut content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    content_blocks.retain(|c| c.get("type").unwrap().as_str().unwrap() != "thought");
     assert_eq!(content_blocks.len(), 1);
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -2527,7 +2544,9 @@ pub async fn check_simple_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    output.retain(|c| !matches!(c, ContentBlock::Thought(_)));
     assert_eq!(output.len(), 1);
 
     if !is_batch {
@@ -2938,9 +2957,12 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 
         let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
         if !content_blocks.is_empty() {
-            let content_block = content_blocks.first().unwrap();
-            let content = content_block.get("text").unwrap().as_str().unwrap();
-            full_content.push_str(content);
+            for block in content_blocks {
+                if block["type"] == "text" {
+                    let content = block.get("text").unwrap().as_str().unwrap();
+                    full_content.push_str(content);
+                }
+            }
         }
 
         // When we get a cache hit, the usage should be explicitly set to 0
@@ -3014,8 +3036,9 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert_eq!(input, correct_input);
 
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    let mut output: Vec<Value> = serde_json::from_str(output).unwrap();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    output.retain(|c| c.get("type").unwrap().as_str().unwrap() != "thought");
     let content_block = output.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -3111,7 +3134,9 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    output.retain(|c| !matches!(c, ContentBlock::Thought(_)));
     assert_eq!(output.len(), 1);
 
     // Check the InferenceTag Table
@@ -3987,7 +4012,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         assert_eq!(chunk_episode_id, episode_id);
 
         let blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        for block in blocks.iter() {
+        for block in blocks {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -8057,6 +8082,7 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             ];
             if MISSING_STOP_SEQUENCE_PROVIDERS.contains(&provider.model_provider_name.as_str())
                 || provider.model_name == "gemma-3-1b-aws-sagemaker-openai"
+                || provider.model_name == "deepseek-r1-aws-bedrock"
             {
                 assert_eq!(response.finish_reason, Some(FinishReason::Stop));
             } else {
@@ -8466,7 +8492,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         assert_eq!(chunk_episode_id, episode_id);
 
         let blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        for block in blocks.iter() {
+        for block in blocks {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -10333,14 +10359,20 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     // The 2.5 Pro model always seems to think before responding, even with
     // {"generationConfig": {"thinkingConfig": {"thinkingBudget": 0 }}
+    // This also happens for DeepSeek R1
     // This prevents us from setting a low max_tokens, since the thinking tokens will
     // use up all of the output tokens before an actual response is generated.
-    if provider.model_name.contains("gemini-2.5-pro") {
+    if provider.model_name.contains("gemini-2.5-pro")
+        || provider.model_name.contains("deepseek-r1-aws-bedrock")
+    {
         return;
     }
 
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
+
+    // Include randomness in the prompt to force a cache miss for the first request
+    let randomness = Uuid::now_v7();
 
     let payload = json!({
         "function_name": "basic_test",
@@ -10348,7 +10380,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         "episode_id": episode_id,
         "input":
             {
-               "system": {"assistant_name": "Dr. Mehta"},
+               "system": {"assistant_name": format!("Dr. Mehta: {randomness}")},
                "messages": [
                 {
                     "role": "user",
@@ -10357,6 +10389,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
+        "cache_options": {"enabled": "on", "lookback_s": 10},
         "params": {
             "chat_completion": {
                 "max_tokens": 1
@@ -10382,34 +10415,15 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     println!("API response: {response_json:#?}");
 
-    check_short_inference_response(response_json, Some(episode_id), &provider, false).await;
+    check_short_inference_response(
+        randomness,
+        response_json,
+        Some(episode_id),
+        &provider,
+        false,
+    )
+    .await;
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-    let episode_id = Uuid::now_v7();
-
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input":
-            {
-               "system": {"assistant_name": "Dr. Mehta"},
-               "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the name of the capital city of Japan?"
-                }
-            ]},
-        "stream": false,
-        "tags": {"foo": "bar"},
-        "cache_options": {"enabled": "on", "lookback_s": 10},
-        "params": {
-            "chat_completion": {
-                "max_tokens": 1
-            }
-        },
-        "extra_headers": extra_headers.headers,
-    });
 
     let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
@@ -10424,10 +10438,12 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     println!("API response: {response_json:#?}");
 
-    check_short_inference_response(response_json, Some(episode_id), &provider, true).await;
+    check_short_inference_response(randomness, response_json, Some(episode_id), &provider, true)
+        .await;
 }
 
 async fn check_short_inference_response(
+    randomness: Uuid,
     response_json: Value,
     episode_id: Option<Uuid>,
     provider: &E2ETestProvider,
@@ -10501,7 +10517,7 @@ async fn check_short_inference_response(
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input = json!({
-        "system": {"assistant_name": "Dr. Mehta"},
+        "system": {"assistant_name": format!("Dr. Mehta: {randomness}")},
         "messages": [
             {
                 "role": "user",
@@ -10584,7 +10600,7 @@ async fn check_short_inference_response(
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
-        "You are a helpful and friendly assistant named Dr. Mehta"
+        format!("You are a helpful and friendly assistant named Dr. Mehta: {randomness}")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
@@ -10618,6 +10634,32 @@ async fn check_short_inference_response(
         result.get("cached").unwrap().as_bool().unwrap(),
         should_be_cached
     );
+
+    // Check that our cache entry was only written once
+    if should_be_cached {
+        // Allow some time for an incorrect second cache write to happen
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        // Count the number of cache entries for this raw_request
+        // Note that this can have false negatives (ClickHouse might decide to merge parts
+        // immediately after a duplicate insert)
+        let count = clickhouse
+            .run_query_synchronous(
+                "SELECT COUNT(*) FROM ModelInferenceCache WHERE raw_request = {raw_request:String} "
+                    .to_string(),
+                &[("raw_request", result["raw_request"].as_str().unwrap())]
+                    .into_iter()
+                    .collect(),
+            )
+            .await
+            .unwrap()
+            .response
+            .trim()
+            .parse::<u64>()
+            .unwrap();
+
+        assert_eq!(count, 1);
+    }
 }
 
 pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
@@ -11457,7 +11499,14 @@ pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETes
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let content = response_json.get("content").unwrap().as_array().unwrap();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    let mut content = response_json
+        .get("content")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .clone();
+    content.retain(|c| c.get("type").unwrap().as_str().unwrap() != "thought");
     assert_eq!(content.len(), 1);
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
