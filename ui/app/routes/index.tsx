@@ -96,6 +96,7 @@ export async function loader() {
     numEvaluationRuns,
     numDynamicEvaluationRuns,
     numDynamicEvaluationRunProjects,
+    functionConfigs,
   ] = await Promise.all([
     countInferencesByFunction(),
     countEpisodes(),
@@ -103,9 +104,11 @@ export async function loader() {
     countTotalEvaluationRuns(),
     countDynamicEvaluationRuns(),
     countDynamicEvaluationProjects(),
+    getAllFunctionConfigs(),
   ]);
   const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
-  const numFunctions = Object.keys(getAllFunctionConfigs()).length;
+  const numFunctions = Object.keys(functionConfigs).length;
+  console.log("numFunctions", numFunctions);
   const numDatasets = datasetCounts.length;
 
   return {
