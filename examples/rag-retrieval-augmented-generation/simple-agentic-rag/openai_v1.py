@@ -2,7 +2,11 @@ import os
 from datetime import datetime
 
 import dotenv
-from tensorzero.agents import TensorZeroAgentsRunner, with_tensorzero_agents_patched
+from tensorzero.agents import (
+    TensorZeroAgentsRunArgs,
+    TensorZeroAgentsRunner,
+    with_tensorzero_agents_patched,
+)
 from tools import answer_question, load_wikipedia_page, search_wikipedia, think
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -43,9 +47,12 @@ async def ask_question(question: str, verbose: bool = False) -> str:
     # Use the Agents SDK Runner - this handles the entire tool loop automatically
     system_model = SystemModel(date=datetime.now().strftime("%Y-%m-%d"))
     user_model = UserModel(question=question)
-    result = await TensorZeroAgentsRunner.run(
+    result = await TensorZeroAgentsRunner[SystemModel, UserModel].run(
         agent,
-        {"system": system_model, "user": user_model},
+        TensorZeroAgentsRunArgs(
+            system=system_model,
+            user=user_model,
+        ),
         max_turns=15,
     )
     if verbose:

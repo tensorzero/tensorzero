@@ -241,6 +241,7 @@ def main(argv: list[str] | None = None) -> None:
     # ---------------------------------------------------------------------
     identifiers = _collect_function_identifiers(cfg_dict)
     identifier_module_src = _render_identifier_module(identifiers)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     (output_dir / "__init__.py").touch(exist_ok=True)
     types_file = output_dir / "function_identifiers.py"

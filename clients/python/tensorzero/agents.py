@@ -1,7 +1,7 @@
 import contextvars
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Optional, TypedDict
+from typing import Any, Generic, Optional, TypeVar
 
 import toml
 from pydantic import BaseModel
@@ -173,17 +173,23 @@ class TensorZeroAgentsClient(AsyncOpenAI):
         return TensorZeroAgentsChat(self)
 
 
-class TensorZeroAgentsRunArgs(TypedDict):
-    system: BaseModel
-    user: BaseModel
+SystemModelT = TypeVar("SystemModelT", bound=BaseModel)
+UserModelT = TypeVar("UserModelT", bound=BaseModel)
 
 
-class TensorZeroAgentsRunner(agents.Runner):
+class TensorZeroAgentsRunArgs(BaseModel, Generic[SystemModelT, UserModelT]):
+    system: SystemModelT
+    user: UserModelT
+
+
+class TensorZeroAgentsRunner(agents.Runner, Generic[SystemModelT, UserModelT]):
     @classmethod
     async def run(
         cls,
         starting_agent: agents.Agent[agents.TContext],
-        input: str | list[agents.TResponseInputItem] | TensorZeroAgentsRunArgs,
+        input: str
+        | list[agents.TResponseInputItem]
+        | TensorZeroAgentsRunArgs[SystemModelT, UserModelT],
         *,
         context: agents.TContext | None = None,
         max_turns: int = agents.run.DEFAULT_MAX_TURNS,
@@ -197,8 +203,8 @@ class TensorZeroAgentsRunner(agents.Runner):
             "TensorZeroAgentsRunner must be called within a with_tensorzero_agents_patched context"
         )
 
-        if isinstance(input, dict):
-            args = input["system"].model_dump() | input["user"].model_dump()
+        if isinstance(input, TensorZeroAgentsRunArgs):
+            args = input.system.model_dump() | input.user.model_dump()
             args = {f"tensorzero::arguments::{k}": v for k, v in args.items()}
             existing_run_config = run_config or agents.run.RunConfig()
             existing_model_settings = (
