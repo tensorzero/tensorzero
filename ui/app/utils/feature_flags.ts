@@ -24,6 +24,7 @@ export function getFeatureFlags(): FeatureFlags {
 export function getExtraInferenceOptions(): object {
   if (getFeatureFlags().FORCE_CACHE_ON) {
     return {
+      dryrun: false,
       cache_options: {
         enabled: "on",
       },
