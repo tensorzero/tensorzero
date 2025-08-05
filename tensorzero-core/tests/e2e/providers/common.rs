@@ -1765,8 +1765,10 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
 
 #[traced_test]
 pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProvider) {
-    // Bedrock rejects input thoughts for this model
-    if provider.model_name == "claude-3-haiku-20240307-aws-bedrock" {
+    // Bedrock rejects input thoughts for these models
+    if provider.model_name == "claude-3-haiku-20240307-aws-bedrock"
+        || provider.model_name == "deepseek-r1-aws-bedrock"
+    {
         return;
     }
 
