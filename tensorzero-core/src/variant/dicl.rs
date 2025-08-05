@@ -340,7 +340,7 @@ impl DiclConfig {
         // Wrap the embedding in a response with metadata
         let embedding_response_with_metadata =
             EmbeddingResponseWithMetadata::new(embedding_response, self.embedding_model.clone());
-        let [embedding_vector] = embedding_response_with_metadata.embedding.as_slice() else {
+        let [embedding_vector] = embedding_response_with_metadata.embeddings.as_slice() else {
             return Err(ErrorDetails::InternalError {
                 message: format!(
                     "Embedding model returned multiple vectors. {IMPOSSIBLE_ERROR_MESSAGE}"

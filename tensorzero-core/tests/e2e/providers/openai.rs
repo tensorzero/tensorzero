@@ -1254,9 +1254,9 @@ async fn test_embedding_sanity_check() {
     };
 
     // Calculate cosine similarities
-    let similarity_ab = cosine_similarity(&embedding_a, &embedding_b);
-    let similarity_ac = cosine_similarity(&embedding_a, &embedding_c);
-    let similarity_bc = cosine_similarity(&embedding_b, &embedding_c);
+    let similarity_ab = cosine_similarity(embedding_a, embedding_b);
+    let similarity_ac = cosine_similarity(embedding_a, embedding_c);
+    let similarity_bc = cosine_similarity(embedding_b, embedding_c);
 
     // Assert that semantically similar sentences have higher similarity (with a margin of 0.3)
     // We empirically determined this by staring at it (no science to it)

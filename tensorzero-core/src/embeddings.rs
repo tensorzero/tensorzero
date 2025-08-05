@@ -102,7 +102,7 @@ impl EmbeddingModelConfig {
         request: &EmbeddingRequest,
         model_name: &str,
         clients: &InferenceClients<'_>,
-    ) -> Result<EmbeddingResponse, Error> {
+    ) -> Result<EmbeddingModelResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {
@@ -154,7 +154,7 @@ impl EmbeddingModelConfig {
                         );
                     };
                     let embedding_response =
-                        EmbeddingResponse::new(response, provider_name.clone());
+                        EmbeddingModelResponse::new(response, provider_name.clone());
                     return Ok(embedding_response);
                 }
                 Err(error) => {
@@ -220,7 +220,7 @@ pub struct EmbeddingProviderResponse {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct EmbeddingResponse {
+pub struct EmbeddingModelResponse {
     pub id: Uuid,
     pub input: EmbeddingInput,
     pub embeddings: Vec<Vec<f32>>,
@@ -233,7 +233,7 @@ pub struct EmbeddingResponse {
     pub cached: bool,
 }
 
-impl EmbeddingResponse {
+impl EmbeddingModelResponse {
     pub fn from_cache(
         cache_lookup: CacheData<EmbeddingCacheData>,
         request: &EmbeddingModelProviderRequest,
@@ -261,7 +261,7 @@ impl EmbeddingResponse {
 pub struct EmbeddingResponseWithMetadata {
     pub id: Uuid,
     pub input: EmbeddingInput,
-    pub embedding: Vec<Vec<f32>>,
+    pub embeddings: Vec<Vec<f32>>,
     pub created: u64,
     pub raw_request: String,
     pub raw_response: String,
@@ -271,7 +271,7 @@ pub struct EmbeddingResponseWithMetadata {
     pub embedding_model_name: Arc<str>,
 }
 
-impl EmbeddingResponse {
+impl EmbeddingModelResponse {
     pub fn new(
         embedding_provider_response: EmbeddingProviderResponse,
         embedding_provider_name: Arc<str>,
@@ -292,11 +292,11 @@ impl EmbeddingResponse {
 }
 
 impl EmbeddingResponseWithMetadata {
-    pub fn new(embedding_response: EmbeddingResponse, embedding_model_name: Arc<str>) -> Self {
+    pub fn new(embedding_response: EmbeddingModelResponse, embedding_model_name: Arc<str>) -> Self {
         Self {
             id: embedding_response.id,
             input: embedding_response.input,
-            embedding: embedding_response.embeddings,
+            embeddings: embedding_response.embeddings,
             created: embedding_response.created,
             raw_request: embedding_response.raw_request,
             raw_response: embedding_response.raw_response,
