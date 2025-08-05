@@ -733,6 +733,18 @@ async fn test_clickhouse_migration_manager() {
     let output_token_total: u64 = response.response.trim().parse().unwrap();
     assert_eq!(output_token_total, 200000000);
     // Since we've already ran all of the migrations, we shouldn't have written any new records
+    // except for Migration0029 (which runs every time)
+    let _new_migration0029 = new_rows
+        .iter()
+        .find(|row| row.migration_name == "Migration0029")
+        .unwrap();
+    new_rows.retain(|row| row.migration_name != "Migration0029");
+
+    let _old_migration0029 = rows
+        .iter()
+        .find(|row| row.migration_name == "Migration0029")
+        .unwrap();
+    rows.retain(|row| row.migration_name != "Migration0029");
 
     assert_eq!(new_rows, rows);
 }
