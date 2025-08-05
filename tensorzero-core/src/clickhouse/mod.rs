@@ -258,6 +258,16 @@ impl ClickHouseConnectionInfo {
         query: String,
         parameters: &HashMap<&str, &str>,
     ) -> Result<ClickHouseResponse, Error> {
+        self.run_query_synchronous_with_err_logging(query, parameters, true)
+            .await
+    }
+
+    pub async fn run_query_synchronous_with_err_logging(
+        &self,
+        query: String,
+        parameters: &HashMap<&str, &str>,
+        err_logging: bool,
+    ) -> Result<ClickHouseResponse, Error> {
         match self {
             Self::Disabled => Ok(ClickHouseResponse {
                 response: String::new(),
@@ -298,9 +308,12 @@ impl ClickHouseConnectionInfo {
                     .send()
                     .await
                     .map_err(|e| {
-                        Error::new(ErrorDetails::ClickHouseQuery {
-                            message: DisplayOrDebugGateway::new(e).to_string(),
-                        })
+                        Error::new_with_err_logging(
+                            ErrorDetails::ClickHouseQuery {
+                                message: DisplayOrDebugGateway::new(e).to_string(),
+                            },
+                            err_logging,
+                        )
                     })?;
                 let status = res.status();
 
@@ -309,16 +322,26 @@ impl ClickHouseConnectionInfo {
                     // NOTE: X-Clickhouse-Summary is a ClickHouse-specific header that contains information about the query execution.
                     // It is not formally specified in the ClickHouse documentation so we only warn if it isn't working but won't error here.
                     let summary_str = summary.to_str().map_err(|e| {
-                        Error::new(ErrorDetails::ClickHouseQuery {
-                            message: format!("Failed to parse x-clickhouse-summary header: {e}"),
-                        })
+                        Error::new_with_err_logging(
+                            ErrorDetails::ClickHouseQuery {
+                                message: format!(
+                                    "Failed to parse x-clickhouse-summary header: {e}"
+                                ),
+                            },
+                            err_logging,
+                        )
                     })?;
 
                     serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(
                         |e| {
-                            Error::new(ErrorDetails::ClickHouseQuery {
-                                message: format!("Failed to deserialize x-clickhouse-summary: {e}"),
-                            })
+                            Error::new_with_err_logging(
+                                ErrorDetails::ClickHouseQuery {
+                                    message: format!(
+                                        "Failed to deserialize x-clickhouse-summary: {e}"
+                                    ),
+                                },
+                                err_logging,
+                            )
                         },
                     )?
                 } else {
@@ -330,9 +353,12 @@ impl ClickHouseConnectionInfo {
                 };
 
                 let response_body = res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: DisplayOrDebugGateway::new(e).to_string(),
-                    })
+                    Error::new_with_err_logging(
+                        ErrorDetails::ClickHouseQuery {
+                            message: DisplayOrDebugGateway::new(e).to_string(),
+                        },
+                        err_logging,
+                    )
                 })?;
 
                 match status {
@@ -340,9 +366,12 @@ impl ClickHouseConnectionInfo {
                         response: response_body,
                         metadata,
                     }),
-                    _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
-                        message: response_body,
-                    })),
+                    _ => Err(Error::new_with_err_logging(
+                        ErrorDetails::ClickHouseQuery {
+                            message: response_body,
+                        },
+                        err_logging,
+                    )),
                 }
             }
         }
