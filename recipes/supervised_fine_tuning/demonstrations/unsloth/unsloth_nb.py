@@ -334,7 +334,11 @@ for rendered_inference in rendered_inferences:
         messages.extend(message_to_chatml(message))
     messages.append(output_to_chatml(rendered_inference.output))
     # Add tools if available
-    payload = {"messages": messages, "tokenize": False, "add_generation_prompt": False}
+    payload = {
+        "conversation": messages,
+        "tokenize": False,
+        "add_generation_prompt": False,
+    }
     if rendered_inference.tool_params:
         tools = tensorzero_to_chatml_tools(
             rendered_inference.tool_params.tools_available
