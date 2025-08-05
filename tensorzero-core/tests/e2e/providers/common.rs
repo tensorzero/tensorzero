@@ -10344,7 +10344,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     // The 2.5 Pro model always seems to think before responding, even with
     // {"generationConfig": {"thinkingConfig": {"thinkingBudget": 0 }}
-    // This also happens for Deepseke R1
+    // This also happens for DeepSeek R1
     // This prevents us from setting a low max_tokens, since the thinking tokens will
     // use up all of the output tokens before an actual response is generated.
     if provider.model_name.contains("gemini-2.5-pro")
