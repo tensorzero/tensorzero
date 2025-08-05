@@ -714,7 +714,7 @@ async fn test_clickhouse_migration_manager() {
         assert!(applied_at.is_some());
     }
     run_all(&clickhouse, &migrations).await;
-    let new_rows = get_all_migration_records(&clickhouse).await.unwrap();
+    let mut new_rows = get_all_migration_records(&clickhouse).await.unwrap();
 
     let response = clickhouse
         .run_query_synchronous_no_params(
@@ -734,6 +734,8 @@ async fn test_clickhouse_migration_manager() {
     assert_eq!(output_token_total, 200000000);
     // Since we've already ran all of the migrations, we shouldn't have written any new records
     // except for Migration0029 (which runs every time)
+
+    let mut rows = rows;
     let _new_migration0029 = new_rows
         .iter()
         .find(|row| row.migration_name == "Migration0029")
