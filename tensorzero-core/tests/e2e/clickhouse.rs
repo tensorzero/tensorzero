@@ -572,7 +572,7 @@ async fn test_clickhouse_migration_manager() {
                 }
                 let name = migrations[i].name();
                 // Migration0029 always runs (since we want it to write a migration row on a clean start)
-                if migration.name() == "Migration0029" {
+                if migration.name() != "Migration0029" {
                     assert!(
                         !logs_contain(&format!("Applying migration: {name}")),
                         "Migration {name} should not have been applied"
