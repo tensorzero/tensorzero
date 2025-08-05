@@ -45,6 +45,7 @@ use crate::tool::{DynamicToolParams, Tool, ToolCallInput, ToolCallOutput, ToolCh
 use crate::variant::JsonMode;
 use serde::Deserializer;
 
+use super::embeddings::{embeddings, EmbeddingResponse};
 use super::inference::{
     InferenceCredentials, InferenceOutput, InferenceResponse, InferenceResponseChunk,
     InferenceStream,
@@ -137,10 +138,65 @@ pub struct OpenAICompatibleEmbeddingParams {
     input: EmbeddingInput,
     model: String,
     dimensions: Option<u32>,
+    // Since we only support one format, this field is not used.
+    #[expect(dead_code)]
     encoding_format: EmbeddingEncodingFormat,
+    #[serde(default, rename = "tensorzero::credentials")]
+    tensorzero_credentials: InferenceCredentials,
 }
 
-impl From<
+impl From<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
+    fn from(params: OpenAICompatibleEmbeddingParams) -> Self {
+        EmbeddingParams {
+            input: params.input,
+            model_name: params.model,
+            dimensions: params.dimensions,
+            credentials: params.tensorzero_credentials,
+        }
+    }
+}
+#[derive(Debug, Serialize)]
+#[serde(tag = "object", rename = "snake_case")]
+pub enum OpenAIEmbeddingResponse {
+    List {
+        data: Vec<OpenAIEmbedding>,
+        model: String,
+        usage: OpenAIEmbeddingUsage,
+    },
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "object", rename = "snake_case")]
+pub enum OpenAIEmbedding {
+    Embedding { embedding: Vec<f32>, index: usize },
+}
+
+#[derive(Debug, Serialize)]
+pub struct OpenAIEmbeddingUsage {
+    prompt_tokens: u32,
+    total_tokens: u32,
+}
+
+impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
+    fn from(response: EmbeddingResponse) -> Self {
+        OpenAIEmbeddingResponse::List {
+            data: response
+                .embeddings
+                .into_iter()
+                .enumerate()
+                .map(|(i, embedding)| OpenAIEmbedding::Embedding {
+                    embedding,
+                    index: i,
+                })
+                .collect(),
+            model: response.model,
+            usage: OpenAIEmbeddingUsage {
+                prompt_tokens: response.usage.input_tokens,
+                total_tokens: response.usage.input_tokens,
+            },
+        }
+    }
+}
 
 pub async fn embeddings_handler(
     State(AppStateData {
@@ -148,11 +204,11 @@ pub async fn embeddings_handler(
         http_client,
         ..
     }): AppState,
-    headers: HeaderMap,
-    StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
-) -> Result<Response<Body>, Error> {
-    let embedding_params = EmbeddingParams {};
-    embeddings(config, &http_client)
+    StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
+) -> Result<Json<OpenAIEmbeddingResponse>, Error> {
+    let embedding_params = openai_compatible_params.into();
+    let response = embeddings(config, &http_client, embedding_params).await?;
+    Ok(Json(response.into()))
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

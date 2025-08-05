@@ -63,10 +63,12 @@ pub async fn embeddings(
     Ok(EmbeddingResponse {
         embeddings: response.embeddings,
         usage: response.usage,
+        model: params.model_name,
     })
 }
 
 pub struct EmbeddingResponse {
     pub embeddings: Vec<Vec<f32>>,
     pub usage: Usage,
+    pub model: String,
 }
