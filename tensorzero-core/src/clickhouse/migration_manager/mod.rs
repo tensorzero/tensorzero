@@ -1,6 +1,7 @@
 pub mod migration_trait;
 pub mod migrations;
 
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
@@ -100,12 +101,72 @@ pub fn make_all_migrations<'a>(
     migrations
 }
 
+/// Returns `true` if our `TensorZeroMigration` table contains exactly `all_migrations`.
+/// If the database or `TensorZeroMigration` table does not exist, or it contains either more
+/// or fewer distinct migration ids than we expect, than we return `false` to be conservative.
+/// Note that we allow multiple rows to exist per migration ids (since the migrations
+/// might have been run concurrently).
+pub async fn should_skip_migrations(
+    clickhouse: &ClickHouseConnectionInfo,
+    all_migrations: &[Box<dyn Migration + Send + Sync + '_>],
+) -> bool {
+    let migration_records = match get_all_migration_records(clickhouse).await {
+        Ok(records) => records,
+        Err(e) => {
+            if let ErrorDetails::ClickHouseMigration { message, .. } = e.get_details() {
+                if message.contains("UNKNOWN_DATABASE") {
+                    tracing::info!("Database not found, assuming clean start");
+                    return false;
+                }
+                if message.contains("UNKNOWN_TABLE") {
+                    tracing::info!("TensorZeroMigration table not found, assuming clean start");
+                    return false;
+                }
+            }
+            // Fall back to running all migrations as normal, and hopefully produce a better error message
+            tracing::warn!("Failed to lookup migrations records: {e}");
+            return false;
+        }
+    };
+    let mut migration_ids = migration_records
+        .iter()
+        .map(|r| r.migration_id)
+        .collect::<Vec<_>>();
+    migration_ids.sort();
+
+    let expected_migration_ids = all_migrations
+        .iter()
+        .map(|m| m.migration_num())
+        .collect::<Result<Vec<_>, Error>>();
+    let mut expected_migration_ids = match expected_migration_ids {
+        Ok(ids) => ids,
+        Err(e) => {
+            // If we encounter any parse errors, just run the migrations as normal,
+            // and hopefully produce a better error message
+            tracing::warn!("Failed to get migration ids: {e}");
+            return false;
+        }
+    };
+    expected_migration_ids.sort();
+
+    // We only want to skip running migrations if the database is in a known state
+    // (we've run exactly the migrations that we expect to have run)
+    tracing::debug!("Actual   migration ids: {migration_ids:?}");
+    tracing::debug!("Expected migration ids: {expected_migration_ids:?}");
+    migration_ids == expected_migration_ids
+}
+
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     clickhouse.health().await?;
+
+    let migrations: Vec<Box<dyn Migration + Send + Sync>> = make_all_migrations(clickhouse);
+    if should_skip_migrations(clickhouse, &migrations).await {
+        tracing::info!("All migrations have already been applied");
+        return Ok(());
+    }
+    tracing::info!("All migrations have not yet been applied, running migrations");
     // This is a no-op if the database already exists
     clickhouse.create_database().await?;
-
-    let migrations = make_all_migrations(clickhouse);
 
     // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
     // The value we pass in for 'clean_start' is ignored for the first migration
@@ -128,7 +189,43 @@ pub struct MigrationRecordDatabaseInsert {
     pub applied_at: Option<String>,
 }
 
-async fn insert_migration_record(
+/// Attempts to get all migration records from the `TensorZeroMigration` table.
+/// We do not log any `Error`s that we return, as the caller may want to ignore them.
+/// Returns at most one record per migration ID.
+pub async fn get_all_migration_records(
+    clickhouse: &ClickHouseConnectionInfo,
+) -> Result<Vec<MigrationRecordDatabaseInsert>, Error> {
+    let mut rows = Vec::new();
+    for row in clickhouse
+        .run_query_synchronous_with_err_logging(
+            "SELECT DISTINCT ON (migration_id) * FROM TensorZeroMigration ORDER BY migration_id ASC, applied_at DESC FORMAT JSONEachRow"
+                .to_string(),
+            &HashMap::new(),
+            false,
+        )
+        .await
+        .map_err(|e| {
+            Error::new_without_logging(ErrorDetails::ClickHouseMigration {
+                id: "0000".to_string(),
+                message: format!("Failed to get migration records: {e}"),
+            })
+        })?
+        .response
+        .lines()
+    {
+        rows.push(
+            serde_json::from_str::<MigrationRecordDatabaseInsert>(row).map_err(|e| {
+                Error::new_without_logging(ErrorDetails::ClickHouseMigration {
+                    id: "0000".to_string(),
+                    message: format!("Failed to parse migration record: {e}"),
+                })
+            })?,
+        );
+    }
+    Ok(rows)
+}
+
+pub async fn insert_migration_record(
     clickhouse: &ClickHouseConnectionInfo,
     migration: &(impl Migration + ?Sized),
     execution_time: Duration,

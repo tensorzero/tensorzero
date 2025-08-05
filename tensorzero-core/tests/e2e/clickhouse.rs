@@ -4,11 +4,13 @@ use std::cell::Cell;
 use std::future::Future;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use paste::paste;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::json;
 use tensorzero_core::clickhouse::migration_manager::migration_trait::Migration;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
+use tensorzero_core::error::Error;
 use tokio::runtime::Handle;
 use tracing_test::traced_test;
 use uuid::Uuid;
@@ -25,7 +27,7 @@ use tensorzero_core::clickhouse::migration_manager::migrations::migration_0011::
 use tensorzero_core::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
 
 use tensorzero_core::clickhouse::migration_manager::{
-    self, make_all_migrations, MigrationRecordDatabaseInsert,
+    self, get_all_migration_records, make_all_migrations, MigrationRecordDatabaseInsert,
 };
 use tensorzero_core::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_core::clickhouse::{
@@ -674,7 +676,7 @@ async fn test_clickhouse_migration_manager() {
             24, 25, 26, 27
         ]
     );
-    let rows = get_all_migration_records(&clickhouse).await;
+    let rows = get_all_migration_records(&clickhouse).await.unwrap();
     println!("Rows: {rows:#?}");
     // Migration0029 is currently skipped, because 'StaticEvaluationHumanFeedbackFloatView' is created
     // by a banned migration
@@ -705,7 +707,7 @@ async fn test_clickhouse_migration_manager() {
         assert!(applied_at.is_some());
     }
     run_all(&clickhouse, &migrations).await;
-    let new_rows = get_all_migration_records(&clickhouse).await;
+    let new_rows = get_all_migration_records(&clickhouse).await.unwrap();
 
     let response = clickhouse
         .run_query_synchronous_no_params(
@@ -726,25 +728,6 @@ async fn test_clickhouse_migration_manager() {
     // Since we've already ran all of the migrations, we shouldn't have written any new records
 
     assert_eq!(new_rows, rows);
-}
-
-async fn get_all_migration_records(
-    clickhouse: &ClickHouseConnectionInfo,
-) -> Vec<MigrationRecordDatabaseInsert> {
-    let mut rows = Vec::new();
-    for row in clickhouse
-        .run_query_synchronous_no_params(
-            "SELECT * FROM TensorZeroMigration ORDER BY migration_id FORMAT JSONEachRow"
-                .to_string(),
-        )
-        .await
-        .unwrap()
-        .response
-        .lines()
-    {
-        rows.push(serde_json::from_str::<MigrationRecordDatabaseInsert>(row).unwrap());
-    }
-    rows
 }
 
 #[tokio::test]
@@ -813,6 +796,29 @@ async fn test_concurrent_clickhouse_migrations() {
     for handle in handles {
         handle.await.unwrap();
     }
+
+    // We should have written at least one duplicate migration record to `TensorZeroMigration`
+    // due to multiple copies of the same migration running concurrently.
+    let total_runs = clickhouse
+        .run_query_synchronous_no_params("SELECT COUNT(*) FROM TensorZeroMigration".to_string())
+        .await
+        .unwrap()
+        .response
+        .trim()
+        .parse::<u64>()
+        .unwrap();
+
+    let all_migrations = migration_manager::get_all_migration_records(&clickhouse)
+        .await
+        .unwrap();
+    assert!(
+        total_runs as usize > all_migrations.len(),
+        "Expected more than {} migration runs, but only only found {total_runs}",
+        all_migrations.len()
+    );
+
+    let migrations = migration_manager::make_all_migrations(&clickhouse);
+    assert!(migration_manager::should_skip_migrations(&clickhouse, &migrations).await);
 }
 
 /// Migration 0013 has some checks that enforce that concurrent migrations can't break
@@ -962,4 +968,80 @@ async fn test_migration_0013_data_no_table() {
     .unwrap_err();
     assert!(err.to_string()
         .contains("Data already exists in the ChatInference or JsonInference tables and InferenceById or InferenceByEpisodeId is missing. Please contact TensorZero team"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[traced_test]
+async fn test_run_migrations_clean() {
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    migration_manager::run(&clickhouse).await.unwrap();
+    assert!(logs_contain("Database not found, assuming clean start"));
+    assert!(!logs_contain("All migrations have already been applied"));
+
+    // Run again, and we should skip all migrations
+    migration_manager::run(&clickhouse).await.unwrap();
+    assert!(logs_contain("All migrations have already been applied"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[traced_test]
+async fn test_run_migrations_fake_row() {
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    clickhouse.create_database().await.unwrap();
+
+    struct Migration99999;
+
+    #[async_trait]
+    impl Migration for Migration99999 {
+        fn name(&self) -> String {
+            "Migration99999".to_string()
+        }
+        async fn can_apply(&self) -> Result<(), Error> {
+            Ok(())
+        }
+        async fn should_apply(&self) -> Result<bool, Error> {
+            Ok(true)
+        }
+        async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+            Ok(())
+        }
+        async fn has_succeeded(&self) -> Result<bool, Error> {
+            Ok(true)
+        }
+        fn rollback_instructions(&self) -> String {
+            "SELECT 1;".to_string()
+        }
+    }
+
+    migration_manager::run(&clickhouse).await.unwrap();
+
+    // Run our fake migration to insert an unexpected row into `TensorZeroMigration`
+    // A subsequent normal run of migrations should *not* skip running migrations,
+    // since it will see an unexpected state
+    migration_manager::run_migration(&clickhouse, &Migration99999, true)
+        .await
+        .unwrap();
+
+    let migrations = migration_manager::make_all_migrations(&clickhouse);
+    assert!(!migration_manager::should_skip_migrations(&clickhouse, &migrations).await);
+
+    migration_manager::run(&clickhouse).await.unwrap();
+    assert!(!logs_contain("already been applied"));
+
+    let rows = migration_manager::get_all_migration_records(&clickhouse)
+        .await
+        .unwrap();
+
+    let mut actual_migration_ids = rows.iter().map(|r| r.migration_id).collect::<Vec<_>>();
+    actual_migration_ids.sort();
+
+    let all_migrations = migration_manager::make_all_migrations(&clickhouse);
+    let mut expected_migration_ids = all_migrations
+        .iter()
+        .map(|m| m.migration_num().unwrap())
+        .collect::<Vec<_>>();
+    expected_migration_ids.push(99999);
+    expected_migration_ids.sort();
+
+    assert_eq!(actual_migration_ids, expected_migration_ids);
 }
