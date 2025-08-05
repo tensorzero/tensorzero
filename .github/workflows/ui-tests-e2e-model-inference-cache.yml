@@ -4,19 +4,18 @@ on:
   workflow_call:
     secrets:
       AWS_ACCESS_KEY_ID:
-        required: true
+        required: false
       AWS_SECRET_ACCESS_KEY:
-        required: true
+        required: false
       OPENAI_API_KEY:
-        required: true
+        required: false
       FIREWORKS_ACCOUNT_ID:
-        required: true
+        required: false
       FIREWORKS_API_KEY:
-        required: true
+        required: false
     inputs:
       regen_cache:
         required: true
-        default: false
         type: boolean
 
 jobs:
