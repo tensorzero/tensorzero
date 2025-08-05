@@ -3,20 +3,19 @@ name: UI E2E tests with model inference cache
 on:
   workflow_call:
     secrets:
-      AWS_ACCESS_KEY_ID:
+      S3_ACCESS_KEY_ID:
         required: true
-      AWS_SECRET_ACCESS_KEY:
+      S3_SECRET_ACCESS_KEY:
         required: true
       OPENAI_API_KEY:
-        required: true
+        required: false
       FIREWORKS_ACCOUNT_ID:
-        required: true
+        required: false
       FIREWORKS_API_KEY:
-        required: true
+        required: false
     inputs:
       regen_cache:
         required: true
-        default: false
         type: boolean
 
 jobs:
@@ -96,8 +95,8 @@ jobs:
           echo "FIREWORKS_ACCOUNT_ID=${{ secrets.FIREWORKS_ACCOUNT_ID }}" >> fixtures/.env-gateway
           echo "FIREWORKS_API_KEY=${{ secrets.FIREWORKS_API_KEY }}" >> fixtures/.env-gateway
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> fixtures/.env-gateway
-          echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env-gateway
-          echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env-gateway
+          echo "S3_ACCESS_KEY_ID=${{ secrets.S3_ACCESS_KEY_ID }}" >> fixtures/.env-gateway
+          echo "S3_SECRET_ACCESS_KEY=${{ secrets.S3_SECRET_ACCESS_KEY }}" >> fixtures/.env-gateway
           ./fixtures/regenerate-model-inference-cache.sh
           # Take down and destroy the containers, so that our subsequent test run starts with a fresh ClickHouse
           # server, and inserts our regenerated fixtures from scratch
@@ -119,12 +118,14 @@ jobs:
           # Environment variables only used by the gateway container
           # We deliberately leave these unset when starting the UI container, to ensure
           # that it doesn't depend on them being set
-          # TODO - set these back to dummy credentials once we fix regenerating the model inference cache
-          echo "FIREWORKS_ACCOUNT_ID=${{ secrets.FIREWORKS_ACCOUNT_ID }}" >> fixtures/.env-gateway
-          echo "FIREWORKS_API_KEY=${{ secrets.FIREWORKS_API_KEY }}" >> fixtures/.env-gateway
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> fixtures/.env-gateway
-          echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env-gateway
-          echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env-gateway
+          # When the secrets are not passed in to this workflow
+          # (which happens when we test our existing cache file in PR CI),
+          # we set them to dummy values
+          echo "FIREWORKS_ACCOUNT_ID=${{ secrets.FIREWORKS_ACCOUNT_ID || 'not_used' }}" >> fixtures/.env-gateway
+          echo "FIREWORKS_API_KEY=${{ secrets.FIREWORKS_API_KEY || 'not_used' }}" >> fixtures/.env-gateway
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY || 'not_used' }}" >> fixtures/.env-gateway
+          echo "S3_ACCESS_KEY_ID=${{ secrets.S3_ACCESS_KEY_ID }}" >> fixtures/.env-gateway
+          echo "S3_SECRET_ACCESS_KEY=${{ secrets.S3_SECRET_ACCESS_KEY }}" >> fixtures/.env-gateway
           docker compose -f fixtures/docker-compose.e2e.yml up --no-build -d
           docker compose -f fixtures/docker-compose.e2e.yml wait fixtures
 
@@ -137,7 +138,6 @@ jobs:
         id: e2e_tests
         env:
           TENSORZERO_CI: 1
-        continue-on-error: true
         run: pnpm ui:test:e2e --grep-invert "@credentials"
 
       - name: Print Docker Compose logs
@@ -169,7 +169,7 @@ jobs:
         run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
 
       - name: Upload Playwright artifacts
-        if: steps.e2e_tests.outcome == 'failure'
+        if: failure()
         uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
         with:
           name: playwright-report
@@ -177,7 +177,3 @@ jobs:
             ui/playwright-report/
             ui/test-results/
           retention-days: 7
-
-      - name: Exit if tests failed
-        if: steps.e2e_tests.outcome == 'failure'
-        run: exit 1
