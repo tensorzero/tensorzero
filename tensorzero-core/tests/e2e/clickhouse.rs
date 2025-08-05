@@ -976,12 +976,12 @@ async fn test_migration_0013_data_no_table() {
 #[traced_test]
 async fn test_run_migrations_clean() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    migration_manager::run(&clickhouse, false).await.unwrap();
+    migration_manager::run(&clickhouse, true).await.unwrap();
     assert!(logs_contain("Database not found, assuming clean start"));
     assert!(!logs_contain("All migrations have already been applied"));
 
     // Run again, and we should skip all migrations
-    migration_manager::run(&clickhouse, false).await.unwrap();
+    migration_manager::run(&clickhouse, true).await.unwrap();
     assert!(logs_contain("All migrations have already been applied"));
 }
 
