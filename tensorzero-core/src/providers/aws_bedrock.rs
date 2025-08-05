@@ -5,12 +5,11 @@ use aws_sdk_bedrockruntime::types::{
     ContentBlockStart, ConversationRole, ConverseOutput as ConverseOutputType,
     ConverseStreamOutput as ConverseStreamOutputType, DocumentBlock, DocumentFormat,
     DocumentSource, ImageBlock, ImageFormat, ImageSource, InferenceConfiguration, Message,
-    ReasoningContentBlock, ReasoningContentBlockDelta, SpecificToolChoice, StopReason,
-    SystemContentBlock, Tool, ToolChoice as AWSBedrockToolChoice, ToolConfiguration,
+    ReasoningContentBlock, ReasoningContentBlockDelta, ReasoningTextBlock, SpecificToolChoice,
+    StopReason, SystemContentBlock, Tool, ToolChoice as AWSBedrockToolChoice, ToolConfiguration,
     ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification, ToolUseBlock,
 };
 use aws_smithy_types::error::display::DisplayErrorContext;
-use aws_smithy_types::Blob;
 use aws_types::region::Region;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -24,7 +23,7 @@ use super::aws_common::{self, build_interceptor, InterceptorAndRawBody};
 use super::helpers::peek_first_chunk;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::file::mime_type_to_ext;
@@ -415,19 +414,6 @@ fn stream_bedrock(
     })
 }
 
-// Redacted content is not exactly a signature, but it's the closest thing
-// we have in our data model. If we ever support passing thoughts back in
-// to Bedrock, we should base64-decide the input signature
-// and produce a `ReasoningContentBlock::RedactedContent`
-// We prepend a special tensorzero prefix so that we can detect this on
-// the way in, once we start supporting passing thoughts back in
-fn bedrock_redacted_to_tensorzero(redacted_content: &Blob) -> String {
-    format!(
-        "tensorzero_aws_bedrock_redacted::{}",
-        aws_smithy_types::base64::encode(redacted_content)
-    )
-}
-
 fn bedrock_to_tensorzero_stream_message(
     output: ConverseStreamOutputType,
     message_latency: Duration,
@@ -487,21 +473,9 @@ fn bedrock_to_tensorzero_stream_message(
                                     None,
                                 )))
                             }
-                            ReasoningContentBlockDelta::RedactedContent(redacted_content) => {
-                                Ok(Some(ProviderInferenceResponseChunk::new(
-                                    vec![ContentBlockChunk::Thought(ThoughtChunk {
-                                        id: message.content_block_index.to_string(),
-                                        text: None,
-                                        signature: Some(bedrock_redacted_to_tensorzero(
-                                            redacted_content,
-                                        )),
-                                        provider_type: Some(PROVIDER_TYPE.to_string()),
-                                    })],
-                                    None,
-                                    raw_message,
-                                    message_latency,
-                                    None,
-                                )))
+                            ReasoningContentBlockDelta::RedactedContent(_) => {
+                                tracing::warn!("Anthropic redacted thinking is not yet supported, discarding output content block");
+                                Ok(None)
                             }
                             _ => {
                                 tracing::warn!(
@@ -740,14 +714,31 @@ impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
                     Ok(Some(BedrockContentBlock::Document(document)))
                 }
             }
-            // We don't support thought blocks being passed in from a request.
-            // These are only possible to be passed in in the scenario where the
-            // output of a chat completion is used as an input to another model inference,
-            // i.e. a judge or something.
-            // We don't think the thoughts should be passed in in this case.
             ContentBlock::Thought(thought) => {
-                warn_discarded_thought_block(PROVIDER_TYPE, thought);
-                Ok(None)
+                if let Some(text) = &thought.text {
+                    let mut builder = ReasoningTextBlock::builder().text(text);
+                    if let Some(signature) = &thought.signature {
+                        builder = builder.signature(signature);
+                    }
+                    let block = builder.build().map_err(|e| {
+                        Error::new(ErrorDetails::InferenceClient {
+                            raw_request: None,
+                            raw_response: None,
+                            status_code: Some(StatusCode::BAD_REQUEST),
+                            message: format!("Error serializing reasoning text block: {e:?}"),
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        })
+                    })?;
+                    Ok(Some(BedrockContentBlock::ReasoningContent(
+                        ReasoningContentBlock::ReasoningText(block),
+                    )))
+                } else if thought.signature.is_some() {
+                    tracing::warn!("AWS Bedrock redacted thinking is not yet supported, discarding input content block");
+                    Ok(None)
+                } else {
+                    // We have a thought block with no text or signature, so just ignore it
+                    Ok(None)
+                }
             }
             ContentBlock::Unknown {
                 data: _,
@@ -792,12 +783,9 @@ fn bedrock_content_block_to_output(
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 })))
             }
-            ReasoningContentBlock::RedactedContent(redacted_content) => {
-                Ok(Some(ContentBlockOutput::Thought(Thought {
-                    text: None,
-                    signature: Some(bedrock_redacted_to_tensorzero(&redacted_content)),
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
-                })))
+            ReasoningContentBlock::RedactedContent(_) => {
+                tracing::warn!("AWS Bedrock redacted thinking is not yet supported, discarding output content chunk");
+                Ok(None)
             }
             _ => {
                 tracing::warn!(
