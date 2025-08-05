@@ -8,6 +8,7 @@ Set `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzer
 ### Optional: Dev Container
 
 We have provided a Dev Container config in `.devcontainer` to help users of VS Code who want to run the notebook on a remote server.
+The Dev Container pulls the [Unsloth docker image](https://hub.docker.com/r/unsloth/unsloth).
 To use our container, follow the [VS Code Instructions](https://code.visualstudio.com/docs/devcontainers/containers#_open-a-folder-on-a-remote-ssh-host-in-a-container), then proceed with the "Using `uv`" instructions below.
 
 ### Using [`uv`](https://github.com/astral-sh/uv) (Recommended)
@@ -15,15 +16,13 @@ To use our container, follow the [VS Code Instructions](https://code.visualstudi
 ```bash
 uv venv  # Create a new virtual environment
 source .venv/bin/activate # Activate environment
-uv pip install xformers --index-url https://download.pytorch.org/whl/<your-cuda-version> # Install xformers
 uv pip install -r requirements.txt # Install the dependencies
 ```
 
 ### Using `pip`
 
-We recommend using Python 3.10+ and a virtual environment.
+We recommend using Python 3.12+ and a virtual environment.
 
 ```bash
-pip install xformers --index-url https://download.pytorch.org/whl/<your-cuda-version> # Install xformers
 pip install -r requirements.txt
 ```
