@@ -18,11 +18,3 @@ uv venv  # Create a new virtual environment
 source .venv/bin/activate # Activate environment
 uv pip install -r requirements.txt # Install the dependencies
 ```
-
-### Using `pip`
-
-We recommend using Python 3.12+ and a virtual environment.
-
-```bash
-pip install -r requirements.txt
-```
