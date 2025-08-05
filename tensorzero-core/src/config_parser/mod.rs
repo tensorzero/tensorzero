@@ -337,7 +337,7 @@ pub struct BatchWritesConfig {
 impl Default for BatchWritesConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
+            enabled: false,
             flush_interval_ms: default_flush_interval_ms(),
             max_rows: default_max_rows(),
         }

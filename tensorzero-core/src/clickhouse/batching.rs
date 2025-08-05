@@ -51,6 +51,9 @@ impl BatchSender {
         clickhouse: ClickHouseConnectionInfo,
         config: BatchWritesConfig,
     ) -> Result<Self, Error> {
+        // We call `tokio::task::block_in_place` in our `Drop` impl to wait for outstanding
+        // batch writes to finish. This does not work on the CurrentThread runtime,
+        // so we fail here rather than panicking at shutdown.
         if Handle::current().runtime_flavor() == RuntimeFlavor::CurrentThread {
             return Err(Error::new(ErrorDetails::InternalError {
                 message: "Cannot use ClickHouse batching with the CurrentThread Tokio runtime"

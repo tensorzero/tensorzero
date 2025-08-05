@@ -655,7 +655,7 @@ pub enum Rows<'a, T: Serialize + Send + Sync> {
     Serialized(&'a [String]),
 }
 
-impl<'a, T: Serialize + Send + Sync> Rows<'a, T> {
+impl<T: Serialize + Send + Sync> Rows<'_, T> {
     fn as_json(&self) -> Result<Cow<'_, [String]>, Error> {
         match self {
             Rows::Unserialized(rows) => {
