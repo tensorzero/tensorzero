@@ -813,7 +813,7 @@ async fn test_concurrent_clickhouse_migrations() {
         .unwrap();
     assert!(
         total_runs as usize > all_migrations.len(),
-        "Expected more than {} migration runs, but only only found {total_runs}",
+        "Expected more than {} migration runs, but only found {total_runs}",
         all_migrations.len()
     );
 
