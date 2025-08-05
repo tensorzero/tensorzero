@@ -213,7 +213,13 @@ async fn test_inference_with_explicit_region() {
     assert!(result.get("ttft_ms").unwrap().is_null());
     let raw_response = result.get("raw_response").unwrap();
     let raw_response_json: Value = serde_json::from_str(raw_response.as_str().unwrap()).unwrap();
-    let _ = raw_response_json.get("debug").unwrap().as_str().unwrap();
+    assert!(
+        !raw_response_json["output"]["message"]["content"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "Unexpected raw response: {raw_response_json}"
+    );
 }
 
 #[tokio::test]
