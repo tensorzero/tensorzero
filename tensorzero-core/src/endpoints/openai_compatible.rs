@@ -27,6 +27,8 @@ use uuid::Uuid;
 
 use crate::cache::CacheParamsOptions;
 use crate::config_parser::UninitializedVariantInfo;
+use crate::embeddings::EmbeddingInput;
+use crate::endpoints::embeddings::Params as EmbeddingParams;
 use crate::endpoints::inference::{
     inference, ChatCompletionInferenceParams, InferenceParams, Params,
 };
@@ -122,6 +124,35 @@ pub async fn inference_handler(
                 .into_response())
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EmbeddingEncodingFormat {
+    Float,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OpenAICompatibleEmbeddingParams {
+    input: EmbeddingInput,
+    model: String,
+    dimensions: Option<u32>,
+    encoding_format: EmbeddingEncodingFormat,
+}
+
+impl From<
+
+pub async fn embeddings_handler(
+    State(AppStateData {
+        config,
+        http_client,
+        ..
+    }): AppState,
+    headers: HeaderMap,
+    StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
+) -> Result<Response<Body>, Error> {
+    let embedding_params = EmbeddingParams {};
+    embeddings(config, &http_client)
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
