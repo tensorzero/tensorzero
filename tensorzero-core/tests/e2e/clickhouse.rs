@@ -657,8 +657,17 @@ async fn test_clickhouse_migration_manager() {
                 assert!(!clean_start);
             }
             let name = migrations[i].name();
-            assert!(!logs_contain(&format!("Applying migration: {name}")));
-            assert!(!logs_contain(&format!("Migration succeeded: {name}")));
+            // Migration0029 always runs
+            if name != "Migration0029" {
+                assert!(
+                    !logs_contain(&format!("Applying migration: {name}")),
+                    "Missing log for {name}"
+                );
+                assert!(
+                    !logs_contain(&format!("Migration succeeded: {name}")),
+                    "Missing success for {name}"
+                );
+            }
         }
 
         assert!(!logs_contain("Failed to apply migration"));
