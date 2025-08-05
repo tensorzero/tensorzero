@@ -474,12 +474,12 @@ fn bedrock_to_tensorzero_stream_message(
                                 )))
                             }
                             ReasoningContentBlockDelta::RedactedContent(_) => {
-                                tracing::warn!("AWS Bedrock redacted thinking is not yet supported, discarding output content block");
+                                tracing::warn!("The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks.");
                                 Ok(None)
                             }
                             _ => {
                                 tracing::warn!(
-                                    "Got unknown reasoning content block chunk type from AWS Bedrock, discarding"
+                                    "The TensorZero Gateway received an unknown reasoning content block (supported reasoning formats: `Text`, `Signature`, `RedactedContent`) from AWS Bedrock, so we're discarding the content block. Please reach out to our team and we'll quickly collaborate on a solution."
                                 );
                                 Ok(None)
                             }
@@ -733,10 +733,11 @@ impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
                         ReasoningContentBlock::ReasoningText(block),
                     )))
                 } else if thought.signature.is_some() {
-                    tracing::warn!("AWS Bedrock redacted thinking is not yet supported, discarding input content block");
+                    tracing::warn!("The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks.");
                     Ok(None)
                 } else {
                     // We have a thought block with no text or signature, so just ignore it
+                    tracing::warn!("The gateway received a reasoning content block with neither text nor signature. This is unsupported, so we'll drop it.");
                     Ok(None)
                 }
             }
@@ -784,12 +785,12 @@ fn bedrock_content_block_to_output(
                 })))
             }
             ReasoningContentBlock::RedactedContent(_) => {
-                tracing::warn!("AWS Bedrock redacted thinking is not yet supported, discarding output content chunk");
+                tracing::warn!("The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks.");
                 Ok(None)
             }
             _ => {
                 tracing::warn!(
-                    "Got unknown reasoning content block type from AWS Bedrock, discarding"
+                    "The TensorZero Gateway received an unknown reasoning content block (supported reasoning formats: `Text`, `Signature`, `RedactedContent`) from AWS Bedrock, so we're discarding the content block. Please reach out to our team and we'll quickly collaborate on a solution."
                 );
                 Ok(None)
             }
@@ -797,7 +798,7 @@ fn bedrock_content_block_to_output(
 
         _ => Err(Error::new(ErrorDetails::TypeConversion {
             message: format!(
-                "Unsupported content block type for AWS Bedrock: {}",
+                "The TensorZero Gateway received an unknown content block from AWS Bedrock ({}), so we're discarding it. Please reach out to our team and we'll quickly collaborate on a solution.",
                 std::any::type_name_of_val(&block)
             ),
         })),
