@@ -400,6 +400,9 @@ pub enum ErrorDetails {
     MissingFileExtension {
         file_name: String,
     },
+    ModelNotFound {
+        model_name: String,
+    },
     ModelProvidersExhausted {
         provider_errors: HashMap<String, Error>,
     },
@@ -570,6 +573,7 @@ impl ErrorDetails {
             ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
             ErrorDetails::MissingFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
+            ErrorDetails::ModelNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
             ErrorDetails::Observability { .. } => tracing::Level::WARN,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
@@ -673,6 +677,7 @@ impl ErrorDetails {
             ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFunctionInVariants { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFileExtension { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1081,6 +1086,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Could not determine file extension for file: {file_name}"
                 )
+            }
+            ErrorDetails::ModelNotFound { model_name } => {
+                write!(f, "Model not found: {model_name}")
             }
             ErrorDetails::ModelProvidersExhausted { provider_errors } => {
                 write!(

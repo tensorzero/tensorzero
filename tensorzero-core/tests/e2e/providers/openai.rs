@@ -1106,7 +1106,8 @@ async fn test_embedding_request() {
     };
 
     let request = EmbeddingRequest {
-        input: "This is a test input".to_string(),
+        input: "This is a test input".to_string().into(),
+        dimensions: None,
     };
     let api_keys = InferenceCredentials::default();
     let response = model_config
@@ -1125,11 +1126,13 @@ async fn test_embedding_request() {
         )
         .await
         .unwrap();
-    assert_eq!(response.embedding.len(), 1536);
+    let [first_embedding] = response.embeddings.as_slice() else {
+        panic!("Expected exactly one embedding");
+    };
+    assert_eq!(first_embedding.len(), 1536);
     assert!(!response.cached);
     // Calculate the L2 norm of the embedding
-    let norm: f32 = response
-        .embedding
+    let norm: f32 = first_embedding
         .iter()
         .map(|&x| x.powi(2))
         .sum::<f32>()
@@ -1189,7 +1192,7 @@ async fn test_embedding_request() {
         .await
         .unwrap();
     assert!(cached_response.cached);
-    assert_eq!(response.embedding, cached_response.embedding);
+    assert_eq!(response.embeddings, cached_response.embeddings);
     assert_eq!(cached_response.usage.input_tokens, 5);
     assert_eq!(cached_response.usage.output_tokens, 0);
 }
@@ -1208,15 +1211,24 @@ async fn test_embedding_sanity_check() {
             .unwrap();
     let client = Client::new();
     let embedding_request_a = EmbeddingRequest {
-        input: "Joe Biden is the president of the United States".to_string(),
+        input: "Joe Biden is the president of the United States"
+            .to_string()
+            .into(),
+        dimensions: None,
     };
 
     let embedding_request_b = EmbeddingRequest {
-        input: "Kamala Harris is the vice president of the United States".to_string(),
+        input: "Kamala Harris is the vice president of the United States"
+            .to_string()
+            .into(),
+        dimensions: None,
     };
 
     let embedding_request_c = EmbeddingRequest {
-        input: "My favorite systems programming language is Rust".to_string(),
+        input: "My favorite systems programming language is Rust"
+            .to_string()
+            .into(),
+        dimensions: None,
     };
     let api_keys = InferenceCredentials::default();
 
@@ -1231,11 +1243,20 @@ async fn test_embedding_sanity_check() {
     let response_a = response_a.expect("Failed to get embedding for request A");
     let response_b = response_b.expect("Failed to get embedding for request B");
     let response_c = response_c.expect("Failed to get embedding for request C");
+    let [embedding_a] = response_a.embeddings.as_slice() else {
+        panic!("Failed to get embedding for request A");
+    };
+    let [embedding_b] = response_b.embeddings.as_slice() else {
+        panic!("Failed to get embedding for request b");
+    };
+    let [embedding_c] = response_c.embeddings.as_slice() else {
+        panic!("Failed to get embedding for request C");
+    };
 
     // Calculate cosine similarities
-    let similarity_ab = cosine_similarity(&response_a.embedding, &response_b.embedding);
-    let similarity_ac = cosine_similarity(&response_a.embedding, &response_c.embedding);
-    let similarity_bc = cosine_similarity(&response_b.embedding, &response_c.embedding);
+    let similarity_ab = cosine_similarity(&embedding_a, &embedding_b);
+    let similarity_ac = cosine_similarity(&embedding_a, &embedding_c);
+    let similarity_bc = cosine_similarity(&embedding_b, &embedding_c);
 
     // Assert that semantically similar sentences have higher similarity (with a margin of 0.3)
     // We empirically determined this by staring at it (no science to it)

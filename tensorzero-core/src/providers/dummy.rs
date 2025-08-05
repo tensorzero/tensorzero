@@ -771,7 +771,7 @@ impl EmbeddingProvider for DummyProvider {
         }
         let id = Uuid::now_v7();
         let created = current_timestamp();
-        let embedding = vec![0.0; 1536];
+        let embeddings = vec![vec![0.0; 1536]; request.input.num_inputs()];
         let raw_request = DUMMY_RAW_REQUEST.to_string();
         let raw_response = DUMMY_RAW_REQUEST.to_string();
         let usage = Usage {
@@ -783,8 +783,8 @@ impl EmbeddingProvider for DummyProvider {
         };
         Ok(EmbeddingProviderResponse {
             id,
-            input: request.input.to_string(),
-            embedding,
+            input: request.input.clone(),
+            embeddings,
             created,
             raw_request,
             raw_response,

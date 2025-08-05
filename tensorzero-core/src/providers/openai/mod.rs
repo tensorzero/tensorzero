@@ -18,7 +18,9 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
-use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
+use crate::embeddings::{
+    EmbeddingInput, EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest,
+};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
@@ -585,7 +587,8 @@ impl EmbeddingProvider for OpenAIProvider {
         dynamic_api_keys: &InferenceCredentials,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_body = OpenAIEmbeddingRequest::new(&self.model_name, &request.input);
+        let request_body =
+            OpenAIEmbeddingRequest::new(&self.model_name, &request.input, request.dimensions);
         let request_url =
             get_embedding_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let start_time = Instant::now();
@@ -2058,12 +2061,17 @@ fn openai_to_tensorzero_chunk(
 #[derive(Debug, Serialize)]
 struct OpenAIEmbeddingRequest<'a> {
     model: &'a str,
-    input: &'a str,
+    input: &'a EmbeddingInput,
+    dimensions: Option<u32>,
 }
 
 impl<'a> OpenAIEmbeddingRequest<'a> {
-    fn new(model: &'a str, input: &'a str) -> Self {
-        Self { model, input }
+    fn new(model: &'a str, input: &'a EmbeddingInput, dimensions: Option<u32>) -> Self {
+        Self {
+            model,
+            input,
+            dimensions,
+        }
     }
 }
 
@@ -2114,23 +2122,15 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
                 provider_type: PROVIDER_TYPE.to_string(),
             }));
         }
-        let embedding = response
+        let embeddings = response
             .data
             .into_iter()
-            .next()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: "Expected exactly one embedding in response".to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?
-            .embedding;
+            .map(|embedding| embedding.embedding)
+            .collect();
 
         Ok(EmbeddingProviderResponse::new(
-            embedding,
-            request.input.to_string(),
+            embeddings,
+            request.input.clone(),
             raw_request,
             raw_response,
             response.usage.into(),

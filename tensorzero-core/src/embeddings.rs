@@ -13,7 +13,7 @@ use crate::model_table::BaseModelTable;
 use crate::model_table::ShorthandModelConfig;
 use crate::{
     endpoints::inference::InferenceCredentials,
-    error::{Error, ErrorDetails},
+    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     inference::types::{
         current_timestamp, Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
     },
@@ -134,19 +134,25 @@ impl EmbeddingModelConfig {
                 .await;
             match response {
                 Ok(response) => {
-                    if clients.cache_options.enabled.write() {
+                    if clients.cache_options.enabled.write() && response.embeddings.len() == 1 {
+                        let Some(first_embedding) = response.embeddings.first() else {
+                            return Err(ErrorDetails::InternalError{
+                             message: format!("Failed to get first embedding for cache {IMPOSSIBLE_ERROR_MESSAGE}")
+                            }
+                            .into());
+                        };
                         let _ = start_cache_write(
                             clients.clickhouse_connection_info,
                             provider_request.get_cache_key()?,
                             EmbeddingCacheData {
-                                embedding: response.embedding.clone(),
+                                embedding: first_embedding.clone(),
                             },
                             &response.raw_request,
                             &response.raw_response,
                             &response.usage,
                             None,
                         );
-                    }
+                    };
                     let embedding_response =
                         EmbeddingResponse::new(response, provider_name.clone());
                     return Ok(embedding_response);
@@ -160,9 +166,38 @@ impl EmbeddingModelConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum EmbeddingInput {
+    Single(String),
+    Batch(Vec<String>),
+}
+
+impl EmbeddingInput {
+    pub fn num_inputs(&self) -> usize {
+        match self {
+            EmbeddingInput::Single(_) => 1,
+            EmbeddingInput::Batch(texts) => texts.len(),
+        }
+    }
+
+    pub fn first(&self) -> Option<&String> {
+        match self {
+            EmbeddingInput::Single(text) => Some(text),
+            EmbeddingInput::Batch(texts) => texts.first(),
+        }
+    }
+}
+
+impl From<String> for EmbeddingInput {
+    fn from(text: String) -> Self {
+        EmbeddingInput::Single(text)
+    }
+}
+
 #[derive(Debug, PartialEq, Serialize)]
 pub struct EmbeddingRequest {
-    pub input: String,
+    pub input: EmbeddingInput,
+    pub dimensions: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -175,8 +210,8 @@ pub struct EmbeddingProviderRequest<'request> {
 #[derive(Debug, PartialEq)]
 pub struct EmbeddingProviderResponse {
     pub id: Uuid,
-    pub input: String,
-    pub embedding: Vec<f32>,
+    pub input: EmbeddingInput,
+    pub embeddings: Vec<Vec<f32>>,
     pub created: u64,
     pub raw_request: String,
     pub raw_response: String,
@@ -187,8 +222,8 @@ pub struct EmbeddingProviderResponse {
 #[derive(Debug, PartialEq)]
 pub struct EmbeddingResponse {
     pub id: Uuid,
-    pub input: String,
-    pub embedding: Vec<f32>,
+    pub input: EmbeddingInput,
+    pub embeddings: Vec<Vec<f32>>,
     pub created: u64,
     pub raw_request: String,
     pub raw_response: String,
@@ -207,7 +242,7 @@ impl EmbeddingResponse {
             id: Uuid::now_v7(),
             created: current_timestamp(),
             input: request.request.input.clone(),
-            embedding: cache_lookup.output.embedding,
+            embeddings: vec![cache_lookup.output.embedding],
             raw_request: cache_lookup.raw_request,
             raw_response: cache_lookup.raw_response,
             usage: Usage {
@@ -225,8 +260,8 @@ impl EmbeddingResponse {
 
 pub struct EmbeddingResponseWithMetadata {
     pub id: Uuid,
-    pub input: String,
-    pub embedding: Vec<f32>,
+    pub input: EmbeddingInput,
+    pub embedding: Vec<Vec<f32>>,
     pub created: u64,
     pub raw_request: String,
     pub raw_response: String,
@@ -244,7 +279,7 @@ impl EmbeddingResponse {
         Self {
             id: embedding_provider_response.id,
             input: embedding_provider_response.input,
-            embedding: embedding_provider_response.embedding,
+            embeddings: embedding_provider_response.embeddings,
             created: embedding_provider_response.created,
             raw_request: embedding_provider_response.raw_request,
             raw_response: embedding_provider_response.raw_response,
@@ -261,7 +296,7 @@ impl EmbeddingResponseWithMetadata {
         Self {
             id: embedding_response.id,
             input: embedding_response.input,
-            embedding: embedding_response.embedding,
+            embedding: embedding_response.embeddings,
             created: embedding_response.created,
             raw_request: embedding_response.raw_request,
             raw_response: embedding_response.raw_response,
@@ -273,16 +308,24 @@ impl EmbeddingResponseWithMetadata {
     }
 }
 
-impl From<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetadata {
-    fn from(response: EmbeddingResponseWithMetadata) -> Self {
-        Self {
+impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetadata {
+    type Error = Error;
+
+    fn try_from(response: EmbeddingResponseWithMetadata) -> Result<Self, Self::Error> {
+        if response.input.num_inputs() != 1 {
+            return Err(ErrorDetails::InternalError { message: format!("Can't convert batched embedding response to model inference response. {IMPOSSIBLE_ERROR_MESSAGE}") }.into());
+        }
+        let Some(input) = response.input.first() else {
+            return Err(ErrorDetails::InternalError { message: format!("Can't convert batched embedding response to model inference response. {IMPOSSIBLE_ERROR_MESSAGE}") }.into());
+        };
+        Ok(Self {
             id: response.id,
             output: vec![],
             created: response.created,
             system: None,
             input_messages: vec![RequestMessage {
                 role: Role::User,
-                content: vec![response.input.into()],
+                content: vec![input.clone().into()],
             }], // TODO (#399): Store this information in a more appropriate way for this kind of request
             raw_request: response.raw_request,
             raw_response: response.raw_response,
@@ -292,7 +335,7 @@ impl From<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetadata 
             model_name: response.embedding_model_name,
             cached: false,
             finish_reason: None,
-        }
+        })
     }
 }
 
@@ -360,8 +403,8 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
 
 impl EmbeddingProviderResponse {
     pub fn new(
-        embedding: Vec<f32>,
-        input: String,
+        embeddings: Vec<Vec<f32>>,
+        input: EmbeddingInput,
         raw_request: String,
         raw_response: String,
         usage: Usage,
@@ -370,7 +413,7 @@ impl EmbeddingProviderResponse {
         Self {
             id: Uuid::now_v7(),
             input,
-            embedding,
+            embeddings,
             created: current_timestamp(),
             raw_request,
             raw_response,
@@ -410,7 +453,8 @@ mod tests {
             ]),
         };
         let request = EmbeddingRequest {
-            input: "Hello, world!".to_string(),
+            input: "Hello, world!".to_string().into(),
+            dimensions: None,
         };
         let response = fallback_embedding_model
             .embed(
