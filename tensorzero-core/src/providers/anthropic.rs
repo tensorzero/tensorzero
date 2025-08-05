@@ -1800,7 +1800,13 @@ mod tests {
         }];
 
         let request = ModelInferenceRequest {
+            messages: messages.clone(),
+            ..Default::default()
+        };
+
+        let request_with_max_tokens = ModelInferenceRequest {
             messages,
+            max_tokens: Some(100),
             ..Default::default()
         };
 
@@ -1808,53 +1814,105 @@ mod tests {
         let body = AnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 32_000);
 
+        let model = "claude-opus-4-20250514".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
         let model = "claude-sonnet-4-20250514".to_string();
         let body = AnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 64_000);
+
+        let model = "claude-sonnet-4-20250514".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-7-sonnet-20250219".to_string();
         let body = AnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 64_000);
 
+        let model = "claude-3-7-sonnet-20250219".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
         let model = "claude-3-5-sonnet-20241022".to_string();
         let body = AnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 8_192);
+
+        let model = "claude-3-5-sonnet-20241022".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-haiku-20241022".to_string();
         let body = AnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 8_192);
 
+        let model = "claude-3-5-haiku-20241022".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
         let model = "claude-opus-4-0".to_string();
         let body = AnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 32_000);
+
+        let model = "claude-opus-4-0".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-0".to_string();
         let body = AnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 64_000);
 
+        let model = "claude-sonnet-4-0".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
         let model = "claude-3-7-sonnet-latest".to_string();
         let body = AnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 64_000);
+
+        let model = "claude-3-7-sonnet-latest".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet-latest".to_string();
         let body = AnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 8_192);
 
+        let model = "claude-3-5-sonnet-latest".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
         let model = "claude-3-5-haiku-latest".to_string();
         let body = AnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 8_192);
+
+        let model = "claude-3-5-haiku-latest".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-haiku-20240307".to_string();
         let body = AnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 4_096);
 
+        let model = "claude-3-haiku-20240307".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
         let model = "claude-3-5-ballad-latest".to_string(); // fake model
         let body = AnthropicRequestBody::new(&model, &request);
         assert!(body.is_err());
 
+        let model = "claude-3-5-ballad-latest".to_string(); // fake model
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
         let model = "claude-4-5-haiku-20260101".to_string(); // fake model
         let body = AnthropicRequestBody::new(&model, &request);
         assert!(body.is_err());
+
+        let model = "claude-4-5-haiku-20260101".to_string(); // fake model
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
     }
 
     #[test]

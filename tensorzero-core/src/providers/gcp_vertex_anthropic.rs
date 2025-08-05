@@ -1661,7 +1661,13 @@ mod tests {
         }];
 
         let request = ModelInferenceRequest {
+            messages: messages.clone(),
+            ..Default::default()
+        };
+
+        let request_with_max_tokens = ModelInferenceRequest {
             messages,
+            max_tokens: Some(100),
             ..Default::default()
         };
 
@@ -1669,37 +1675,73 @@ mod tests {
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 32_000);
 
+        let model = "claude-opus-4@20250514".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
         let model = "claude-sonnet-4@20250514".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 64_000);
+
+        let model = "claude-sonnet-4@20250514".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-7-sonnet@20250219".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 64_000);
 
+        let model = "claude-3-7-sonnet@20250219".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
         let model = "claude-3-5-sonnet-v2@20240222".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 8_192);
+
+        let model = "claude-3-5-sonnet-v2@20240222".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet@20240229".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 8_192);
 
+        let model = "claude-3-5-sonnet@20240229".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
         let model = "claude-3-5-haiku@20240307".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 8_192);
+
+        let model = "claude-3-5-haiku@20240307".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-haiku@20240307".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 4_096);
 
+        let model = "claude-3-haiku@20240307".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
         let model = "claude-sonnet-4".to_string(); // fake model
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert!(body.is_err());
 
+        let model = "claude-sonnet-4".to_string(); // fake model
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
         let model = "claude-4-5-ballad@20260101".to_string(); // fake model
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert!(body.is_err());
+
+        let model = "claude-4-5-ballad@20260101".to_string(); // fake model
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
     }
 
     #[test]
