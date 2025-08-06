@@ -1127,7 +1127,7 @@ impl UninitializedProviderConfig {
                 api_base,
                 api_key_location,
             } => ProviderConfig::NvidiaNim(NvidiaNimProvider::new(
-                model_name.expect("REASON"),
+                model_name
                 api_base,
                 api_key_location,
             )?),
