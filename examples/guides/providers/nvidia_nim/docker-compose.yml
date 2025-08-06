@@ -3,9 +3,7 @@
 
 services:
   gateway:
-    build:
-      context: ../../../../
-      dockerfile: gateway/Dockerfile
+    image: tensorzero/gateway
     volumes:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
