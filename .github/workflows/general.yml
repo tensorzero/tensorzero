@@ -360,7 +360,7 @@ jobs:
     strategy:
       matrix:
         # Only include replicated: true when running in merge queue
-        replicated: ${{ fromJSON('[true, false]') }}
+        replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
         clickhouse_version:
           - tag: "24.12-alpine"
             prefix: "24.12"
@@ -407,7 +407,6 @@ jobs:
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
-          echo "TENSORZERO_CACHE=/cache" >> $GITHUB_ENV
 
       - name: Launch non-replicated ClickHouse container for E2E tests
         if: matrix.replicated == false
@@ -415,10 +414,7 @@ jobs:
 
       - name: Launch replicated ClickHouse container for E2E tests
         if: matrix.replicated == true
-        run: |
-          # Delete the volumes first (we're just using a cache volume to get more disk space)
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml rm
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up clickhouse-01 clickhouse-02 clickhouse-03 --wait
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up clickhouse-01 clickhouse-02 clickhouse-03 --wait
 
       # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
       - name: Check ClickHouse version
