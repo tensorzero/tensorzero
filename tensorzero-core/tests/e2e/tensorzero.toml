@@ -375,14 +375,14 @@ routing = ["llama"]
 
 [models."llama-scout-llama".providers.llama]
 type = "llama"
-model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
+model_name = "Llama-4-Scout-17B-16E-Instruct-FP8"
 
 [models."llama-scout-llama-dynamic"]
 routing = ["llama"]
 
 [models."llama-scout-llama-dynamic".providers.llama]
 type = "llama"
-model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
+model_name = "Llama-4-Scout-17B-16E-Instruct-FP8"
 api_key_location = "dynamic::llama_api_key"
 
 
