@@ -479,21 +479,21 @@ jobs:
         if: always()
         run: |
           echo "Error logs for ClickHouse 01:"
-          docker exec e2e-clickhouse01-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+          docker exec e2e-clickhouse-01-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
           echo "Error logs for ClickHouse 02:"
-          docker exec e2e-clickhouse02-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+          docker exec e2e-clickhouse-02-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
           echo "Error logs for ClickHouse 03:"
-          docker exec e2e-clickhouse03-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+          docker exec e2e-clickhouse-03-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
 
       - name: Print ClickHouse trace logs (replicated)
         if: always()
         run: |
           echo "Trace logs for ClickHouse 01:"
-          docker exec e2e-clickhouse01-1 cat /var/log/clickhouse-server/clickhouse-server.log
+          docker exec e2e-clickhouse-01-1 cat /var/log/clickhouse-server/clickhouse-server.log
           echo "Trace logs for ClickHouse 02:"
-          docker exec e2e-clickhouse02-1 cat /var/log/clickhouse-server/clickhouse-server.log
+          docker exec e2e-clickhouse-02-1 cat /var/log/clickhouse-server/clickhouse-server.log
           echo "Trace logs for ClickHouse 03:"
-          docker exec e2e-clickhouse03-1 cat /var/log/clickhouse-server/clickhouse-server.log
+          docker exec e2e-clickhouse-03-1 cat /var/log/clickhouse-server/clickhouse-server.log
 
       - name: Print docker compose logs (non-replicated)
         if: always() && matrix.replicated == false
