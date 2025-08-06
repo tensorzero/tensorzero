@@ -422,7 +422,7 @@ impl ModelConfig {
                     Ok(response) => {
                         // Perform the cache write outside of the `non_streaming_total_timeout` timeout future,
                         // (in case we ever add a blocking cache write option)
-                        if clients.cache_options.enabled.write() {
+                        if !response.cached && clients.cache_options.enabled.write() {
                             let _ = start_cache_write(
                                 clients.clickhouse_connection_info,
                                 cache_key,
@@ -951,7 +951,7 @@ pub enum UninitializedProviderConfig {
     #[strum(serialize = "nvidia_nim")]
     #[serde(rename = "nvidia_nim")]
     NvidiaNim {
-        model_name: String,
+        model_name: Option<String>,
         api_base: Option<Url>,
         #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
@@ -1127,7 +1127,7 @@ impl UninitializedProviderConfig {
                 api_base,
                 api_key_location,
             } => ProviderConfig::NvidiaNim(NvidiaNimProvider::new(
-                model_name,
+                model_name.expect("REASON"),
                 api_base,
                 api_key_location,
             )?),
