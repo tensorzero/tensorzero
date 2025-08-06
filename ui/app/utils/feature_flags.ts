@@ -1,3 +1,5 @@
+import { canUseDOM } from "./common";
+
 interface FeatureFlags {
   /// When set, sets `cache_options.enabled = "on"` on all inference calls
   /// Normally, we leave this unset, which uses the TensorZero default of 'write_only'
@@ -13,21 +15,35 @@ interface FeatureFlags {
  * @returns FeatureFlags
  */
 export function getFeatureFlags(): FeatureFlags {
-  const FORCE_CACHE_ON = import.meta.env.VITE_TENSORZERO_FORCE_CACHE_ON === "1";
+  const envValue = canUseDOM
+    ? import.meta.env.VITE_TENSORZERO_FORCE_CACHE_ON
+    : process.env.VITE_TENSORZERO_FORCE_CACHE_ON;
+  const FORCE_CACHE_ON = envValue === "1";
   return {
     FORCE_CACHE_ON,
   };
 }
 
-/// Returns an object containing extra parameters that should be passed to
-/// inference calls on our TensorZero client
-export function getExtraInferenceOptions(): object {
+interface ExtraInferenceOptions {
+  cache_options?: {
+    enabled: "on" | "off" | "write_only";
+  };
+  dryrun?: boolean;
+}
+
+/**
+ * Returns an object containing extra parameters that should be passed to
+ * inference calls on our TensorZero client
+ */
+export function getExtraInferenceOptions(): ExtraInferenceOptions {
   if (getFeatureFlags().FORCE_CACHE_ON) {
     return {
-      dryrun: false,
+      // We need to force dryrun off, as it prevents us from writing to the
+      // cache (which we need in order to populate our model inference cache)
       cache_options: {
         enabled: "on",
       },
+      dryrun: false,
     };
   }
   return {};

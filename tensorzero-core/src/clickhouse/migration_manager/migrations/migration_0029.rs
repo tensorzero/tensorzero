@@ -20,20 +20,13 @@ impl Migration for Migration0029<'_> {
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
-        let float_materialized_view_exists = check_table_exists(
-            self.clickhouse,
-            "StaticEvaluationHumanFeedbackFloatView",
-            MIGRATION_ID,
-        )
-        .await?;
-        let boolean_materialized_view_exists = check_table_exists(
-            self.clickhouse,
-            "StaticEvaluationHumanFeedbackBooleanView",
-            MIGRATION_ID,
-        )
-        .await?;
-        // We need to run this migration if either the float or boolean materialized views exist.
-        Ok(float_materialized_view_exists || boolean_materialized_view_exists)
+        // Note - we always return `true` here, so that we run this migration
+        // on a clean start, and write out the corresponding `TensorZeroMigration` record.
+        // This ensures that running from a clean start runs every migration, which allows
+        // us to skip running all migrations on subsequent runs.
+        // Applying this migration from a clean start doesn't do anything, since the views
+        // don't exist.
+        Ok(true)
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
@@ -57,7 +50,18 @@ impl Migration for Migration0029<'_> {
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {
-        let should_apply = self.should_apply().await?;
-        Ok(!should_apply)
+        let float_materialized_view_exists = check_table_exists(
+            self.clickhouse,
+            "StaticEvaluationHumanFeedbackFloatView",
+            MIGRATION_ID,
+        )
+        .await?;
+        let boolean_materialized_view_exists = check_table_exists(
+            self.clickhouse,
+            "StaticEvaluationHumanFeedbackBooleanView",
+            MIGRATION_ID,
+        )
+        .await?;
+        Ok(!float_materialized_view_exists && !boolean_materialized_view_exists)
     }
 }
