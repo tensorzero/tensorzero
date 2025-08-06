@@ -132,15 +132,14 @@ jobs:
         id: e2e_tests
         env:
           TENSORZERO_CI: 1
-        continue-on-error: true
         run: pnpm ui:test:e2e-base-path
 
       - name: Run UI E2E tests that require credentials
         id: e2e_tests_credentials
         env:
           TENSORZERO_CI: 1
-        continue-on-error: true
-        run: pnpm ui:test:e2e --grep "@credentials"
+        # We currently have no tests that require credentials
+        run: pnpm ui:test:e2e --grep "@credentials" --pass-with-no-tests
 
       - name: Print Docker Compose logs
         if: always()
@@ -161,7 +160,7 @@ jobs:
         run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
 
       - name: Upload Playwright artifacts
-        if: steps.e2e_tests.outcome == 'failure'
+        if: failure()
         uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
         with:
           name: playwright-report-e2e-base-path
@@ -169,10 +168,6 @@ jobs:
             ui/playwright-report/
             ui/test-results/
           retention-days: 7
-
-      - name: Exit if tests failed
-        if: steps.e2e_tests.outcome == 'failure'
-        run: exit 1
 
   # Test that the ui e2e tests pass with model inference cache included in this commit
   # and no model provider secrets set.
