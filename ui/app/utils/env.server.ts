@@ -77,6 +77,9 @@ export function getEnv(): Env {
 export function getExtraInferenceOptions(): object {
   if (getEnv().TENSORZERO_FORCE_CACHE_ON) {
     return {
+      // We need to force dryrun off, as it prevents us from writing to the cache
+      // (which we need in order to populate our model inference cache)
+      dryrun: false,
       cache_options: {
         enabled: "on",
       },
