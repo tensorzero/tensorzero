@@ -945,6 +945,14 @@ pub enum UninitializedProviderConfig {
         #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
+    #[strum(serialize = "nvidia_nim")]
+    #[serde(rename = "nvidia_nim")]
+    NvidiaNim {
+        model_name: String,
+        api_base: Option<Url>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        api_key_location: Option<CredentialLocation>,
+    },
     OpenAI {
         model_name: String,
         api_base: Option<Url>,
@@ -1111,6 +1119,15 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_key_location,
             } => ProviderConfig::Mistral(MistralProvider::new(model_name, api_key_location)?),
+            UninitializedProviderConfig::NvidiaNim {
+                model_name,
+                api_base,
+                api_key_location,
+            } => ProviderConfig::NvidiaNim(NvidiaNimProvider::new(
+                model_name,
+                api_base,
+                api_key_location,
+            )?),
             UninitializedProviderConfig::OpenAI {
                 model_name,
                 api_base,
