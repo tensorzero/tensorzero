@@ -1,19 +1,11 @@
 import { useState } from "react";
 import type { VariantInfo, ChatCompletionConfig } from "tensorzero-node";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "~/components/ui/sheet";
+import { Sheet, SheetContent, SheetFooter } from "~/components/ui/sheet";
+import { PageHeader } from "~/components/layout/PageLayout";
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { Separator } from "~/components/ui/separator";
 import { CodeEditor } from "~/components/ui/code-editor";
-import { Badge } from "~/components/ui/badge";
 
 interface VariantEditorProps {
   variantInfo: VariantInfo;
@@ -78,118 +70,97 @@ export function VariantEditor({
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent side="right" className="w-full md:w-5/6">
-        <SheetHeader>
-          <SheetTitle>
-            Edit Variant Configuration
-            {variantName && (
-              <span className="text-muted-foreground ml-2 font-normal">
-                ({variantName})
-              </span>
-            )}
-          </SheetTitle>
-          <SheetDescription>
-            Configure chat completion settings for this variant
-          </SheetDescription>
-        </SheetHeader>
+        <PageHeader label="Variant Configuration" name={variantName} />
 
         <div className="mt-4 max-h-[calc(100vh-12rem)] space-y-6 overflow-y-auto">
           {/* Weight */}
           <Card>
             <CardHeader>
-              <CardTitle>Weight</CardTitle>
+              <CardTitle>Basic</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                <Label>Variant Weight</Label>
-                <div className="text-sm">
-                  {config.weight !== null ? (
-                    <Badge variant="secondary">{config.weight}</Badge>
-                  ) : (
-                    <span className="text-muted-foreground">Not set</span>
-                  )}
+              <div className="space-y-4">
+                <div className="space-y-4">
+                  <Label>Model</Label>
+                  <div className="font-mono text-sm">{config.model}</div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Model Configuration */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Model</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <Label>Model</Label>
-                <div className="flex items-center gap-2">
-                  <code className="bg-muted rounded px-2 py-1 font-mono text-sm">
-                    {config.model}
-                  </code>
+                <div className="space-y-4">
+                  <Label>Weight</Label>
+                  <div className="text-sm">
+                    {config.weight !== null ? (
+                      <div className="font-mono text-sm">{config.weight}</div>
+                    ) : (
+                      <span className="text-muted-foreground">Default</span>
+                    )}
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           {/* Templates Section */}
-          <div className="space-y-6">
-            <h3 className="text-lg font-semibold">Templates</h3>
-            {/* TODO before editing: fix the case where if you clear a template the template is no longer editable */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Templates</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* TODO before editing: fix the case where if you clear a template the template is no longer editable */}
 
-            <div className="space-y-2">
-              <Label>System Template</Label>
-              {editedConfig?.system_template ? (
-                <CodeEditor
-                  value={editedConfig.system_template.contents}
-                  allowedLanguages={["jinja2", "text"]}
-                  onChange={(value) => updateTemplate("system", value)}
-                  className="min-h-[200px]"
-                />
-              ) : (
-                <div className="rounded-md border border-dashed p-8 text-center">
-                  <p className="text-muted-foreground text-sm">
-                    No system template defined
-                  </p>
-                </div>
-              )}
-            </div>
+              <div className="space-y-4">
+                <Label>System Template</Label>
+                {editedConfig?.system_template ? (
+                  <CodeEditor
+                    value={editedConfig.system_template.contents}
+                    allowedLanguages={["jinja2", "text"]}
+                    onChange={(value) => updateTemplate("system", value)}
+                    className="min-h-[200px]"
+                  />
+                ) : (
+                  <div className="rounded-md border border-dashed p-8 text-center">
+                    <p className="text-muted-foreground text-sm">
+                      No system template defined
+                    </p>
+                  </div>
+                )}
+              </div>
 
-            <div className="space-y-2">
-              <Label>User Template</Label>
-              {editedConfig?.user_template ? (
-                <CodeEditor
-                  value={editedConfig.user_template.contents}
-                  allowedLanguages={["jinja2", "text"]}
-                  onChange={(value) => updateTemplate("user", value)}
-                  className="min-h-[200px]"
-                />
-              ) : (
-                <div className="rounded-md border border-dashed p-8 text-center">
-                  <p className="text-muted-foreground text-sm">
-                    No user template defined
-                  </p>
-                </div>
-              )}
-            </div>
+              <div className="space-y-4">
+                <Label>User Template</Label>
+                {editedConfig?.user_template ? (
+                  <CodeEditor
+                    value={editedConfig.user_template.contents}
+                    allowedLanguages={["jinja2", "text"]}
+                    onChange={(value) => updateTemplate("user", value)}
+                    className="min-h-[200px]"
+                  />
+                ) : (
+                  <div className="rounded-md border border-dashed p-8 text-center">
+                    <p className="text-muted-foreground text-sm">
+                      No user template defined
+                    </p>
+                  </div>
+                )}
+              </div>
 
-            <div className="space-y-2">
-              <Label>Assistant Template</Label>
-              {editedConfig?.assistant_template ? (
-                <CodeEditor
-                  value={editedConfig.assistant_template.contents}
-                  allowedLanguages={["jinja2", "text"]}
-                  onChange={(value) => updateTemplate("assistant", value)}
-                  className="min-h-[200px]"
-                />
-              ) : (
-                <div className="rounded-md border border-dashed p-8 text-center">
-                  <p className="text-muted-foreground text-sm">
-                    No assistant template defined
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <Separator />
+              <div className="space-y-8">
+                <Label>Assistant Template</Label>
+                {editedConfig?.assistant_template ? (
+                  <CodeEditor
+                    value={editedConfig.assistant_template.contents}
+                    allowedLanguages={["jinja2", "text"]}
+                    onChange={(value) => updateTemplate("assistant", value)}
+                    className="min-h-[200px]"
+                  />
+                ) : (
+                  <div className="rounded-md border border-dashed p-8 text-center">
+                    <p className="text-muted-foreground text-sm">
+                      No assistant template defined
+                    </p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Response Format */}
           <Card>
@@ -201,7 +172,7 @@ export function VariantEditor({
                 <Label>JSON Mode</Label>
                 <div className="text-sm">
                   {config.json_mode ? (
-                    <Badge>{config.json_mode}</Badge>
+                    <div className="font-mono text-sm">{config.json_mode}</div>
                   ) : (
                     <span className="text-muted-foreground">Disabled</span>
                   )}
@@ -214,13 +185,9 @@ export function VariantEditor({
                   {config.stop_sequences && config.stop_sequences.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
                       {config.stop_sequences.map((seq, idx) => (
-                        <Badge
-                          key={idx}
-                          variant="secondary"
-                          className="font-mono"
-                        >
+                        <div key={idx} className="font-mono text-sm">
                           "{seq}"
-                        </Badge>
+                        </div>
                       ))}
                     </div>
                   ) : (
@@ -242,7 +209,9 @@ export function VariantEditor({
                   <Label>Temperature</Label>
                   <div className="text-sm">
                     {config.temperature !== null ? (
-                      <Badge variant="outline">{config.temperature}</Badge>
+                      <div className="font-mono text-sm">
+                        {config.temperature}
+                      </div>
                     ) : (
                       <span className="text-muted-foreground">Default</span>
                     )}
@@ -252,7 +221,7 @@ export function VariantEditor({
                   <Label>Top P</Label>
                   <div className="text-sm">
                     {config.top_p !== null ? (
-                      <Badge variant="outline">{config.top_p}</Badge>
+                      <div className="font-mono text-sm">{config.top_p}</div>
                     ) : (
                       <span className="text-muted-foreground">Default</span>
                     )}
@@ -262,7 +231,9 @@ export function VariantEditor({
                   <Label>Max Tokens</Label>
                   <div className="text-sm">
                     {config.max_tokens !== null ? (
-                      <Badge variant="outline">{config.max_tokens}</Badge>
+                      <div className="font-mono text-sm">
+                        {config.max_tokens}
+                      </div>
                     ) : (
                       <span className="text-muted-foreground">Default</span>
                     )}
@@ -272,7 +243,7 @@ export function VariantEditor({
                   <Label>Seed</Label>
                   <div className="text-sm">
                     {config.seed !== null ? (
-                      <Badge variant="outline">{config.seed}</Badge>
+                      <div className="font-mono text-sm">{config.seed}</div>
                     ) : (
                       <span className="text-muted-foreground">Default</span>
                     )}
@@ -293,7 +264,9 @@ export function VariantEditor({
                   <Label>Presence Penalty</Label>
                   <div className="text-sm">
                     {config.presence_penalty !== null ? (
-                      <Badge variant="outline">{config.presence_penalty}</Badge>
+                      <div className="font-mono text-sm">
+                        {config.presence_penalty}
+                      </div>
                     ) : (
                       <span className="text-muted-foreground">Default</span>
                     )}
@@ -303,9 +276,9 @@ export function VariantEditor({
                   <Label>Frequency Penalty</Label>
                   <div className="text-sm">
                     {config.frequency_penalty !== null ? (
-                      <Badge variant="outline">
+                      <div className="font-mono text-sm">
                         {config.frequency_penalty}
-                      </Badge>
+                      </div>
                     ) : (
                       <span className="text-muted-foreground">Default</span>
                     )}
@@ -315,10 +288,10 @@ export function VariantEditor({
             </CardContent>
           </Card>
 
-          {/* Timeout Configuration */}
+          {/* Timeouts */}
           <Card>
             <CardHeader>
-              <CardTitle>Timeout Configuration</CardTitle>
+              <CardTitle>Timeouts</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
@@ -326,11 +299,11 @@ export function VariantEditor({
                   <Label>Non-Streaming Total (ms)</Label>
                   <div className="text-sm">
                     {variantInfo.timeouts.non_streaming.total_ms !== null ? (
-                      <Badge variant="outline">
+                      <div className="font-mono text-sm">
                         {variantInfo.timeouts.non_streaming.total_ms.toString()}
-                      </Badge>
+                      </div>
                     ) : (
-                      <span className="text-muted-foreground">Not set</span>
+                      <span className="text-muted-foreground">Default</span>
                     )}
                   </div>
                 </div>
@@ -338,11 +311,11 @@ export function VariantEditor({
                   <Label>Streaming TTFT (ms)</Label>
                   <div className="text-sm">
                     {variantInfo.timeouts.streaming.ttft_ms !== null ? (
-                      <Badge variant="outline">
+                      <div className="font-mono text-sm">
                         {variantInfo.timeouts.streaming.ttft_ms.toString()}
-                      </Badge>
+                      </div>
                     ) : (
-                      <span className="text-muted-foreground">Not set</span>
+                      <span className="text-muted-foreground">Default</span>
                     )}
                   </div>
                 </div>
@@ -350,27 +323,35 @@ export function VariantEditor({
             </CardContent>
           </Card>
 
-          {/* Retry Configuration */}
+          {/* Retry */}
           <Card>
             <CardHeader>
-              <CardTitle>Retry Configuration</CardTitle>
+              <CardTitle>Retries</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Num Retries</Label>
-                  <Badge variant="outline">{config.retries.num_retries}</Badge>
+                  <Label>Number of Retries</Label>
+                  <div className="font-mono text-sm">
+                    {config.retries.num_retries}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Max Delay (s)</Label>
-                  <Badge variant="outline">{config.retries.max_delay_s}</Badge>
+                  <div className="font-mono text-sm">
+                    {config.retries.max_delay_s}
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <SheetFooter className="mt-6">
+        <SheetFooter className="mt-6 items-center">
+          <span className="text-muted-foreground mr-8 text-xs">
+            Changes don't affect the gateway. They are temporary and live in the
+            browser.
+          </span>
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>

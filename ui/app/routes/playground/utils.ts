@@ -113,18 +113,7 @@ export function getNewVariantName(currentVariantName: string): string {
   return `tensorzero::edited::${randomId}::${originalVariantName}`;
 }
 
-export function getDisplayVariantName(variant: PlaygroundVariantInfo) {
-  if (variant.type === "builtin") {
-    return variant.name;
-  } else if (variant.type === "edited") {
-    const originalVariantName = extractOriginalVariantNameFromEdited(
-      variant.name,
-    );
-    return originalVariantName + " (edited)";
-  }
-}
-
-function extractOriginalVariantNameFromEdited(
+export function extractOriginalVariantNameFromEdited(
   editedVariantName: string,
 ): string {
   const match = editedVariantName.match(/^tensorzero::edited::[^:]*::(.*)$/);

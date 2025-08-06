@@ -32,8 +32,9 @@ import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.serv
 import type { InferenceResponse } from "tensorzero-node";
 import { EditButton } from "~/components/utils/EditButton";
 import { VariantEditor } from "~/components/function/variant/VariantEditor";
+import { Badge } from "~/components/ui/badge";
 import {
-  getDisplayVariantName,
+  extractOriginalVariantNameFromEdited,
   getNewVariantName,
   getVariants,
   preparePlaygroundInferenceRequest,
@@ -46,6 +47,32 @@ const DEFAULT_LIMIT = 5;
 export const handle: RouteHandle = {
   crumb: () => ["Playground"],
 };
+
+function getCleanVariantName(variant: PlaygroundVariantInfo) {
+  if (variant.type === "builtin") {
+    return variant.name;
+  } else if (variant.type === "edited") {
+    const originalVariantName = extractOriginalVariantNameFromEdited(
+      variant.name,
+    );
+    return originalVariantName;
+  }
+}
+
+function getDisplayVariantName(variant: PlaygroundVariantInfo) {
+  if (variant.type === "builtin") {
+    return <span>{variant.name}</span>;
+  } else if (variant.type === "edited") {
+    const originalVariantName = extractOriginalVariantNameFromEdited(
+      variant.name,
+    );
+    return (
+      <span>
+        {originalVariantName} <Badge variant="secondary">edited</Badge>
+      </span>
+    );
+  }
+}
 
 /**
  * We will skip revalidation on navigation in the case where:
@@ -515,7 +542,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
               onClose={() => setEditingVariant(null)}
               variantName={
                 editingVariant.name
-                  ? getDisplayVariantName(editingVariant)
+                  ? getCleanVariantName(editingVariant)
                   : undefined
               }
             />

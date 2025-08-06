@@ -9,6 +9,7 @@ import {
   Dataset,
   GridCheck,
   SequenceChecks,
+  Playground,
 } from "~/components/icons/Icons";
 import { useSidebar } from "~/components/ui/sidebar";
 import { useActivePath } from "~/hooks/use-active-path";
@@ -77,6 +78,11 @@ const navigation: NavigationSection[] = [
   {
     title: "Workflows",
     items: [
+      {
+        title: "Playground",
+        url: "/playground",
+        icon: Playground,
+      },
       {
         title: "Datasets",
         url: "/datasets",
