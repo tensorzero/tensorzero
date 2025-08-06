@@ -13,7 +13,6 @@ pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
-use tensorzero_core::howdy::setup_howdy;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
@@ -31,7 +30,6 @@ use tensorzero_core::{
 use thiserror::Error;
 use tokio::{sync::Mutex, time::error::Elapsed};
 use tokio_stream::StreamExt;
-use tokio_util::sync::CancellationToken;
 use url::Url;
 use uuid::Uuid;
 
@@ -289,7 +287,7 @@ impl ClientBuilder {
                                 source: e.into(),
                             })
                         })?;
-                setup_howdy(clickhouse_connection_info.clone(), CancellationToken::new());
+
                 let http_client = if let Some(http_client) = self.http_client {
                     http_client
                 } else {

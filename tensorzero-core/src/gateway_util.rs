@@ -17,6 +17,7 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
+use crate::howdy::setup_howdy;
 
 /// Represents an active gateway (either standalone or embedded)
 /// The contained `app_state` can be freely cloned and dropped.
@@ -101,6 +102,8 @@ impl GatewayHandle {
         clickhouse_connection_info: ClickHouseConnectionInfo,
         http_client: Client,
     ) -> Self {
+        let cancel_token = CancellationToken::new();
+        setup_howdy(clickhouse_connection_info.clone(), cancel_token.clone());
         Self {
             app_state: AppStateData {
                 config,
@@ -108,7 +111,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 _private: (),
             },
-            cancel_token: CancellationToken::new(),
+            cancel_token,
             _private: (),
         }
     }
