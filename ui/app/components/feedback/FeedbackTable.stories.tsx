@@ -15,6 +15,7 @@ const config: Config = {
     observability: {
       enabled: true,
       async_writes: false,
+      skip_completed_migrations: false,
     },
     export: {
       otlp: {

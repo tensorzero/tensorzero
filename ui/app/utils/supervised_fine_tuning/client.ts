@@ -1,5 +1,4 @@
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
-import { TensorZeroClient } from "tensorzero-node";
 import type {
   InferenceFilterTreeNode,
   InferenceOutputSource,
@@ -8,20 +7,8 @@ import type {
   UninitializedOptimizerInfo,
 } from "tensorzero-node";
 import { getConfig } from "~/utils/config/index.server";
+import { getNativeTensorZeroClient } from "../tensorzero/native_client.server";
 import { getEnv } from "../env.server";
-
-let _tensorZeroClient: TensorZeroClient | undefined;
-export async function getNativeTensorZeroClient(): Promise<TensorZeroClient> {
-  if (_tensorZeroClient) {
-    return _tensorZeroClient;
-  }
-
-  const env = getEnv();
-  _tensorZeroClient = await TensorZeroClient.buildHttp(
-    env.TENSORZERO_GATEWAY_URL,
-  );
-  return _tensorZeroClient;
-}
 
 export async function poll_sft_job(
   jobHandle: OptimizationJobHandle,

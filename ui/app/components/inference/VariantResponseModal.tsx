@@ -21,7 +21,6 @@ interface ResponseColumnProps {
   response: VariantResponseInfo | null;
   errorMessage?: string | null;
   children?: React.ReactNode;
-  item: ParsedInferenceRow | ParsedDatasetRow;
 }
 
 function ResponseColumn({
@@ -29,7 +28,6 @@ function ResponseColumn({
   response,
   errorMessage,
   children,
-  item,
 }: ResponseColumnProps) {
   return (
     <div className="flex flex-1 flex-col">
@@ -52,13 +50,7 @@ function ResponseColumn({
           <>
             {response.output && (
               <div className="flex-1">
-                <NewOutput
-                  output={
-                    "output_schema" in item && item.output_schema
-                      ? { ...response.output, schema: item.output_schema }
-                      : response.output
-                  }
-                />
+                <NewOutput output={response.output} />
               </div>
             )}
 
@@ -180,16 +172,11 @@ export function VariantResponseModal({
           ) : (
             <>
               <div className="flex flex-col gap-4 md:grid md:min-h-[300px] md:grid-cols-2">
-                <ResponseColumn
-                  title="Original"
-                  response={baselineResponse}
-                  item={item}
-                />
+                <ResponseColumn title="Original" response={baselineResponse} />
                 <ResponseColumn
                   title="New"
                   response={variantResponse}
                   errorMessage={error}
-                  item={item}
                 >
                   {children}
                 </ResponseColumn>
