@@ -10417,32 +10417,6 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     .await;
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-    let episode_id = Uuid::now_v7();
-
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input":
-            {
-               "system": {"assistant_name": "Dr. Mehta"},
-               "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the name of the capital city of Japan?"
-                }
-            ]},
-        "stream": false,
-        "tags": {"foo": "bar"},
-        "cache_options": {"enabled": "on", "lookback_s": 10},
-        "params": {
-            "chat_completion": {
-                "max_tokens": 1
-            }
-        },
-        "extra_headers": extra_headers.extra_headers,
-    });
-
     let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
