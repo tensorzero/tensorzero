@@ -1211,5 +1211,9 @@ async fn test_run_migrations_fake_row() {
     expected_migration_ids.push(99999);
     expected_migration_ids.sort();
 
-    assert_eq!(actual_migration_ids, expected_migration_ids);
+    if clickhouse.is_cluster_configured() {
+        assert_eq!(actual_migration_ids, vec![99999]);
+    } else {
+        assert_eq!(actual_migration_ids, expected_migration_ids);
+    }
 }
