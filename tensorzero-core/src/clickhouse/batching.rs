@@ -114,7 +114,9 @@ impl BatchSender {
         let channel = &channels[table_name];
         for row in rows {
             if let Err(e) = channel.send(row) {
-                tracing::error!("Error sending row to batch channel: {e}. {IMPOSSIBLE_ERROR_MESSAGE}");
+                tracing::error!(
+                    "Error sending row to batch channel: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"
+                );
             }
         }
         Ok(())
