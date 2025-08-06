@@ -26,6 +26,17 @@ routing = ["openai"]
 type = "openai"
 model_name = "text-embedding-3-small"
 
+[embedding_models.fallback]
+routing = ["dummy_error", "dummy_succeed"]
+
+[embedding_models.fallback.providers.dummy_error]
+type = "dummy"
+model_name = "error"
+
+[embedding_models.fallback.providers.dummy_succeed]
+type = "dummy"
+model_name = "success"
+
 [models."ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"]
 routing = ["openai"]
 
