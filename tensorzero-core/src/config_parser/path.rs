@@ -16,9 +16,8 @@ use crate::error::{Error, ErrorDetails};
 /// When we add support for config globbing, we'll require deserializing
 /// all paths (e.g. `system_schema`) as `TomlRelativePath`s, which will
 /// track the original `.toml` file in order to perform correct relative path resolution.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TomlRelativePath {
     __tensorzero_remapped_path: PathBuf,
     /// This should be set for dynamic variants to indicate what the file contents would have been at this remapped path.

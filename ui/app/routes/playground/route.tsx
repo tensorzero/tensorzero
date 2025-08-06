@@ -13,7 +13,7 @@ import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import { useFunctionConfig, useAllFunctionConfigs } from "~/context/config";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
-import { getTensorZeroClient, listDatapoints } from "~/utils/tensorzero.server";
+import { listDatapoints } from "~/utils/tensorzero.server";
 import { VariantFilter } from "~/components/function/variant/variant-filter";
 import {
   prepareInferenceActionRequest,
@@ -24,10 +24,6 @@ import { X } from "lucide-react";
 import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 import type { DisplayInput } from "~/utils/clickhouse/common";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  InferenceRequestSchema,
-  type InferenceResponse,
-} from "~/utils/tensorzero";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
 import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.server";
@@ -36,6 +32,8 @@ import OutputRust from "~/components/inference/NewOutputRust";
 import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
 import { safeParseInt } from "~/utils/common";
+import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
+import type { InferenceResponse } from "tensorzero-node";
 import { getExtraInferenceOptions } from "~/utils/feature_flags";
 
 const DEFAULT_LIMIT = 5;
@@ -162,16 +160,17 @@ export async function loader({ request }: Route.LoaderArgs) {
           : undefined,
       output_schema:
         datapoint?.type === "json" ? datapoint.output_schema : null,
-    });
-    const result = InferenceRequestSchema.safeParse(request);
-    if (!result.success) {
-      throw new Error("Invalid request");
-    }
-    return await getTensorZeroClient().inference({
-      ...result.data,
+      // The default is write_only but we do off in the playground
+      cache_options: {
+        max_age_s: null,
+        enabled: "off",
+      },
+      dryrun: true,
       ...getExtraInferenceOptions(),
-      stream: false,
     });
+    const nativeClient = await getNativeTensorZeroClient();
+    const inferenceResponse = await nativeClient.inference(request);
+    return inferenceResponse;
   };
   // Do not block on all the server inferences, just return the promises
   // Create a map of maps of promises, one for each datapoint/variant combination
@@ -541,6 +540,12 @@ function useClientInferences(
               : undefined,
           output_schema:
             datapoint?.type === "json" ? datapoint.output_schema : null,
+          // The default is write_only but we do off in the playground
+          cache_options: {
+            max_age_s: null,
+            enabled: "off",
+          },
+          dryrun: true,
         });
         const formData = new FormData();
         formData.append("data", JSON.stringify(request));

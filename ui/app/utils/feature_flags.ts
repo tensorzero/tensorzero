@@ -27,6 +27,7 @@ export function getFeatureFlags(): FeatureFlags {
 interface ExtraInferenceOptions {
   cache_options?: {
     enabled: "on" | "off" | "write_only";
+    max_age_s: number | null;
   };
   dryrun?: boolean;
 }
@@ -42,6 +43,7 @@ export function getExtraInferenceOptions(): ExtraInferenceOptions {
       // cache (which we need in order to populate our model inference cache)
       cache_options: {
         enabled: "on",
+        max_age_s: null,
       },
       dryrun: false,
     };
