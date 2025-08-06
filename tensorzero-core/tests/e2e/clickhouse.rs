@@ -1159,13 +1159,15 @@ async fn test_run_migrations_fake_row() {
         }
     }
 
-    migration_manager::run(RunMigrationManagerArgs {
+    let migration_manager_result = migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
         manual_run: false,
         skip_completed_migrations: true,
     })
-    .await
-    .unwrap();
+    .await;
+    if migration_manager_result.is_err() ^ clickhouse.is_cluster_configured() {
+        panic!("Migration manager should fail to run if and only if a cluster is configured");
+    }
 
     // Run our fake migration to insert an unexpected row into `TensorZeroMigration`
     // A subsequent normal run of migrations should *not* skip running migrations,
@@ -1183,13 +1185,15 @@ async fn test_run_migrations_fake_row() {
     let migrations = migration_manager::make_all_migrations(&clickhouse);
     assert!(!migration_manager::should_skip_migrations(&clickhouse, &migrations).await);
 
-    migration_manager::run(RunMigrationManagerArgs {
+    let migration_manager_result = migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
         skip_completed_migrations: true,
         manual_run: false,
     })
-    .await
-    .unwrap();
+    .await;
+    if migration_manager_result.is_err() ^ clickhouse.is_cluster_configured() {
+        panic!("Migration manager should fail to run if and only if a cluster is configured");
+    }
     assert!(!logs_contain("already been applied"));
 
     let rows = migration_manager::get_all_migration_records(&clickhouse)

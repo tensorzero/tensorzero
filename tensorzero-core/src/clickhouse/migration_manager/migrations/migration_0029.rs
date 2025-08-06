@@ -20,13 +20,20 @@ impl Migration for Migration0029<'_> {
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
-        // Note - we always return `true` here, so that we run this migration
-        // on a clean start, and write out the corresponding `TensorZeroMigration` record.
-        // This ensures that running from a clean start runs every migration, which allows
-        // us to skip running all migrations on subsequent runs.
-        // Applying this migration from a clean start doesn't do anything, since the views
-        // don't exist.
-        Ok(true)
+        // Note: This migration is special in that in its original form it wouldn't run in a
+        // clean start setting because migration 0023 was banned.
+        // We want to write at least once that this migration was run to the TensorZeroMigration table
+        // so that we can skip the migrations if the table is full.
+        // This migration "cheats" by checking if the migration manager has written that this migration has
+        // already been run successfully.
+        // If not, we run this once, the migration manager will write the row, and we will skip it every subsequent time.
+        let response = self
+            .clickhouse
+            .run_query_synchronous_no_params(
+                "SELECT 1 FROM TensorZeroMigration WHERE migration_id = 29 LIMIT 1".to_string(),
+            )
+            .await?;
+        return Ok(response.response != "1");
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
