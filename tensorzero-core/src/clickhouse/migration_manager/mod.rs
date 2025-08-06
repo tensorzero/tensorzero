@@ -280,6 +280,7 @@ async fn check_replication_settings(clickhouse: &ClickHouseConnectionInfo) -> Re
     // we fail if the ClickHouse deployment has not been configured to be replicated.
     if max_cluster_count > 1
         && !clickhouse.is_cluster_configured()
+        && !cloud_mode
         && !non_replicated_tensorzero_on_replicated_clickhouse_override
     {
         return Err(Error::new(ErrorDetails::ClickHouseConfiguration {
