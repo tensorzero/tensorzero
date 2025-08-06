@@ -146,7 +146,6 @@ impl Migration for Migration0020<'_> {
         } else {
             "InferenceById".to_string()
         };
-        // TODO(Viraj, blocks merge): figure out how to do this operation in a replicated table or confirm that this is OK as is
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
                 table_engine_name: "ReplacingMergeTree",
