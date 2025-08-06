@@ -702,6 +702,7 @@ mod tests {
                 index: 0,
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: OpenAIFinishReason::Stop,

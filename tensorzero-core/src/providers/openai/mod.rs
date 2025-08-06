@@ -35,7 +35,7 @@ use crate::inference::types::{
     TextChunk, Usage,
 };
 use crate::inference::types::{
-    FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
+    FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, ThoughtChunk,
 };
 use crate::inference::InferenceProvider;
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
@@ -1809,6 +1809,10 @@ impl From<OpenAIResponseToolCall> for ToolCall {
 pub(super) struct OpenAIResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) content: Option<String>,
+    // OpenAI doesn't currently set this field, but some OpenAI-compatible
+    // providers (e.g. VLLM) do.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) tool_calls: Option<Vec<OpenAIResponseToolCall>>,
 }
@@ -1946,6 +1950,10 @@ struct OpenAIToolCallChunk {
 struct OpenAIDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
+    // OpenAI doesn't currently set this field, but some OpenAI-compatible
+    // providers (e.g. VLLM) do.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenAIToolCallChunk>>,
 }
@@ -2009,6 +2017,16 @@ fn openai_to_tensorzero_chunk(
     if let Some(choice) = chunk.choices.pop() {
         if let Some(choice_finish_reason) = choice.finish_reason {
             finish_reason = Some(choice_finish_reason.into());
+        }
+        if let Some(reasoning) = choice.delta.reasoning_content {
+            // We don't have real chunk ids, so always use chunk id 1 for reasoning content
+            // (which should get concatenated into a single ContentBlock by the client)
+            content.push(ContentBlockChunk::Thought(ThoughtChunk {
+                text: Some(reasoning),
+                signature: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                id: "1".to_string(),
+            }));
         }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {
@@ -2710,6 +2728,7 @@ mod tests {
                 index: 0,
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: OpenAIFinishReason::Stop,
@@ -2802,6 +2821,7 @@ mod tests {
                 finish_reason: OpenAIFinishReason::ToolCalls,
                 message: OpenAIResponseMessage {
                     content: None,
+                    reasoning_content: None,
                     tool_calls: Some(vec![OpenAIResponseToolCall {
                         id: "call1".to_string(),
                         r#type: OpenAIToolType::Function,
@@ -2946,6 +2966,7 @@ mod tests {
                     index: 0,
                     message: OpenAIResponseMessage {
                         content: Some("Choice 1".to_string()),
+                        reasoning_content: None,
                         tool_calls: None,
                     },
                     finish_reason: OpenAIFinishReason::Stop,
@@ -2955,6 +2976,7 @@ mod tests {
                     finish_reason: OpenAIFinishReason::Stop,
                     message: OpenAIResponseMessage {
                         content: Some("Choice 2".to_string()),
+                        reasoning_content: None,
                         tool_calls: None,
                     },
                 },
@@ -3149,6 +3171,7 @@ mod tests {
             choices: vec![OpenAIChatChunkChoice {
                 delta: OpenAIDelta {
                     content: Some("Hello".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: Some(OpenAIFinishReason::Stop),
@@ -3177,6 +3200,7 @@ mod tests {
                 finish_reason: Some(OpenAIFinishReason::ToolCalls),
                 delta: OpenAIDelta {
                     content: None,
+                    reasoning_content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
                         index: 0,
                         id: None,
@@ -3211,6 +3235,7 @@ mod tests {
                 finish_reason: None,
                 delta: OpenAIDelta {
                     content: None,
+                    reasoning_content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
                         index: 1,
                         id: None,
@@ -3246,6 +3271,7 @@ mod tests {
                 finish_reason: Some(OpenAIFinishReason::Stop),
                 delta: OpenAIDelta {
                     content: None,
+                    reasoning_content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
                         index: 1,
                         id: Some("id2".to_string()),
