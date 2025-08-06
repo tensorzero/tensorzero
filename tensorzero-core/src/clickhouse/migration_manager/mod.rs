@@ -195,18 +195,10 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
         }
     }
 
-    // To check that the database is replicated, check if either of ChatInference is a ReplicatedMergeTree
-    // or `clickhouse.cluster_name` is Some
-    let chat_is_replicated: Option<bool> = clickhouse
-        .run_query_synchronous_no_params("SHOW CREATE TABLE ChatInference".to_string())
-        .await
-        .ok()
-        .map(|result| result.response.contains("ReplicatedMergeTree"));
-
-    let is_replicated = clickhouse.is_cluster_configured() || chat_is_replicated.unwrap_or(false);
-
     // Check if the ClickHouse instance is configured correctly for replication.
     check_replication_settings(clickhouse).await?;
+
+    let is_replicated = clickhouse.is_cluster_configured();
 
     // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
     // The value we pass in for 'clean_start' is ignored for the first migration
