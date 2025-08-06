@@ -64,7 +64,7 @@ pub struct TensorZeroInterceptor {
     /// Captures the raw request from `modify_before_signing`.
     /// After the request is executed, we use this to retrieve the raw request.
     raw_request: Arc<Mutex<Option<String>>>,
-    /// Captures the raw response from `modify_after_signing`.
+    /// Captures the raw response from `read_after_deserialization`.
     /// After the request is executed, we use this to retrieve the raw response.
     raw_response: Arc<Mutex<Option<String>>>,
     extra_body: FullExtraBodyConfig,
