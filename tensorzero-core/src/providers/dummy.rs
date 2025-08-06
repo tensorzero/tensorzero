@@ -13,7 +13,9 @@ use uuid::Uuid;
 use crate::inference::InferenceProvider;
 
 use crate::cache::ModelProviderRequest;
-use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
+use crate::embeddings::{
+    Embedding, EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest,
+};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::PollBatchInferenceResponse;
@@ -771,7 +773,7 @@ impl EmbeddingProvider for DummyProvider {
         }
         let id = Uuid::now_v7();
         let created = current_timestamp();
-        let embeddings = vec![vec![0.0; 1536]; request.input.num_inputs()];
+        let embeddings = vec![Embedding::Float(vec![0.0; 1536]); request.input.num_inputs()];
         let raw_request = DUMMY_RAW_REQUEST.to_string();
         let raw_response = DUMMY_RAW_REQUEST.to_string();
         let usage = Usage {

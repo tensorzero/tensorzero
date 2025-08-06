@@ -353,6 +353,7 @@ impl DiclConfig {
         let formatted_embedding = format!(
             "[{}]",
             embedding_vector
+                .into_float()?
                 .iter()
                 .map(|&x| x.to_string())
                 .collect::<Vec<_>>()

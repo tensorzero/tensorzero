@@ -7,7 +7,7 @@ use crate::{
     cache::CacheOptions,
     clickhouse::ClickHouseConnectionInfo,
     config_parser::Config,
-    embeddings::{EmbeddingInput, EmbeddingRequest},
+    embeddings::{Embedding, EmbeddingInput, EmbeddingRequest},
     endpoints::inference::InferenceClients,
     error::{Error, ErrorDetails},
     inference::types::Usage,
@@ -44,6 +44,13 @@ pub async fn embeddings(
         .ok_or(Error::new(ErrorDetails::ModelNotFound {
             model_name: params.model_name.clone(),
         }))?;
+    if let EmbeddingInput::Batch(array) = &params.input {
+        if array.is_empty() {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: "Input cannot be empty".to_string(),
+            }));
+        }
+    }
     let request = EmbeddingRequest {
         input: params.input,
         dimensions: params.dimensions,
@@ -68,7 +75,7 @@ pub async fn embeddings(
 }
 
 pub struct EmbeddingResponse {
-    pub embeddings: Vec<Vec<f32>>,
+    pub embeddings: Vec<Embedding>,
     pub usage: Usage,
     pub model: String,
 }

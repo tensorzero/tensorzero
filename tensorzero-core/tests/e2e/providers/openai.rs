@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config_parser::ProviderTypesConfig;
 use tensorzero_core::embeddings::{
-    EmbeddingModelConfig, EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest,
+    Embedding, EmbeddingModelConfig, EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest,
     UninitializedEmbeddingProviderConfig,
 };
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
@@ -1129,10 +1129,13 @@ async fn test_embedding_request() {
     let [first_embedding] = response.embeddings.as_slice() else {
         panic!("Expected exactly one embedding");
     };
-    assert_eq!(first_embedding.len(), 1536);
+    assert_eq!(first_embedding.ndims(), 1536);
     assert!(!response.cached);
     // Calculate the L2 norm of the embedding
     let norm: f32 = first_embedding
+        .clone()
+        .into_float()
+        .unwrap()
         .iter()
         .map(|&x| x.powi(2))
         .sum::<f32>()
@@ -1270,10 +1273,14 @@ async fn test_embedding_sanity_check() {
     );
 }
 
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let magnitude_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let magnitude_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+fn cosine_similarity(a: &Embedding, b: &Embedding) -> f32 {
+    let a = a.clone();
+    let b = b.clone();
+    let a_float = a.into_float().unwrap();
+    let b_float = b.into_float().unwrap();
+    let dot_product: f32 = a_float.iter().zip(b_float.iter()).map(|(x, y)| x * y).sum();
+    let magnitude_a: f32 = a_float.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let magnitude_b: f32 = b_float.iter().map(|x| x * x).sum::<f32>().sqrt();
     dot_product / (magnitude_a * magnitude_b)
 }
 

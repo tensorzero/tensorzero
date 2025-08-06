@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
 use crate::embeddings::{
-    EmbeddingInput, EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest,
+    Embedding, EmbeddingInput, EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest,
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
@@ -2090,7 +2090,7 @@ struct OpenAIEmbeddingResponseWithMetadata<'a> {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct OpenAIEmbeddingData {
-    embedding: Vec<f32>,
+    embedding: Embedding,
 }
 
 impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderResponse {
@@ -2114,14 +2114,6 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
             })
         })?;
 
-        if response.data.len() != 1 {
-            return Err(Error::new(ErrorDetails::InferenceServer {
-                message: "Expected exactly one embedding in response".to_string(),
-                raw_request: Some(raw_request.clone()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }));
-        }
         let embeddings = response
             .data
             .into_iter()

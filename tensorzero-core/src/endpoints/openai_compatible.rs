@@ -27,7 +27,7 @@ use uuid::Uuid;
 
 use crate::cache::CacheParamsOptions;
 use crate::config_parser::UninitializedVariantInfo;
-use crate::embeddings::EmbeddingInput;
+use crate::embeddings::{Embedding, EmbeddingInput};
 use crate::endpoints::embeddings::Params as EmbeddingParams;
 use crate::endpoints::inference::{
     inference, ChatCompletionInferenceParams, InferenceParams, Params,
@@ -131,6 +131,7 @@ pub async fn inference_handler(
 #[serde(rename_all = "lowercase")]
 pub enum EmbeddingEncodingFormat {
     Float,
+    Base64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -156,7 +157,7 @@ impl From<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
     }
 }
 #[derive(Debug, Serialize)]
-#[serde(tag = "object", rename = "snake_case")]
+#[serde(tag = "object", rename_all = "lowercase")]
 pub enum OpenAIEmbeddingResponse {
     List {
         data: Vec<OpenAIEmbedding>,
@@ -166,9 +167,9 @@ pub enum OpenAIEmbeddingResponse {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(tag = "object", rename = "snake_case")]
+#[serde(tag = "object", rename_all = "lowercase")]
 pub enum OpenAIEmbedding {
-    Embedding { embedding: Vec<f32>, index: usize },
+    Embedding { embedding: Embedding, index: usize },
 }
 
 #[derive(Debug, Serialize)]
