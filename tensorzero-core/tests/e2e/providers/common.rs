@@ -1258,7 +1258,7 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
             ]},
         "stream": stream,
         "tags": {"foo": "bar"},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let inference_id = if stream {
@@ -1450,7 +1450,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
         "extra_body": extra_body,
         "stream": stream,
         "tags": {"foo": "bar"},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let inference_id = if stream {
@@ -1606,7 +1606,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                 }
             ]},
         "stream": stream,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -1833,7 +1833,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -1870,7 +1870,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
         "stream": false,
         "tags": {"foo": "bar"},
         "cache_options": {"enabled": "on", "lookback_s": 10},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -2788,7 +2788,7 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
                 "value": 123,
             },
         ],
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -2887,7 +2887,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         "include_original_response": include_original_response,
         "tags": {"key": tag_value},
         "cache_options": {"enabled": "on", "lookback_s": 10},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -3177,7 +3177,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
         },
         "stream": false,
         "credentials": provider.credentials,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -3419,7 +3419,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         },
         "stream": true,
         "credentials": provider.credentials,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -3669,7 +3669,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
         "stream": false,
         "variant_name": provider.variant_name,
         "tags": {"test_type": "auto_used"},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -4310,7 +4310,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
             ]},
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -4570,7 +4570,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
             ]},
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -4872,7 +4872,7 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
         "tool_choice": "required",
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -5163,7 +5163,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         "tool_choice": "required",
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -5519,7 +5519,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
         "tool_choice": "none",
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -5777,7 +5777,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         "tool_choice": "none",
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -6095,7 +6095,7 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
         ],
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -6436,7 +6436,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         "tool_choice": {"specific": "self_destruct"},
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -6811,7 +6811,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
         "allowed_tools": ["get_humidity"],
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -7078,7 +7078,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         "allowed_tools": ["get_humidity"],
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -9575,7 +9575,7 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
                 }
             ]},
         "stream": false,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -9834,7 +9834,7 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
             ]},
         "stream": false,
         "output_schema": output_schema.clone(),
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -10091,7 +10091,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
                 }
             ]},
         "stream": true,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -10387,7 +10387,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
                 "max_tokens": 1
             }
         },
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
     if provider.variant_name.contains("openai") && provider.variant_name.contains("o1") {
         // Can't pin a single token for o1
@@ -11309,7 +11309,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
             }
         },
         "stream": false,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -11468,7 +11468,7 @@ pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETes
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
