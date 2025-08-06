@@ -497,7 +497,13 @@ jobs:
 
       - name: Print container health checks (replicated)
         if: always() && matrix.replicated == true
-        run: docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-01-1) | jq
+        run: |
+          echo "Health check for ClickHouse 01:"
+          docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-01) | jq
+          echo "Health check for ClickHouse 02:"
+          docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-02) | jq
+          echo "Health check for ClickHouse 03:"
+          docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-03) | jq
 
       - name: Print docker compose logs (non-replicated)
         if: always() && matrix.replicated == false
