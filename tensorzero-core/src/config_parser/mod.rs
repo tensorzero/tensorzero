@@ -312,6 +312,10 @@ pub struct ObservabilityConfig {
     pub async_writes: bool,
     #[serde(default)]
     pub batch_writes: BatchWritesConfig,
+    /// If `true`, then we skip checking/applying migrations if the `TensorZeroMigration` table
+    /// contains exactly the migrations that we expect to have run.
+    #[serde(default)]
+    pub skip_completed_migrations: bool,
 }
 
 fn default_flush_interval_ms() -> u64 {

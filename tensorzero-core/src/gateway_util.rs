@@ -162,7 +162,11 @@ pub async fn setup_clickhouse(
 
     // Run ClickHouse migrations (if any) if we have a production ClickHouse connection
     if let ClickHouseConnectionInfo::Production { .. } = &clickhouse_connection_info {
-        migration_manager::run(&clickhouse_connection_info).await?;
+        migration_manager::run(
+            &clickhouse_connection_info,
+            config.gateway.observability.skip_completed_migrations,
+        )
+        .await?;
     }
     Ok(clickhouse_connection_info)
 }
@@ -320,6 +324,7 @@ mod tests {
                 enabled: Some(false),
                 async_writes: false,
                 batch_writes: Default::default(),
+                skip_completed_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -350,6 +355,7 @@ mod tests {
                 enabled: None,
                 async_writes: false,
                 batch_writes: Default::default(),
+                skip_completed_migrations: false,
             },
             unstable_error_json: false,
             ..Default::default()
@@ -377,6 +383,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
+                skip_completed_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -403,6 +410,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
+                skip_completed_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -431,6 +439,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
+                skip_completed_migrations: false,
             },
             bind_address: None,
             debug: false,
