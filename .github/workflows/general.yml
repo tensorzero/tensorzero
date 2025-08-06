@@ -350,6 +350,8 @@ jobs:
         run: find . -name "Chart.yaml" -exec dirname {} \; | xargs -I {} helm lint {}
 
   clickhouse-tests:
+    name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
+
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
     # the main 'validate' job)
@@ -405,6 +407,7 @@ jobs:
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+          echo "TENSORZERO_CACHE=/cache" >> $GITHUB_ENV
 
       - name: Launch non-replicated ClickHouse container for E2E tests
         if: matrix.replicated == false
@@ -412,7 +415,10 @@ jobs:
 
       - name: Launch replicated ClickHouse container for E2E tests
         if: matrix.replicated == true
-        run: TENSORZERO_CACHE=/cache TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up clickhouse-01 clickhouse-02 clickhouse-03 --wait
+        run: |
+          # Delete the volumes first (we're just using a cache volume to get more disk space)
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml rm
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up clickhouse-01 clickhouse-02 clickhouse-03 --wait
 
       # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
       - name: Check ClickHouse version
@@ -463,6 +469,16 @@ jobs:
 
       - name: Test (Rust)
         run: cargo test-e2e-no-creds
+
+      - name: Print docker compose logs (replicated)
+        if: always() && matrix.replicated == true
+        run: |
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml logs -t
+
+      - name: Print docker compose logs (non-replicated)
+        if: always() && matrix.replicated == false
+        run: |
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
       - name: Print e2e logs
         if: always()
