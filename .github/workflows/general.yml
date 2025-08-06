@@ -495,6 +495,10 @@ jobs:
           echo "Trace logs for ClickHouse 03:"
           docker exec e2e-clickhouse-03-1 cat /var/log/clickhouse-server/clickhouse-server.log
 
+      - name: Print container health checks (replicated)
+        if: always() && matrix.replicated == true
+        run: docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-01-1) | jq
+
       - name: Print docker compose logs (non-replicated)
         if: always() && matrix.replicated == false
         run: |
