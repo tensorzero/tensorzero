@@ -8,6 +8,10 @@ use crate::config_parser::ConfigFileGlob;
 use crate::error::{Error, ErrorDetails};
 
 pub struct SpanMap {
+    /// Each entry in this vector is a tuple of a byte range from the final merged config,
+    /// and the `TomlFile` representing the original file.
+    /// The ranges are disjoint, and are sorted in ascending order, which allows
+    /// us to binary search to lookup a particular range.
     range_to_file: Vec<(Range<usize>, TomlFile)>,
 }
 

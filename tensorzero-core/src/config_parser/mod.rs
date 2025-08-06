@@ -408,7 +408,7 @@ impl MetricConfigLevel {
     }
 }
 
-/// A glob pattern together with the config file paths it resolves it
+/// A glob pattern together with the config file paths it resolves to
 /// We eagerly resolve the glob pattern so that we can include all of the matched
 /// config file paths in error messages.
 #[derive(Debug)]
@@ -449,7 +449,7 @@ impl ConfigFileGlob {
             }));
         }
         // Sort the paths to avoid depending on the filesystem iteration order
-        // when we merge configs. This should only the precise error message we display,
+        // when we merge configs. This should only affect the precise error message we display,
         // not whether or not the config parses successfully (or the final `Config`
         // that we resolve)
         glob_paths.sort_by_key(|path| path.display().to_string());
@@ -943,7 +943,7 @@ struct UninitializedGlobbedConfig {
 }
 
 impl UninitializedConfig {
-    /// Read all of the globbed config file sfrom disk, and merge them into a single `UninitializedGlobbedConfig`
+    /// Read all of the globbed config files from disk, and merge them into a single `UninitializedGlobbedConfig`
     fn read_toml_config(glob: &ConfigFileGlob) -> Result<UninitializedGlobbedConfig, Error> {
         let (span_map, table) = SpanMap::from_glob(glob)?;
         Ok(UninitializedGlobbedConfig { table, span_map })
