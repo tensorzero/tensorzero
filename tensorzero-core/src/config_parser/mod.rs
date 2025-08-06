@@ -80,20 +80,18 @@ pub struct Config {
     pub optimizers: HashMap<String, OptimizerInfo>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct NonStreamingTimeouts {
     #[serde(default)]
     /// The total time allowed for the non-streaming request to complete.
     pub total_ms: Option<u64>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct StreamingTimeouts {
     #[serde(default)]
     /// The time allowed for the first token to be produced.
@@ -102,9 +100,8 @@ pub struct StreamingTimeouts {
 
 /// Configures the timeouts for both streaming and non-streaming requests.
 /// This can be attached to various other configs (e.g. variants, models, model providers)
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct TimeoutsConfig {
     #[serde(default)]
@@ -312,6 +309,10 @@ pub struct ObservabilityConfig {
     pub enabled: Option<bool>,
     #[serde(default)]
     pub async_writes: bool,
+    /// If `true`, then we skip checking/applying migrations if the `TensorZeroMigration` table
+    /// contains exactly the migrations that we expect to have run.
+    #[serde(default)]
+    pub skip_completed_migrations: bool,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -1121,10 +1122,9 @@ impl UninitializedFunctionConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 // We don't use `#[serde(deny_unknown_fields)]` here - it needs to go on 'UninitializedVariantConfig',
 // since we use `#[serde(flatten)]` on the `inner` field.
 pub struct UninitializedVariantInfo {
@@ -1134,12 +1134,11 @@ pub struct UninitializedVariantInfo {
     pub timeouts: Option<TimeoutsConfig>,
 }
 
-#[derive(Clone, Debug, TensorZeroDeserialize, Serialize)]
+#[derive(Clone, Debug, TensorZeroDeserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub enum UninitializedVariantConfig {
     ChatCompletion(UninitializedChatCompletionConfig),
     #[serde(rename = "experimental_best_of_n_sampling")]

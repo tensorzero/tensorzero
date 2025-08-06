@@ -46,14 +46,15 @@ pub struct ChatCompletionConfig {
     pub stop_sequences: Option<Vec<String>>,
     pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     pub retries: RetryConfig,
+    #[cfg_attr(test, ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
+    #[cfg_attr(test, ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
     pub weight: Option<f64>,
@@ -73,8 +74,10 @@ pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
     pub retries: RetryConfig,
     #[serde(default)]
+    #[ts(skip)]
     pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
+    #[ts(skip)]
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
 

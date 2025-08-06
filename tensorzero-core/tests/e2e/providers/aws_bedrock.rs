@@ -18,6 +18,13 @@ crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
+    let deepseek_r1_provider = E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "aws-bedrock-deepseek-r1".to_string(),
+        model_name: "deepseek-r1-aws-bedrock".into(),
+        model_provider_name: "aws_bedrock".into(),
+        credentials: HashMap::new(),
+    };
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws-bedrock".to_string(),
@@ -25,6 +32,9 @@ async fn get_providers() -> E2ETestProviders {
         model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     }];
+
+    let mut simple_inference_providers = standard_providers.clone();
+    simple_inference_providers.push(deepseek_r1_provider.clone());
 
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
@@ -75,7 +85,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     E2ETestProviders {
-        simple_inference: standard_providers.clone(),
+        simple_inference: simple_inference_providers,
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: vec![],

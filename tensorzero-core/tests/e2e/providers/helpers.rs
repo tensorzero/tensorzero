@@ -56,7 +56,5 @@ pub fn get_extra_headers() -> UnfilteredInferenceExtraHeaders {
             kind: ExtraHeaderKind::Value(modal_secret.clone()),
         });
     }
-    UnfilteredInferenceExtraHeaders {
-        headers: extra_headers,
-    }
+    UnfilteredInferenceExtraHeaders { extra_headers }
 }

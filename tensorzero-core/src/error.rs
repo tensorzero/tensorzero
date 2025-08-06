@@ -114,6 +114,13 @@ impl Error {
         Error(Box::new(details))
     }
 
+    pub fn new_with_err_logging(details: ErrorDetails, err_logging: bool) -> Self {
+        if err_logging {
+            details.log();
+        }
+        Error(Box::new(details))
+    }
+
     pub fn new_without_logging(details: ErrorDetails) -> Self {
         Error(Box::new(details))
     }

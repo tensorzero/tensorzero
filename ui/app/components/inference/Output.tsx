@@ -3,12 +3,12 @@ import { Badge } from "~/components/ui/badge";
 import { Card, CardContent } from "~/components/ui/card";
 import type {
   JsonInferenceOutput,
-  ContentBlockOutput,
-} from "~/utils/clickhouse/common";
+  ContentBlockChatOutput,
+} from "tensorzero-node";
 
 // Base interface with just the common required properties
 interface BaseOutputProps {
-  output: JsonInferenceOutput | ContentBlockOutput[];
+  output: JsonInferenceOutput | ContentBlockChatOutput[];
 }
 
 // For when isEditing is not provided (default behavior)
@@ -21,7 +21,7 @@ interface DefaultOutputProps extends BaseOutputProps {
 interface EditableOutputProps extends BaseOutputProps {
   isEditing: boolean;
   onOutputChange: (
-    output: JsonInferenceOutput | ContentBlockOutput[] | null,
+    output: JsonInferenceOutput | ContentBlockChatOutput[] | null,
   ) => void;
 }
 
@@ -35,7 +35,7 @@ function isJsonInferenceOutput(
 
 // ContentBlock Props
 interface BaseContentBlockProps {
-  block: ContentBlockOutput;
+  block: ContentBlockChatOutput;
   index: number;
 }
 
@@ -46,7 +46,7 @@ interface DefaultContentBlockProps extends BaseContentBlockProps {
 
 interface EditableContentBlockProps extends BaseContentBlockProps {
   isEditing: boolean;
-  onBlockChange: (updatedBlock: ContentBlockOutput) => void;
+  onBlockChange: (updatedBlock: ContentBlockChatOutput) => void;
 }
 
 type ContentBlockProps = DefaultContentBlockProps | EditableContentBlockProps;
@@ -83,10 +83,10 @@ function renderContentBlock({
 
 // TextBlock component
 interface TextBlockProps {
-  block: Extract<ContentBlockOutput, { type: "text" }>;
+  block: Extract<ContentBlockChatOutput, { type: "text" }>;
   isEditing?: boolean;
   onBlockChange?: (
-    updatedBlock: Extract<ContentBlockOutput, { type: "text" }>,
+    updatedBlock: Extract<ContentBlockChatOutput, { type: "text" }>,
   ) => void;
 }
 
@@ -126,10 +126,10 @@ function TextBlock({ block, isEditing, onBlockChange }: TextBlockProps) {
 
 // ToolCallBlock component
 interface OutputToolCallBlockProps {
-  block: Extract<ContentBlockOutput, { type: "tool_call" }>;
+  block: Extract<ContentBlockChatOutput, { type: "tool_call" }>;
   isEditing?: boolean;
   onBlockChange?: (
-    updatedBlock: Extract<ContentBlockOutput, { type: "tool_call" }>,
+    updatedBlock: Extract<ContentBlockChatOutput, { type: "tool_call" }>,
   ) => void;
 }
 function OutputToolCallBlock({
@@ -258,7 +258,7 @@ function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
                   ? "border-red-500 dark:border-red-500"
                   : "border-slate-300 dark:border-slate-700"
               } dark:bg-slate-800`}
-              value={displayValue}
+              value={displayValue ?? undefined}
               onChange={handleRawChange}
               rows={5}
             />
@@ -278,9 +278,9 @@ function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
 
 // ContentBlocksOutput component for handling ContentBlockOutput[]
 interface ContentBlocksOutputProps {
-  blocks: ContentBlockOutput[];
+  blocks: ContentBlockChatOutput[];
   isEditing?: boolean;
-  onBlocksChange?: (blocks: ContentBlockOutput[]) => void;
+  onBlocksChange?: (blocks: ContentBlockChatOutput[]) => void;
 }
 
 function ContentBlocksOutput({
@@ -290,7 +290,7 @@ function ContentBlocksOutput({
 }: ContentBlocksOutputProps) {
   const handleBlockChange = (
     index: number,
-    updatedBlock: ContentBlockOutput,
+    updatedBlock: ContentBlockChatOutput,
   ) => {
     if (onBlocksChange) {
       const updatedBlocks = [...blocks];
@@ -327,7 +327,7 @@ export function OutputContent({
     }
   };
 
-  const handleBlocksChange = (updatedBlocks: ContentBlockOutput[]) => {
+  const handleBlocksChange = (updatedBlocks: ContentBlockChatOutput[]) => {
     if (onOutputChange) {
       onOutputChange(updatedBlocks);
     }

@@ -422,7 +422,7 @@ impl ModelConfig {
                     Ok(response) => {
                         // Perform the cache write outside of the `non_streaming_total_timeout` timeout future,
                         // (in case we ever add a blocking cache write option)
-                        if clients.cache_options.enabled.write() {
+                        if !response.cached && clients.cache_options.enabled.write() {
                             let _ = start_cache_write(
                                 clients.clickhouse_connection_info,
                                 cache_key,
@@ -638,7 +638,9 @@ fn consolidate_usage(chunks: &[ProviderInferenceResponseChunk]) -> Usage {
 pub struct UninitializedModelProvider {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,
+    #[cfg_attr(test, ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
+    #[cfg_attr(test, ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
     pub timeouts: Option<TimeoutsConfig>,
     /// If `true`, we emit a warning and discard chunks that we don't recognize
@@ -656,7 +658,9 @@ pub struct UninitializedModelProvider {
 pub struct ModelProvider {
     pub name: Arc<str>,
     pub config: ProviderConfig,
+    #[cfg_attr(test, ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
+    #[cfg_attr(test, ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
     pub timeouts: Option<TimeoutsConfig>,
     /// See `UninitializedModelProvider.discard_unknown_chunks`.

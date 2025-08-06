@@ -19,12 +19,12 @@ import {
   getAdjacentEpisodeIds,
 } from "./inference.server";
 import { countInferencesForFunction } from "./inference.server";
-import type {
-  ContentBlockOutput,
-  JsonInferenceOutput,
-  TextContent,
-} from "./common";
+import type { TextContent } from "./common";
 import { getClickhouseClient } from "./client.server";
+import type {
+  ContentBlockChatOutput,
+  JsonInferenceOutput,
+} from "tensorzero-node";
 
 // Test countInferencesForFunction
 test("countInferencesForFunction returns correct counts", async () => {
@@ -514,7 +514,7 @@ test("queryInferenceById for chat inference", async () => {
   );
   expect(inference?.function_type).toBe("chat");
   expect(inference?.input.messages.length).toBeGreaterThan(0);
-  const output = inference?.output as ContentBlockOutput[];
+  const output = inference?.output as ContentBlockChatOutput[];
   const firstOutput = output[0] as TextContent;
   expect(firstOutput.type).toBe("text");
   expect(firstOutput.text).toBe("Yes.");
