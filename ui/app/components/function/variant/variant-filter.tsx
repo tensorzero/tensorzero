@@ -13,7 +13,7 @@ import { Input } from "~/components/ui/input";
 import clsx from "clsx";
 import { Separator } from "~/components/ui/separator";
 
-export type VariantData = { color: string; name: string };
+export type VariantData = { color?: string; name: string };
 
 interface VariantFilterProps {
   variants: VariantData[];
