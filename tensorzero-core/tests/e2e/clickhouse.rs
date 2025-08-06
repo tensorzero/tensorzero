@@ -1111,7 +1111,7 @@ async fn test_run_migrations_clean() {
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
         manual_run: true,
-        skip_completed_migrations: false,
+        skip_completed_migrations: true,
     })
     .await
     .unwrap();
@@ -1122,7 +1122,7 @@ async fn test_run_migrations_clean() {
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
         manual_run: true,
-        skip_completed_migrations: false,
+        skip_completed_migrations: true,
     })
     .await
     .unwrap();
