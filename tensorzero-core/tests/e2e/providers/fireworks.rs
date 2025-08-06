@@ -1,3 +1,4 @@
+#![expect(clippy::print_stderr)]
 use std::collections::HashMap;
 
 use http::StatusCode;
@@ -154,8 +155,7 @@ async fn test_fireworks_reasoning_content_non_stream() {
     let thought = content.iter().find(|c| c["type"] == "thought").unwrap();
     assert!(
         !thought["text"].as_str().unwrap().is_empty(),
-        "Thought block was empty: {:?}",
-        thought
+        "Thought block was empty: {thought:?}",
     );
 }
 
@@ -184,7 +184,7 @@ async fn test_fireworks_reasoning_content_stream() {
         match event {
             Event::Open => continue,
             Event::Message(message) => {
-                println!("API chunk: {message:?}");
+                eprintln!("API chunk: {message:?}");
                 if message.data == "[DONE]" {
                     break;
                 }
@@ -196,7 +196,7 @@ async fn test_fireworks_reasoning_content_stream() {
     let mut found_thought = false;
     for chunk in chunks {
         let chunk_json: serde_json::Value = serde_json::from_str(&chunk).unwrap();
-        println!("Chunk: {chunk_json}");
+        eprintln!("Chunk: {chunk_json}");
         if chunk_json["content"][0]["type"] == "thought" {
             found_thought = true;
             break;
