@@ -6,8 +6,9 @@ services:
       - "8123:8123"
       - "9000:9000"
     volumes:
-      - ${TENSORZERO_CACHE:-.}/replicated_clickhouse_config/ch1:/etc/clickhouse-server/config.d
-      - ${TENSORZERO_CACHE:-.}/replicated_clickhouse_config/common:/etc/clickhouse-server/users.d
+      - ${TENSORZERO_CACHE:-.}/replicated_clickhouse_01_data:/var/lib/clickhouse
+      - ./replicated_clickhouse_config/ch1:/etc/clickhouse-server/config.d
+      - ./replicated_clickhouse_config/common:/etc/clickhouse-server/users.d
     ulimits:
       nofile:
         soft: 262144
@@ -25,8 +26,9 @@ services:
       - "8124:8123" # Host port 8124 -> Container port 8123
       - "9002:9000" # Host port 9001 -> Container port 9000
     volumes:
-      - ${TENSORZERO_CACHE:-.}/replicated_clickhouse_config/ch2:/etc/clickhouse-server/config.d
-      - ${TENSORZERO_CACHE:-.}/replicated_clickhouse_config/common:/etc/clickhouse-server/users.d
+      - ${TENSORZERO_CACHE:-.}/replicated_clickhouse_02_data:/var/lib/clickhouse
+      - ./replicated_clickhouse_config/ch2:/etc/clickhouse-server/config.d
+      - ./replicated_clickhouse_config/common:/etc/clickhouse-server/users.d
     ulimits:
       nofile:
         soft: 262144
@@ -44,8 +46,9 @@ services:
       - "8125:8123"
       - "9003:9000"
     volumes:
-      - ${TENSORZERO_CACHE:-.}/replicated_clickhouse_config/ch3:/etc/clickhouse-server/config.d
-      - ${TENSORZERO_CACHE:-.}/replicated_clickhouse_config/common:/etc/clickhouse-server/users.d
+      - ${TENSORZERO_CACHE:-.}/replicated_clickhouse_03_data:/var/lib/clickhouse
+      - ./replicated_clickhouse_config/ch3:/etc/clickhouse-server/config.d
+      - ./replicated_clickhouse_config/common:/etc/clickhouse-server/users.d
     ulimits:
       nofile:
         soft: 262144
