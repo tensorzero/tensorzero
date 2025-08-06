@@ -395,7 +395,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                               tooltip={
                                 isEditable
                                   ? "Edit variant"
-                                  : "Editing is currently only supported for Chat Completion variants"
+                                  : "Editing is currently only supported for chat completion variants."
                               }
                             />
                           </div>
