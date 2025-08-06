@@ -108,7 +108,6 @@ export async function loader() {
   ]);
   const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
   const numFunctions = Object.keys(functionConfigs).length;
-  console.log("numFunctions", numFunctions);
   const numDatasets = datasetCounts.length;
 
   return {
