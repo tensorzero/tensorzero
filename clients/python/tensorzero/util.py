@@ -2,6 +2,8 @@ import uuid
 
 from uuid_utils import compat
 
+from uuid import UUID
+
 
 def uuid7() -> uuid.UUID:
     """
@@ -11,4 +13,5 @@ def uuid7() -> uuid.UUID:
     return compat.uuid7()
 
 
-__all__ = ["uuid7"]
+__all__ = ["uuid7", "UUID"]
+

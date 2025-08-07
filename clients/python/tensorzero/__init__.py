@@ -1,5 +1,6 @@
 import typing as t
 from importlib.metadata import version
+from .util import UUID
 
 import httpx
 
@@ -172,8 +173,10 @@ __all__ = [
     "ToolCall",
     "ToolCallChunk",
     "ToolResult",
+    "UUID",
     "UnknownContentBlock",
     "Usage",
+    
 ]
 
 T = t.TypeVar("T", bound=t.Any)
@@ -253,3 +256,4 @@ def patch_openai_client(
         # In 'async_setup' mode, return a `Future` that sets the needed fields after the gateway has started
         return _async_attach_fields(client, gateway)
     return _attach_fields(client, gateway)
+
