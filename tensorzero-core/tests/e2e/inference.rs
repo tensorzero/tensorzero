@@ -5,10 +5,7 @@ use crate::{
         attrs_to_map, build_span_map, install_capturing_otel_exporter, CapturingOtelExporter,
         SpanMap,
     },
-    providers::common::{
-    make_embedded_gateway_with_config,
-        FERRIS_PNG,
-    },
+    providers::common::{make_embedded_gateway_with_config, FERRIS_PNG},
 };
 use axum::http::HeaderValue;
 use base64::prelude::*;
@@ -24,7 +21,7 @@ use tensorzero::{
 use tensorzero_core::{
     clickhouse::{
         test_helpers::{
-            select_all_model_inferences_by_inference_ids_clickhouse,
+            select_all_model_inferences_by_chat_episode_id_clickhouse,
             select_chat_inferences_clickhouse,
         },
         ClickHouseConnectionInfo,
@@ -3904,13 +3901,10 @@ async fn test_clickhouse_bulk_insert() {
     assert_eq!(actual_inference_ids.len(), inference_count);
     assert_eq!(actual_inference_ids, expected_inference_ids);
 
-    // We created a fresh database, so the only ModelInference rows should be the ones we just wrote
-    let model_inferences = select_all_model_inferences_by_inference_ids_clickhouse(
-        &expected_inference_ids.iter().cloned().collect::<Vec<_>>(),
-        &clickhouse_client,
-    )
-    .await
-    .unwrap();
+    let model_inferences =
+        select_all_model_inferences_by_chat_episode_id_clickhouse(episode_id, &clickhouse_client)
+            .await
+            .unwrap();
 
     let actual_model_inference_ids = model_inferences
         .iter()
