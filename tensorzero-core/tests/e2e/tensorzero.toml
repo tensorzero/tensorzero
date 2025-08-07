@@ -39,6 +39,15 @@ extra_body = [
     { pointer = "/frequency_penalty", value = 1.42 },
 ]
 
+[models."gpt-oss-20b-fireworks"]
+routing = ["fireworks"]
+
+[models."gpt-oss-20b-fireworks".providers.fireworks]
+type = "fireworks"
+model_name = "accounts/fireworks/models/gpt-oss-20b"
+parse_think_blocks = false
+
+
 [models."gpt-4o-mini-2024-07-18-dynamic"]
 routing = ["openai"]
 
