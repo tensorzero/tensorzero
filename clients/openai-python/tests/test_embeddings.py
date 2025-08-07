@@ -92,11 +92,12 @@ async def test_embeddings_with_dimensions(async_client):
     # Verify the response structure
     assert result.model == "text-embedding-3-small"
     assert len(result.data) == 1
-    assert len(result.data[0].embedding) == 512  # Should match requested dimensions
+    # Should match requested dimensions
+    assert len(result.data[0].embedding) == 512
 
 
 @pytest.mark.asyncio
-async def test_embeddings_with_encoding_format(async_client):
+async def test_embeddings_with_encoding_format_float(async_client):
     """Test embeddings with different encoding formats"""
     result = await async_client.embeddings.create(
         input="Test encoding format",
@@ -108,6 +109,21 @@ async def test_embeddings_with_encoding_format(async_client):
     assert result.model == "text-embedding-3-small"
     assert len(result.data) == 1
     assert isinstance(result.data[0].embedding[0], float)
+
+
+@pytest.mark.asyncio
+async def test_embeddings_with_encoding_format_base64(async_client):
+    """Test embeddings with different encoding formats"""
+    result = await async_client.embeddings.create(
+        input="Test encoding format",
+        model="text-embedding-3-small",
+        encoding_format="base64",
+    )
+
+    # Verify the response structure
+    assert result.model == "text-embedding-3-small"
+    assert len(result.data) == 1
+    assert isinstance(result.data[0].embedding, str)
 
 
 @pytest.mark.asyncio
