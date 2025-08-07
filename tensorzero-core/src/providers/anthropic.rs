@@ -232,10 +232,10 @@ impl InferenceProvider for AnthropicProvider {
                     message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
-                    raw_response: Some(response_text),
+                    raw_response: Some(response_text.clone()),
                 })
             })?;
-            handle_anthropic_error(response_code, error_body.error, raw_request)
+            handle_anthropic_error(response_code, error_body.error, raw_request, response_text)
         }
     }
 
@@ -1036,6 +1036,7 @@ fn handle_anthropic_error(
     response_code: StatusCode,
     response_body: AnthropicErrorBody,
     raw_request: String,
+    raw_response: String,
 ) -> Result<ProviderInferenceResponse, Error> {
     match response_code {
         StatusCode::UNAUTHORIZED
@@ -1045,14 +1046,14 @@ fn handle_anthropic_error(
             status_code: Some(response_code),
             provider_type: PROVIDER_TYPE.to_string(),
             raw_request: Some(raw_request),
-            raw_response: serde_json::to_string(&response_body).ok(),
+            raw_response: Some(raw_response),
             message: response_body.message,
         }
         .into()),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
         // These are all captured in _ since they have the same error behavior
         _ => Err(ErrorDetails::InferenceServer {
-            raw_response: serde_json::to_string(&response_body).ok(),
+            raw_response: Some(raw_response),
             message: response_body.message,
             provider_type: PROVIDER_TYPE.to_string(),
             raw_request: Some(raw_request),
@@ -2111,8 +2112,12 @@ mod tests {
             message: "test_message".to_string(),
         };
         let response_code = StatusCode::BAD_REQUEST;
-        let result =
-            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
+        let result = handle_anthropic_error(
+            response_code,
+            error_body.clone(),
+            "raw request".to_string(),
+            "raw response".to_string(),
+        );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -2121,12 +2126,16 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some("raw request".to_string()),
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some("raw response".to_string()),
             }
         );
         let response_code = StatusCode::UNAUTHORIZED;
-        let result =
-            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
+        let result = handle_anthropic_error(
+            response_code,
+            error_body.clone(),
+            "raw request".to_string(),
+            "raw response".to_string(),
+        );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -2135,12 +2144,16 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some("raw request".to_string()),
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some("raw response".to_string()),
             }
         );
         let response_code = StatusCode::TOO_MANY_REQUESTS;
-        let result =
-            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
+        let result = handle_anthropic_error(
+            response_code,
+            error_body.clone(),
+            "raw request".to_string(),
+            "raw response".to_string(),
+        );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -2149,32 +2162,40 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some("raw request".to_string()),
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some("raw response".to_string()),
             }
         );
         let response_code = StatusCode::NOT_FOUND;
-        let result =
-            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
+        let result = handle_anthropic_error(
+            response_code,
+            error_body.clone(),
+            "raw request".to_string(),
+            "raw response".to_string(),
+        );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: Some("raw request".to_string()),
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some("raw response".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }
         );
         let response_code = StatusCode::INTERNAL_SERVER_ERROR;
-        let result =
-            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
+        let result = handle_anthropic_error(
+            response_code,
+            error_body.clone(),
+            "raw request".to_string(),
+            "raw response".to_string(),
+        );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: Some("raw request".to_string()),
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some("raw response".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }
         );
