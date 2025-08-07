@@ -56,9 +56,9 @@ use crate::providers::{
     anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
     deepseek::DeepSeekProvider, fireworks::FireworksProvider,
     gcp_vertex_anthropic::GCPVertexAnthropicProvider, gcp_vertex_gemini::GCPVertexGeminiProvider,
-    groq::GroqProvider, mistral::MistralProvider, nvidia_nim::NvidiaNimProvider, openai::OpenAIProvider,
-    openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
-    xai::XAIProvider,
+    groq::GroqProvider, mistral::MistralProvider, nvidia_nim::NvidiaNimProvider,
+    openai::OpenAIProvider, openrouter::OpenRouterProvider, together::TogetherProvider,
+    vllm::VLLMProvider, xai::XAIProvider,
 };
 
 #[derive(Debug, Serialize)]
@@ -832,7 +832,9 @@ impl ProviderConfig {
                 Cow::Borrowed(crate::providers::hyperbolic::PROVIDER_TYPE)
             }
             ProviderConfig::Mistral(_) => Cow::Borrowed(crate::providers::mistral::PROVIDER_TYPE),
-            ProviderConfig::NvidiaNim(_) => Cow::Borrowed(crate::providers::nvidia_nim::PROVIDER_TYPE),
+            ProviderConfig::NvidiaNim(_) => {
+                Cow::Borrowed(crate::providers::nvidia_nim::PROVIDER_TYPE)
+            }
             ProviderConfig::OpenAI(_) => Cow::Borrowed(crate::providers::openai::PROVIDER_TYPE),
             ProviderConfig::OpenRouter(_) => {
                 Cow::Borrowed(crate::providers::openrouter::PROVIDER_TYPE)
