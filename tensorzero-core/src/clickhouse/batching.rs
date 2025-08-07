@@ -33,19 +33,6 @@ pub struct BatchSender {
     pub writer_handle: BatchWriterHandle,
 }
 
-impl Drop for BatchSender {
-    fn drop(&mut self) {
-        drop(self.channels.take());
-        tracing::info!("Waiting for ClickHouse batch writer to finish");
-        tokio::task::block_in_place(|| {
-            if let Err(e) = Handle::current().block_on(&mut self.writer_handle) {
-                tracing::error!("Error in batch writer: {e}");
-            }
-        });
-        tracing::info!("ClickHouse batch writer finished");
-    }
-}
-
 impl BatchSender {
     pub fn new(
         clickhouse: ClickHouseConnectionInfo,

@@ -8,6 +8,7 @@ use axum::routing::post;
 use axum::Router;
 use reqwest::{Client, Proxy};
 use serde::de::DeserializeOwned;
+use tokio::runtime::Handle;
 use tokio::sync::oneshot::Sender;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
@@ -47,6 +48,34 @@ impl Drop for GatewayHandle {
     fn drop(&mut self) {
         tracing::info!("Shutting down gateway");
         self.cancel_token.cancel();
+        let handle = self
+            .app_state
+            .clickhouse_connection_info
+            .batcher_join_handle();
+        // Drop our `ClickHouseConnectionInfo`, so that we stop holding on to the `Arc<BatchSender>`
+        // This allows the batch writer task to exit (once all of the remaining `ClickhouseConnectionInfo`s are dropped)
+        self.app_state.clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        if let Some(handle) = handle {
+            tracing::info!("Waiting for ClickHouse batch writer to finish");
+            // This could block forever if:
+            // * We spawn a long-lived `tokio::task` that holds on to a `ClickhouseConnectionInfo`,
+            //   and isn't using our `CancellationToken` to exit.
+            // * The `GatewayHandle` is dropped from a task that's running other futures
+            //   concurrently (e.g. a `try_join_all` where one of the futures somehow drops a `GatewayHandle`).
+            //   In this case, the `block_in_place` call would prevent those futures from ever making progress,
+            //   causing a `ClickhouseConnectionInfo` (and therefore the `Arc<BatchSender>`) to never be dropped.
+            //   This is very unlikely, as we only create a `GatewayHandle` in a few places (the main gateway
+            //   and embedded client), and drop it when we're exiting.
+            //
+            // We err on the side of hanging the server on shutdown, rather than potentially exiting while
+            // we still have batched writes in-flight (or about to be written via an active `ClickhouseConnectionInfo`).
+            tokio::task::block_in_place(|| {
+                if let Err(e) = Handle::current().block_on(handle) {
+                    tracing::error!("Error in batch writer: {e}");
+                }
+            });
+            tracing::info!("ClickHouse batch writer finished");
+        }
     }
 }
 
