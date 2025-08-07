@@ -8,7 +8,10 @@ use std::time::Duration;
 use tensorzero_core::{
     clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
     config_parser::ProviderTypesConfig,
-    embeddings::{EmbeddingProvider, EmbeddingRequest, UninitializedEmbeddingProviderConfig},
+    embeddings::{
+        EmbeddingEncodingFormat, EmbeddingProvider, EmbeddingRequest,
+        UninitializedEmbeddingProviderConfig,
+    },
     endpoints::inference::InferenceCredentials,
     inference::types::{
         ContentBlock, ContentBlockChatOutput, JsonInferenceOutput, RequestMessage, ResolvedInput,
@@ -369,6 +372,7 @@ async fn embed_insert_example(
     let request = EmbeddingRequest {
         input: serde_json::to_string(&input).unwrap().into(),
         dimensions: None,
+        encoding_format: EmbeddingEncodingFormat::Float,
     };
     let api_keys = InferenceCredentials::default();
     let response = provider_config

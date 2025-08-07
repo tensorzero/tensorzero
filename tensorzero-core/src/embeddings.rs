@@ -201,6 +201,7 @@ impl From<String> for EmbeddingInput {
 pub struct EmbeddingRequest {
     pub input: EmbeddingInput,
     pub dimensions: Option<u32>,
+    pub encoding_format: EmbeddingEncodingFormat,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -208,6 +209,14 @@ pub struct EmbeddingProviderRequest<'request> {
     pub request: &'request EmbeddingRequest,
     pub model_name: &'request str,
     pub provider_name: &'request str,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum EmbeddingEncodingFormat {
+    #[default]
+    Float,
+    Base64,
 }
 
 #[derive(Debug, PartialEq)]
@@ -511,6 +520,7 @@ mod tests {
         let request = EmbeddingRequest {
             input: "Hello, world!".to_string().into(),
             dimensions: None,
+            encoding_format: EmbeddingEncodingFormat::Float,
         };
         let response = fallback_embedding_model
             .embed(

@@ -50,6 +50,7 @@ use super::inference::{
     InferenceCredentials, InferenceOutput, InferenceResponse, InferenceResponseChunk,
     InferenceStream,
 };
+use crate::embeddings::EmbeddingEncodingFormat;
 
 /// A handler for the OpenAI-compatible inference endpoint
 #[debug_handler(state = AppStateData)]
@@ -128,19 +129,12 @@ pub async fn inference_handler(
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum EmbeddingEncodingFormat {
-    Float,
-    Base64,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct OpenAICompatibleEmbeddingParams {
     input: EmbeddingInput,
     model: String,
     dimensions: Option<u32>,
     // Since we only support one format, this field is not used.
-    #[expect(dead_code)]
+    #[serde(default)]
     encoding_format: EmbeddingEncodingFormat,
     #[serde(default, rename = "tensorzero::credentials")]
     tensorzero_credentials: InferenceCredentials,
@@ -152,6 +146,7 @@ impl From<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
             input: params.input,
             model_name: params.model,
             dimensions: params.dimensions,
+            encoding_format: params.encoding_format,
             credentials: params.tensorzero_credentials,
         }
     }

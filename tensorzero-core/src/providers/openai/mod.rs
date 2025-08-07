@@ -18,6 +18,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
+use crate::embeddings::EmbeddingEncodingFormat;
 use crate::embeddings::{
     Embedding, EmbeddingInput, EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest,
 };
@@ -587,8 +588,12 @@ impl EmbeddingProvider for OpenAIProvider {
         dynamic_api_keys: &InferenceCredentials,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_body =
-            OpenAIEmbeddingRequest::new(&self.model_name, &request.input, request.dimensions);
+        let request_body = OpenAIEmbeddingRequest::new(
+            &self.model_name,
+            &request.input,
+            request.dimensions,
+            request.encoding_format,
+        );
         let request_url =
             get_embedding_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let start_time = Instant::now();
@@ -2063,14 +2068,21 @@ struct OpenAIEmbeddingRequest<'a> {
     model: &'a str,
     input: &'a EmbeddingInput,
     dimensions: Option<u32>,
+    encoding_format: EmbeddingEncodingFormat,
 }
 
 impl<'a> OpenAIEmbeddingRequest<'a> {
-    fn new(model: &'a str, input: &'a EmbeddingInput, dimensions: Option<u32>) -> Self {
+    fn new(
+        model: &'a str,
+        input: &'a EmbeddingInput,
+        dimensions: Option<u32>,
+        encoding_format: EmbeddingEncodingFormat,
+    ) -> Self {
         Self {
             model,
             input,
             dimensions,
+            encoding_format,
         }
     }
 }

@@ -7,7 +7,7 @@ use crate::{
     cache::CacheOptions,
     clickhouse::ClickHouseConnectionInfo,
     config_parser::Config,
-    embeddings::{Embedding, EmbeddingInput, EmbeddingRequest},
+    embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
     endpoints::inference::InferenceClients,
     error::{Error, ErrorDetails},
     inference::types::Usage,
@@ -20,6 +20,7 @@ pub struct Params {
     pub input: EmbeddingInput,
     pub model_name: String,
     pub dimensions: Option<u32>,
+    pub encoding_format: EmbeddingEncodingFormat,
     #[serde(default)]
     pub credentials: InferenceCredentials,
 }
@@ -54,6 +55,7 @@ pub async fn embeddings(
     let request = EmbeddingRequest {
         input: params.input,
         dimensions: params.dimensions,
+        encoding_format: params.encoding_format,
     };
     // Caching and clickhouse writes are disabled in the embeddings endpoint for now
     let cache_options = CacheOptions::default();

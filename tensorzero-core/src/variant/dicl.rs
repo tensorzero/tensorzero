@@ -6,6 +6,7 @@ use serde::Serialize;
 use crate::config_parser::path::TomlRelativePath;
 use crate::config_parser::LoadableConfig;
 use crate::config_parser::PathWithContents;
+use crate::embeddings::EmbeddingEncodingFormat;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
@@ -333,6 +334,7 @@ impl DiclConfig {
         let embedding_request = EmbeddingRequest {
             input: serialized_input.into(),
             dimensions: None,
+            encoding_format: EmbeddingEncodingFormat::Float,
         };
 
         // Embed the input via an API request

@@ -6,15 +6,15 @@ use serde_json::{json, Value};
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config_parser::ProviderTypesConfig;
 use tensorzero_core::embeddings::{
-    Embedding, EmbeddingModelConfig, EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest,
-    UninitializedEmbeddingProviderConfig,
+    Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProvider,
+    EmbeddingProviderConfig, EmbeddingRequest, UninitializedEmbeddingProviderConfig,
 };
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
 use tensorzero_core::inference::types::{Latency, ModelInferenceRequestJsonMode};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use crate::providers::common::{E2ETestProvider, E2ETestProviders};
+use crate::providers::common::{E2ETestProvider, E2ETestProviders, EmbeddingTestProvider};
 use tensorzero_core::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
@@ -156,11 +156,16 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let embedding_providers = vec![EmbeddingTestProvider {
+        model_name: "text-embedding-3-small".into(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: vec![],
+        embeddings: embedding_providers,
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: standard_providers.clone(),
@@ -1108,6 +1113,7 @@ async fn test_embedding_request() {
     let request = EmbeddingRequest {
         input: "This is a test input".to_string().into(),
         dimensions: None,
+        encoding_format: EmbeddingEncodingFormat::Float,
     };
     let api_keys = InferenceCredentials::default();
     let response = model_config
@@ -1218,6 +1224,7 @@ async fn test_embedding_sanity_check() {
             .to_string()
             .into(),
         dimensions: None,
+        encoding_format: EmbeddingEncodingFormat::Float,
     };
 
     let embedding_request_b = EmbeddingRequest {
@@ -1225,6 +1232,7 @@ async fn test_embedding_sanity_check() {
             .to_string()
             .into(),
         dimensions: None,
+        encoding_format: EmbeddingEncodingFormat::Float,
     };
 
     let embedding_request_c = EmbeddingRequest {
@@ -1232,6 +1240,7 @@ async fn test_embedding_sanity_check() {
             .to_string()
             .into(),
         dimensions: None,
+        encoding_format: EmbeddingEncodingFormat::Float,
     };
     let api_keys = InferenceCredentials::default();
 
