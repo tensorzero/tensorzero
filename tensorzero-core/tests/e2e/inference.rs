@@ -1,12 +1,14 @@
 use std::{collections::HashSet, sync::Arc};
 
 use crate::{
-    clickhouse::get_clean_clickhouse,
     otel::{
         attrs_to_map, build_span_map, install_capturing_otel_exporter, CapturingOtelExporter,
         SpanMap,
     },
-    providers::common::{make_embedded_client_with_config_and_clickhouse, make_embedded_gateway_with_config, FERRIS_PNG},
+    providers::common::{
+    make_embedded_gateway_with_config,
+        FERRIS_PNG,
+    },
 };
 use axum::http::HeaderValue;
 use base64::prelude::*;
@@ -22,7 +24,8 @@ use tensorzero::{
 use tensorzero_core::{
     clickhouse::{
         test_helpers::{
-            select_all_model_inferences_clickhouse, select_chat_inferences_clickhouse,
+            select_all_model_inferences_by_inference_ids_clickhouse,
+            select_chat_inferences_clickhouse,
         },
         ClickHouseConnectionInfo,
     },
@@ -3823,15 +3826,13 @@ async fn test_clickhouse_bulk_insert_off_default() {
 // group those tests as 'batch inference' tests
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clickhouse_bulk_insert() {
-    let (clickhouse, _guard) = get_clean_clickhouse(true);
     let client = Arc::new(
-        make_embedded_client_with_config_and_clickhouse(
+        make_embedded_gateway_with_config(
             "
     [gateway.observability]
     enabled = true
     batch_writes = { enabled = true }
     ",
-            clickhouse.clone(),
         )
         .await,
     );
@@ -3904,9 +3905,12 @@ async fn test_clickhouse_bulk_insert() {
     assert_eq!(actual_inference_ids, expected_inference_ids);
 
     // We created a fresh database, so the only ModelInference rows should be the ones we just wrote
-    let model_inferences = select_all_model_inferences_clickhouse(&clickhouse_client)
-        .await
-        .unwrap();
+    let model_inferences = select_all_model_inferences_by_inference_ids_clickhouse(
+        &expected_inference_ids.iter().cloned().collect::<Vec<_>>(),
+        &clickhouse_client,
+    )
+    .await
+    .unwrap();
 
     let actual_model_inference_ids = model_inferences
         .iter()

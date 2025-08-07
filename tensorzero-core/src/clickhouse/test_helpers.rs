@@ -8,6 +8,7 @@ use crate::endpoints::dynamic_evaluation_run::{
 #[cfg(feature = "e2e_tests")]
 use super::escape_string_for_clickhouse_literal;
 use super::ClickHouseConnectionInfo;
+use itertools::Itertools;
 use serde::Deserialize;
 use serde_json::Value;
 #[cfg(feature = "e2e_tests")]
@@ -212,13 +213,17 @@ pub async fn select_model_inference_clickhouse(
     Some(json)
 }
 
-pub async fn select_all_model_inferences_clickhouse(
+pub async fn select_all_model_inferences_by_inference_ids_clickhouse(
+    inference_ids: &[Uuid],
     clickhouse_connection_info: &ClickHouseConnectionInfo,
 ) -> Option<Vec<Value>> {
     #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
-    let query = format!("SELECT * FROM ModelInference FORMAT JSONEachRow");
+    let query = format!(
+        "SELECT * FROM ModelInference WHERE inference_id IN ({}) FORMAT JSONEachRow",
+        inference_ids.iter().map(|id| format!("'{id}'")).join(",")
+    );
 
     let text = clickhouse_connection_info
         .run_query_synchronous_no_params(query)
