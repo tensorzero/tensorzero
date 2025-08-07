@@ -15,9 +15,19 @@ pub struct SpanMap {
     range_to_file: Vec<(Range<usize>, TomlFile)>,
 }
 
-struct TomlFile {
+pub struct TomlFile {
     path: PathBuf,
     base_path: PathBuf,
+}
+
+impl TomlFile {
+    pub fn path(&self) -> &PathBuf {
+        &self.path
+    }
+
+    pub fn base_path(&self) -> &PathBuf {
+        &self.base_path
+    }
 }
 
 impl SpanMap {
@@ -104,22 +114,22 @@ impl SpanMap {
             .into());
         }
         let mut target_config = DeTable::new();
+        let span_map = SpanMap { range_to_file };
         for padded_str in &padded_strs {
             let parsed = DeTable::parse(padded_str).map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!("Failed to parse config file as valid TOML: {e}"),
                 })
             })?;
-            merge_tomls(&mut target_config, parsed.get_ref(), vec![])?;
+            merge_tomls(&mut target_config, parsed.get_ref(), &span_map, vec![])?;
         }
-        let span_map = SpanMap { range_to_file };
         let final_table = resolve_toml_relative_paths(target_config, &span_map)?;
         Ok((span_map, final_table))
     }
 
     /// Obtains the base path for a given range. This range should come from a `Spanned` entry
     /// in the final `DeTable`
-    pub(super) fn lookup_range_base_path(&self, range: Range<usize>) -> Option<&PathBuf> {
+    pub(super) fn lookup_range(&self, range: Range<usize>) -> Option<&TomlFile> {
         if range.end == 0 {
             return None;
         }
@@ -135,7 +145,7 @@ impl SpanMap {
                 }
             })
             .ok()?;
-        Some(&self.range_to_file[idx].1.base_path)
+        Some(&self.range_to_file[idx].1)
     }
 
     /// If the glob matched exactly one file, return the path to that file (*not* the base path)

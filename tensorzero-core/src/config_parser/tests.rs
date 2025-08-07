@@ -2276,3 +2276,83 @@ async fn test_invalid_glob() {
         "Error using glob: `/fake/tensorzero-config-test/path/to/**/fake.toml`: No files matched the glob pattern. Ensure that the path exists, and contains at least one file."
     );
 }
+
+#[tokio::test]
+async fn test_glob_duplicate_key() {
+    let config_a = r#"
+        [functions.first]
+        type = "chat"
+
+        [functions.first.variants.first_variant]
+        type = "chat_completion"
+        model = "dummy::echo_request_messages"
+        "#;
+
+    let config_b = r"
+        functions.first.variants.first_variant.max_tokens = 200
+        ";
+
+    let config_c = r#"
+        functions.first.variants.first_variant.model = "other_model"
+        "#;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_a_path = temp_dir.path().join("config_a.toml");
+    let config_b_path = temp_dir.path().join("config_b.toml");
+    let config_c_path = temp_dir.path().join("config_c.toml");
+    std::fs::write(&config_a_path, config_a).unwrap();
+    std::fs::write(&config_b_path, config_b).unwrap();
+    std::fs::write(&config_c_path, config_c).unwrap();
+
+    let err = Config::load_and_verify_from_path(
+        &ConfigFileGlob::new_from_path(temp_dir.path().join("*.toml").as_path()).unwrap(),
+    )
+    .await
+    .expect_err("Config should fail to load");
+
+    assert_eq!(
+        err.to_string(),
+        format!(
+            "`functions.first.variants.first_variant.model`: Found duplicate values in globbed TOML config files `{}` and `{}`",
+            config_a_path.display(),
+            config_c_path.display()
+        )
+    );
+}
+
+#[tokio::test]
+async fn test_glob_merge_non_map() {
+    let config_a = r#"
+        [functions.first]
+        type = "chat"
+
+        [functions.first.variants.first_variant]
+        type = "chat_completion"
+        model = "dummy::echo_request_messages"
+        "#;
+
+    let config_b = r"
+        functions.first = 123
+        ";
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_a_path = temp_dir.path().join("config_a.toml");
+    let config_b_path = temp_dir.path().join("config_b.toml");
+    std::fs::write(&config_a_path, config_a).unwrap();
+    std::fs::write(&config_b_path, config_b).unwrap();
+
+    let err = Config::load_and_verify_from_path(
+        &ConfigFileGlob::new_from_path(temp_dir.path().join("*.toml").as_path()).unwrap(),
+    )
+    .await
+    .expect_err("Config should fail to load");
+
+    assert_eq!(
+        err.to_string(),
+        format!(
+            "`functions.first`: Cannot merge `integer` from file `{}` into a table from file `{}`",
+            config_b_path.display(),
+            config_a_path.display()
+        )
+    );
+}

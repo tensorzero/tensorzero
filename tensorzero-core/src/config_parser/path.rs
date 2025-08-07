@@ -376,10 +376,11 @@ static TARGET_PATH_COMPONENTS: &[&[PathComponent]] = &[
 pub(super) fn merge_tomls<'a>(
     target: &mut DeTable<'a>,
     source: &DeTable<'a>,
-    error_path: Vec<String>,
+    span_map: &SpanMap,
+    error_key_path: Vec<String>,
 ) -> Result<(), Error> {
     for (key, value) in source {
-        let mut error_path = error_path.clone();
+        let mut error_path = error_key_path.clone();
         error_path.push(key.get_ref().to_string());
         match target.entry(key.clone()) {
             Entry::Vacant(entry) => {
@@ -392,23 +393,43 @@ pub(super) fn merge_tomls<'a>(
                 | DeValue::Boolean(_)
                 | DeValue::Array(_)
                 | DeValue::Datetime(_) => {
+                    let target_file = span_map
+                        .lookup_range(entry.key().span())
+                        .map(|f| f.path().clone())
+                        .unwrap_or_else(|| PathBuf::from("<unknown TOML file>"));
+                    let source_file = span_map
+                        .lookup_range(key.span())
+                        .map(|f| f.path().clone())
+                        .unwrap_or_else(|| PathBuf::from("<unknown TOML file>"));
                     return Err(ErrorDetails::Config {
                         message: format!(
-                            "`{}`: Found duplicate values in globbed TOML config files",
-                            error_path.join(".")
+                            "`{}`: Found duplicate values in globbed TOML config files `{}` and `{}`",
+                            error_path.join("."),
+                            target_file.display(),
+                            source_file.display(),
                         ),
                     }
                     .into());
                 }
                 DeValue::Table(target_table) => {
                     if let DeValue::Table(source_table) = value.get_ref() {
-                        merge_tomls(target_table, source_table, error_path)?;
+                        merge_tomls(target_table, source_table, span_map, error_path)?;
                     } else {
+                        let source_file = span_map
+                            .lookup_range(key.span())
+                            .map(|f| f.path().clone())
+                            .unwrap_or_else(|| PathBuf::from("<unknown TOML file>"));
+                        let target_file = span_map
+                            .lookup_range(entry.key().span())
+                            .map(|f| f.path().clone())
+                            .unwrap_or_else(|| PathBuf::from("<unknown TOML file>"));
                         return Err(ErrorDetails::Config {
                             message: format!(
-                                "`{}`: Cannot merge `{}` into a table",
+                                "`{}`: Cannot merge `{}` from file `{}` into a table from file `{}`",
                                 error_path.join("."),
-                                value.get_ref().type_str()
+                                value.get_ref().type_str(),
+                                source_file.display(),
+                                target_file.display(),
                             ),
                         }
                         .into());
@@ -516,15 +537,16 @@ pub(super) fn resolve_toml_relative_paths(
                             let span = entry.span();
                             if let DeValue::String(target_string) = entry.get_mut() {
                                 let base_path = span_map
-                                    .lookup_range_base_path(span)
+                                    .lookup_range(span)
                                     .ok_or_else(|| {
                                         Error::new(ErrorDetails::Config {
                                             message: format!(
-                                                "`{}`: Failed to determine original TOML source file",
-                                                error_path.join(".")
-                                            ),
+                                            "`{}`: Failed to determine original TOML source file",
+                                            error_path.join(".")
+                                        ),
                                         })
-                                    })?;
+                                    })?
+                                    .base_path();
 
                                 let target_path = Path::new(&**target_string);
                                 let mut inner_table = DeTable::new();
