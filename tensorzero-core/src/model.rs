@@ -56,7 +56,7 @@ use crate::providers::{
     anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
     deepseek::DeepSeekProvider, fireworks::FireworksProvider,
     gcp_vertex_anthropic::GCPVertexAnthropicProvider, gcp_vertex_gemini::GCPVertexGeminiProvider,
-    groq::GroqProvider, mistral::MistralProvider, openai::OpenAIProvider,
+    groq::GroqProvider, mistral::MistralProvider, nvidia_nim::NvidiaNimProvider, openai::OpenAIProvider,
     openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
     xai::XAIProvider,
 };
@@ -777,6 +777,7 @@ pub enum ProviderConfig {
     Groq(GroqProvider),
     Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
+    NvidiaNim(NvidiaNimProvider),
     OpenAI(OpenAIProvider),
     OpenRouter(OpenRouterProvider),
     #[serde(rename = "sglang")]
