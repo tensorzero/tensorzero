@@ -117,66 +117,88 @@ impl EmbeddingModelConfig {
         clients: &InferenceClients<'_>,
     ) -> Result<EmbeddingModelResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
-        for provider_name in &self.routing {
-            let provider_config = self.providers.get(provider_name).ok_or_else(|| {
-                Error::new(ErrorDetails::ProviderNotFound {
-                    provider_name: provider_name.to_string(),
-                })
-            })?;
-            let provider_request = EmbeddingModelProviderRequest {
-                request,
-                provider_name,
-                model_name,
-            };
-            // TODO: think about how to best handle errors here
-            if clients.cache_options.enabled.read() {
-                let cache_lookup = embedding_cache_lookup(
-                    clients.clickhouse_connection_info,
-                    &provider_request,
-                    clients.cache_options.max_age_s,
-                )
-                .await
-                .ok()
-                .flatten();
-                if let Some(cache_lookup) = cache_lookup {
-                    return Ok(cache_lookup);
+        let run_all_embedding_models = async {
+            for provider_name in &self.routing {
+                let provider_config = self.providers.get(provider_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::ProviderNotFound {
+                        provider_name: provider_name.to_string(),
+                    })
+                })?;
+                let provider_request = EmbeddingModelProviderRequest {
+                    request,
+                    provider_name,
+                    model_name,
+                };
+                // TODO: think about how to best handle errors here
+                if clients.cache_options.enabled.read() {
+                    let cache_lookup = embedding_cache_lookup(
+                        clients.clickhouse_connection_info,
+                        &provider_request,
+                        clients.cache_options.max_age_s,
+                    )
+                    .await
+                    .ok()
+                    .flatten();
+                    if let Some(cache_lookup) = cache_lookup {
+                        return Ok(cache_lookup);
+                    }
                 }
-            }
-            let response = provider_config
-                .embed(request, clients.http_client, clients.credentials)
-                .await;
+                let response = provider_config
+                    .embed(request, clients.http_client, clients.credentials)
+                    .await;
 
-            match response {
-                Ok(response) => {
-                    if clients.cache_options.enabled.write() && response.embeddings.len() == 1 {
-                        let Some(first_embedding) = response.embeddings.first() else {
-                            return Err(ErrorDetails::InternalError{
+                match response {
+                    Ok(response) => {
+                        if clients.cache_options.enabled.write() && response.embeddings.len() == 1 {
+                            let Some(first_embedding) = response.embeddings.first() else {
+                                return Err(ErrorDetails::InternalError{
                              message: format!("Failed to get first embedding for cache {IMPOSSIBLE_ERROR_MESSAGE}")
                             }
                             .into());
+                            };
+                            let _ = start_cache_write(
+                                clients.clickhouse_connection_info,
+                                provider_request.get_cache_key()?,
+                                EmbeddingCacheData {
+                                    embedding: first_embedding.into_float()?.into_owned(),
+                                },
+                                &response.raw_request,
+                                &response.raw_response,
+                                &response.usage,
+                                None,
+                            );
                         };
-                        let _ = start_cache_write(
-                            clients.clickhouse_connection_info,
-                            provider_request.get_cache_key()?,
-                            EmbeddingCacheData {
-                                embedding: first_embedding.into_float()?.into_owned(),
-                            },
-                            &response.raw_request,
-                            &response.raw_response,
-                            &response.usage,
-                            None,
-                        );
-                    };
-                    let embedding_response =
-                        EmbeddingModelResponse::new(response, provider_name.clone());
-                    return Ok(embedding_response);
-                }
-                Err(error) => {
-                    provider_errors.insert(provider_name.to_string(), error);
+                        let embedding_response =
+                            EmbeddingModelResponse::new(response, provider_name.clone());
+                        return Ok(embedding_response);
+                    }
+                    Err(error) => {
+                        provider_errors.insert(provider_name.to_string(), error);
+                    }
                 }
             }
+            Err(ErrorDetails::ModelProvidersExhausted { provider_errors }.into())
+        };
+        // This is the top-level embedding model timeout, which limits the total time taken to run all providers.
+        // Some of the providers may themselves have timeouts, which is fine. Provider timeouts
+        // are treated as just another kind of provider error - a timeout of N ms is equivalent
+        // to a provider taking N ms, and then producing a normal HTTP error.
+        if let Some(timeout) = self.timeouts.non_streaming.total_ms {
+            let timeout = Duration::from_millis(timeout);
+            tokio::time::timeout(timeout, run_all_embedding_models)
+                .await
+                // Convert the outer `Elapsed` error into a TensorZero error,
+                // so that it can be handled by the `match response` block below
+                .unwrap_or_else(|_: Elapsed| {
+                    Err(Error::new(ErrorDetails::ModelTimeout {
+                        model_name: model_name.to_string(),
+                        timeout,
+                        streaming: false,
+                    }))
+                })
+        } else {
+            run_all_embedding_models.await
         }
-        Err(ErrorDetails::ModelProvidersExhausted { provider_errors }.into())
     }
 }
 
