@@ -20,11 +20,19 @@ json_mode = "strict"
 
 # TODO: Once you've fine-tuned your model, add it here like the commented example below
 
-# [functions.extract_entities.variants.gpt_4o_mini_fine_tuned]
-# type = "chat_completion"
-# model = "openai::ft:gpt-4o-mini-2024-07-18:xxxxxxxx::xxxxxxxx"
-# system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
-# json_mode = "strict"
+#[functions.extract_entities.variants.gpt_4o_mini_sft_fine_tuned]
+#type = "chat_completion"
+#model = "openai::ft:gpt-4.1-mini-2025-04-14:xxxxxxxx::xxxxxxxx"
+#system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+#json_mode = "strict"
+
+# TODO: Once you've fine-tuned with DPO, add it here
+
+#[functions.extract_entities.variants.gpt_4o_mini_sft_dpo_fine_tuned]
+#type = "chat_completion"
+#model = "openai::ft:gpt-4.1-mini-2025-04-14:xxxxxxxx::xxxxxxxx"
+#system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+#json_mode = "strict"
 
 # [functions.extract_entities.variants.gpt_4o_mini_dicl]
 # type = "experimental_dynamic_in_context_learning"
