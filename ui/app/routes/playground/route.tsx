@@ -153,26 +153,28 @@ export async function loader({ request }: Route.LoaderArgs) {
     variantName: string,
     functionConfig: FunctionConfig,
   ) => {
-    const request = prepareInferenceActionRequest({
-      source: "clickhouse_datapoint",
-      input,
-      functionName,
-      variant: variantName,
-      tool_params:
-        datapoint?.type === "chat"
-          ? (datapoint.tool_params ?? undefined)
-          : undefined,
-      output_schema:
-        datapoint?.type === "json" ? datapoint.output_schema : null,
-      // The default is write_only but we do off in the playground
-      cache_options: {
-        max_age_s: null,
-        enabled: "off",
-      },
-      dryrun: true,
-      functionConfig,
+    const request = {
+      ...prepareInferenceActionRequest({
+        source: "clickhouse_datapoint",
+        input,
+        functionName,
+        variant: variantName,
+        tool_params:
+          datapoint?.type === "chat"
+            ? (datapoint.tool_params ?? undefined)
+            : undefined,
+        output_schema:
+          datapoint?.type === "json" ? datapoint.output_schema : null,
+        // The default is write_only but we do off in the playground
+        cache_options: {
+          max_age_s: null,
+          enabled: "off",
+        },
+        dryrun: true,
+        functionConfig,
+      }),
       ...getExtraInferenceOptions(),
-    });
+    };
     const nativeClient = await getNativeTensorZeroClient();
     const inferenceResponse = await nativeClient.inference(request);
     return inferenceResponse;
@@ -544,25 +546,28 @@ function useClientInferences(
           newMap.set(variant, variantMap);
         }
 
-        const request = prepareInferenceActionRequest({
-          source: "clickhouse_datapoint",
-          input,
-          functionName,
-          variant: variant,
-          tool_params:
-            datapoint?.type === "chat"
-              ? (datapoint.tool_params ?? undefined)
-              : undefined,
-          output_schema:
-            datapoint?.type === "json" ? datapoint.output_schema : null,
-          // The default is write_only but we do off in the playground
-          cache_options: {
-            max_age_s: null,
-            enabled: "off",
-          },
-          dryrun: true,
-          functionConfig,
-        });
+        const request = {
+          ...prepareInferenceActionRequest({
+            source: "clickhouse_datapoint",
+            input,
+            functionName,
+            variant: variant,
+            tool_params:
+              datapoint?.type === "chat"
+                ? (datapoint.tool_params ?? undefined)
+                : undefined,
+            output_schema:
+              datapoint?.type === "json" ? datapoint.output_schema : null,
+            // The default is write_only but we do off in the playground
+            cache_options: {
+              max_age_s: null,
+              enabled: "off",
+            },
+            dryrun: true,
+            functionConfig,
+          }),
+          ...getExtraInferenceOptions(),
+        };
         const formData = new FormData();
         formData.append("data", JSON.stringify(request));
         const responsePromise = fetch("/api/tensorzero/inference", {
