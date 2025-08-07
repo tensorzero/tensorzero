@@ -179,7 +179,7 @@ pub enum ClientBuilderError {
     NotHTTPGateway,
     #[error("Failed to configure ClickHouse: {0}")]
     Clickhouse(TensorZeroError),
-    #[error("Failed to parse config: {0}.")]
+    #[error("Failed to parse config: {0}")]
     ConfigParsingPreGlob(TensorZeroError),
     #[error("Failed to parse config: {error}. Config file glob `{glob}` resolved to the following files:\n{paths}", glob = glob.glob,paths = glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"))]
     ConfigParsing {
