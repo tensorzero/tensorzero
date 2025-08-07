@@ -15,6 +15,7 @@ export async function action({ request }: Route.ActionArgs): Promise<Response> {
     const parsed = JSON.parse(data);
     const extraOptions = getExtraInferenceOptions();
     const request = { ...parsed, ...extraOptions } as ClientInferenceParams;
+    console.log(request);
     const nativeClient = await getNativeTensorZeroClient();
     const inference = await nativeClient.inference(request);
     return Response.json(inference);
@@ -25,7 +26,6 @@ export async function action({ request }: Route.ActionArgs): Promise<Response> {
         { status: 400 },
       );
     }
-
     if (isTensorZeroServerError(error)) {
       return Response.json({ error: error.message }, { status: error.status });
     }

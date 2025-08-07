@@ -2,6 +2,7 @@ import type { DisplayInput } from "~/utils/clickhouse/common";
 import type {
   Datapoint as TensorZeroDatapoint,
   InferenceResponse,
+  FunctionConfig,
 } from "tensorzero-node";
 import { prepareInferenceActionRequest } from "../api/tensorzero/inference.utils";
 
@@ -15,6 +16,7 @@ export function refreshClientInference(
   datapoint: TensorZeroDatapoint,
   variantName: string,
   functionName: string,
+  functionConfig: FunctionConfig,
 ) {
   const request = prepareInferenceActionRequest({
     source: "clickhouse_datapoint",
@@ -31,6 +33,7 @@ export function refreshClientInference(
       enabled: "off",
     },
     dryrun: true,
+    functionConfig,
   });
   // The API endpoint takes form data so we need to stringify it and send as data
   const formData = new FormData();

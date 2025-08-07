@@ -7,7 +7,9 @@ import type {
   ClientInput,
   ClientInputMessage,
   ClientInputMessageContent,
+  FunctionConfig,
   JsonValue,
+  Tool,
 } from "tensorzero-node";
 import type {
   InputMessageContent as TensorZeroContent,
@@ -292,6 +294,7 @@ interface ClickHouseDatapointActionArgs {
   variant: string;
   cache_options: CacheParamsOptions;
   dryrun: boolean;
+  functionConfig: FunctionConfig;
 }
 
 export function prepareInferenceActionRequest(
@@ -351,7 +354,12 @@ export function prepareInferenceActionRequest(
     // Extract tool parameters from the ClickHouse datapoint args
     const tool_choice = args.tool_params?.tool_choice;
     const parallel_tool_calls = args.tool_params?.parallel_tool_calls;
-    const tools_available = args.tool_params?.tools_available;
+    const additional_tools = args.tool_params?.tools_available
+      ? subtractStaticToolsFromInferenceInput(
+          args.tool_params?.tools_available,
+          args.functionConfig,
+        )
+      : null;
 
     return {
       ...baseParams,
@@ -362,7 +370,7 @@ export function prepareInferenceActionRequest(
       tool_choice: tool_choice || null,
       dryrun: true,
       parallel_tool_calls: parallel_tool_calls || null,
-      additional_tools: tools_available || null,
+      additional_tools,
       cache_options: args.cache_options,
     };
   } else {
@@ -588,4 +596,27 @@ function resolvedFileContentToClientFile(
     mime_type: content.file.mime_type,
     data: data,
   };
+}
+
+/*
+ * For both inferences and datapoints, we store a full tool config that
+ * specifies what the model saw or could have seen at inference time for a particular example.
+ * However, TensorZero will automatically use the tools that are currently configured for inferences.
+ * It will also error if there are tools with duplicated names. In order to avoid this, we "subtract"
+ * out all currently configured tools from the tools that we pass in dynamically.
+ */
+function subtractStaticToolsFromInferenceInput(
+  datapointTools: Tool[],
+  functionConfig: FunctionConfig,
+): Tool[] {
+  if (functionConfig.type === "json") {
+    return datapointTools;
+  }
+  const resultTools = [];
+  for (const tool of datapointTools) {
+    if (!functionConfig.tools.some((t) => t === tool.name)) {
+      resultTools.push(tool);
+    }
+  }
+  return resultTools;
 }
