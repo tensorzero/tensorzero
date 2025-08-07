@@ -1,6 +1,5 @@
 import typing as t
 from importlib.metadata import version
-from .util import UUID
 
 import httpx
 
@@ -173,7 +172,6 @@ __all__ = [
     "ToolCall",
     "ToolCallChunk",
     "ToolResult",
-    "UUID",
     "UnknownContentBlock",
     "Usage",
     
