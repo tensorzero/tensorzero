@@ -443,6 +443,7 @@ impl EmbeddingProvider for EmbeddingProviderInfo {
 pub struct UninitializedEmbeddingProviderConfig {
     #[serde(flatten)]
     config: UninitializedProviderConfig,
+    #[serde(default)]
     timeouts: TimeoutsConfig,
 }
 
@@ -457,6 +458,12 @@ impl UninitializedEmbeddingProviderConfig {
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::OpenAI(provider),
+                timeouts,
+                provider_name,
+            },
+            #[cfg(feature = "e2e_tests")]
+            ProviderConfig::Dummy(provider) => EmbeddingProviderInfo {
+                inner: EmbeddingProviderConfig::Dummy(provider),
                 timeouts,
                 provider_name,
             },

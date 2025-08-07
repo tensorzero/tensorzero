@@ -303,3 +303,55 @@ pub async fn test_embedding_consistency_with_provider(provider: EmbeddingTestPro
         );
     }
 }
+
+/// Test basic embedding with fallback model
+/// That model should have a slow model run first, time out, and then succeed with the OpenAI model
+/// For now this test is underspecified since we can't run the embeddings through the embedded client and check logs
+/// or check ClickHouse
+#[tokio::test]
+pub async fn test_basic_embedding_fallback() {
+    let payload = json!({
+        "input": "Hello, world!",
+        "model": "fallback",
+    });
+    let response = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:?}");
+    assert_eq!(response_json["object"].as_str().unwrap(), "list");
+    assert_eq!(
+        response_json["data"][0]["embedding"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1536
+    );
+    assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
+    assert_eq!(response_json["data"][0]["index"].as_u64().unwrap(), 0);
+    assert_eq!(
+        response_json["data"][0]["object"].as_str().unwrap(),
+        "embedding"
+    );
+    assert!(response_json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
+    assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
+}
+
+#[tokio::test]
+pub async fn test_basic_embedding_timeout() {
+    let payload = json!({
+        "input": "Hello, world!",
+        "model": "timeout",
+    });
+    let response = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
+}

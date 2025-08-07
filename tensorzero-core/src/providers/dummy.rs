@@ -771,6 +771,9 @@ impl EmbeddingProvider for DummyProvider {
             }
             .into());
         }
+        if self.model_name.contains("slow") {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        }
         let id = Uuid::now_v7();
         let created = current_timestamp();
         let embeddings = vec![Embedding::Float(vec![0.0; 1536]); request.input.num_inputs()];
