@@ -1,10 +1,10 @@
 #![expect(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
 mod batch;
-mod config;
 mod best_of_n;
 mod cache;
 mod clickhouse;
 mod common;
+mod config;
 mod datasets;
 mod dicl;
 mod dynamic_evaluations;
