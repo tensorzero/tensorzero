@@ -247,7 +247,6 @@ pub async fn test_capture_model_error() {
             description: "".into()
         }
     );
-    eprintln!("Root span: {:#?}", root_span);
     let root_attr_map = attrs_to_map(&root_span.attributes);
     assert_eq!(
         root_attr_map["model_name"],
@@ -308,8 +307,7 @@ pub async fn test_capture_model_error() {
     assert_eq!(
         model_provider_span.events.len(),
         1,
-        "Unexpected number of events: {:?}",
-        model_provider_span
+        "Unexpected number of events: {model_provider_span:#?}",
     );
     assert!(
         model_provider_span.events[0]
