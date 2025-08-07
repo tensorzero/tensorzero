@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use opentelemetry::{KeyValue, SpanId, Value};
+use opentelemetry::{trace::Status, KeyValue, SpanId, Value};
 use opentelemetry_sdk::{
     error::OTelSdkResult,
     trace::{SpanData, SpanExporter},
@@ -15,6 +15,7 @@ use tensorzero::{
 use tensorzero_core::inference::types::TextKind;
 use tensorzero_core::observability::build_opentelemetry_layer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use uuid::Uuid;
 
 use crate::providers::common::make_embedded_gateway_no_config;
 
@@ -49,6 +50,8 @@ impl CapturingOtelExporter {
         spans
     }
 }
+
+#[derive(Debug)]
 
 pub struct SpanMap {
     pub root_spans: Vec<SpanData>,
@@ -135,6 +138,7 @@ pub async fn test_capture_simple_inference_spans() {
     // Since we're using the embedded gateway, the root span will be `function_inference`
     // (we won't have a top-level HTTP span)
     assert_eq!(root_span.name, "function_inference");
+    assert_eq!(root_span.status, Status::Unset);
     let root_attr_map = attrs_to_map(&root_span.attributes);
     assert_eq!(root_attr_map["model_name"], "dummy::good".into());
     assert_eq!(
@@ -154,6 +158,7 @@ pub async fn test_capture_simple_inference_spans() {
     };
 
     assert_eq!(variant_span.name, "variant_inference");
+    assert_eq!(variant_span.status, Status::Unset);
     let variant_attr_map = attrs_to_map(&variant_span.attributes);
     assert_eq!(
         variant_attr_map["function_name"],
@@ -168,6 +173,7 @@ pub async fn test_capture_simple_inference_spans() {
     };
 
     assert_eq!(model_span.name, "model_inference");
+    assert_eq!(model_span.status, Status::Unset);
     let model_attr_map = attrs_to_map(&model_span.attributes);
     assert_eq!(model_attr_map["model_name"], "dummy::good".into());
     assert_eq!(model_attr_map["stream"], false.into());
@@ -177,6 +183,7 @@ pub async fn test_capture_simple_inference_spans() {
         panic!("Expected one child span: {model_children:#?}");
     };
     assert_eq!(model_provider_span.name, "model_provider_inference");
+    assert_eq!(model_provider_span.status, Status::Unset);
     let model_provider_attr_map = attrs_to_map(&model_provider_span.attributes);
     assert_eq!(model_provider_attr_map["provider_name"], "dummy".into());
     assert_eq!(
@@ -187,6 +194,140 @@ pub async fn test_capture_simple_inference_spans() {
     assert_eq!(
         model_provider_attr_map["gen_ai.request.model"],
         "good".into()
+    );
+    assert_eq!(model_attr_map["stream"], false.into());
+
+    assert_eq!(
+        spans
+            .span_children
+            .get(&model_provider_span.span_context.span_id()),
+        None
+    );
+
+    assert_eq!(num_spans, 4);
+}
+
+#[tokio::test]
+pub async fn test_capture_model_error() {
+    let episode_uuid = Uuid::now_v7();
+    let exporter = install_capturing_otel_exporter();
+
+    let client = make_embedded_gateway_no_config().await;
+    let _err = client
+        .inference(ClientInferenceParams {
+            episode_id: Some(episode_uuid),
+            model_name: Some("openai::missing-model-name".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is your name?".to_string(),
+                    })],
+                }],
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap_err();
+
+    let all_spans = exporter.take_spans();
+    let num_spans = all_spans.len();
+    let spans = build_span_map(all_spans);
+
+    let [root_span] = spans.root_spans.as_slice() else {
+        panic!("Expected one root span: {:#?}", spans.root_spans);
+    };
+    // Since we're using the embedded gateway, the root span will be `function_inference`
+    // (we won't have a top-level HTTP span)
+    assert_eq!(root_span.name, "function_inference");
+    assert_eq!(
+        root_span.status,
+        Status::Error {
+            description: "".into()
+        }
+    );
+    eprintln!("Root span: {:#?}", root_span);
+    let root_attr_map = attrs_to_map(&root_span.attributes);
+    assert_eq!(
+        root_attr_map["model_name"],
+        "openai::missing-model-name".into()
+    );
+    assert_eq!(root_attr_map["episode_id"], episode_uuid.to_string().into());
+    assert_eq!(root_attr_map.get("function_name"), None);
+    assert_eq!(root_attr_map.get("variant_name"), None);
+
+    let root_children = &spans.span_children[&root_span.span_context.span_id()];
+    let [variant_span] = root_children.as_slice() else {
+        panic!("Expected one child span: {root_children:#?}");
+    };
+
+    assert_eq!(variant_span.name, "variant_inference");
+    assert_eq!(variant_span.status, Status::Unset);
+    let variant_attr_map = attrs_to_map(&variant_span.attributes);
+    assert_eq!(
+        variant_attr_map["function_name"],
+        "tensorzero::default".into()
+    );
+    assert_eq!(
+        variant_attr_map["variant_name"],
+        "openai::missing-model-name".into()
+    );
+    assert_eq!(variant_attr_map["stream"], false.into());
+
+    let variant_children = &spans.span_children[&variant_span.span_context.span_id()];
+    let [model_span] = variant_children.as_slice() else {
+        panic!("Expected one child span: {variant_children:#?}");
+    };
+
+    assert_eq!(model_span.name, "model_inference");
+    assert_eq!(
+        model_span.status,
+        Status::Error {
+            description: "".into()
+        }
+    );
+    let model_attr_map = attrs_to_map(&model_span.attributes);
+    assert_eq!(
+        model_attr_map["model_name"],
+        "openai::missing-model-name".into()
+    );
+    assert_eq!(model_attr_map["stream"], false.into());
+
+    let model_children = &spans.span_children[&model_span.span_context.span_id()];
+    let [model_provider_span] = model_children.as_slice() else {
+        panic!("Expected one child span: {model_children:#?}");
+    };
+    assert_eq!(model_provider_span.name, "model_provider_inference");
+    assert_eq!(
+        model_provider_span.status,
+        Status::Error {
+            description: "".into()
+        }
+    );
+    assert_eq!(
+        model_provider_span.events.len(),
+        1,
+        "Unexpected number of events: {:?}",
+        model_provider_span
+    );
+    assert!(
+        model_provider_span.events[0]
+            .name
+            .starts_with("Error from openai server:"),
+        "Unexpected span event: {:?}",
+        model_provider_span.events[0]
+    );
+    let model_provider_attr_map = attrs_to_map(&model_provider_span.attributes);
+    assert_eq!(model_provider_attr_map["provider_name"], "openai".into());
+    assert_eq!(
+        model_provider_attr_map["gen_ai.operation.name"],
+        "chat".into()
+    );
+    assert_eq!(model_provider_attr_map["gen_ai.system"], "openai".into());
+    assert_eq!(
+        model_provider_attr_map["gen_ai.request.model"],
+        "missing-model-name".into()
     );
     assert_eq!(model_attr_map["stream"], false.into());
 
