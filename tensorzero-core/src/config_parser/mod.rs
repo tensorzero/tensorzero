@@ -307,6 +307,10 @@ pub struct ObservabilityConfig {
     pub enabled: Option<bool>,
     #[serde(default)]
     pub async_writes: bool,
+    /// If `true`, then we skip checking/applying migrations if the `TensorZeroMigration` table
+    /// contains exactly the migrations that we expect to have run.
+    #[serde(default)]
+    pub skip_completed_migrations: bool,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
