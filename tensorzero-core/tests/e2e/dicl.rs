@@ -4,6 +4,7 @@ use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
+use std::sync::Arc;
 use std::time::Duration;
 use tensorzero_core::{
     clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
@@ -364,7 +365,10 @@ async fn embed_insert_example(
     let provider_config =
         toml::from_str::<UninitializedEmbeddingProviderConfig>(provider_config_serialized)
             .expect("Failed to deserialize EmbeddingProviderConfig")
-            .load(&ProviderTypesConfig::default())
+            .load(
+                &ProviderTypesConfig::default(),
+                Arc::from("good".to_string()),
+            )
             .await
             .unwrap();
 

@@ -7,7 +7,7 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write, CacheData, EmbeddingCacheData,
     EmbeddingModelProviderRequest,
 };
-use crate::config_parser::ProviderTypesConfig;
+use crate::config_parser::{ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::model::UninitializedProviderConfig;
 use crate::model_table::BaseModelTable;
@@ -25,6 +25,7 @@ use base64::prelude::*;
 use futures::future::try_join_all;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use tokio::time::error::Elapsed;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -50,9 +51,15 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
                 }));
             }
         };
+        let provider_info = EmbeddingProviderInfo {
+            inner: provider_config,
+            timeouts: TimeoutsConfig::default(),
+            provider_name: Arc::from(provider_type.to_string()),
+        };
         Ok(EmbeddingModelConfig {
             routing: vec![provider_type.to_string().into()],
-            providers: HashMap::from([(provider_type.to_string().into(), provider_config)]),
+            providers: HashMap::from([(provider_type.to_string().into(), provider_info)]),
+            timeouts: TimeoutsConfig::default(),
         })
     }
 
@@ -68,6 +75,8 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
 pub struct UninitializedEmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, UninitializedEmbeddingProviderConfig>,
+    #[serde(default)]
+    pub timeouts: TimeoutsConfig,
 }
 
 impl UninitializedEmbeddingModelConfig {
@@ -76,7 +85,7 @@ impl UninitializedEmbeddingModelConfig {
         provider_types: &ProviderTypesConfig,
     ) -> Result<EmbeddingModelConfig, Error> {
         let providers = try_join_all(self.providers.into_iter().map(|(name, config)| async {
-            let provider_config = config.load(provider_types).await?;
+            let provider_config = config.load(provider_types, name.clone()).await?;
             Ok::<_, Error>((name, provider_config))
         }))
         .await?
@@ -85,6 +94,7 @@ impl UninitializedEmbeddingModelConfig {
         Ok(EmbeddingModelConfig {
             routing: self.routing,
             providers,
+            timeouts: self.timeouts,
         })
     }
 }
@@ -94,7 +104,8 @@ impl UninitializedEmbeddingModelConfig {
 #[cfg_attr(test, ts(export))]
 pub struct EmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
-    pub providers: HashMap<Arc<str>, EmbeddingProviderConfig>,
+    pub providers: HashMap<Arc<str>, EmbeddingProviderInfo>,
+    pub timeouts: TimeoutsConfig,
 }
 
 impl EmbeddingModelConfig {
@@ -134,6 +145,7 @@ impl EmbeddingModelConfig {
             let response = provider_config
                 .embed(request, clients.http_client, clients.credentials)
                 .await;
+
             match response {
                 Ok(response) => {
                     if clients.cache_options.enabled.write() && response.embeddings.len() == 1 {
@@ -369,20 +381,63 @@ pub enum EmbeddingProviderConfig {
     Dummy(DummyProvider),
 }
 
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct EmbeddingProviderInfo {
+    pub inner: EmbeddingProviderConfig,
+    pub timeouts: TimeoutsConfig,
+    pub provider_name: Arc<str>,
+}
+
+impl EmbeddingProvider for EmbeddingProviderInfo {
+    async fn embed(
+        &self,
+        request: &EmbeddingRequest,
+        client: &Client,
+        dynamic_api_keys: &InferenceCredentials,
+    ) -> Result<EmbeddingProviderResponse, Error> {
+        let response_fut = self.inner.embed(request, client, dynamic_api_keys);
+        Ok(
+            if let Some(timeout_ms) = self.timeouts.non_streaming.total_ms {
+                let timeout = Duration::from_millis(timeout_ms);
+                tokio::time::timeout(timeout, response_fut)
+                    .await
+                    .unwrap_or_else(|_: Elapsed| {
+                        Err(Error::new(ErrorDetails::ModelProviderTimeout {
+                            provider_name: self.provider_name.to_string(),
+                            timeout,
+                            streaming: false,
+                        }))
+                    })?
+            } else {
+                response_fut.await?
+            },
+        )
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct UninitializedEmbeddingProviderConfig {
     #[serde(flatten)]
     config: UninitializedProviderConfig,
+    timeouts: TimeoutsConfig,
 }
 
 impl UninitializedEmbeddingProviderConfig {
     pub async fn load(
         self,
         provider_types: &ProviderTypesConfig,
-    ) -> Result<EmbeddingProviderConfig, Error> {
+        provider_name: Arc<str>,
+    ) -> Result<EmbeddingProviderInfo, Error> {
         let provider_config = self.config.load(provider_types).await?;
+        let timeouts = self.timeouts;
         Ok(match provider_config {
-            ProviderConfig::OpenAI(provider) => EmbeddingProviderConfig::OpenAI(provider),
+            ProviderConfig::OpenAI(provider) => EmbeddingProviderInfo {
+                inner: EmbeddingProviderConfig::OpenAI(provider),
+                timeouts,
+                provider_name,
+            },
             _ => {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
@@ -506,16 +561,27 @@ mod tests {
             model_name: "error".into(),
             ..Default::default()
         });
+        let bad_provider_info = EmbeddingProviderInfo {
+            inner: bad_provider,
+            timeouts: Default::default(),
+            provider_name: Arc::from("error".to_string()),
+        };
         let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
             ..Default::default()
         });
+        let good_provider_info = EmbeddingProviderInfo {
+            inner: good_provider,
+            timeouts: Default::default(),
+            provider_name: Arc::from("good".to_string()),
+        };
         let fallback_embedding_model = EmbeddingModelConfig {
             routing: vec!["error".to_string().into(), "good".to_string().into()],
             providers: HashMap::from([
-                ("error".to_string().into(), bad_provider),
-                ("good".to_string().into(), good_provider),
+                ("error".to_string().into(), bad_provider_info),
+                ("good".to_string().into(), good_provider_info),
             ]),
+            timeouts: TimeoutsConfig::default(),
         };
         let request = EmbeddingRequest {
             input: "Hello, world!".to_string().into(),

@@ -1,10 +1,12 @@
 #![expect(clippy::print_stdout)]
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config_parser::ProviderTypesConfig;
+use tensorzero_core::config_parser::TimeoutsConfig;
 use tensorzero_core::embeddings::{
     Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProvider,
     EmbeddingProviderConfig, EmbeddingRequest, UninitializedEmbeddingProviderConfig,
@@ -1091,11 +1093,14 @@ async fn test_embedding_request() {
     let provider_config =
         toml::from_str::<UninitializedEmbeddingProviderConfig>(provider_config_serialized)
             .expect("Failed to deserialize EmbeddingProviderConfig")
-            .load(&ProviderTypesConfig::default())
+            .load(
+                &ProviderTypesConfig::default(),
+                Arc::from("good".to_string()),
+            )
             .await
             .unwrap();
     assert!(matches!(
-        provider_config,
+        provider_config.inner,
         EmbeddingProviderConfig::OpenAI(_)
     ));
 
@@ -1108,6 +1113,7 @@ async fn test_embedding_request() {
         providers: [(model_name.as_str().into(), provider_config)]
             .into_iter()
             .collect(),
+        timeouts: TimeoutsConfig::default(),
     };
 
     let request = EmbeddingRequest {
@@ -1215,7 +1221,10 @@ async fn test_embedding_sanity_check() {
     let provider_config =
         toml::from_str::<UninitializedEmbeddingProviderConfig>(provider_config_serialized)
             .expect("Failed to deserialize EmbeddingProviderConfig")
-            .load(&ProviderTypesConfig::default())
+            .load(
+                &ProviderTypesConfig::default(),
+                Arc::from("good".to_string()),
+            )
             .await
             .unwrap();
     let client = Client::new();
