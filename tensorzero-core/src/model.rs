@@ -779,6 +779,7 @@ pub enum ProviderConfig {
     Groq(GroqProvider),
     Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
+    #[serde(rename = "nvidia_nim")]
     NvidiaNim(NvidiaNimProvider),
     OpenAI(OpenAIProvider),
     OpenRouter(OpenRouterProvider),
