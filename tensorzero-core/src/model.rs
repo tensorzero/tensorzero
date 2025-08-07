@@ -956,7 +956,7 @@ pub enum UninitializedProviderConfig {
     #[serde(rename = "nvidia_nim")]
     NvidiaNim {
         model_name: String,
-        api_base: Url,
+        api_base: Option<Url>,
         #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
@@ -1132,7 +1132,7 @@ impl UninitializedProviderConfig {
                 api_key_location,
             } => ProviderConfig::NvidiaNim(NvidiaNimProvider::new(
                 model_name,
-                Some(api_base),
+                api_base,
                 api_key_location,
             )?),
             UninitializedProviderConfig::OpenAI {
