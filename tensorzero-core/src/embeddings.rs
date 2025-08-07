@@ -461,7 +461,7 @@ impl UninitializedEmbeddingProviderConfig {
                 timeouts,
                 provider_name,
             },
-            #[cfg(feature = "e2e_tests")]
+            #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::Dummy(provider),
                 timeouts,
