@@ -1,4 +1,5 @@
 import contextvars
+import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Generic, Optional, TypeVar
@@ -37,6 +38,9 @@ try:
     AGENTS_AVAILABLE = True
 except ImportError:
     AGENTS_AVAILABLE = False
+
+SystemModelT = TypeVar("SystemModelT", bound=BaseModel)
+UserModelT = TypeVar("UserModelT", bound=BaseModel)
 
 
 # Global context variables for tracking state within the context manager
@@ -83,7 +87,7 @@ class TensorZeroAgentsCompletions(AsyncCompletions):
 
         if tz_context.episode_id:
             # Inject episode_id or other context as needed
-            extra_body = kwargs.get("extra_body", {})
+            extra_body = kwargs.get("extra_body", {}) or {}
             extra_body["tensorzero::episode_id"] = tz_context.episode_id
             kwargs["extra_body"] = extra_body
 
@@ -106,10 +110,14 @@ class TensorZeroAgentsCompletions(AsyncCompletions):
                         property_name,
                         property_schema,
                     ) in system_schema_properties.items():
-                        # TODO: We could add validation here, maybe we can generate a pydantic model from the schema
                         provided_value = metadata.get(
                             f"tensorzero::arguments::{property_name}"
                         )
+                        try:
+                            provided_value = json.loads(provided_value)
+                        except json.JSONDecodeError:
+                            # Was already raw string
+                            pass
                         arguments[property_name] = provided_value
                     content_object = [
                         {"type": "text", "tensorzero::arguments": arguments}
@@ -134,6 +142,11 @@ class TensorZeroAgentsCompletions(AsyncCompletions):
                         provided_value = metadata.get(
                             f"tensorzero::arguments::{property_name}"
                         )
+                        try:
+                            provided_value = json.loads(provided_value)
+                        except json.JSONDecodeError:
+                            # Was already raw string
+                            pass
                         arguments[property_name] = provided_value
                     content_object = [
                         {"type": "text", "tensorzero::arguments": arguments}
@@ -173,10 +186,6 @@ class TensorZeroAgentsClient(AsyncOpenAI):
         return TensorZeroAgentsChat(self)
 
 
-SystemModelT = TypeVar("SystemModelT", bound=BaseModel)
-UserModelT = TypeVar("UserModelT", bound=BaseModel)
-
-
 class TensorZeroAgentsRunArgs(BaseModel, Generic[SystemModelT, UserModelT]):
     system: SystemModelT
     user: UserModelT
@@ -205,7 +214,12 @@ class TensorZeroAgentsRunner(agents.Runner, Generic[SystemModelT, UserModelT]):
 
         if isinstance(input, TensorZeroAgentsRunArgs):
             args = input.system.model_dump() | input.user.model_dump()
-            args = {f"tensorzero::arguments::{k}": v for k, v in args.items()}
+            args = {
+                f"tensorzero::arguments::{k}": v
+                if isinstance(v, str)
+                else json.dumps(v)
+                for k, v in args.items()
+            }
             existing_run_config = run_config or agents.run.RunConfig()
             existing_model_settings = (
                 existing_run_config.model_settings or agents.run.ModelSettings()

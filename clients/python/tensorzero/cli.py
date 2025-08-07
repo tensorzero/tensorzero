@@ -204,15 +204,71 @@ def _generate_schema_models(
             )
 
 
+def _generate_json_schemas_from_models(*, models_dir: Path, output_dir: Path) -> None:
+    """Generate JSON schema files from Pydantic models discovered in `models_dir`.
+
+    Recursively scans Python files, imports them, and for every Pydantic
+    `BaseModel` defined in the module writes a `<ModelName>.json` schema
+    mirroring the directory layout under `output_dir`.
+    """
+    import inspect
+    import json
+    from importlib.util import module_from_spec, spec_from_file_location
+
+    from pydantic import BaseModel
+
+    for py_file in models_dir.rglob("*.py"):
+        spec = spec_from_file_location(py_file.stem, py_file)
+        if spec is None or spec.loader is None:
+            print(f"[WARN] could not load module from {py_file}", file=sys.stderr)
+            continue
+        module = module_from_spec(spec)
+        sys.modules[spec.name] = module
+        try:
+            spec.loader.exec_module(module)  # type: ignore[attr-defined]
+        except Exception as exc:  # pragma: no cover
+            print(
+                f"[WARN] skipping {py_file} due to import error: {exc}", file=sys.stderr
+            )
+            continue
+
+        for obj_name, obj in vars(module).items():
+            if (
+                inspect.isclass(obj)
+                and issubclass(obj, BaseModel)
+                and obj.__module__ == module.__name__
+            ):
+                schema = obj.model_json_schema()
+                rel_dir = py_file.relative_to(models_dir).parent
+                dest_dir = output_dir / rel_dir
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                dest_file = dest_dir / f"{obj.__name__}.json"
+                dest_file.write_text(json.dumps(schema, indent=2), encoding="utf-8")
+                print(f"[OK] wrote JSON schema for {obj.__name__} → {dest_file}")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="tensorzero-gen",
-        description="Generate typed helpers from a tensorzero.toml configuration.",
+        description=(
+            "Generate typed helpers from a tensorzero.toml configuration OR "
+            "convert Pydantic models to JSON schemas."
+        ),
     )
     parser.add_argument(
         "config",
+        nargs="?",
         type=Path,
         help="Path to tensorzero.toml file.",
+    )
+    parser.add_argument(
+        "--models-dir",
+        "-m",
+        type=Path,
+        help=(
+            "Directory containing Python files with Pydantic models for JSON "
+            "schema generation."
+        ),
     )
     parser.add_argument(
         "--output",
@@ -228,57 +284,74 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    cfg_path: Path = args.config.expanduser().resolve()
     output_dir: Path = args.output.expanduser().resolve()
+    cfg_path: Path | None = args.config.expanduser().resolve() if args.config else None
+    models_dir: Path | None = (
+        args.models_dir.expanduser().resolve() if args.models_dir else None
+    )
 
-    if not cfg_path.exists():
+    if cfg_path is None and models_dir is None:
+        parser.error("either CONFIG or --models-dir/-m must be provided")
+    if cfg_path and not cfg_path.exists():
         parser.error(f"configuration file not found: {cfg_path}")
+    if models_dir and not models_dir.exists():
+        parser.error(f"models directory not found: {models_dir}")
 
-    cfg_dict = toml.load(cfg_path)
+    cfg_dict = toml.load(cfg_path) if cfg_path else {}
 
-    # ---------------------------------------------------------------------
-    # 1. Function identifier types
-    # ---------------------------------------------------------------------
-    identifiers = _collect_function_identifiers(cfg_dict)
-    identifier_module_src = _render_identifier_module(identifiers)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if cfg_path:
+        # ---------------------------------------------------------------------
+        # 1. Function identifier types
+        # ---------------------------------------------------------------------
+        identifiers = _collect_function_identifiers(cfg_dict)
+        identifier_module_src = _render_identifier_module(identifiers)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    (output_dir / "__init__.py").touch(exist_ok=True)
-    types_file = output_dir / "function_identifiers.py"
-    types_file.write_text(identifier_module_src, encoding="utf-8")
-    print(f"[OK] wrote function identifier types → {types_file}")
+        (output_dir / "__init__.py").touch(exist_ok=True)
+        types_file = output_dir / "function_identifiers.py"
+        types_file.write_text(identifier_module_src, encoding="utf-8")
+        print(f"[OK] wrote function identifier types → {types_file}")
 
-    # ---------------------------------------------------------------------
-    # 2. Schema → Pydantic models
-    # ---------------------------------------------------------------------
-    if not args.skip_schemas:
-        schema_rel_paths: set[str] = set()
-        for func_cfg in cfg_dict.get("functions", {}).values():
-            if "system_schema" in func_cfg:
-                schema_rel_paths.add(func_cfg["system_schema"])
-            if "user_schema" in func_cfg:
-                schema_rel_paths.add(func_cfg["user_schema"])
-        # Variants may override?  (currently unlikely – but be safe.)
-        for func_cfg in cfg_dict.get("functions", {}).values():
-            for variant_cfg in func_cfg.get("variants", {}).values():
-                if "system_schema" in variant_cfg:
-                    schema_rel_paths.add(variant_cfg["system_schema"])
-                if "user_schema" in variant_cfg:
-                    schema_rel_paths.add(variant_cfg["user_schema"])
+        # ---------------------------------------------------------------------
+        # 2. Schema → Pydantic models
+        # ---------------------------------------------------------------------
+        if not args.skip_schemas:
+            schema_rel_paths: set[str] = set()
+            for func_cfg in cfg_dict.get("functions", {}).values():
+                if "system_schema" in func_cfg:
+                    schema_rel_paths.add(func_cfg["system_schema"])
+                if "user_schema" in func_cfg:
+                    schema_rel_paths.add(func_cfg["user_schema"])
 
-        resolved_paths = [cfg_path.parent / Path(p) for p in schema_rel_paths]
-        if resolved_paths:
-            schema_out_dir = output_dir / "schemas"
-            _generate_schema_models(
-                schema_paths=resolved_paths,
-                output_dir=schema_out_dir,
-                base_dir=cfg_path.parent,
-            )
-            print(
-                f"[OK] generated {len(resolved_paths)} pydantic model module(s) → {schema_out_dir}"
-            )
-        else:
-            print("[INFO] no schema files declared – skipping model generation")
+            # Variants may override system/user schema definitions.
+            for func_cfg in cfg_dict.get("functions", {}).values():
+                for variant_cfg in func_cfg.get("variants", {}).values():
+                    if "system_schema" in variant_cfg:
+                        schema_rel_paths.add(variant_cfg["system_schema"])
+                    if "user_schema" in variant_cfg:
+                        schema_rel_paths.add(variant_cfg["user_schema"])
+
+            resolved_paths = [cfg_path.parent / Path(p) for p in schema_rel_paths]
+            if resolved_paths:
+                schema_out_dir = output_dir / "schemas"
+                _generate_schema_models(
+                    schema_paths=resolved_paths,
+                    output_dir=schema_out_dir,
+                    base_dir=cfg_path.parent,
+                )
+                print(
+                    f"[OK] generated {len(resolved_paths)} pydantic model module(s) → {schema_out_dir}"
+                )
+            else:
+                print("[INFO] no schema files declared – skipping model generation")
+
+    if models_dir:
+        json_schema_out_dir = output_dir / "json_schemas"
+        _generate_json_schemas_from_models(
+            models_dir=models_dir,
+            output_dir=json_schema_out_dir,
+        )
+        print(f"[OK] JSON schema generation complete → {json_schema_out_dir}")
 
     print("[DONE] Generation complete.")
 

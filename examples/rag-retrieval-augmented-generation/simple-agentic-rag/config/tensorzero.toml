@@ -6,6 +6,7 @@
 
 [gateway]
 observability.enabled = true
+template_filesystem_access.enabled = true
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
