@@ -360,7 +360,7 @@ jobs:
     strategy:
       matrix:
         # Only include replicated: true when running in merge queue
-        replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
+        replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[true, false]') }}
         clickhouse_version:
           - tag: "24.12-alpine"
             prefix: "24.12"

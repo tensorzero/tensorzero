@@ -33,7 +33,7 @@ impl Migration for Migration0029<'_> {
                 "SELECT 1 FROM TensorZeroMigration WHERE migration_id = 29 LIMIT 1".to_string(),
             )
             .await?;
-        return Ok(response.response != "1");
+        return Ok(response.response.trim() != "1");
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
