@@ -39,12 +39,7 @@
 # installs all the necessary dependencies to run vLLM and the model. This includes a special-purpose vLLM prerelease
 # and a nightly PyTorch install for Triton support.
 
-import json
-import time
-from datetime import datetime, timezone
-from typing import Any
 
-import aiohttp
 import modal
 
 vllm_image = (
@@ -122,7 +117,9 @@ VLLM_PORT = 8000
     },
 )
 @modal.concurrent(max_inputs=MAX_INPUTS)
-@modal.web_server(port=VLLM_PORT, startup_timeout=30 * MINUTES, requires_proxy_auth=True)
+@modal.web_server(
+    port=VLLM_PORT, startup_timeout=30 * MINUTES, requires_proxy_auth=True
+)
 def serve():
     import subprocess
 
