@@ -358,7 +358,10 @@ impl DiclConfig {
         let formatted_embedding = format!(
             "[{}]",
             embedding_vector
-                .into_float()?
+                .as_float()
+                .ok_or_else(|| Error::new(ErrorDetails::InternalError {
+                    message: format!("Failed to convert DICL embedding to float array. {IMPOSSIBLE_ERROR_MESSAGE}")
+                }))?
                 .iter()
                 .map(|&x| x.to_string())
                 .collect::<Vec<_>>()

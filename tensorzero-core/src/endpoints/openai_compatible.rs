@@ -133,7 +133,6 @@ pub struct OpenAICompatibleEmbeddingParams {
     input: EmbeddingInput,
     model: String,
     dimensions: Option<u32>,
-    // Since we only support one format, this field is not used.
     #[serde(default)]
     encoding_format: EmbeddingEncodingFormat,
     #[serde(default, rename = "tensorzero::credentials")]

@@ -1146,7 +1146,7 @@ async fn test_embedding_request() {
     // Calculate the L2 norm of the embedding
     let norm: f32 = first_embedding
         .clone()
-        .into_float()
+        .as_float()
         .unwrap()
         .iter()
         .map(|&x| x.powi(2))
@@ -1294,8 +1294,8 @@ async fn test_embedding_sanity_check() {
 fn cosine_similarity(a: &Embedding, b: &Embedding) -> f32 {
     let a = a.clone();
     let b = b.clone();
-    let a_float = a.into_float().unwrap();
-    let b_float = b.into_float().unwrap();
+    let a_float = a.as_float().unwrap();
+    let b_float = b.as_float().unwrap();
     let dot_product: f32 = a_float.iter().zip(b_float.iter()).map(|(x, y)| x * y).sum();
     let magnitude_a: f32 = a_float.iter().map(|x| x * x).sum::<f32>().sqrt();
     let magnitude_b: f32 = b_float.iter().map(|x| x * x).sum::<f32>().sqrt();
