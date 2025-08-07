@@ -51,7 +51,6 @@ async fn test_embedded_duplicate_key() {
 
     let config_a_path = config_a_path.display();
     let config_b_path = config_b_path.display();
-    let config_dir = temp_dir.path().display();
     let glob = glob.display();
 
     assert_eq!(
