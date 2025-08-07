@@ -1,11 +1,12 @@
 use std::{collections::HashSet, sync::Arc};
 
 use crate::{
+    clickhouse::get_clean_clickhouse,
     otel::{
         attrs_to_map, build_span_map, install_capturing_otel_exporter, CapturingOtelExporter,
         SpanMap,
     },
-    providers::common::{make_embedded_gateway_with_config, FERRIS_PNG},
+    providers::common::{make_embedded_client_with_config_and_clickhouse, make_embedded_gateway_with_config, FERRIS_PNG},
 };
 use axum::http::HeaderValue;
 use base64::prelude::*;
@@ -19,7 +20,12 @@ use tensorzero::{
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::{
-    clickhouse::test_helpers::select_chat_inferences_clickhouse,
+    clickhouse::{
+        test_helpers::{
+            select_all_model_inferences_clickhouse, select_chat_inferences_clickhouse,
+        },
+        ClickHouseConnectionInfo,
+    },
     endpoints::inference::ChatInferenceResponse,
     inference::types::{
         ContentBlock, ContentBlockOutput, File, RequestMessage, ResolvedInput,
@@ -3787,21 +3793,62 @@ async fn test_multiple_text_blocks_in_message() {
     ));
 }
 
+// We don't use the word 'batch' in the test name, since we already
+// group those tests as 'batch inference' tests
 #[tokio::test(flavor = "multi_thread")]
-async fn test_large_write_batching() {
+async fn test_clickhouse_bulk_insert_off_default() {
     let client = Arc::new(
         make_embedded_gateway_with_config(
+            "
+    ",
+        )
+        .await,
+    );
+
+    let ClickHouseConnectionInfo::Production { batch_sender, .. } = client
+        .get_app_state_data()
+        .unwrap()
+        .clickhouse_connection_info
+        .clone()
+    else {
+        panic!("Clickhouse client was not production!");
+    };
+    assert!(
+        batch_sender.is_none(),
+        "Batching should not have been enabled!"
+    );
+}
+
+// We don't use the word 'batch' in the test name, since we already
+// group those tests as 'batch inference' tests
+#[tokio::test(flavor = "multi_thread")]
+async fn test_clickhouse_bulk_insert() {
+    let (clickhouse, _guard) = get_clean_clickhouse(true);
+    let client = Arc::new(
+        make_embedded_client_with_config_and_clickhouse(
             "
     [gateway.observability]
     enabled = true
     batch_writes = { enabled = true }
     ",
+            clickhouse.clone(),
         )
         .await,
     );
+
+    let ClickHouseConnectionInfo::Production { batch_sender, .. } = client
+        .get_app_state_data()
+        .unwrap()
+        .clickhouse_connection_info
+        .clone()
+    else {
+        panic!("Clickhouse client was not production!");
+    };
+    assert!(batch_sender.is_some(), "Batching was not enabled!");
+
     let mut join_set = JoinSet::new();
     let episode_id = Uuid::now_v7();
-    let inference_count = 1000;
+    let inference_count = 10_000;
     for _ in 0..inference_count {
         let client = client.clone();
         join_set.spawn(async move {
@@ -3855,4 +3902,23 @@ async fn test_large_write_batching() {
 
     assert_eq!(actual_inference_ids.len(), inference_count);
     assert_eq!(actual_inference_ids, expected_inference_ids);
+
+    // We created a fresh database, so the only ModelInference rows should be the ones we just wrote
+    let model_inferences = select_all_model_inferences_clickhouse(&clickhouse_client)
+        .await
+        .unwrap();
+
+    let actual_model_inference_ids = model_inferences
+        .iter()
+        .map(|i| {
+            i.get("inference_id")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .parse::<Uuid>()
+                .unwrap()
+        })
+        .collect::<HashSet<_>>();
+    assert_eq!(actual_model_inference_ids.len(), inference_count);
+    assert_eq!(actual_model_inference_ids, expected_inference_ids);
 }

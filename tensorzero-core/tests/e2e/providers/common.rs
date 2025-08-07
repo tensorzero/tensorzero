@@ -1,5 +1,6 @@
 #![expect(clippy::print_stdout)]
 use std::io::Cursor;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr};
 
@@ -22,17 +23,18 @@ use rand::Rng;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
+use tensorzero_core::clickhouse::{migration_manager, ClickHouseConnectionInfo};
+use tensorzero_core::config_parser::Config;
 use std::future::IntoFuture;
 use tensorzero::{
-    CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
-    ClientInputMessageContent, InferenceOutput, InferenceResponse,
+    CacheParamsOptions, ClientBuilder, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, InferenceOutput, InferenceResponse
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
 use tracing_test::traced_test;
 
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
 
-use tensorzero_core::gateway_util::AppStateData;
+use tensorzero_core::gateway_util::{AppStateData, GatewayHandle};
 use tensorzero_core::inference::types::{FinishReason, TextKind, Thought};
 use tensorzero_core::{
     cache::CacheEnabledMode,
@@ -143,6 +145,23 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
     .build()
     .await
     .unwrap()
+}
+
+pub async fn make_embedded_client_with_config_and_clickhouse(
+    config: &str,
+    clickhouse: ClickHouseConnectionInfo,
+) -> tensorzero::Client {
+    let tmp_config = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp_config.path(), config).unwrap();
+    let config = Arc::new(
+        Config::load_from_path_optional_verify_credentials(tmp_config.path(), false)
+            .await
+            .unwrap(),
+    );
+    migration_manager::run(&clickhouse, false).await.unwrap();
+    let handle =
+        GatewayHandle::new_with_clickhouse_and_http_client(config, clickhouse, Client::new());
+    ClientBuilder::build_from_state(handle).await.unwrap()
 }
 
 // We use a multi-threaded runtime so that the embedded gateway can use 'block_on'.

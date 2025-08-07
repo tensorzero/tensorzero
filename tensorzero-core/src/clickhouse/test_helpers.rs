@@ -212,6 +212,31 @@ pub async fn select_model_inference_clickhouse(
     Some(json)
 }
 
+pub async fn select_all_model_inferences_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+) -> Option<Vec<Value>> {
+    #[cfg(feature = "e2e_tests")]
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!("SELECT * FROM ModelInference FORMAT JSONEachRow");
+
+    let text = clickhouse_connection_info
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let json_rows: Vec<Value> = text
+        .response
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+
+    if json_rows.is_empty() {
+        None
+    } else {
+        Some(json_rows)
+    }
+}
+
 pub async fn select_model_inferences_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -219,7 +244,6 @@ pub async fn select_model_inferences_clickhouse(
     #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
-    // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
         "SELECT * FROM ModelInference WHERE inference_id = '{inference_id}' FORMAT JSONEachRow"
     );
