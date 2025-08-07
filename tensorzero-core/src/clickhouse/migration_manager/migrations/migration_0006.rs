@@ -1,5 +1,5 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::Error;
 use async_trait::async_trait;
 
@@ -45,9 +45,19 @@ impl Migration for Migration0006<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "BatchModelInference",
+                engine_args: &[],
+            },
+        );
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+
         // Create the `BatchModelInference` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS BatchModelInference
+        let query = format!(
+            r"
+            CREATE TABLE IF NOT EXISTS BatchModelInference{on_cluster_name}
             (
                 inference_id UUID,
                 batch_id UUID,
@@ -65,17 +75,26 @@ impl Migration for Migration0006<'_> {
                 output_schema Nullable(String),
                 tags Map(String, String) DEFAULT map(),
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(inference_id),
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY (batch_id, inference_id)
-        ";
+        ",
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `BatchRequest` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS BatchRequest
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "BatchRequest",
+                engine_args: &[],
+            },
+        );
+        let query = format!(
+            r"
+            CREATE TABLE IF NOT EXISTS BatchRequest{on_cluster_name}
             (
                 batch_id UUID,
                 id UUID,
@@ -85,38 +104,50 @@ impl Migration for Migration0006<'_> {
                 status Enum('pending' = 1, 'completed' = 2, 'failed' = 3),
                 errors Map(UUID, String),
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id),
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY (batch_id, id)
-        ";
+        ",
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the BatchIdByInferenceId table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS BatchIdByInferenceId
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "BatchIdByInferenceId",
+                engine_args: &[],
+            },
+        );
+        let query = format!(
+            r"
+            CREATE TABLE IF NOT EXISTS BatchIdByInferenceId{on_cluster_name}
             (
                 inference_id UUID,
                 batch_id UUID,
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY (inference_id)
-        ";
+        ",
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the BatchIdByInferenceId table
-        let query = r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS BatchIdByInferenceIdView
+        let query = format!(
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS BatchIdByInferenceIdView{on_cluster_name}
             TO BatchIdByInferenceId
             AS
                 SELECT
                     inference_id,
                     batch_id
                 FROM BatchModelInference
-            ";
+            "
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -131,13 +162,15 @@ impl Migration for Migration0006<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS BatchIdByInferenceIdView;
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            "/* Drop the materialized views */\
+            DROP VIEW IF EXISTS BatchIdByInferenceIdView{on_cluster_name};
             /* Drop the tables */\
-            DROP TABLE IF EXISTS BatchIdByInferenceId;
-            DROP TABLE IF EXISTS BatchRequest;
-            DROP TABLE IF EXISTS BatchModelInference;
+            DROP TABLE IF EXISTS BatchIdByInferenceId{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS BatchRequest{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS BatchModelInference{on_cluster_name} SYNC;
         "
-        .to_string()
+        )
     }
 }

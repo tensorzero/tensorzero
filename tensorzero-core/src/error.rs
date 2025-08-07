@@ -206,6 +206,9 @@ pub enum ErrorDetails {
     ChannelWrite {
         message: String,
     },
+    ClickHouseConfiguration {
+        message: String,
+    },
     ClickHouseConnection {
         message: String,
     },
@@ -520,6 +523,7 @@ impl ErrorDetails {
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
             ErrorDetails::BadImageFetch { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseConfiguration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
@@ -617,6 +621,7 @@ impl ErrorDetails {
             ErrorDetails::BatchNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Cache { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseConfiguration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -834,6 +839,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {message}")
+            }
+            ErrorDetails::ClickHouseConfiguration { message } => {
+                write!(f, "Error in ClickHouse configuration: {message}")
             }
             ErrorDetails::ClickHouseConnection { message } => {
                 write!(f, "Error connecting to ClickHouse: {message}")
