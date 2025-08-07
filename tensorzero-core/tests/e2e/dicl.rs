@@ -385,7 +385,7 @@ async fn embed_insert_example(
         .unwrap();
 
     let id = Uuid::now_v7();
-    let embedding = response.embeddings;
+    let embedding = &response.embeddings[0];
 
     let input_string = serde_json::to_string(&input).unwrap();
     let row = serde_json::json!({
