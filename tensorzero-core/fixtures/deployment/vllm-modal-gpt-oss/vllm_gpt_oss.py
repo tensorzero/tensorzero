@@ -109,8 +109,8 @@ VLLM_PORT = 8000
 @app.function(
     image=vllm_image,
     gpu=f"H100:{N_GPU}",
-    scaledown_window=1 * MINUTES,  # how long should we stay up with no requests?
-    timeout=30 * MINUTES,  # how long should we wait for container start?
+    scaledown_window=5 * MINUTES,  # how long should we stay up with no requests?
+    timeout=5 * MINUTES,  # how long should we wait for container start?
     volumes={
         "/root/.cache/huggingface": hf_cache_vol,
         "/root/.cache/vllm": vllm_cache_vol,
@@ -118,7 +118,7 @@ VLLM_PORT = 8000
 )
 @modal.concurrent(max_inputs=MAX_INPUTS)
 @modal.web_server(
-    port=VLLM_PORT, startup_timeout=30 * MINUTES, requires_proxy_auth=True
+    port=VLLM_PORT, startup_timeout=5 * MINUTES, requires_proxy_auth=True
 )
 def serve():
     import subprocess
