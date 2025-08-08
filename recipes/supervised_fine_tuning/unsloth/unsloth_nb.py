@@ -130,6 +130,8 @@ from trl import SFTTrainer
 from unsloth import FastLanguageModel, is_bfloat16_supported
 from unsloth.chat_templates import get_chat_template
 
+from utils import tensorzero_rendered_samples_to_conversations, train_val_split
+
 # %% [markdown]
 # Load and render the stored inferences
 
@@ -150,6 +152,7 @@ metric_node = FloatMetricFilter(
     value=FLOAT_METRIC_THRESHOLD,
     comparison_operator=comparison_operator,
 )
+# from tensorzero import BooleanMetricFilter
 # metric_node = BooleanMetricFilter(
 #     metric_name=METRIC_NAME,
 #     value=True  # or False
@@ -173,10 +176,27 @@ stored_inferences = tensorzero_client.experimental_list_inferences(
 # Render the stored inferences
 
 # %%
-rendered_inferences = tensorzero_client.experimental_render_inferences(
+rendered_samples = tensorzero_client.experimental_render_inferences(
     stored_inferences=stored_inferences,
     variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
 )
+
+# %% [markdown]
+# Split the data into training and validation sets for fine-tuning.
+
+# %%
+train_samples, eval_samples = train_val_split(
+    rendered_samples,
+    val_size=VAL_FRACTION,
+    last_inference_only=True,
+)
+
+# %% [markdown]
+# Convert the rendered samples to conversations for tokenization
+
+# %%
+train_conversations = tensorzero_rendered_samples_to_conversations(train_samples)
+eval_conversations = tensorzero_rendered_samples_to_conversations(eval_samples)
 
 # %% [markdown]
 # Instantiate the model and tokenizer
@@ -200,178 +220,23 @@ tokenizer = get_chat_template(
 )
 
 
-# %% [markdown]
-# Reformat the rendered inferences to ChatML and tokenize
-
-
 # %%
-def tensorzero_to_chatml_tools(tools: Optional[List[Any]]) -> List[Dict[str, Any]]:
-    """Convert TensorZero tools to OpenAI format."""
-    chatml_tools: List[Dict[str, Any]] = []
-    if tools:
-        for tool in tools:
-            chatml_tools.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": tool.description,
-                        "parameters": tool.parameters,
-                    },
-                }
-            )
-    return chatml_tools
-
-
-def message_to_chatml(message: OutputMessage) -> Optional[List[Dict[str, Any]]]:
-    chatml_messages: List[Dict[str, Any]] = []
-    assert message.role in ["user", "assistant"], f"Invalid role: {message.role}"
-    content: List[str] = []
-    tool_calls: List[Dict[str, Any]] = []
-    for content_block in message.content:
-        if isinstance(content_block, Text):
-            assert content_block.arguments is None, "Arguments should be None"
-            content.append(content_block.text)
-        elif isinstance(content_block, RawText):
-            content.append(content_block.value)
-        elif isinstance(content_block, Thought):
-            content.append(f"<think>{content_block['text']}</think>")
-        elif isinstance(content_block, ToolCall):
-            tool_calls.append(
-                {
-                    "function": {
-                        "arguments": content_block.raw_arguments,
-                        "name": content_block.name,
-                    },
-                    "id": content_block.id,
-                    "type": "function",
-                }
-            )
-        elif isinstance(content_block, ToolResult):
-            # Tool results get priority so that they follow the tool call in the conversation.
-            # Any other "user" content will be appended in another message below.
-            chatml_messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": content_block.id,
-                    "content": content_block.result,
-                }
-            )
-        else:
-            warnings.warn(
-                f"We do not support content block type: {type(content_block)}, dropping example.",
-                UserWarning,
-            )
-            return None
-    if content or tool_calls:
-        chatml_message: Dict[str, Any] = {"role": message.role}
-        if content:
-            chatml_message["content"] = "\n".join(content)
-        if tool_calls:
-            chatml_message["tool_calls"] = tool_calls
-        chatml_messages.append(chatml_message)
-
-    return chatml_messages
-
-
-def output_to_chatml(output: List[ContentBlock]) -> Dict[str, Any]:
-    content: List[str] = []
-    tool_calls: List[Dict[str, Any]] = []
-
-    for content_block in output:
-        if isinstance(content_block, Text):
-            assert content_block.arguments is None, "Arguments should be None"
-            content.append(content_block.text)
-        elif isinstance(content_block, Thought):
-            content.append(f"<think>{content_block['text']}</think>")
-        elif isinstance(content_block, ToolCall):
-            tool_calls.append(
-                {
-                    "function": {
-                        "arguments": content_block.raw_arguments,
-                        "name": content_block.name,
-                    },
-                    "id": content_block.id,
-                    "type": "function",
-                }
-            )
-        else:
-            warnings.warn(
-                f"We do not support content block type: {type(content_block)}, dropping example.",
-                UserWarning,
-            )
-            return None
-
-    # Once we finish collecting all blocks, create one assistant message.
-    output_message: Dict[str, Any] = {"role": "assistant"}
-    if content:
-        output_message["content"] = "\n".join(content)
-    if tool_calls:
-        output_message["tool_calls"] = tool_calls
-
-    return output_message
-
-
-conversations = []
-for rendered_inference in rendered_inferences:
-    messages = []
-    model_input = rendered_inference.input
-    if model_input.system is not None:
-        messages.append({"role": "system", "content": model_input.system})
-    for message in model_input.messages:
-        messages.extend(message_to_chatml(message))
-    messages.append(output_to_chatml(rendered_inference.output))
-    # Add tools if available
-    payload = {
-        "conversation": messages,
-        "tokenize": False,
-        "add_generation_prompt": False,
+def process_conversations(inference: Dict[str, Any]):
+    inference.update({"add_generation_prompt": False, "tokenize": False})
+    return {
+        "text": tokenizer.apply_chat_template(
+            **inference,
+        )
     }
-    if rendered_inference.tool_params:
-        tools = tensorzero_to_chatml_tools(
-            rendered_inference.tool_params.tools_available
-        )
-        payload["tools"] = tools
-    tokenized_messages = tokenizer.apply_chat_template(**payload)
 
-    # Drop conversations that have unknown content
-    if all(msg is not None for msg in messages):
-        conversations.append(
-            {"text": tokenized_messages, "episode_id": rendered_inference.episode_id}
-        )
-
-conversations = pd.DataFrame(conversations)
-
-# %% [markdown]
-# Split the data into training and validation sets for fine-tuning.
-#
 
 # %%
-# Get unique episode_ids
-unique_episode_ids = conversations["episode_id"].unique()
-
-# Shuffle the unique episode_ids
-np.random.seed(42)
-np.random.shuffle(unique_episode_ids)
-
-# Calculate the split index for episode_ids
-split_index = int(len(unique_episode_ids) * (1 - VAL_FRACTION))
-
-# Split the episode_ids into training and validation sets
-train_episode_ids = unique_episode_ids[:split_index]
-val_episode_ids = unique_episode_ids[split_index:]
-
-# Create training and validation DataFrames based on episode_ids
-train_df = conversations[conversations["episode_id"].isin(train_episode_ids)]
-val_df = conversations[conversations["episode_id"].isin(val_episode_ids)]
-
-# Convert to huggingface dataset
-train_dataset = Dataset.from_pandas(train_df.drop("episode_id", axis=1))
-eval_dataset = Dataset.from_pandas(val_df.drop("episode_id", axis=1))
-
-print(f"Training set size: {len(train_df)}")
-print(f"Validation set size: {len(val_df)}")
-print(f"Actual validation fraction: {len(val_df) / len(conversations):.2f}")
+train_dataset = Dataset.from_list(
+    [process_conversations(sample) for sample in train_conversations]
+)
+eval_dataset = Dataset.from_list(
+    [process_conversations(sample) for sample in eval_conversations]
+)
 
 # %% [markdown]
 # Set LoRA parameters
