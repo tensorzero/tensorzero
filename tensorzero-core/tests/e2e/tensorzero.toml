@@ -726,6 +726,30 @@ routing = ["openai"]
 type = "openai"
 model_name = "text-embedding-3-small"
 
+[embedding_models.fallback]
+routing = ["slow", "openai"]
+
+[embedding_models.fallback.providers.slow]
+type = "dummy"
+model_name = "slow"
+
+[embedding_models.fallback.providers.slow.timeouts]
+non_streaming = { total_ms = 1000 }
+
+[embedding_models.fallback.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+
+[embedding_models.timeout]
+routing = ["slow"]
+
+[embedding_models.timeout.timeouts]
+non_streaming = { total_ms = 1000 }
+
+[embedding_models.timeout.providers.slow]
+type = "dummy"
+model_name = "slow"
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
