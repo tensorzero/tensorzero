@@ -1403,11 +1403,10 @@ mod tests {
         };
 
         let llama_request =
-            LlamaRequest::new("meta-llama/llama-4-scout-17b-16e-instruct", &basic_request).unwrap();
-
+            LlamaRequest::new("Llama-4-Scout-17B-16E-Instruct-FP8", &basic_request).unwrap();
         assert_eq!(
             llama_request.model,
-            "meta-llama/llama-4-scout-17b-16e-instruct"
+            "Llama-4-Scout-17B-16E-Instruct-FP8"
         );
         assert_eq!(llama_request.messages.len(), 2);
         assert_eq!(llama_request.temperature, Some(0.7));
@@ -1446,14 +1445,14 @@ mod tests {
         };
 
         let llama_request = LlamaRequest::new(
-            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "Llama-4-Scout-17B-16E-Instruct-FP8",
             &request_with_tools,
         )
         .unwrap();
 
         assert_eq!(
             llama_request.model,
-            "meta-llama/llama-4-scout-17b-16e-instruct"
+            "Llama-4-Scout-17B-16E-Instruct-FP8"
         );
         assert_eq!(llama_request.messages.len(), 2); // We'll add a system message containing Json to fit Llama requirements
         assert_eq!(llama_request.temperature, None);
@@ -1505,14 +1504,14 @@ mod tests {
         };
 
         let llama_request = LlamaRequest::new(
-            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "Llama-4-Scout-17B-16E-Instruct-FP8",
             &request_with_tools,
         )
         .unwrap();
 
         assert_eq!(
             llama_request.model,
-            "meta-llama/llama-4-scout-17b-16e-instruct"
+            "Llama-4-Scout-17B-16E-Instruct-FP8"
         );
         assert_eq!(llama_request.messages.len(), 1);
         assert_eq!(llama_request.temperature, None);
@@ -1553,14 +1552,14 @@ mod tests {
         };
 
         let llama_request = LlamaRequest::new(
-            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "Llama-4-Scout-17B-16E-Instruct-FP8",
             &request_with_tools,
         )
         .unwrap();
 
         assert_eq!(
             llama_request.model,
-            "meta-llama/llama-4-scout-17b-16e-instruct"
+            "Llama-4-Scout-17B-16E-Instruct-FP8"
         );
         assert_eq!(llama_request.messages.len(), 1);
         assert_eq!(llama_request.temperature, None);
@@ -1621,7 +1620,7 @@ mod tests {
 
         let request_body = LlamaRequest {
             messages: vec![],
-            model: "meta-llama/llama-4-scout-17b-16e-instruct",
+            model: "Llama-4-Scout-17B-16E-Instruct-FP8",
             temperature: Some(0.5),
             top_p: Some(0.5),
             presence_penalty: Some(0.5),
@@ -1719,7 +1718,7 @@ mod tests {
 
         let request_body = LlamaRequest {
             messages: vec![],
-            model: "meta-llama/llama-4-scout-17b-16e-instruct",
+            model: "Llama-4-Scout-17B-16E-Instruct-FP8",
             temperature: Some(0.5),
             top_p: Some(0.5),
             presence_penalty: Some(0.5),
@@ -1787,7 +1786,7 @@ mod tests {
         };
         let request_body = LlamaRequest {
             messages: vec![],
-            model: "meta-llama/llama-4-scout-17b-16e-instruct",
+            model: "Llama-4-Scout-17B-16E-Instruct-FP8",
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
@@ -1845,7 +1844,7 @@ mod tests {
 
         let request_body = LlamaRequest {
             messages: vec![],
-            model: "meta-llama/llama-4-scout-17b-16e-instruct",
+            model: "Llama-4-Scout-17B-16E-Instruct-FP8",
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),

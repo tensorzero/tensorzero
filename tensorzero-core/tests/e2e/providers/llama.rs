@@ -14,8 +14,8 @@ async fn get_providers() -> E2ETestProviders {
 
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: true,
-        variant_name: "llama-standard".to_string(),
-        model_name: "meta-llama/Llama-4-Scout-17B-16E".into(),
+        variant_name: "llama".to_string(),
+        model_name: "Llama-4-Scout-17B-16E-Instruct-FP8".into(),
         model_provider_name: "llama".into(),
         credentials: HashMap::new(),
     }];
@@ -23,7 +23,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: true,
         variant_name: "llama-extra-body".to_string(),
-        model_name: "meta-llama/Llama-4-Scout-17B-16E".into(),
+        model_name: "Llama-4-Scout-17B-16E-Instruct-FP8".into(),
         model_provider_name: "llama".into(),
         credentials: HashMap::new(),
     }];
@@ -31,15 +31,15 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: true,
         variant_name: "llama-extra-headers".to_string(),
-        model_name: "meta-llama/Llama-4-Scout-17B-16E".into(),
+        model_name: "Llama-4-Scout-17B-16E-Instruct-FP8".into(),
         model_provider_name: "llama".into(),
         credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
         supports_batch_inference: true,
-        variant_name: "llama-inference-params".to_string(),
-        model_name: "meta-llama/Llama-4-Scout-17B-16E".into(),
+        variant_name: "llama".to_string(),
+        model_name: "Llama-4-Scout-17B-16E-Instruct-FP8".into(),
         model_provider_name: "llama".into(),
         credentials: credentials.clone(),
     }];
@@ -47,7 +47,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: true,
         variant_name: "llama-dynamic".to_string(),
-        model_name: "meta-llama/Llama-4-Scout-17B-16E".into(),
+        model_name: "Llama-4-Scout-17B-16E-Instruct-FP8".into(),
         model_provider_name: "llama".into(),
         credentials,
     }];
@@ -55,7 +55,7 @@ async fn get_providers() -> E2ETestProviders {
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: true,
         variant_name: "llama-shorthand".to_string(),
-        model_name: "meta-llama/Llama-4-Scout-17B-16E".into(),
+        model_name: "Llama-4-Scout-17B-16E-Instruct-FP8".into(),
         model_provider_name: "llama".into(),
         credentials: HashMap::new(),
     }];
@@ -63,15 +63,15 @@ async fn get_providers() -> E2ETestProviders {
     let json_providers = vec![
         E2ETestProvider {
             supports_batch_inference: true,
-            variant_name: "llama-json".to_string(),
-            model_name: "meta-llama/Llama-4-Scout-17B-16E".into(),
+            variant_name: "llama".to_string(),
+            model_name: "Llama-4-Scout-17B-16E-Instruct-FP8".into(),
             model_provider_name: "llama".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: true,
-            variant_name: "llama-strict-json".to_string(),
-            model_name: "meta-llama/Llama-4-Scout-17B-16E".into(),
+            variant_name: "llama-strict".to_string(),
+            model_name: "Llama-4-Scout-17B-16E-Instruct-FP8".into(),
             model_provider_name: "llama".into(),
             credentials: HashMap::new(),
         },
