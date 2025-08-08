@@ -14,7 +14,7 @@
 
 Take what you need, adopt incrementally, and complement with other tools.
 
-<video src="https://github.com/user-attachments/assets/cedb329f-209e-4de9-b928-75a5df4fe2a8"></video>
+<video src="https://github.com/user-attachments/assets/04a8466e-27d8-4189-b305-e7cecb6881ee"></video>
 
 ---
 
