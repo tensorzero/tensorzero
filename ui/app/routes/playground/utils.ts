@@ -1,6 +1,8 @@
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import type { InferenceResponse } from "~/utils/tensorzero";
-import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
+import type {
+  Datapoint as TensorZeroDatapoint,
+  InferenceResponse,
+} from "tensorzero-node";
 import { prepareInferenceActionRequest } from "../api/tensorzero/inference.utils";
 
 export function refreshClientInference(
@@ -24,6 +26,11 @@ export function refreshClientInference(
         ? (datapoint.tool_params ?? undefined)
         : undefined,
     output_schema: datapoint?.type === "json" ? datapoint.output_schema : null,
+    cache_options: {
+      max_age_s: null,
+      enabled: "off",
+    },
+    dryrun: true,
   });
   // The API endpoint takes form data so we need to stringify it and send as data
   const formData = new FormData();
@@ -34,7 +41,6 @@ export function refreshClientInference(
       body: formData,
     });
     const data = await response.json();
-    console.log(data);
     if (data.error) {
       throw new Error(data.error);
     }

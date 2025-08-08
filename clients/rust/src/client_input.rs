@@ -11,6 +11,8 @@ use tensorzero_derive::TensorZeroDeserialize;
 // Like the normal `Input` type, but with `ClientInputMessage` instead of `InputMessage`.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ClientInput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<Value>,
@@ -21,6 +23,8 @@ pub struct ClientInput {
 // Like the normal `InputMessage` type, but with `ClientInputMessageContent` instead of `InputMessageContent`.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ClientInputMessage {
     pub role: Role,
     #[serde(deserialize_with = "deserialize_content")]
@@ -30,6 +34,8 @@ pub struct ClientInputMessage {
 #[derive(Clone, Debug, TensorZeroDeserialize, Serialize, PartialEq)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum ClientInputMessageContent {
     Text(TextKind),
     ToolCall(ToolCallInput),

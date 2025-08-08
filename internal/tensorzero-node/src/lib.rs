@@ -2,7 +2,10 @@
 use std::{path::Path, time::Duration};
 use url::Url;
 
-use tensorzero::{Client, ClientBuilder, ClientBuilderMode, OptimizationJobHandle};
+use tensorzero::{
+    Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, InferenceOutput,
+    OptimizationJobHandle,
+};
 
 #[macro_use]
 extern crate napi_derive;
@@ -86,6 +89,29 @@ impl TensorZeroClient {
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let result_str = serde_json::to_string(&result).map_err(|e| {
             napi::Error::from_reason(format!("Failed to serialize stale dataset result: {e}"))
+        })?;
+        Ok(result_str)
+    }
+
+    #[napi]
+    pub async fn inference(&self, params: String) -> Result<String, napi::Error> {
+        let params: ClientInferenceParams =
+            serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        if params.stream.unwrap_or(false) {
+            return Err(napi::Error::from_reason(
+                "Streaming inference is not supported",
+            ));
+        }
+        let result = self
+            .client
+            .inference(params)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let InferenceOutput::NonStreaming(result) = result else {
+            return Err(napi::Error::from_reason("Streaming inference is not supported. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports"));
+        };
+        let result_str = serde_json::to_string(&result).map_err(|e| {
+            napi::Error::from_reason(format!("Failed to serialize inference result: {e}"))
         })?;
         Ok(result_str)
     }

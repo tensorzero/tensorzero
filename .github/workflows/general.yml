@@ -350,13 +350,17 @@ jobs:
         run: find . -name "Chart.yaml" -exec dirname {} \; | xargs -I {} helm lint {}
 
   clickhouse-tests:
+    name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
+
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
     # the main 'validate' job)
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-large-cache-volume' || 'ubuntu-latest' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     strategy:
       matrix:
+        # Only include replicated: true when running in merge queue
+        replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
         clickhouse_version:
           - tag: "24.12-alpine"
             prefix: "24.12"
@@ -390,6 +394,10 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Set ClickHouse replicated cluster name
+        if: matrix.replicated == true
+        run: echo "TENSORZERO_CLICKHOUSE_CLUSTER_NAME=tensorzero_e2e_tests_cluster" >> $GITHUB_ENV
+
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
 
@@ -400,8 +408,13 @@ jobs:
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
-      - name: Launch ClickHouse container for E2E tests
+      - name: Launch non-replicated ClickHouse container for E2E tests
+        if: matrix.replicated == false
         run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse --wait
+
+      - name: Launch replicated ClickHouse container for E2E tests
+        if: matrix.replicated == true
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up clickhouse-01 clickhouse-02 clickhouse-03 --wait
 
       # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
       - name: Check ClickHouse version
@@ -415,8 +428,27 @@ jobs:
       - name: Build the gateway for E2E tests
         run: cargo build-e2e
 
-      - name: Launch the gateway for E2E tests
+      - name: Launch the gateway for E2E tests (not configured for replication)
+        if: matrix.replicated == false
         run: |
+          cargo run-e2e > e2e_logs.txt 2>&1 &
+            count=0
+            max_attempts=10
+            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+              echo "Waiting for gateway to be healthy..."
+              sleep 1
+              count=$((count + 1))
+              if [ $count -ge $max_attempts ]; then
+                echo "Gateway failed to become healthy after $max_attempts attempts"
+                exit 1
+              fi
+            done
+          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
+
+      - name: Launch the gateway for E2E tests (configured for replication)
+        if: matrix.replicated == true
+        run: |
+          cargo run-e2e --run-migrations-only &&
           cargo run-e2e > e2e_logs.txt 2>&1 &
             count=0
             max_attempts=10
@@ -433,6 +465,46 @@ jobs:
 
       - name: Test (Rust)
         run: cargo test-e2e-no-creds
+
+      - name: Print docker compose logs (replicated)
+        if: always() && matrix.replicated == true
+        run: |
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml logs -t
+
+      - name: Print ClickHouse error logs (replicated)
+        if: always() && matrix.replicated == true
+        run: |
+          echo "Error logs for ClickHouse 01:"
+          docker exec e2e-clickhouse-01-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+          echo "Error logs for ClickHouse 02:"
+          docker exec e2e-clickhouse-02-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+          echo "Error logs for ClickHouse 03:"
+          docker exec e2e-clickhouse-03-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+
+      - name: Print ClickHouse trace logs (replicated)
+        if: always() && matrix.replicated == true
+        run: |
+          echo "Trace logs for ClickHouse 01:"
+          docker exec e2e-clickhouse-01-1 cat /var/log/clickhouse-server/clickhouse-server.log
+          echo "Trace logs for ClickHouse 02:"
+          docker exec e2e-clickhouse-02-1 cat /var/log/clickhouse-server/clickhouse-server.log
+          echo "Trace logs for ClickHouse 03:"
+          docker exec e2e-clickhouse-03-1 cat /var/log/clickhouse-server/clickhouse-server.log
+
+      - name: Print container health checks (replicated)
+        if: always() && matrix.replicated == true
+        run: |
+          echo "Health check for ClickHouse 01:"
+          docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-01) | jq
+          echo "Health check for ClickHouse 02:"
+          docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-02) | jq
+          echo "Health check for ClickHouse 03:"
+          docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-03) | jq
+
+      - name: Print docker compose logs (non-replicated)
+        if: always() && matrix.replicated == false
+        run: |
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
       - name: Print e2e logs
         if: always()
