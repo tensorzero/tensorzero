@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::embeddings::{EmbeddingRequest, EmbeddingResponse};
+use crate::embeddings::{EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{warn_discarded_cache_write, Error, ErrorDetails};
 use crate::inference::types::file::serialize_with_file_data;
 use crate::inference::types::{
@@ -387,14 +387,14 @@ pub async fn embedding_cache_lookup(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     request: &EmbeddingModelProviderRequest<'_>,
     max_age_s: Option<u32>,
-) -> Result<Option<EmbeddingResponse>, Error> {
+) -> Result<Option<EmbeddingModelResponse>, Error> {
     let result = cache_lookup_inner::<EmbeddingCacheData>(
         clickhouse_connection_info,
         request.get_cache_key()?,
         max_age_s,
     )
     .await?;
-    Ok(result.map(|result| EmbeddingResponse::from_cache(result, request)))
+    Ok(result.map(|result| EmbeddingModelResponse::from_cache(result, request)))
 }
 
 pub async fn cache_lookup(

@@ -1,3 +1,5 @@
+#![expect(clippy::print_stdout)]
+use std::collections::HashMap;
 use std::{collections::HashSet, sync::Arc};
 
 use crate::{
@@ -19,6 +21,7 @@ use tensorzero::{
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::{
+    clickhouse::test_helpers::get_clickhouse_replica,
     clickhouse::{
         test_helpers::{
             select_all_model_inferences_by_chat_episode_id_clickhouse,
@@ -2883,6 +2886,72 @@ async fn test_dummy_only_embedded_gateway_no_config() {
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
     assert_eq!(function_name, "tensorzero::default");
+    // It's not necessary to check ModelInference table given how many other places we do that
+}
+
+#[tokio::test]
+async fn test_dummy_only_replicated_clickhouse() {
+    let client = make_embedded_gateway_no_config().await;
+    let response = client
+        .inference(ClientInferenceParams {
+            model_name: Some("dummy::my-model".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is the name of the capital city of Japan?".to_string(),
+                    })],
+                }],
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming response");
+    };
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Check if ClickHouse is ok - ChatInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, response.inference_id())
+        .await
+        .unwrap();
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, response.inference_id());
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "tensorzero::default");
+
+    // Check if ClickHouse replica is ok - ChatInference Table on replica
+    let clickhouse_replica = get_clickhouse_replica().await;
+    if let Some(clickhouse_replica) = clickhouse_replica {
+        println!("ClickHouse replica is ok");
+        let result = select_chat_inference_clickhouse(&clickhouse_replica, response.inference_id())
+            .await
+            .unwrap();
+        let id_str = result.get("id").unwrap().as_str().unwrap();
+        let id = Uuid::parse_str(id_str).unwrap();
+        assert_eq!(id, response.inference_id());
+        let episode_id_str = result.get("episode_id").unwrap().as_str().unwrap();
+
+        let function_name = result.get("function_name").unwrap().as_str().unwrap();
+        assert_eq!(function_name, "tensorzero::default");
+
+        // Let's also check that the data is in InferenceById to make sure that the data is replicated to materialize views too
+        let result = clickhouse_replica.run_query_synchronous(
+            "SELECT * FROM InferenceById WHERE id_uint = toUInt128({id:UUID}) FORMAT JSONEachRow".to_string(),
+            &HashMap::from([("id", id_str)]),
+        ).await.unwrap();
+        let result: Value = serde_json::from_str(result.response.trim()).unwrap();
+        let episode_id_str_mv = result.get("episode_id").unwrap().as_str().unwrap();
+        assert_eq!(episode_id_str_mv, episode_id_str);
+    }
     // It's not necessary to check ModelInference table given how many other places we do that
 }
 

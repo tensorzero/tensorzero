@@ -13,7 +13,7 @@ use tokio::sync::oneshot::Sender;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-use crate::clickhouse::migration_manager;
+use crate::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
 use crate::endpoints;
@@ -194,10 +194,11 @@ pub async fn setup_clickhouse(
 
     // Run ClickHouse migrations (if any) if we have a production ClickHouse connection
     if let ClickHouseConnectionInfo::Production { .. } = &clickhouse_connection_info {
-        migration_manager::run(
-            &clickhouse_connection_info,
-            config.gateway.observability.skip_completed_migrations,
-        )
+        migration_manager::run(RunMigrationManagerArgs {
+            clickhouse: &clickhouse_connection_info,
+            skip_completed_migrations: config.gateway.observability.skip_completed_migrations,
+            manual_run: false,
+        })
         .await?;
     }
     Ok(clickhouse_connection_info)
