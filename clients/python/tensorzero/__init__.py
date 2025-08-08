@@ -174,7 +174,6 @@ __all__ = [
     "ToolResult",
     "UnknownContentBlock",
     "Usage",
-    
 ]
 
 T = t.TypeVar("T", bound=t.Any)
@@ -254,4 +253,3 @@ def patch_openai_client(
         # In 'async_setup' mode, return a `Future` that sets the needed fields after the gateway has started
         return _async_attach_fields(client, gateway)
     return _attach_fields(client, gateway)
-
