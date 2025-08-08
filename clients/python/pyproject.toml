@@ -58,6 +58,8 @@ dev = [
     "pytest-rerunfailures",
     "pytest",
     "openai",
+    "clickhouse-connect",
+    "pandas",
 ]
 
 [tool.maturin]

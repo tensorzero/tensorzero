@@ -21,6 +21,7 @@ import base64
 import inspect
 import json
 import os
+import tempfile
 import threading
 import time
 import typing as t
@@ -28,6 +29,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from os import path
 from uuid import UUID
+import asyncio
+from clickhouse_connect import get_client  # type: ignore
 
 import pytest
 import tensorzero
@@ -3249,3 +3252,46 @@ def test_sync_include_original_response_json(sync_client: TensorZeroGateway):
     )
     assert isinstance(response, JsonInferenceResponse)
     assert response.original_response == '{"answer":"Hello"}'
+
+
+@pytest.mark.asyncio
+async def test_async_clickhouse_batch_writes():
+    # Create a temp file and write to it
+    with tempfile.NamedTemporaryFile() as temp_file:
+        temp_file.write(b"gateway.observability.enabled = true\n")
+        temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
+        client = await AsyncTensorZeroGateway.build_embedded(
+            config_file=temp_file.name,
+            clickhouse_url=clickhouse_url,
+        )
+        num_inferences = 100
+        futures = []
+        episode_id = str(uuid7())
+        for i in range(num_inferences):
+            futures.append(
+                client.inference(
+                    model_name="dummy::good",
+                    episode_id=episode_id,
+                    input={
+                        "messages": [{"role": "user", "content": "Hello, world!"}],
+                    },
+                )
+            )
+
+        results = await asyncio.gather(*futures)
+        assert len(results) == num_inferences
+
+        # Wait for results to be written to ClickHouse
+        await asyncio.sleep(1)
+
+        expected_inference_ids = set(result.inference_id for result in results)
+
+        clickhouse_client = get_client(dsn=clickhouse_url)
+        clickhouse_result = clickhouse_client.query_df(
+            f"SELECT * FROM ChatInference where episode_id = '{episode_id}'"
+        )
+        assert len(clickhouse_result) == num_inferences
+
+        actual_inference_ids = set(row.id for row in clickhouse_result.iloc)
+        assert actual_inference_ids == expected_inference_ids
