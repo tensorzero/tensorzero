@@ -3261,14 +3261,16 @@ async def test_async_clickhouse_batch_writes():
         temp_file.write(b"gateway.observability.enabled = true\n")
         temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
         clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
-        client = await AsyncTensorZeroGateway.build_embedded(
+        client_fut = AsyncTensorZeroGateway.build_embedded(
             config_file=temp_file.name,
             clickhouse_url=clickhouse_url,
         )
+        assert inspect.isawaitable(client_fut)
+        client = await client_fut
         num_inferences = 100
-        futures = []
+        futures: t.List[t.Awaitable[t.Any]] = []
         episode_id = str(uuid7())
-        for i in range(num_inferences):
+        for _ in range(num_inferences):
             futures.append(
                 client.inference(
                     model_name="dummy::good",
@@ -3288,10 +3290,10 @@ async def test_async_clickhouse_batch_writes():
         expected_inference_ids = set(result.inference_id for result in results)
 
         clickhouse_client = get_client(dsn=clickhouse_url)
-        clickhouse_result = clickhouse_client.query_df(
+        clickhouse_result = clickhouse_client.query_df(  # type: ignore
             f"SELECT * FROM ChatInference where episode_id = '{episode_id}'"
         )
-        assert len(clickhouse_result) == num_inferences
+        assert len(clickhouse_result) == num_inferences  # type: ignore
 
-        actual_inference_ids = set(row.id for row in clickhouse_result.iloc)
+        actual_inference_ids = set(row.id for row in clickhouse_result.iloc)  # type: ignore
         assert actual_inference_ids == expected_inference_ids
