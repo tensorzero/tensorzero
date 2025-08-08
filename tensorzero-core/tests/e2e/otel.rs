@@ -52,7 +52,6 @@ impl CapturingOtelExporter {
 }
 
 #[derive(Debug)]
-
 pub struct SpanMap {
     pub root_spans: Vec<SpanData>,
     pub span_children: HashMap<SpanId, Vec<SpanData>>,
