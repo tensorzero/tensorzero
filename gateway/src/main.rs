@@ -228,6 +228,10 @@ async fn main() {
             "/openai/v1/chat/completions",
             post(endpoints::openai_compatible::inference_handler),
         )
+        .route(
+            "/openai/v1/embeddings",
+            post(endpoints::openai_compatible::embeddings_handler),
+        )
         .route("/feedback", post(endpoints::feedback::feedback_handler))
         // Everything above this layer has OpenTelemetry tracing enabled
         // Note - we do *not* attach a `OtelInResponseLayer`, as this seems to be incorrect according to the W3C Trace Context spec

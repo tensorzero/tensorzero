@@ -189,6 +189,9 @@ pub enum ErrorDetails {
     BadCredentialsPreInference {
         provider_name: String,
     },
+    Base64 {
+        message: String,
+    },
     BatchInputValidation {
         index: usize,
         message: String,
@@ -410,6 +413,9 @@ pub enum ErrorDetails {
     MissingFileExtension {
         file_name: String,
     },
+    ModelNotFound {
+        model_name: String,
+    },
     ModelProvidersExhausted {
         provider_errors: HashMap<String, Error>,
     },
@@ -516,6 +522,7 @@ impl ErrorDetails {
             ErrorDetails::ExtraBodyReplacement { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidInferenceTarget { .. } => tracing::Level::WARN,
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
+            ErrorDetails::Base64 { .. } => tracing::Level::ERROR,
             ErrorDetails::UnsupportedContentBlockType { .. } => tracing::Level::WARN,
             ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
@@ -581,6 +588,7 @@ impl ErrorDetails {
             ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
             ErrorDetails::MissingFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
+            ErrorDetails::ModelNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
             ErrorDetails::Observability { .. } => tracing::Level::WARN,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
@@ -639,6 +647,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceClient { status_code, .. } => {
                 status_code.unwrap_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)
             }
+            ErrorDetails::Base64 { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadImageFetch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -685,6 +694,7 @@ impl ErrorDetails {
             ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFunctionInVariants { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFileExtension { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -827,6 +837,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Bad credentials at inference time for provider: {provider_name}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                 )
+            }
+            ErrorDetails::Base64 { message } => {
+                write!(f, "Error decoding base64: {message}")
             }
             ErrorDetails::BatchInputValidation { index, message } => {
                 write!(f, "Input at index {index} failed validation: {message}",)
@@ -1096,6 +1109,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Could not determine file extension for file: {file_name}"
                 )
+            }
+            ErrorDetails::ModelNotFound { model_name } => {
+                write!(f, "Model not found: {model_name}")
             }
             ErrorDetails::ModelProvidersExhausted { provider_errors } => {
                 write!(
