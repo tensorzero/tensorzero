@@ -19,6 +19,8 @@ export async function action({ request }: Route.ActionArgs): Promise<Response> {
     const inference = await nativeClient.inference(request);
     return Response.json(inference);
   } catch (error) {
+    console.error("Got error from inference");
+    console.error(error);
     if (error instanceof JSONParseError) {
       return Response.json(
         { error: "Error parsing request data" },
