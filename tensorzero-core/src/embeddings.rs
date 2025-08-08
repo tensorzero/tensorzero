@@ -11,6 +11,7 @@ use crate::endpoints::inference::InferenceClients;
 use crate::model::UninitializedProviderConfig;
 use crate::model_table::BaseModelTable;
 use crate::model_table::ShorthandModelConfig;
+use crate::providers::azure::AzureProvider;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
@@ -399,6 +400,7 @@ pub trait EmbeddingProvider {
 #[cfg_attr(test, ts(export))]
 pub enum EmbeddingProviderConfig {
     OpenAI(OpenAIProvider),
+    Azure(AzureProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -461,6 +463,11 @@ impl UninitializedEmbeddingProviderConfig {
                 timeouts,
                 provider_name,
             },
+            ProviderConfig::Azure(provider) => EmbeddingProviderInfo {
+                inner: EmbeddingProviderConfig::Azure(provider),
+                timeouts,
+                provider_name,
+            },
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::Dummy(provider),
@@ -487,6 +494,9 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
     ) -> Result<EmbeddingProviderResponse, Error> {
         match self {
             EmbeddingProviderConfig::OpenAI(provider) => {
+                provider.embed(request, client, dynamic_api_keys).await
+            }
+            EmbeddingProviderConfig::Azure(provider) => {
                 provider.embed(request, client, dynamic_api_keys).await
             }
             #[cfg(any(test, feature = "e2e_tests"))]

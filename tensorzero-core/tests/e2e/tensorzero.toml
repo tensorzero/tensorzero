@@ -711,6 +711,14 @@ routing = ["openai"]
 type = "openai"
 model_name = "text-embedding-3-small"
 
+[embedding_models.azure-text-embedding-3-small]
+routing = ["azure"]
+
+[embedding_models.azure-text-embedding-3-small.providers.azure]
+type = "azure"
+endpoint = "https://t0-azure-openai-east.openai.azure.com/"
+deployment_id = "text-embedding-3-small"
+
 [embedding_models.fallback]
 routing = ["slow", "openai"]
 
