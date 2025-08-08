@@ -1404,7 +1404,6 @@ mod tests {
 
         let llama_request =
             LlamaRequest::new("Llama-4-Scout-17B-16E-Instruct-FP8", &basic_request).unwrap();
-
         assert_eq!(
             llama_request.model,
             "Llama-4-Scout-17B-16E-Instruct-FP8"
