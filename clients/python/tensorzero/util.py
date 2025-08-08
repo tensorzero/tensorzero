@@ -1,17 +1,17 @@
-import uuid
+from uuid import UUID
 
 from uuid_utils import compat
 
-from uuid import UUID
 
-
-def uuid7() -> uuid.UUID:
+def uuid7() -> UUID:
     """
-    Generate a UUID v7 using uuid_utils compatibility layer.
+    Generate a UUIDv7 using the uuid_utils compatibility layer.
     This ensures type compatibility with the rest of the TensorZero client.
     """
     return compat.uuid7()
 
 
-__all__ = ["uuid7", "UUID"]
-
+__all__ = [
+    "UUID",
+    "uuid7",
+]
