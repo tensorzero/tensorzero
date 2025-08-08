@@ -15,6 +15,7 @@ const config: Config = {
     observability: {
       enabled: true,
       async_writes: false,
+      skip_completed_migrations: false,
     },
     export: {
       otlp: {
@@ -31,6 +32,7 @@ const config: Config = {
     bind_address: "localhost:8080",
     base_path: "/",
     unstable_error_json: false,
+    unstable_disable_feedback_target_validation: false,
   },
   object_store_info: { kind: { type: "disabled" } },
   provider_types: {

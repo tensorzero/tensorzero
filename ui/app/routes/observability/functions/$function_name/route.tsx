@@ -11,11 +11,11 @@ import {
   useSearchParams,
 } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
-import { getConfig } from "~/utils/config/index.server";
+import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
 import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import {
   getVariantCounts,
   getVariantPerformances,
@@ -50,7 +50,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
 
-  const function_config = config.functions[function_name];
+  const function_config = await getFunctionConfig(function_name, config);
   if (!function_config) {
     throw data(`Function ${function_name} not found`, { status: 404 });
   }
@@ -141,7 +141,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   } = loaderData;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const function_config = useConfig().functions[function_name];
+  const function_config = useFunctionConfig(function_name);
   if (!function_config) {
     throw data(`Function ${function_name} not found`, { status: 404 });
   }

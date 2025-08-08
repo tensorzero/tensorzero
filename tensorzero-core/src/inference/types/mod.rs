@@ -209,6 +209,8 @@ pub enum InputMessageContent {
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(untagged, deny_unknown_fields)]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum TextKind {
     Text { text: String },
     Arguments { arguments: Map<String, Value> },
@@ -249,9 +251,8 @@ impl<'de> Deserialize<'de> for TextKind {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum Role {
@@ -284,9 +285,8 @@ impl Role {
 /// These RequestMessages are collected into a ModelInferenceRequest,
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct Text {
     pub text: String,
@@ -307,9 +307,8 @@ impl Text {
 }
 
 /// Struct that represents Chain of Thought reasoning
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
     pub text: Option<String>,
@@ -396,9 +395,8 @@ pub enum ContentBlockOutput {
 }
 
 /// Defines the types of content block that can come from a `chat` function
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockChatOutput {
     Text(Text),
@@ -529,7 +527,8 @@ impl ModelInput {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum FinishReason {
     Stop,
@@ -561,7 +560,8 @@ pub struct ProviderInferenceResponse {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Usage {
     pub input_tokens: u32,
     pub output_tokens: u32,
@@ -671,10 +671,9 @@ pub struct JsonInferenceResult {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct JsonInferenceOutput {
     pub raw: Option<String>,
     pub parsed: Option<Value>,
@@ -1448,7 +1447,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
         for content in chunk.content.into_iter() {
             match content {
                 ContentBlockChunk::ToolCall(tool_call) => {
-                    raw = Some(tool_call.raw_arguments.to_owned())
+                    raw = Some(tool_call.raw_arguments.to_owned());
                 }
                 ContentBlockChunk::Text(text_chunk) => raw = Some(text_chunk.text.to_owned()),
                 ContentBlockChunk::Thought(thought_chunk) => {
@@ -1489,7 +1488,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub function_name: &'b str,
     pub variant_name: &'b str,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
-    pub templates: &'a TemplateConfig<'a>,
+    pub templates: &'b TemplateConfig<'a>,
     pub tool_config: Option<&'b ToolCallConfig>,
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
@@ -1757,12 +1756,12 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
             episode_id,
         },
         function_name,
-        variant_name: Some(variant_name),
+        variant_name,
         tool_config,
         templates,
         dynamic_output_schema: dynamic_output_schema.as_ref(),
-        extra_body,
-        extra_headers,
+        extra_body: Cow::Borrowed(&extra_body),
+        extra_headers: Cow::Borrowed(&extra_headers),
         extra_cache_key: None,
     };
     function
@@ -3846,7 +3845,7 @@ mod tests {
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
             InputMessageContent::Text(TextKind::Text { text }) => {
-                assert_eq!(text, "Hello, world!")
+                assert_eq!(text, "Hello, world!");
             }
             _ => panic!("Expected Text content: {message:?}"),
         }
@@ -3861,7 +3860,7 @@ mod tests {
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
             InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                assert_eq!(arguments, json!({"key": "value"}).as_object().unwrap())
+                assert_eq!(arguments, json!({"key": "value"}).as_object().unwrap());
             }
             _ => panic!("Expected Text content"),
         }
@@ -3879,7 +3878,7 @@ mod tests {
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
             InputMessageContent::Text(TextKind::LegacyValue { value }) => {
-                assert_eq!(value, "Hello")
+                assert_eq!(value, "Hello");
             }
             _ => panic!("Expected Text content"),
         }
@@ -3909,7 +3908,7 @@ mod tests {
                 assert_eq!(
                     value,
                     &json!({"complex": "json", "with": ["nested", "array"]})
-                )
+                );
             }
             _ => panic!("Expected Text content with JSON object"),
         }
@@ -4190,7 +4189,7 @@ mod tests {
                 signature: _,
                 provider_type: _,
             }) => {
-                assert_eq!(text, &Some("Thinking...".to_string()))
+                assert_eq!(text, &Some("Thinking...".to_string()));
             }
             _ => panic!("Expected thought block"),
         }

@@ -26,6 +26,9 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cache::CacheParamsOptions;
+use crate::config_parser::UninitializedVariantInfo;
+use crate::embeddings::{Embedding, EmbeddingInput};
+use crate::endpoints::embeddings::Params as EmbeddingParams;
 use crate::endpoints::inference::{
     inference, ChatCompletionInferenceParams, InferenceParams, Params,
 };
@@ -42,10 +45,12 @@ use crate::tool::{DynamicToolParams, Tool, ToolCallInput, ToolCallOutput, ToolCh
 use crate::variant::JsonMode;
 use serde::Deserializer;
 
+use super::embeddings::{embeddings, EmbeddingResponse};
 use super::inference::{
     InferenceCredentials, InferenceOutput, InferenceResponse, InferenceResponseChunk,
     InferenceStream,
 };
+use crate::embeddings::EmbeddingEncodingFormat;
 
 /// A handler for the OpenAI-compatible inference endpoint
 #[debug_handler(state = AppStateData)]
@@ -121,6 +126,84 @@ pub async fn inference_handler(
                 .into_response())
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OpenAICompatibleEmbeddingParams {
+    input: EmbeddingInput,
+    model: String,
+    dimensions: Option<u32>,
+    #[serde(default)]
+    encoding_format: EmbeddingEncodingFormat,
+    #[serde(default, rename = "tensorzero::credentials")]
+    tensorzero_credentials: InferenceCredentials,
+}
+
+impl From<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
+    fn from(params: OpenAICompatibleEmbeddingParams) -> Self {
+        EmbeddingParams {
+            input: params.input,
+            model_name: params.model,
+            dimensions: params.dimensions,
+            encoding_format: params.encoding_format,
+            credentials: params.tensorzero_credentials,
+        }
+    }
+}
+#[derive(Debug, Serialize)]
+#[serde(tag = "object", rename_all = "lowercase")]
+pub enum OpenAIEmbeddingResponse {
+    List {
+        data: Vec<OpenAIEmbedding>,
+        model: String,
+        usage: OpenAIEmbeddingUsage,
+    },
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "object", rename_all = "lowercase")]
+pub enum OpenAIEmbedding {
+    Embedding { embedding: Embedding, index: usize },
+}
+
+#[derive(Debug, Serialize)]
+pub struct OpenAIEmbeddingUsage {
+    prompt_tokens: u32,
+    total_tokens: u32,
+}
+
+impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
+    fn from(response: EmbeddingResponse) -> Self {
+        OpenAIEmbeddingResponse::List {
+            data: response
+                .embeddings
+                .into_iter()
+                .enumerate()
+                .map(|(i, embedding)| OpenAIEmbedding::Embedding {
+                    embedding,
+                    index: i,
+                })
+                .collect(),
+            model: response.model,
+            usage: OpenAIEmbeddingUsage {
+                prompt_tokens: response.usage.input_tokens,
+                total_tokens: response.usage.input_tokens,
+            },
+        }
+    }
+}
+
+pub async fn embeddings_handler(
+    State(AppStateData {
+        config,
+        http_client,
+        ..
+    }): AppState,
+    StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
+) -> Result<Json<OpenAIEmbeddingResponse>, Error> {
+    let embedding_params = openai_compatible_params.into();
+    let response = embeddings(config, &http_client, embedding_params).await?;
+    Ok(Json(response.into()))
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -301,6 +384,8 @@ pub struct OpenAICompatibleParams {
     tensorzero_deny_unknown_fields: bool,
     #[serde(default, rename = "tensorzero::credentials")]
     tensorzero_credentials: InferenceCredentials,
+    #[serde(rename = "tensorzero::internal_dynamic_variant_config")]
+    tensorzero_internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
     #[serde(flatten)]
     unknown_fields: HashMap<String, Value>,
 }
@@ -547,6 +632,8 @@ impl Params {
             include_original_response: false,
             extra_body: openai_compatible_params.tensorzero_extra_body,
             extra_headers: openai_compatible_params.tensorzero_extra_headers,
+            internal_dynamic_variant_config: openai_compatible_params
+                .tensorzero_internal_dynamic_variant_config,
         })
     }
 }
@@ -668,8 +755,16 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
 enum OpenAICompatibleContentBlock {
     Text(TextContent),
-    ImageUrl { image_url: OpenAICompatibleImageUrl },
-    File { file: OpenAICompatibleFile },
+    ImageUrl {
+        image_url: OpenAICompatibleImageUrl,
+    },
+    File {
+        file: OpenAICompatibleFile,
+    },
+    #[serde(rename = "tensorzero::raw_text")]
+    RawText {
+        value: String,
+    },
 }
 
 #[derive(Deserialize, Debug)]
@@ -690,7 +785,7 @@ struct OpenAICompatibleFile {
 // Two mutually exclusive modes - the standard OpenAI text, and our special TensorZero mode
 pub enum TextContent {
     /// A normal openai text content block: `{"type": "text", "text": "Some content"}`. The `type` key comes from the parent `OpenAICompatibleContentBlock`
-    RawText { text: String },
+    Text { text: String },
     /// A special TensorZero mode: `{"type": "text", "tensorzero::arguments": {"custom_key": "custom_val"}}`.
     TensorZeroArguments {
         tensorzero_arguments: Map<String, Value>,
@@ -703,7 +798,7 @@ impl<'de> Deserialize<'de> for TextContent {
         let text = object.remove("text");
         let arguments = object.remove("tensorzero::arguments");
         match (text, arguments) {
-            (Some(text), None) => Ok(TextContent::RawText {
+            (Some(text), None) => Ok(TextContent::Text {
                 text: match text {
                     Value::String(text) => text,
                     _ => return Err(serde::de::Error::custom(
@@ -756,7 +851,8 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
             for val in a {
                 let block = serde_json::from_value::<OpenAICompatibleContentBlock>(val.clone());
                 let output = match block {
-                    Ok(OpenAICompatibleContentBlock::Text(TextContent::RawText { text })) => InputMessageContent::Text(TextKind::Text {text }),
+                    Ok(OpenAICompatibleContentBlock::RawText{ value }) => InputMessageContent::RawText { value },
+                    Ok(OpenAICompatibleContentBlock::Text(TextContent::Text { text })) => InputMessageContent::Text(TextKind::Text {text }),
                     Ok(OpenAICompatibleContentBlock::Text(TextContent::TensorZeroArguments { tensorzero_arguments })) => InputMessageContent::Text(TextKind::Arguments { arguments: tensorzero_arguments }),
                     Ok(OpenAICompatibleContentBlock::ImageUrl { image_url }) => {
                         if image_url.url.scheme() == "data" {
@@ -1250,6 +1346,7 @@ mod tests {
                 unknown_fields: Default::default(),
                 stream_options: None,
                 stop: None,
+                tensorzero_internal_dynamic_variant_config: None,
             },
         )
         .unwrap();
@@ -1429,6 +1526,26 @@ mod tests {
 
     #[test]
     fn test_convert_openai_message_content() {
+        // text content
+        let content = "Hello, world!".to_string();
+        let value = convert_openai_message_content(Value::String(content.clone())).unwrap();
+        assert_eq!(
+            value,
+            vec![InputMessageContent::Text(TextKind::Text { text: content })]
+        );
+        // tensorzero::raw_text
+        let content = json!([{
+            "type": "tensorzero::raw_text",
+            "value": "This is raw text"
+        }]);
+        let value = convert_openai_message_content(content.clone()).unwrap();
+        assert_eq!(
+            value,
+            vec![InputMessageContent::RawText {
+                value: "This is raw text".to_string()
+            }]
+        );
+        // tensorzero::arguments
         let content = json!([{
             "country": "Japan",
             "city": "Tokyo",
@@ -1707,6 +1824,7 @@ mod tests {
                 stream_options: None,
                 stop: None,
                 tensorzero_deny_unknown_fields: false,
+                tensorzero_internal_dynamic_variant_config: None,
             },
         )
         .unwrap();
@@ -1747,6 +1865,7 @@ mod tests {
                 stream_options: None,
                 stop: None,
                 tensorzero_deny_unknown_fields: false,
+                tensorzero_internal_dynamic_variant_config: None,
             },
         )
         .unwrap();
@@ -1793,6 +1912,7 @@ mod tests {
                 stream_options: None,
                 stop: None,
                 tensorzero_deny_unknown_fields: false,
+                tensorzero_internal_dynamic_variant_config: None,
             },
         )
         .unwrap();
@@ -1839,6 +1959,7 @@ mod tests {
                 stream_options: None,
                 stop: None,
                 tensorzero_deny_unknown_fields: false,
+                tensorzero_internal_dynamic_variant_config: None,
             },
         )
         .unwrap();

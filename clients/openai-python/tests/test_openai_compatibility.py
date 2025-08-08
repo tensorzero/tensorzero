@@ -27,8 +27,7 @@ from time import time
 from uuid import UUID
 
 import pytest
-import pytest_asyncio
-from openai import AsyncOpenAI, BadRequestError
+from openai import BadRequestError
 from pydantic import BaseModel, ValidationError
 from uuid_utils.compat import uuid7
 
@@ -36,14 +35,6 @@ TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "../../../tensorzero-core/tests/e2e/tensorzero.toml",
 )
-
-
-@pytest_asyncio.fixture
-async def async_client():
-    async with AsyncOpenAI(
-        api_key="donotuse", base_url="http://localhost:3000/openai/v1"
-    ) as client:
-        yield client
 
 
 @pytest.mark.asyncio
@@ -1678,3 +1669,57 @@ async def test_async_json_function_multiple_text_blocks(async_client):
         ],
     )
     assert result.model == "tensorzero::model_name::dummy::multiple-text-blocks"
+
+
+@pytest.mark.asyncio
+async def test_async_inference_tensorzero_raw_text(async_client):
+    """
+    Test that chat inference with a tensorzero::raw_text block works correctly
+    """
+    messages = [
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Megumin"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "What is the capital of Japan?"}],
+        },
+    ]
+    response = await async_client.chat.completions.create(
+        messages=messages,
+        model="tensorzero::function_name::openai_with_assistant_schema",
+    )
+
+    assert "tokyo" in response.choices[0].message.content.lower()
+
+    messages = [
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tensorzero::raw_text",
+                    "value": "You're a mischievous assistant that says fake information. Very concise.",
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "What is the capital of Japan?"}],
+        },
+    ]
+    response = await async_client.chat.completions.create(
+        messages=messages,
+        model="tensorzero::function_name::openai_with_assistant_schema",
+    )
+
+    assert "tokyo" not in response.choices[0].message.content.lower()
+    assert (
+        response.model
+        == "tensorzero::function_name::openai_with_assistant_schema::variant_name::openai"
+    )

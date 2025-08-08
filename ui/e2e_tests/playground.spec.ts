@@ -100,7 +100,10 @@ test("playground should work for extract_entities JSON function with 2 variants"
 test("playground should work for image_judger function with images in input", async ({
   page,
 }) => {
-  await page.goto("/playground?limit=2");
+  // We set 'limit=1' so that we don't make parallel inference requests
+  // (two of the datapoints have the same input, and could trample on each other's
+  // cache entries)
+  await page.goto("/playground?limit=1");
   await expect(page.getByText("Select a function")).toBeVisible();
 
   // Select function 'image_judger' by typing in the combobox
@@ -122,14 +125,14 @@ test("playground should work for image_judger function with images in input", as
   await expect(page.getByText("baz")).toBeVisible();
   await expect(page.getByRole("link", { name: "honest_answer" })).toBeVisible();
 
-  // Verify that there are 2 inputs and 2 reference outputs
-  await expect(page.getByRole("heading", { name: "Input" })).toHaveCount(2);
+  // Verify that there is 1 input and 1 reference output
+  await expect(page.getByRole("heading", { name: "Input" })).toHaveCount(1);
   await expect(
     page.getByRole("heading", { name: "Reference Output" }),
-  ).toHaveCount(2);
+  ).toHaveCount(1);
 
-  // Verify that images are rendered in the input elements
-  await expect(page.locator("img")).toHaveCount(2);
+  // Verify that the image is rendered in the input element
+  await expect(page.locator("img")).toHaveCount(1);
 
   // Wait for at least one textbox containing "crab"
   // Wait for and assert at least one exists
@@ -137,6 +140,61 @@ test("playground should work for image_judger function with images in input", as
   await page.getByRole("textbox").filter({ hasText: "crab" }).first().waitFor();
 
   // Verify that there are no errors
+  await expect(
+    page.getByRole("heading", { name: "Inference Error" }),
+  ).toHaveCount(0);
+});
+
+test("playground should work for data with tools", async ({ page }) => {
+  // We set 'limit=1' so that we don't make parallel inference requests
+  // (two of the datapoints have the same input, and could trample on each other's
+  // cache entries)
+  await page.goto(
+    "/playground?functionName=multi_hop_rag_agent&datasetName=tool_call_examples&variant=baseline",
+  );
+
+  // Verify the selections are visible
+  await expect(page.getByText("multi_hop_rag_agent")).toBeVisible();
+  await expect(page.getByText("tool_call_examples")).toBeVisible();
+  await expect(page.getByRole("link", { name: "baseline" })).toBeVisible();
+
+  // Verify that there is 1 input and 1 reference output
+  await expect(page.getByRole("heading", { name: "Input" })).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { name: "Reference Output" }),
+  ).toHaveCount(1);
+
+  // Verify that tool calls are displayed correctly
+  // The datapoint has multiple tool calls in the input history
+  // plus the output from the variant, so we expect multiple "Tool Call" labels
+  const initialToolCallCount = await page.getByText("Tool Call").count();
+  expect(initialToolCallCount).toBeGreaterThan(0);
+
+  // Verify that at least one tool call has the expected fields
+  await expect(page.getByText("Name").first()).toBeVisible();
+  await expect(page.getByText("ID").first()).toBeVisible();
+  await expect(page.getByText("Arguments").first()).toBeVisible();
+
+  // Verify that there are no errors before refresh
+  await expect(
+    page.getByRole("heading", { name: "Inference Error" }),
+  ).toHaveCount(0);
+
+  // Click the refresh button to reload inference
+  // Find the refresh button in the output area
+  const refreshButton = page
+    .getByRole("button")
+    .filter({ has: page.locator("svg") });
+  await refreshButton.first().click();
+
+  // Wait for the inference to reload
+  await page.waitForTimeout(1000);
+
+  // Verify tool calls are still displayed after refresh
+  const afterRefreshToolCallCount = await page.getByText("Tool Call").count();
+  expect(afterRefreshToolCallCount).toBeGreaterThan(0);
+
+  // Verify that there are no errors after refresh
   await expect(
     page.getByRole("heading", { name: "Inference Error" }),
   ).toHaveCount(0);

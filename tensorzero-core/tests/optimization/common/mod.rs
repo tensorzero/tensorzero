@@ -83,6 +83,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     };
     let model_config = model_config
         .load("test-fine-tuned-model", &ProviderTypesConfig::default())
+        .await
         .unwrap();
     let system = "You are a helpful assistant named Dr. M.M. Patel.".to_string();
     let messages = vec![RequestMessage {

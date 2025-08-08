@@ -1,11 +1,10 @@
 import {
-  type ContentBlockOutput,
   CountSchema,
-  type JsonInferenceOutput,
   modelInferenceInputMessageSchema,
   type TableBounds,
   type TableBoundsWithCount,
   TableBoundsWithCountSchema,
+  JsonValueSchema,
 } from "./common";
 import {
   contentBlockSchema,
@@ -13,7 +12,11 @@ import {
   inputSchema,
 } from "./common";
 import { data } from "react-router";
-import type { FunctionConfig } from "tensorzero-node";
+import type {
+  FunctionConfig,
+  JsonInferenceOutput,
+  ContentBlockChatOutput,
+} from "tensorzero-node";
 import { getClickhouseClient } from "./client.server";
 import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
 import {
@@ -30,10 +33,11 @@ import {
   type ModelInferenceRow,
   type ParsedInferenceRow,
   type ParsedModelInferenceRow,
+  toolCallConfigDatabaseInsertSchema,
 } from "./inference";
 import { z } from "zod";
 import { logger } from "~/utils/logger";
-import { getConfig } from "../config/index.server";
+import { getConfig, getFunctionConfig } from "../config/index.server";
 
 /**
  * Query a table of at most `page_size` Inferences from ChatInference or JsonInference that are
@@ -509,23 +513,22 @@ async function parseInferenceRow(
 ): Promise<ParsedInferenceRow> {
   const input = inputSchema.parse(JSON.parse(row.input));
   const config = await getConfig();
-  const functionConfig = config.functions[row.function_name] || null;
+  const functionConfig = await getFunctionConfig(row.function_name, config);
   const resolvedInput = await resolveInput(input, functionConfig);
   const extra_body = row.extra_body ? JSON.parse(row.extra_body) : undefined;
   if (row.function_type === "chat") {
+    const tool_params =
+      row.tool_params === ""
+        ? null
+        : toolCallConfigDatabaseInsertSchema.parse(JSON.parse(row.tool_params));
     return {
       ...row,
       input: resolvedInput,
-      output: parseInferenceOutput(row.output) as ContentBlockOutput[],
+      output: parseInferenceOutput(row.output) as ContentBlockChatOutput[],
       inference_params: z
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.inference_params)),
-      tool_params:
-        row.tool_params === ""
-          ? {}
-          : z
-              .record(z.string(), z.unknown())
-              .parse(JSON.parse(row.tool_params)),
+      tool_params: tool_params,
       extra_body,
     };
   } else {
@@ -536,9 +539,7 @@ async function parseInferenceRow(
       inference_params: z
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.inference_params)),
-      output_schema: z
-        .record(z.string(), z.unknown())
-        .parse(JSON.parse(row.output_schema)),
+      output_schema: JsonValueSchema.parse(JSON.parse(row.output_schema)),
       extra_body,
     };
   }

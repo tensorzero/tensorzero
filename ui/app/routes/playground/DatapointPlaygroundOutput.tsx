@@ -6,9 +6,12 @@ import NewOutput from "~/components/inference/NewOutput";
 import { Button } from "~/components/ui/button";
 import { CodeEditor } from "~/components/ui/code-editor";
 import { refreshClientInference } from "./utils";
-import type { InferenceResponse } from "~/utils/tensorzero";
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import type { Datapoint } from "tensorzero-node";
+import type {
+  Datapoint,
+  FunctionConfig,
+  InferenceResponse,
+} from "tensorzero-node";
 
 interface DatapointPlaygroundOutputProps {
   datapoint: Datapoint;
@@ -22,6 +25,7 @@ interface DatapointPlaygroundOutputProps {
   ) => void;
   input: DisplayInput;
   functionName: string;
+  functionConfig: FunctionConfig;
 }
 const DatapointPlaygroundOutput = memo(
   function DatapointPlaygroundOutput({
@@ -32,6 +36,7 @@ const DatapointPlaygroundOutput = memo(
     input,
     functionName,
     isLoading,
+    functionConfig,
   }: DatapointPlaygroundOutputProps) {
     const loadingIndicator = (
       <div className="flex min-h-[8rem] items-center justify-center">
@@ -50,6 +55,7 @@ const DatapointPlaygroundOutput = memo(
             datapoint,
             variantName,
             functionName,
+            functionConfig,
           );
         }}
       >

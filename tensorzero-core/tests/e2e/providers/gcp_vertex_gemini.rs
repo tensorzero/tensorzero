@@ -142,6 +142,7 @@ async fn get_providers() -> E2ETestProviders {
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: vec![],
+        embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: vec![],
         tool_use_inference: tool_providers.clone(),
@@ -244,5 +245,5 @@ async fn test_gcp_vertex_gemini_bad_model_id() {
 
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     let error = response_json.get("error").unwrap().as_str().unwrap();
-    assert!(error.contains("Model or endpoint not found. You may be specifying the wrong one of these. Standard GCP models should use a `model_id` and not an `endpoint_id`, while fine-tuned models should use an `endpoint_id`."))
+    assert!(error.contains("Model or endpoint not found. You may be specifying the wrong one of these. Standard GCP models should use a `model_id` and not an `endpoint_id`, while fine-tuned models should use an `endpoint_id`."));
 }

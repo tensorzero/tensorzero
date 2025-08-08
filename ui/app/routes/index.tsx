@@ -20,7 +20,7 @@ import {
   countInferencesByFunction,
   countEpisodes,
 } from "~/utils/clickhouse/inference.server";
-import { getConfig } from "~/utils/config/index.server";
+import { getAllFunctionConfigs } from "~/utils/config/index.server";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import { useConfig } from "~/context/config";
@@ -91,23 +91,23 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
 export async function loader() {
   const [
     countsInfo,
-    config,
     numEpisodes,
     datasetCounts,
     numEvaluationRuns,
     numDynamicEvaluationRuns,
     numDynamicEvaluationRunProjects,
+    functionConfigs,
   ] = await Promise.all([
     countInferencesByFunction(),
-    getConfig(),
     countEpisodes(),
     getDatasetCounts({}),
     countTotalEvaluationRuns(),
     countDynamicEvaluationRuns(),
     countDynamicEvaluationProjects(),
+    getAllFunctionConfigs(),
   ]);
   const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
-  const numFunctions = Object.keys(config.functions).length;
+  const numFunctions = Object.keys(functionConfigs).length;
   const numDatasets = datasetCounts.length;
 
   return {

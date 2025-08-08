@@ -12,10 +12,11 @@ use tensorzero::InferenceOutput;
 use tensorzero::Role;
 use tensorzero::{ClientInferenceParams, ClientInput};
 use tensorzero_core::clickhouse::migration_manager;
+use tensorzero_core::clickhouse::migration_manager::RunMigrationManagerArgs;
 use tensorzero_core::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::config_parser::Config;
-use tensorzero_core::gateway_util::AppStateData;
+use tensorzero_core::gateway_util::GatewayHandle;
 use tensorzero_core::howdy::{get_deployment_id, get_howdy_report};
 use tensorzero_core::inference::types::TextKind;
 use tokio::time::Duration;
@@ -36,10 +37,16 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
             .await
             .unwrap(),
     );
-    migration_manager::run(&clickhouse).await.unwrap();
-    let state =
-        AppStateData::new_with_clickhouse_and_http_client(config, clickhouse, Client::new());
-    ClientBuilder::build_from_state(state).await.unwrap()
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        skip_completed_migrations: false,
+        manual_run: false,
+    })
+    .await
+    .unwrap();
+    let handle =
+        GatewayHandle::new_with_clickhouse_and_http_client(config, clickhouse, Client::new());
+    ClientBuilder::build_from_state(handle).await.unwrap()
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -51,6 +58,8 @@ async fn test_get_howdy_report() {
     let howdy_report = get_howdy_report(&clickhouse, &deployment_id).await.unwrap();
     assert_eq!(howdy_report.inference_count, "0");
     assert_eq!(howdy_report.feedback_count, "0");
+    assert!(howdy_report.input_token_total.is_none());
+    assert!(howdy_report.output_token_total.is_none());
     assert_eq!(
         howdy_report.gateway_version,
         tensorzero_core::endpoints::status::TENSORZERO_VERSION
@@ -123,9 +132,17 @@ async fn test_get_howdy_report() {
     assert!(!new_howdy_report.feedback_count.is_empty());
     // Since we're in an e2e test, this should be true
     assert!(new_howdy_report.dryrun);
-    println!("new_howdy_report: {new_howdy_report:?}");
-    println!("howdy_report: {howdy_report:?}");
+
     // Assert that the parsed inference and feedback counts are greater than the old ones
     assert_eq!(new_howdy_report.inference_count, "2");
     assert_eq!(new_howdy_report.feedback_count, "2");
+    // Assert that the token counts are also positive now
+    let input_token_total: u64 = new_howdy_report.input_token_total.unwrap().parse().unwrap();
+    assert_eq!(input_token_total, 20);
+    let output_token_total: u64 = new_howdy_report
+        .output_token_total
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(output_token_total, 2);
 }
