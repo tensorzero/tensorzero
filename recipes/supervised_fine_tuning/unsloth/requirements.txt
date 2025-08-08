@@ -1954,9 +1954,9 @@ tzdata==2025.2 \
     --hash=sha256:1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8 \
     --hash=sha256:b60a638fcc0daffadf82fe0f57e53d06bdec2f36c4df66280ae79bce6bd6f2b9
     # via pandas
-unsloth==2025.8.2 \
-    --hash=sha256:1df7222bd6d4acd4ed803a00147456bd0e8a0d265fe40eb3193f1155a0d6e05b \
-    --hash=sha256:cd7be4afbf2ba223bae42501aa73a69bd666463a34aa8815e80db7fb7f5e2e74
+unsloth==2025.8.1 \
+    --hash=sha256:3f3a407f85c084baaca7704b242627556b890f2fdb64ec0d3cb726864616f47e \
+    --hash=sha256:86413e7fa6a982296b1349454d645ef0f12f450ef562ea07a5083377f47f15a2
     # via tensorzero-recipe-sft-unsloth
 unsloth-zoo==2025.8.2 \
     --hash=sha256:7e4f9e1fff872c9d7e0cc43039b2130a0fcf5d2afbfaba2e28d36a2bd1585a9b \

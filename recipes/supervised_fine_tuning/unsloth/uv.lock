@@ -2733,7 +2733,7 @@ requires-dist = [
     { name = "pandas" },
     { name = "tensorzero", specifier = ">=2025.8.0" },
     { name = "toml" },
-    { name = "unsloth" },
+    { name = "unsloth", specifier = "==2025.8.1" },
 ]
 
 [[package]]
@@ -3031,7 +3031,7 @@ wheels = [
 
 [[package]]
 name = "unsloth"
-version = "2025.8.2"
+version = "2025.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "accelerate" },
@@ -3058,9 +3058,9 @@ dependencies = [
     { name = "wheel" },
     { name = "xformers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/59/fd/a13293dba6ae2af9119c52a7aa943459708d1a2f84337ae4574c0e36f492/unsloth-2025.8.2.tar.gz", hash = "sha256:cd7be4afbf2ba223bae42501aa73a69bd666463a34aa8815e80db7fb7f5e2e74", size = 263315, upload-time = "2025-08-08T15:34:14.319Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e7/2c/8d89c085c1456a8bfbd3107aa79ed1256612327cc6436ed5dfb783a1c40e/unsloth-2025.8.1.tar.gz", hash = "sha256:86413e7fa6a982296b1349454d645ef0f12f450ef562ea07a5083377f47f15a2", size = 257556, upload-time = "2025-08-02T10:41:17.224Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/db/69/62c5723fde8ee222c6237762be7cb520901476604f78566813d68d38529c/unsloth-2025.8.2-py3-none-any.whl", hash = "sha256:1df7222bd6d4acd4ed803a00147456bd0e8a0d265fe40eb3193f1155a0d6e05b", size = 305537, upload-time = "2025-08-08T15:34:11.81Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/d0/184903cbcb80b7bbd5c96afedb3e91beafc5df8c1a114b823419d381a3a3/unsloth-2025.8.1-py3-none-any.whl", hash = "sha256:3f3a407f85c084baaca7704b242627556b890f2fdb64ec0d3cb726864616f47e", size = 299780, upload-time = "2025-08-02T10:41:14.996Z" },
 ]
 
 [[package]]
