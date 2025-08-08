@@ -20,12 +20,6 @@ interface Env {
   OPENAI_BASE_URL: string | null;
   FIREWORKS_BASE_URL: string | null;
   FIREWORKS_ACCOUNT_ID: string | null;
-  /// When set, sets `cache_options.enabled = "on"` on all inference calls
-  /// Normally, we leave this unset, which uses the TensorZero default of 'write_only'
-  /// This is used by e2e tests to allow us to populate the model inference cache
-  /// from regen-fixtures without trampling existing entries, and then to use the cached
-  /// entries from the normal ui e2e tests
-  TENSORZERO_FORCE_CACHE_ON: boolean;
 }
 
 let _env: Env;
@@ -66,26 +60,9 @@ export function getEnv(): Env {
     TENSORZERO_EVALUATIONS_PATH:
       process.env.TENSORZERO_EVALUATIONS_PATH || "evaluations",
     FIREWORKS_ACCOUNT_ID: process.env.FIREWORKS_ACCOUNT_ID || null,
-    TENSORZERO_FORCE_CACHE_ON: process.env.TENSORZERO_FORCE_CACHE_ON === "1",
   };
 
   return _env;
-}
-
-/// Returns an object containing extra parameters that should be passed to
-/// inference calls on our TensorZero client
-export function getExtraInferenceOptions(): object {
-  if (getEnv().TENSORZERO_FORCE_CACHE_ON) {
-    return {
-      // We need to force dryrun off, as it prevents us from writing to the cache
-      // (which we need in order to populate our model inference cache)
-      dryrun: false,
-      cache_options: {
-        enabled: "on",
-      },
-    };
-  }
-  return {};
 }
 
 function getClickhouseUrl() {

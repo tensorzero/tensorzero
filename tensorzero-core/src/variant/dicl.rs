@@ -6,6 +6,7 @@ use serde::Serialize;
 use crate::config_parser::path::TomlRelativePath;
 use crate::config_parser::LoadableConfig;
 use crate::config_parser::PathWithContents;
+use crate::embeddings::EmbeddingEncodingFormat;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
@@ -21,7 +22,7 @@ use crate::model_table::ShorthandModelConfig;
 use crate::{
     embeddings::EmbeddingRequest,
     endpoints::inference::{InferenceClients, InferenceParams},
-    error::{Error, ErrorDetails},
+    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
     inference::types::{
         ContentBlockChatOutput, InferenceResult, InferenceResultStream, JsonInferenceOutput,
@@ -149,7 +150,9 @@ impl Variant for DiclConfig {
         // Add the embedding to the model inference results
         inference_response
             .mut_model_inference_results()
-            .push(embedding_response.into());
+            // This can only fail if the embedding response has a request with > 1 input,
+            // which should never happen as we only send one input at a time
+            .push(embedding_response.try_into()?);
         Ok(inference_response)
     }
 
@@ -207,7 +210,7 @@ impl Variant for DiclConfig {
         // Add the embedding to the model inference results
         model_used_info
             .previous_model_inference_results
-            .push(embedding_response.into());
+            .push(embedding_response.try_into()?);
         Ok((inference_result_stream, model_used_info))
     }
 
@@ -329,7 +332,9 @@ impl DiclConfig {
             })?;
 
         let embedding_request = EmbeddingRequest {
-            input: serialized_input.to_string(),
+            input: serialized_input.into(),
+            dimensions: None,
+            encoding_format: EmbeddingEncodingFormat::Float,
         };
 
         // Embed the input via an API request
@@ -340,12 +345,23 @@ impl DiclConfig {
         // Wrap the embedding in a response with metadata
         let embedding_response_with_metadata =
             EmbeddingResponseWithMetadata::new(embedding_response, self.embedding_model.clone());
+        let [embedding_vector] = embedding_response_with_metadata.embeddings.as_slice() else {
+            return Err(ErrorDetails::InternalError {
+                message: format!(
+                    "Embedding model returned multiple vectors. {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
+            }
+            .into());
+        };
 
         // Format the embedding as a string for ClickHouse
         let formatted_embedding = format!(
             "[{}]",
-            embedding_response_with_metadata
-                .embedding
+            embedding_vector
+                .as_float()
+                .ok_or_else(|| Error::new(ErrorDetails::InternalError {
+                    message: format!("Failed to convert DICL embedding to float array. {IMPOSSIBLE_ERROR_MESSAGE}")
+                }))?
                 .iter()
                 .map(|&x| x.to_string())
                 .collect::<Vec<_>>()

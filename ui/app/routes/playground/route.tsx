@@ -34,7 +34,7 @@ import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
 import { safeParseInt } from "~/utils/common";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import type { InferenceResponse } from "tensorzero-node";
-import { getExtraInferenceOptions } from "~/utils/env.server";
+import { getExtraInferenceOptions } from "~/utils/feature_flags";
 
 const DEFAULT_LIMIT = 5;
 
