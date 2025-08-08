@@ -5,9 +5,9 @@ use aws_sdk_bedrockruntime::types::{
     ContentBlockStart, ConversationRole, ConverseOutput as ConverseOutputType,
     ConverseStreamOutput as ConverseStreamOutputType, DocumentBlock, DocumentFormat,
     DocumentSource, ImageBlock, ImageFormat, ImageSource, InferenceConfiguration, Message,
-    SpecificToolChoice, StopReason, SystemContentBlock, Tool, ToolChoice as AWSBedrockToolChoice,
-    ToolConfiguration, ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification,
-    ToolUseBlock,
+    ReasoningContentBlock, ReasoningContentBlockDelta, ReasoningTextBlock, SpecificToolChoice,
+    StopReason, SystemContentBlock, Tool, ToolChoice as AWSBedrockToolChoice, ToolConfiguration,
+    ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification, ToolUseBlock,
 };
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
@@ -23,7 +23,7 @@ use super::aws_common::{self, build_interceptor, InterceptorAndRawBody};
 use super::helpers::peek_first_chunk;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::file::mime_type_to_ext;
@@ -35,7 +35,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, Role, Text, TextChunk, Usage,
 };
-use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs};
+use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
 use crate::inference::InferenceProvider;
 use crate::model::ModelProvider;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -188,7 +188,7 @@ impl InferenceProvider for AWSBedrockProvider {
                         "Error sending request to AWS Bedrock: {:?}",
                         DisplayErrorContext(&e)
                     ),
-                    raw_request: None,
+                    raw_request: get_raw_request().ok(),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
@@ -456,6 +456,35 @@ fn bedrock_to_tensorzero_stream_message(
                             None,
                         )))
                     }
+                    ContentBlockDelta::ReasoningContent(reasoning_content) => {
+                        match &reasoning_content {
+                            ReasoningContentBlockDelta::Text(_)
+                            | ReasoningContentBlockDelta::Signature(_) => {
+                                Ok(Some(ProviderInferenceResponseChunk::new(
+                                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                                        id: message.content_block_index.to_string(),
+                                        text: reasoning_content.as_text().ok().cloned(),
+                                        signature: reasoning_content.as_signature().ok().cloned(),
+                                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                                    })],
+                                    None,
+                                    raw_message,
+                                    message_latency,
+                                    None,
+                                )))
+                            }
+                            ReasoningContentBlockDelta::RedactedContent(_) => {
+                                tracing::warn!("The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks.");
+                                Ok(None)
+                            }
+                            _ => {
+                                tracing::warn!(
+                                    "The TensorZero Gateway received an unknown reasoning content block (supported reasoning formats: `Text`, `Signature`, `RedactedContent`) from AWS Bedrock, so we're discarding the content block. Please reach out to our team and we'll quickly collaborate on a solution."
+                                );
+                                Ok(None)
+                            }
+                        }
+                    }
                     _ => Err(ErrorDetails::InferenceServer {
                         raw_request: None,
                         raw_response: None,
@@ -685,14 +714,32 @@ impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
                     Ok(Some(BedrockContentBlock::Document(document)))
                 }
             }
-            // We don't support thought blocks being passed in from a request.
-            // These are only possible to be passed in in the scenario where the
-            // output of a chat completion is used as an input to another model inference,
-            // i.e. a judge or something.
-            // We don't think the thoughts should be passed in in this case.
             ContentBlock::Thought(thought) => {
-                warn_discarded_thought_block(PROVIDER_TYPE, thought);
-                Ok(None)
+                if let Some(text) = &thought.text {
+                    let mut builder = ReasoningTextBlock::builder().text(text);
+                    if let Some(signature) = &thought.signature {
+                        builder = builder.signature(signature);
+                    }
+                    let block = builder.build().map_err(|e| {
+                        Error::new(ErrorDetails::InferenceClient {
+                            raw_request: None,
+                            raw_response: None,
+                            status_code: Some(StatusCode::BAD_REQUEST),
+                            message: format!("Error serializing reasoning text block: {e:?}"),
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        })
+                    })?;
+                    Ok(Some(BedrockContentBlock::ReasoningContent(
+                        ReasoningContentBlock::ReasoningText(block),
+                    )))
+                } else if thought.signature.is_some() {
+                    tracing::warn!("The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks.");
+                    Ok(None)
+                } else {
+                    // We have a thought block with no text or signature, so just ignore it
+                    tracing::warn!("The gateway received a reasoning content block with neither text nor signature. This is unsupported, so we'll drop it.");
+                    Ok(None)
+                }
             }
             ContentBlock::Unknown {
                 data: _,
@@ -705,38 +752,56 @@ impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
     }
 }
 
-impl TryFrom<BedrockContentBlock> for ContentBlockOutput {
-    type Error = Error;
+fn bedrock_content_block_to_output(
+    block: BedrockContentBlock,
+) -> Result<Option<ContentBlockOutput>, Error> {
+    match block {
+        BedrockContentBlock::Text(text) => Ok(Some(text.into())),
+        BedrockContentBlock::ToolUse(tool_use) => {
+            let arguments = serde_json::to_string(&tool_use.input).map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    raw_request: None,
+                    raw_response: None,
+                    message: format!(
+                        "Error parsing tool call arguments from AWS Bedrock: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
 
-    fn try_from(block: BedrockContentBlock) -> Result<Self, Self::Error> {
-        match block {
-            BedrockContentBlock::Text(text) => Ok(text.into()),
-            BedrockContentBlock::ToolUse(tool_use) => {
-                let arguments = serde_json::to_string(&tool_use.input).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        raw_request: None,
-                        raw_response: None,
-                        message: format!(
-                            "Error parsing tool call arguments from AWS Bedrock: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
-
-                Ok(ContentBlockOutput::ToolCall(ToolCall {
-                    name: tool_use.name,
-                    arguments,
-                    id: tool_use.tool_use_id,
-                }))
-            }
-            _ => Err(Error::new(ErrorDetails::TypeConversion {
-                message: format!(
-                    "Unsupported content block type for AWS Bedrock: {}",
-                    std::any::type_name_of_val(&block)
-                ),
-            })),
+            Ok(Some(ContentBlockOutput::ToolCall(ToolCall {
+                name: tool_use.name,
+                arguments,
+                id: tool_use.tool_use_id,
+            })))
         }
+        BedrockContentBlock::ReasoningContent(reasoning_content) => match reasoning_content {
+            ReasoningContentBlock::ReasoningText(reasoning_text) => {
+                Ok(Some(ContentBlockOutput::Thought(Thought {
+                    text: Some(reasoning_text.text.clone()),
+                    signature: reasoning_text.signature().map(ToString::to_string),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                })))
+            }
+            ReasoningContentBlock::RedactedContent(_) => {
+                tracing::warn!("The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks.");
+                Ok(None)
+            }
+            _ => {
+                tracing::warn!(
+                    "The TensorZero Gateway received an unknown reasoning content block (supported reasoning formats: `Text`, `Signature`, `RedactedContent`) from AWS Bedrock, so we're discarding the content block. Please reach out to our team and we'll quickly collaborate on a solution."
+                );
+                Ok(None)
+            }
+        },
+
+        _ => Err(Error::new(ErrorDetails::TypeConversion {
+            message: format!(
+                "The TensorZero Gateway received an unknown content block from AWS Bedrock ({}), so we're discarding it. Please reach out to our team and we'll quickly collaborate on a solution.",
+                std::any::type_name_of_val(&block)
+            ),
+        })),
     }
 }
 
@@ -834,7 +899,8 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             })?
             .content
             .into_iter()
-            .map(TryInto::try_into)
+            .map(bedrock_content_block_to_output)
+            .filter_map(Result::transpose)
             .collect::<Result<Vec<ContentBlockOutput>, _>>()?;
 
         if model_id.contains("claude")

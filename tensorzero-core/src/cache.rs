@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::embeddings::{EmbeddingRequest, EmbeddingResponse};
+use crate::embeddings::{EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{warn_discarded_cache_write, Error, ErrorDetails};
 use crate::inference::types::file::serialize_with_file_data;
 use crate::inference::types::{
@@ -17,7 +17,10 @@ use serde::de::{DeserializeOwned, IgnoredAny};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize, ValueEnum)]
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize, ValueEnum, ts_rs::TS,
+)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 #[clap(rename_all = "snake_case")]
 pub enum CacheEnabledMode {
@@ -38,7 +41,8 @@ impl CacheEnabledMode {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CacheParamsOptions {
     #[serde(default)]
     pub max_age_s: Option<u32>,
@@ -385,14 +389,14 @@ pub async fn embedding_cache_lookup(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     request: &EmbeddingModelProviderRequest<'_>,
     max_age_s: Option<u32>,
-) -> Result<Option<EmbeddingResponse>, Error> {
+) -> Result<Option<EmbeddingModelResponse>, Error> {
     let result = cache_lookup_inner::<EmbeddingCacheData>(
         clickhouse_connection_info,
         request.get_cache_key()?,
         max_age_s,
     )
     .await?;
-    Ok(result.map(|result| EmbeddingResponse::from_cache(result, request)))
+    Ok(result.map(|result| EmbeddingModelResponse::from_cache(result, request)))
 }
 
 pub async fn cache_lookup(

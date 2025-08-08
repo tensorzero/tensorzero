@@ -65,6 +65,11 @@ pub struct E2ETestProvider {
     pub supports_batch_inference: bool,
 }
 
+#[derive(Clone, Debug)]
+pub struct EmbeddingTestProvider {
+    pub model_name: String,
+}
+
 /// Enforce that every provider implements a common set of tests.
 ///
 /// To achieve that, each provider should call the `generate_provider_tests!` macro along with a
@@ -94,6 +99,7 @@ pub struct E2ETestProviders {
     pub pdf_inference: Vec<E2ETestProvider>,
 
     pub shorthand_inference: Vec<E2ETestProvider>,
+    pub embeddings: Vec<EmbeddingTestProvider>,
 }
 
 pub async fn make_http_gateway() -> tensorzero::Client {
@@ -215,6 +221,15 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_pdf_inference_with_provider_filesystem;
         use $crate::providers::common::test_stop_sequences_inference_request_with_provider;
         use $crate::providers::common::test_warn_ignored_thought_block_with_provider;
+        use $crate::providers::embeddings::test_basic_embedding_with_provider;
+        use $crate::providers::embeddings::test_shorthand_embedding_with_provider;
+        use $crate::providers::embeddings::test_batch_embedding_with_provider;
+        use $crate::providers::embeddings::test_embedding_with_dimensions_with_provider;
+        use $crate::providers::embeddings::test_embedding_with_encoding_format_with_provider;
+        use $crate::providers::embeddings::test_embedding_with_user_parameter_with_provider;
+        use $crate::providers::embeddings::test_embedding_invalid_model_error_with_provider;
+        use $crate::providers::embeddings::test_embedding_large_batch_with_provider;
+        use $crate::providers::embeddings::test_embedding_consistency_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -613,6 +628,78 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.simple_inference;
             for provider in providers {
                 test_multiple_text_blocks_in_message_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_basic_embedding() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_basic_embedding_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_shorthand_embedding() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_shorthand_embedding_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_batch_embedding() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_batch_embedding_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_with_dimensions() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_with_dimensions_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_with_encoding_format() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_with_encoding_format_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_with_user_parameter() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_with_user_parameter_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_invalid_model_error() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_invalid_model_error_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_large_batch() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_large_batch_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_consistency() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_consistency_with_provider(provider).await;
             }
         }
 
@@ -1258,7 +1345,7 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
             ]},
         "stream": stream,
         "tags": {"foo": "bar"},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let inference_id = if stream {
@@ -1450,7 +1537,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
         "extra_body": extra_body,
         "stream": stream,
         "tags": {"foo": "bar"},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let inference_id = if stream {
@@ -1606,7 +1693,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                 }
             ]},
         "stream": stream,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -1755,6 +1842,13 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
 
 #[traced_test]
 pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProvider) {
+    // Bedrock rejects input thoughts for these models
+    if provider.model_name == "claude-3-haiku-20240307-aws-bedrock"
+        || provider.model_name == "deepseek-r1-aws-bedrock"
+    {
+        return;
+    }
+
     let client = make_embedded_gateway().await;
     client
         .inference(ClientInferenceParams {
@@ -1785,7 +1879,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
         .await
         .unwrap();
 
-    if ["anthropic"].contains(&provider.model_provider_name.as_str()) {
+    if ["anthropic", "aws-bedrock"].contains(&provider.model_provider_name.as_str()) {
         assert!(
             !logs_contain("does not support input thought blocks"),
             "Should not have warned about dropping thought blocks"
@@ -1816,7 +1910,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -1853,7 +1947,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
         "stream": false,
         "tags": {"foo": "bar"},
         "cache_options": {"enabled": "on", "lookback_s": 10},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -2356,7 +2450,14 @@ pub async fn check_simple_inference_response(
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let content = response_json.get("content").unwrap().as_array().unwrap();
+    let mut content = response_json
+        .get("content")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .clone();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    content.retain(|c| c.get("type").unwrap().as_str().unwrap() != "thought");
     assert_eq!(content.len(), 1);
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -2423,7 +2524,9 @@ pub async fn check_simple_inference_response(
     assert_eq!(input, correct_input);
 
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    let mut content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    content_blocks.retain(|c| c.get("type").unwrap().as_str().unwrap() != "thought");
     assert_eq!(content_blocks.len(), 1);
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -2512,7 +2615,9 @@ pub async fn check_simple_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    output.retain(|c| !matches!(c, ContentBlock::Thought(_)));
     assert_eq!(output.len(), 1);
 
     if !is_batch {
@@ -2760,7 +2865,7 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
                 "value": 123,
             },
         ],
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -2859,7 +2964,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         "include_original_response": include_original_response,
         "tags": {"key": tag_value},
         "cache_options": {"enabled": "on", "lookback_s": 10},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -2923,9 +3028,12 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 
         let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
         if !content_blocks.is_empty() {
-            let content_block = content_blocks.first().unwrap();
-            let content = content_block.get("text").unwrap().as_str().unwrap();
-            full_content.push_str(content);
+            for block in content_blocks {
+                if block["type"] == "text" {
+                    let content = block.get("text").unwrap().as_str().unwrap();
+                    full_content.push_str(content);
+                }
+            }
         }
 
         // When we get a cache hit, the usage should be explicitly set to 0
@@ -2999,8 +3107,9 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert_eq!(input, correct_input);
 
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    let mut output: Vec<Value> = serde_json::from_str(output).unwrap();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    output.retain(|c| c.get("type").unwrap().as_str().unwrap() != "thought");
     let content_block = output.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -3096,7 +3205,9 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    output.retain(|c| !matches!(c, ContentBlock::Thought(_)));
     assert_eq!(output.len(), 1);
 
     // Check the InferenceTag Table
@@ -3143,7 +3254,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
         },
         "stream": false,
         "credentials": provider.credentials,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -3385,7 +3496,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         },
         "stream": true,
         "credentials": provider.credentials,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -3635,7 +3746,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
         "stream": false,
         "variant_name": provider.variant_name,
         "tags": {"test_type": "auto_used"},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -4274,7 +4385,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
             ]},
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -4534,7 +4645,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
             ]},
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -4836,7 +4947,7 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
         "tool_choice": "required",
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -5127,7 +5238,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         "tool_choice": "required",
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -5481,7 +5592,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
         "tool_choice": "none",
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -5739,7 +5850,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         "tool_choice": "none",
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -6057,7 +6168,7 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
         ],
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -6398,7 +6509,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         "tool_choice": {"specific": "self_destruct"},
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -6771,7 +6882,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
         "allowed_tools": ["get_humidity"],
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -7038,7 +7149,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         "allowed_tools": ["get_humidity"],
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -8032,6 +8143,7 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             ];
             if MISSING_STOP_SEQUENCE_PROVIDERS.contains(&provider.model_provider_name.as_str())
                 || provider.model_name == "gemma-3-1b-aws-sagemaker-openai"
+                || provider.model_name == "deepseek-r1-aws-bedrock"
             {
                 assert_eq!(response.finish_reason, Some(FinishReason::Stop));
             } else {
@@ -9530,7 +9642,7 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
                 }
             ]},
         "stream": false,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -9789,7 +9901,7 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
             ]},
         "stream": false,
         "output_schema": output_schema.clone(),
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -10046,7 +10158,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
                 }
             ]},
         "stream": true,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -10306,9 +10418,12 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     // The 2.5 Pro model always seems to think before responding, even with
     // {"generationConfig": {"thinkingConfig": {"thinkingBudget": 0 }}
+    // This also happens for DeepSeek R1
     // This prevents us from setting a low max_tokens, since the thinking tokens will
     // use up all of the output tokens before an actual response is generated.
-    if provider.model_name.contains("gemini-2.5-pro") {
+    if provider.model_name.contains("gemini-2.5-pro")
+        || provider.model_name.contains("deepseek-r1-aws-bedrock")
+    {
         return;
     }
 
@@ -10339,7 +10454,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
                 "max_tokens": 1
             }
         },
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
     if provider.variant_name.contains("openai") && provider.variant_name.contains("o1") {
         // Can't pin a single token for o1
@@ -11261,7 +11376,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
             }
         },
         "stream": false,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -11420,7 +11535,7 @@ pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETes
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -11443,7 +11558,14 @@ pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETes
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let content = response_json.get("content").unwrap().as_array().unwrap();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    let mut content = response_json
+        .get("content")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .clone();
+    content.retain(|c| c.get("type").unwrap().as_str().unwrap() != "thought");
     assert_eq!(content.len(), 1);
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();

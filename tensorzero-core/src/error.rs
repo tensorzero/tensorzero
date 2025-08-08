@@ -114,6 +114,13 @@ impl Error {
         Error(Box::new(details))
     }
 
+    pub fn new_with_err_logging(details: ErrorDetails, err_logging: bool) -> Self {
+        if err_logging {
+            details.log();
+        }
+        Error(Box::new(details))
+    }
+
     pub fn new_without_logging(details: ErrorDetails) -> Self {
         Error(Box::new(details))
     }
@@ -182,6 +189,9 @@ pub enum ErrorDetails {
     BadCredentialsPreInference {
         provider_name: String,
     },
+    Base64 {
+        message: String,
+    },
     BatchInputValidation {
         index: usize,
         message: String,
@@ -197,6 +207,9 @@ pub enum ErrorDetails {
         message: String,
     },
     ChannelWrite {
+        message: String,
+    },
+    ClickHouseConfiguration {
         message: String,
     },
     ClickHouseConnection {
@@ -400,6 +413,9 @@ pub enum ErrorDetails {
     MissingFileExtension {
         file_name: String,
     },
+    ModelNotFound {
+        model_name: String,
+    },
     ModelProvidersExhausted {
         provider_errors: HashMap<String, Error>,
     },
@@ -505,7 +521,9 @@ impl ErrorDetails {
             | ErrorDetails::AppState { .. }
             | ErrorDetails::BadCredentialsPreInference { .. }
             | ErrorDetails::BadImageFetch { .. }
+            | ErrorDetails::Base64 { .. }
             | ErrorDetails::ChannelWrite { .. }
+            | ErrorDetails::ClickHouseConfiguration { .. }
             | ErrorDetails::ClickHouseConnection { .. }
             | ErrorDetails::ClickHouseDeserialization { .. }
             | ErrorDetails::ClickHouseMigration { .. }
@@ -577,6 +595,7 @@ impl ErrorDetails {
             | ErrorDetails::JsonRequest { .. }
             | ErrorDetails::MissingBatchInferenceResponse { .. }
             | ErrorDetails::MissingFileExtension { .. }
+            | ErrorDetails::ModelNotFound { .. }
             | ErrorDetails::ModelProviderTimeout { .. }
             | ErrorDetails::ModelTimeout { .. }
             | ErrorDetails::Observability { .. }
@@ -639,8 +658,10 @@ impl ErrorDetails {
             ErrorDetails::AppState { .. }
             | ErrorDetails::BadCredentialsPreInference { .. }
             | ErrorDetails::BadImageFetch { .. }
+            | ErrorDetails::Base64 { .. }
             | ErrorDetails::Cache { .. }
             | ErrorDetails::ChannelWrite { .. }
+            | ErrorDetails::ClickHouseConfiguration { .. }
             | ErrorDetails::ClickHouseConnection { .. }
             | ErrorDetails::ClickHouseDeserialization { .. }
             | ErrorDetails::ClickHouseMigration { .. }
@@ -688,6 +709,7 @@ impl ErrorDetails {
             ErrorDetails::BatchNotFound { .. }
             | ErrorDetails::DatapointNotFound { .. }
             | ErrorDetails::InferenceNotFound { .. }
+            | ErrorDetails::ModelNotFound { .. }
             | ErrorDetails::ProviderNotFound { .. }
             | ErrorDetails::RouteNotFound { .. }
             | ErrorDetails::UnknownEvaluation { .. }
@@ -812,6 +834,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Bad credentials at inference time for provider: {provider_name}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                 )
             }
+            ErrorDetails::Base64 { message } => {
+                write!(f, "Error decoding base64: {message}")
+            }
             ErrorDetails::BatchInputValidation { index, message } => {
                 write!(f, "Input at index {index} failed validation: {message}",)
             }
@@ -823,6 +848,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {message}")
+            }
+            ErrorDetails::ClickHouseConfiguration { message } => {
+                write!(f, "Error in ClickHouse configuration: {message}")
             }
             ErrorDetails::ClickHouseConnection { message } => {
                 write!(f, "Error connecting to ClickHouse: {message}")
@@ -1075,6 +1103,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Could not determine file extension for file: {file_name}"
                 )
+            }
+            ErrorDetails::ModelNotFound { model_name } => {
+                write!(f, "Model not found: {model_name}")
             }
             ErrorDetails::ModelProvidersExhausted { provider_errors } => {
                 write!(

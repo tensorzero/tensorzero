@@ -27,6 +27,8 @@ use uuid::Uuid;
 
 use crate::cache::CacheParamsOptions;
 use crate::config_parser::UninitializedVariantInfo;
+use crate::embeddings::{Embedding, EmbeddingInput};
+use crate::endpoints::embeddings::Params as EmbeddingParams;
 use crate::endpoints::inference::{
     inference, ChatCompletionInferenceParams, InferenceParams, Params,
 };
@@ -43,10 +45,12 @@ use crate::tool::{DynamicToolParams, Tool, ToolCallInput, ToolCallOutput, ToolCh
 use crate::variant::JsonMode;
 use serde::Deserializer;
 
+use super::embeddings::{embeddings, EmbeddingResponse};
 use super::inference::{
     InferenceCredentials, InferenceOutput, InferenceResponse, InferenceResponseChunk,
     InferenceStream,
 };
+use crate::embeddings::EmbeddingEncodingFormat;
 
 /// A handler for the OpenAI-compatible inference endpoint
 #[debug_handler(state = AppStateData)]
@@ -122,6 +126,84 @@ pub async fn inference_handler(
                 .into_response())
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OpenAICompatibleEmbeddingParams {
+    input: EmbeddingInput,
+    model: String,
+    dimensions: Option<u32>,
+    #[serde(default)]
+    encoding_format: EmbeddingEncodingFormat,
+    #[serde(default, rename = "tensorzero::credentials")]
+    tensorzero_credentials: InferenceCredentials,
+}
+
+impl From<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
+    fn from(params: OpenAICompatibleEmbeddingParams) -> Self {
+        EmbeddingParams {
+            input: params.input,
+            model_name: params.model,
+            dimensions: params.dimensions,
+            encoding_format: params.encoding_format,
+            credentials: params.tensorzero_credentials,
+        }
+    }
+}
+#[derive(Debug, Serialize)]
+#[serde(tag = "object", rename_all = "lowercase")]
+pub enum OpenAIEmbeddingResponse {
+    List {
+        data: Vec<OpenAIEmbedding>,
+        model: String,
+        usage: OpenAIEmbeddingUsage,
+    },
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "object", rename_all = "lowercase")]
+pub enum OpenAIEmbedding {
+    Embedding { embedding: Embedding, index: usize },
+}
+
+#[derive(Debug, Serialize)]
+pub struct OpenAIEmbeddingUsage {
+    prompt_tokens: u32,
+    total_tokens: u32,
+}
+
+impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
+    fn from(response: EmbeddingResponse) -> Self {
+        OpenAIEmbeddingResponse::List {
+            data: response
+                .embeddings
+                .into_iter()
+                .enumerate()
+                .map(|(i, embedding)| OpenAIEmbedding::Embedding {
+                    embedding,
+                    index: i,
+                })
+                .collect(),
+            model: response.model,
+            usage: OpenAIEmbeddingUsage {
+                prompt_tokens: response.usage.input_tokens,
+                total_tokens: response.usage.input_tokens,
+            },
+        }
+    }
+}
+
+pub async fn embeddings_handler(
+    State(AppStateData {
+        config,
+        http_client,
+        ..
+    }): AppState,
+    StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
+) -> Result<Json<OpenAIEmbeddingResponse>, Error> {
+    let embedding_params = openai_compatible_params.into();
+    let response = embeddings(config, &http_client, embedding_params).await?;
+    Ok(Json(response.into()))
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
