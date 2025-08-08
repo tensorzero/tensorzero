@@ -409,6 +409,60 @@ impl MetricConfigLevel {
     }
 }
 
+// Config file globbing:
+// TensorZero supports loading from multiple config files (matching a unix-style glob pattern)
+// This poses a number of challenges, mainly related to resolving paths specified inside config files
+// (e.g. `user_template`) relative to the containing config file.
+// The overall loading process is:
+// 1. We call `ConfigFileGlob::new_from_path` to resolve the glob pattern into a list of paths,
+//    This validates that we have at least one config file to load.
+// 2. We build of a `SpanMap` from the glob using `SpanMap::from_glob`. This is responsible for
+//    actually parsing each individual config file, and then merging the resulting `DeTable`s
+//    into a single `DeTable`. Unfortunately, we cannot simple concatenate the files as parse
+//    them as a single larger file, due to the possibility of files like this:
+//    ```toml
+//    [my_section]
+//    my_section_key = "my_section_value"
+//    ```
+//
+//    ```toml
+//    top.level.path = "top_level_value"
+//    ```
+//
+//    If we concatenated and parsed these files, we would incorrectly include `top.level.path`
+//    underneath the `[my_section]`. Toml doesn't have a way of returning to the 'root' context,
+//    so we're forced to manually parse each file, and then merge them ourselves in memory.
+//
+//    Each individually parsed `DeTable` tracks byte ranges (via `Spanned`) into the original
+//    source string. To allow us to identify the original file by looking at `Spanned`
+//    instances in the merge table, we insert extra whitespace into each file before individually
+//    parsing that file. This ensures that all of our `Spanned` ranges are disjoint, allowing us
+//    to map a `Spanned` back to the original TOML file.
+//
+// 3. We 'remap' our `DeTable using `resolve_toml_relative_paths`.
+//    This allows us to deserialize types like `UninitializedChatCompletionConfig`
+//    which store paths (e.g. `user_template`) relative to the containing config file.
+//
+//    Unfortunately, we cannot directly write `Spanned` types inside of these nested
+//    structs. Due to a serde issue, using attributes like `#[serde(transparent)]`
+//    or `#[serde(flatten)]` will cause Serde to deserialize into its own internal type,
+//    and then deserialize the inner type with a different deserializer (not the original one).
+//    The same problem shows up when constructing error messages - while our custom
+//    `TensorZeroDeserialize` attempts to improve the situation, it's best-effort, and
+//    we don't rely on it for correctness.
+//
+//    Instead, we 'remap' paths by walking the merged `DeTable`, and replacing entries
+//    at known paths with their fully qualified paths (using the `SpanMap` to obtain
+//    the base path for each entry). Each value is changed to a nested map that can be
+//    deserialized into a `TomlRelativePath`. If we forget to remap any parts of the config
+//    in `resolve_toml_relative_paths`, then deserializing the `TomlRelativePath` will fail
+//    (rather than succeed with an incorrect path).
+//
+// At this point, we have a `DeTable` that can be successfully deserialized into an `UninitializedConfig`.
+// From this point onward, none of the config-handling code needs to interact with globs, remapped config files,
+// or even be aware of whether or not we have multiple config files. All path access goes through `TomlRelativePath`,
+// which is self-contained (it stores the absolute path that we resolved earlier).
+
 /// A glob pattern together with the config file paths it resolves to
 /// We eagerly resolve the glob pattern so that we can include all of the matched
 /// config file paths in error messages.

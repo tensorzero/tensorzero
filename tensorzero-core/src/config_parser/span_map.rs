@@ -7,6 +7,11 @@ use crate::config_parser::path::{merge_tomls, resolve_toml_relative_paths};
 use crate::config_parser::ConfigFileGlob;
 use crate::error::{Error, ErrorDetails};
 
+/// Holds range information for a merged config file.
+/// The merged file is built up from several different config files.
+/// While we don't parse a single concatenated file, we do adjust the ranges
+/// within each individually-parsed file to be disjoint, allowing us to map
+/// a `Spanned` range back to the original file.
 pub struct SpanMap {
     /// Each entry in this vector is a tuple of a byte range from the final merged config,
     /// and the `TomlFile` representing the original file.
