@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
   release:
     types: [released]
-#  push:
-#    branches: ["main"]
+  push:
+    branches: ["main"]
 
 env:
   DOCKERHUB_USER: tensorzero
