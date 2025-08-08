@@ -12,6 +12,7 @@ debug = true
 template_filesystem_access.enabled = true
 export.otlp.traces.enabled = true
 unstable_error_json = true
+observability.skip_completed_migrations = true
 
 [object_storage]
 type = "disabled"
@@ -37,6 +38,15 @@ extra_body = [
     { pointer = "/temperature", value = 0.456 },
     { pointer = "/frequency_penalty", value = 1.42 },
 ]
+
+[models."gpt-oss-20b-fireworks"]
+routing = ["fireworks"]
+
+[models."gpt-oss-20b-fireworks".providers.fireworks]
+type = "fireworks"
+model_name = "accounts/fireworks/models/gpt-oss-20b"
+parse_think_blocks = false
+
 
 [models."gpt-4o-mini-2024-07-18-dynamic"]
 routing = ["openai"]
@@ -718,6 +728,30 @@ routing = ["openai"]
 [embedding_models.text-embedding-3-small.providers.openai]
 type = "openai"
 model_name = "text-embedding-3-small"
+
+[embedding_models.fallback]
+routing = ["slow", "openai"]
+
+[embedding_models.fallback.providers.slow]
+type = "dummy"
+model_name = "slow"
+
+[embedding_models.fallback.providers.slow.timeouts]
+non_streaming = { total_ms = 1000 }
+
+[embedding_models.fallback.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+
+[embedding_models.timeout]
+routing = ["slow"]
+
+[embedding_models.timeout.timeouts]
+non_streaming = { total_ms = 1000 }
+
+[embedding_models.timeout.providers.slow]
+type = "dummy"
+model_name = "slow"
 
 
 # ┌────────────────────────────────────────────────────────────────────────────┐

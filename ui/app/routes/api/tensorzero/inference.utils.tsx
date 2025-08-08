@@ -1,23 +1,40 @@
 import * as React from "react";
 import { useFetcher, type FetcherFormProps } from "react-router";
 import type { SubmitTarget, FetcherSubmitOptions } from "react-router";
+import type { DisplayInputMessage } from "~/utils/clickhouse/common";
 import type {
-  ContentBlockOutput,
+  CacheParamsOptions,
+  ClientInput,
+  ClientInputMessage,
+  ClientInputMessageContent,
+  FunctionConfig,
+  JsonValue,
+  Tool,
+} from "tensorzero-node";
+import type {
+  InputMessageContent as TensorZeroContent,
+  ImageContent as TensorZeroImage,
+  InputMessage as TensorZeroMessage,
+  Input as TensorZeroInput,
+} from "~/utils/tensorzero";
+import type {
+  ResolvedFileContent,
+  DisplayInputMessageContent,
   DisplayInput,
-  JsonInferenceOutput,
 } from "~/utils/clickhouse/common";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import type { InferenceResponse } from "~/utils/tensorzero";
-import { resolvedInputToTensorZeroInput } from "./inference";
 import { logger } from "~/utils/logger";
 import type {
-  JsonValue,
+  ClientInferenceParams,
   ResolvedInput as TensorZeroResolvedInput,
   ResolvedInputMessage as TensorZeroResolvedInputMessage,
   ResolvedInputMessageContent as TensorZeroResolvedInputMessageContent,
   ToolCallConfigDatabaseInsert,
+  ContentBlockChatOutput,
+  JsonInferenceOutput,
 } from "tensorzero-node";
 import type {
   Input,
@@ -216,6 +233,7 @@ function tensorZeroResolvedContentToInputContent(
       return {
         type: "thought",
         text: content.text,
+        _internal_provider_type: content._internal_provider_type,
         signature: content.signature,
       };
     case "file": {
@@ -274,6 +292,9 @@ interface ClickHouseDatapointActionArgs {
   tool_params?: ToolCallConfigDatabaseInsert;
   output_schema?: JsonValue;
   variant: string;
+  cache_options: CacheParamsOptions;
+  dryrun: boolean;
+  functionConfig: FunctionConfig;
 }
 
 export function prepareInferenceActionRequest(
@@ -281,53 +302,113 @@ export function prepareInferenceActionRequest(
     | InferenceActionArgs
     | DatapointActionArgs
     | ClickHouseDatapointActionArgs,
-) {
+): ClientInferenceParams {
+  // Create base ClientInferenceParams with default values
+  const baseParams: ClientInferenceParams = {
+    function_name: null,
+    model_name: null,
+    episode_id: null,
+    input: { system: null, messages: [] },
+    stream: null,
+    params: {
+      chat_completion: {
+        temperature: null,
+        max_tokens: null,
+        seed: null,
+        top_p: null,
+        presence_penalty: null,
+        frequency_penalty: null,
+        json_mode: null,
+        stop_sequences: null,
+      },
+    },
+    variant_name: null,
+    dryrun: null,
+    internal: false,
+    tags: {},
+    output_schema: null,
+    credentials: new Map(),
+    cache_options: {
+      max_age_s: null,
+      enabled: "on",
+    },
+    include_original_response: false,
+    internal_dynamic_variant_config: null,
+    allowed_tools: null,
+    additional_tools: null,
+    tool_choice: null,
+    parallel_tool_calls: null,
+  };
+
   // Prepare request based on source and function type
-  let request;
   if (
     args.source === "inference" &&
     args.resource.function_name === "tensorzero::default"
   ) {
-    request = prepareDefaultFunctionRequest(args.resource, args.variant);
+    const defaultRequest = prepareDefaultFunctionRequest(
+      args.resource,
+      args.variant,
+    );
+    return { ...baseParams, ...defaultRequest };
   } else if (args.source === "clickhouse_datapoint") {
-    // Convert TensorZero's ResolvedInput to our Input type first
+    // Extract tool parameters from the ClickHouse datapoint args
+    const tool_choice = args.tool_params?.tool_choice;
+    const parallel_tool_calls = args.tool_params?.parallel_tool_calls;
+    const additional_tools = args.tool_params?.tools_available
+      ? subtractStaticToolsFromInferenceInput(
+          args.tool_params?.tools_available,
+          args.functionConfig,
+        )
+      : null;
 
-    request = {
+    return {
+      ...baseParams,
       function_name: args.functionName,
-      input: resolvedInputToTensorZeroInput(args.input),
+      input: resolvedInputToClientInput(args.input),
       variant_name: args.variant,
-      tool_params: args.tool_params,
-      output_schema: args.output_schema,
+      output_schema: args.output_schema || null,
+      tool_choice: tool_choice || null,
+      dryrun: true,
+      parallel_tool_calls: parallel_tool_calls || null,
+      additional_tools,
+      cache_options: args.cache_options,
     };
   } else {
     // For other sources, the input is already a DisplayInput
-    const tensorZeroInput = resolvedInputToTensorZeroInput(args.resource.input);
-    const extra_body =
-      args.source === "inference" ? args.resource.extra_body : undefined;
-    request = {
+    if (
+      args.source === "inference" &&
+      args.resource.extra_body &&
+      args.resource.extra_body.length > 0
+    ) {
+      throw new Error("Extra body is not supported for inference in UI.");
+    }
+    const clientInput = resolvedInputToClientInput(args.resource.input);
+    // TODO: this is unsupported in Node bindings for now
+    // const extra_body =
+    //   args.source === "inference" ? args.resource.extra_body : undefined;
+
+    return {
+      ...baseParams,
       function_name: args.resource.function_name,
-      input: tensorZeroInput,
+      input: clientInput,
       variant_name: args.variant,
       dryrun: true,
-      extra_body,
     };
   }
-
-  return request;
 }
 
 function prepareDefaultFunctionRequest(
   inference: ParsedInferenceRow,
   selectedVariant: string,
-) {
-  const tensorZeroInput = resolvedInputToTensorZeroInput(inference.input);
+): Partial<ClientInferenceParams> {
+  const clientInput = resolvedInputToClientInput(inference.input);
   if (inference.function_type === "chat") {
     const tool_choice = inference.tool_params?.tool_choice;
     const parallel_tool_calls = inference.tool_params?.parallel_tool_calls;
     const tools_available = inference.tool_params?.tools_available;
     return {
       model_name: selectedVariant,
-      input: tensorZeroInput,
+      input: clientInput,
       dryrun: true,
       tool_choice: tool_choice,
       parallel_tool_calls: parallel_tool_calls,
@@ -339,14 +420,203 @@ function prepareDefaultFunctionRequest(
     const output_schema = inference.output_schema;
     return {
       model_name: selectedVariant,
-      input: tensorZeroInput,
+      input: clientInput,
       dryrun: true,
-      output_schema: output_schema,
+      output_schema: output_schema || null,
     };
   }
+
+  // Fallback case
+  return {
+    model_name: selectedVariant,
+    input: clientInput,
+    dryrun: true,
+  };
 }
 
 export interface VariantResponseInfo {
-  output?: JsonInferenceOutput | ContentBlockOutput[];
+  output?: JsonInferenceOutput | ContentBlockChatOutput[];
   usage?: InferenceUsage;
+}
+
+export function resolvedInputToClientInput(input: DisplayInput): ClientInput {
+  return {
+    system: input.system || null,
+    messages: input.messages.map(resolvedInputMessageToClientInputMessage),
+  };
+}
+
+export function resolvedInputToTensorZeroInput(
+  input: DisplayInput,
+): TensorZeroInput {
+  return {
+    ...input,
+    messages: input.messages.map(resolvedInputMessageToTensorZeroMessage),
+  };
+}
+
+function resolvedInputMessageToTensorZeroMessage(
+  message: DisplayInputMessage,
+): TensorZeroMessage {
+  return {
+    ...message,
+    content: message.content.map(
+      resolvedInputMessageContentToTensorZeroContent,
+    ),
+  };
+}
+
+function resolvedInputMessageContentToTensorZeroContent(
+  content: DisplayInputMessageContent,
+): TensorZeroContent {
+  switch (content.type) {
+    case "structured_text":
+      return {
+        type: "text",
+        arguments: content.arguments,
+      };
+    case "unstructured_text":
+      return {
+        type: "text",
+        text: content.text,
+      };
+    case "missing_function_text":
+      return {
+        type: "text",
+        text: content.value,
+      };
+    case "raw_text":
+    case "tool_call":
+    case "tool_result":
+    case "thought":
+    case "unknown":
+      return content;
+    case "file":
+      return resolvedFileContentToTensorZeroFile(content);
+    case "file_error":
+      throw new Error("Can't convert image error to tensorzero content");
+  }
+}
+
+function resolvedFileContentToTensorZeroFile(
+  content: ResolvedFileContent,
+): TensorZeroImage {
+  const data = content.file.dataUrl.split(",")[1];
+  return {
+    type: "image",
+    mime_type: content.file.mime_type,
+    data,
+  };
+}
+
+function resolvedInputMessageToClientInputMessage(
+  message: DisplayInputMessage,
+): ClientInputMessage {
+  return {
+    role: message.role,
+    content: message.content.map(
+      resolvedInputMessageContentToClientInputMessageContent,
+    ),
+  };
+}
+
+function resolvedInputMessageContentToClientInputMessageContent(
+  content: DisplayInputMessageContent,
+): ClientInputMessageContent {
+  switch (content.type) {
+    case "structured_text":
+      return {
+        type: "text",
+        arguments: content.arguments,
+      };
+    case "unstructured_text":
+      return {
+        type: "text",
+        text: content.text,
+      };
+    case "missing_function_text":
+      return {
+        type: "text",
+        text: content.value,
+      };
+    case "raw_text":
+      return {
+        type: "raw_text",
+        value: content.value,
+      };
+    case "tool_call": {
+      let parsedArguments;
+      try {
+        parsedArguments = JSON.parse(content.arguments);
+      } catch {
+        parsedArguments = content.arguments;
+      }
+      return {
+        type: "tool_call",
+        id: content.id,
+        name: content.name,
+        arguments: parsedArguments,
+        raw_arguments: content.arguments,
+        raw_name: content.name,
+      };
+    }
+    case "tool_result":
+      return {
+        type: "tool_result",
+        id: content.id,
+        name: content.name,
+        result: content.result,
+      };
+    case "thought":
+      return {
+        type: "thought",
+        text: content.text,
+        signature: content.signature || null,
+        _internal_provider_type: null,
+      };
+    case "unknown":
+      return {
+        type: "unknown",
+        data: content.data,
+        model_provider_name: content.model_provider_name || null,
+      };
+    case "file":
+      return resolvedFileContentToClientFile(content);
+    case "file_error":
+      throw new Error("Can't convert image error to client content");
+  }
+}
+
+function resolvedFileContentToClientFile(
+  content: ResolvedFileContent,
+): ClientInputMessageContent {
+  const data = content.file.dataUrl.split(",")[1];
+  return {
+    type: "file",
+    mime_type: content.file.mime_type,
+    data: data,
+  };
+}
+
+/*
+ * For both inferences and datapoints, we store a full tool config that
+ * specifies what the model saw or could have seen at inference time for a particular example.
+ * However, TensorZero will automatically use the tools that are currently configured for inferences.
+ * It will also error if there are tools with duplicated names. In order to avoid this, we "subtract"
+ * out all currently configured tools from the tools that we pass in dynamically.
+ */
+function subtractStaticToolsFromInferenceInput(
+  datapointTools: Tool[],
+  functionConfig: FunctionConfig,
+): Tool[] {
+  if (functionConfig.type === "json") {
+    return datapointTools;
+  }
+  const resultTools = [];
+  for (const tool of datapointTools) {
+    if (!functionConfig.tools.some((t) => t === tool.name)) {
+      resultTools.push(tool);
+    }
+  }
+  return resultTools;
 }

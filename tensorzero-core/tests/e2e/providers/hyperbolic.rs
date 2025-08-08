@@ -56,6 +56,7 @@ async fn get_providers() -> E2ETestProviders {
         bad_auth_extra_headers,
         reasoning_inference: vec![],
         extra_body_inference: extra_body_providers,
+        embeddings: vec![],
         inference_params_inference: standard_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: vec![],

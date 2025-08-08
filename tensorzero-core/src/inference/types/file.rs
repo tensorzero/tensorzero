@@ -94,15 +94,18 @@ pub fn serialize_with_file_data<T: Serialize>(value: &T) -> Result<Value, Error>
     })
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum File {
     Url {
         url: Url,
         #[serde(default)]
+        #[ts(type = "string | null")]
         mime_type: Option<MediaType>,
     },
     Base64 {
+        #[ts(type = "string")]
         mime_type: MediaType,
         data: String,
     },
