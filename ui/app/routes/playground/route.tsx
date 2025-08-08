@@ -39,6 +39,11 @@ import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.serv
 import type { InferenceResponse } from "tensorzero-node";
 import { getExtraInferenceOptions } from "~/utils/feature_flags";
 
+/*
+ * By default, RR7 times out promises from the loader in 4950ms.
+ * Since inferences can easily take longer than that we bump to 30s here.
+ */
+export const streamTimeout = 30_000; // ms
 const DEFAULT_LIMIT = 5;
 
 export const handle: RouteHandle = {
