@@ -17,6 +17,7 @@ uv run pytest
 ```
 """
 
+import asyncio
 import base64
 import inspect
 import json
@@ -29,11 +30,10 @@ from copy import deepcopy
 from dataclasses import dataclass
 from os import path
 from uuid import UUID
-import asyncio
-from clickhouse_connect import get_client  # type: ignore
 
 import pytest
 import tensorzero
+from clickhouse_connect import get_client  # type: ignore
 from openai import AsyncOpenAI, OpenAI
 from tensorzero import (
     AsyncTensorZeroGateway,
