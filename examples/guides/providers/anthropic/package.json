@@ -1,0 +1,9 @@
+{
+  "name": "tensorzero-examples-guides-providers-anthropic",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Guide: Anthropic",
+  "dependencies": {
+    "openai": "^4.0.0"
+  }
+}
