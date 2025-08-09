@@ -43,9 +43,9 @@ spec:
             {{- end }}
             {{- end }}
           envFrom:
-            {{- if and .Values.gateway.additionalEnv.secretName (not .Values.gateway.additionalEnv.keys) }}
+            {{- if and .Values.ui.additionalEnv.secretName (not .Values.ui.additionalEnv.keys) }}
             - secretRef:
-                name: {{ .Values.gateway.additionalEnv.secretName }}
+                name: {{ .Values.ui.additionalEnv.secretName }}
             {{- end }}
           volumeMounts:
             {{- if .Values.configMap.enabled }}
@@ -54,9 +54,9 @@ spec:
             {{- end }}
           resources:
             {{- toYaml .Values.ui.resources | nindent 12 }}
-      {{- if .Values.gateway.image.pullSecret }}
+      {{- if .Values.ui.image.pullSecret }}
       imagePullSecrets:
-        - name: {{ .Values.gateway.image.pullSecret }}
+        - name: {{ .Values.ui.image.pullSecret }}
       {{- end }}
       {{- if .Values.configMap.enabled }}
       volumes:
