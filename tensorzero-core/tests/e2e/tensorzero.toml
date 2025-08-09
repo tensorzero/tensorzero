@@ -47,6 +47,13 @@ type = "fireworks"
 model_name = "accounts/fireworks/models/gpt-oss-20b"
 parse_think_blocks = false
 
+[models."gpt-oss-20b-vllm"]
+routing = ["vllm"]
+
+[models."gpt-oss-20b-vllm".providers.vllm]
+type = "vllm"
+api_base = "https://tensorzero--vllm-gpt-oss-20b-serve.modal.run/v1/"
+model_name = "openai/gpt-oss-20b"
 
 [models."gpt-4o-mini-2024-07-18-dynamic"]
 routing = ["openai"]
@@ -1430,6 +1437,12 @@ model = "qwen2.5-0.5b-instruct-vllm"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.vllm-gpt-oss-20b]
+type = "chat_completion"
+model = "gpt-oss-20b-vllm"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.vllm-extra-body]
 type = "chat_completion"
 model = "qwen2.5-0.5b-instruct-vllm"
@@ -1569,6 +1582,12 @@ max_tokens = 100
 [functions.basic_test.variants.fireworks-deepseek]
 type = "chat_completion"
 model = "deepseek-r1"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
+[functions.basic_test.variants.fireworks-gpt-oss-20b]
+type = "chat_completion"
+model = "gpt-oss-20b-fireworks"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 800
 
@@ -1761,6 +1780,16 @@ model = "fireworks::accounts/fireworks/models/mixtral-8x22b-instruct"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
+max_tokens = 100
+
+[functions.json_success.variants.fireworks-gpt-oss-20b]
+type = "chat_completion"
+model = "gpt-oss-20b-fireworks"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+# Fireworks gives us 'Failed to format non-streaming choice: Expected message start token but ran out of tokens' if
+# we try to explicitly request a 'json_object' response format for gpt-oss-20b.
+json_mode = "off"
 max_tokens = 100
 
 [functions.json_success.variants.fireworks-implicit]
@@ -2080,6 +2109,14 @@ json_mode = "strict"
 [functions.json_success.variants.vllm]
 type = "chat_completion"
 model = "qwen2.5-0.5b-instruct-vllm"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
+[functions.json_success.variants.vllm-gpt-oss-20b]
+type = "chat_completion"
+model = "gpt-oss-20b-vllm"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
