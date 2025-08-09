@@ -1,9 +1,11 @@
+use enum_map::Enum;
 use reqwest::multipart::Form;
 use reqwest::multipart::Part;
 use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use serde::Serialize;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,11 +13,15 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockWriteGuard;
 use url::Url;
 
+mod batching;
 pub mod migration_manager;
 pub mod query_builder;
 #[cfg(any(test, feature = "e2e_tests", feature = "optimization_tests"))]
 pub mod test_helpers;
 
+use crate::clickhouse::batching::BatchSender;
+use crate::clickhouse::batching::BatchWriterHandle;
+use crate::config_parser::BatchWritesConfig;
 use crate::config_parser::Config;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::{Error, ErrorDetails};
@@ -35,6 +41,7 @@ pub enum ClickHouseConnectionInfo {
         cluster_name: Option<String>,
         database: String,
         client: Client,
+        batch_sender: Option<Arc<BatchSender>>,
     },
 }
 
@@ -54,7 +61,7 @@ pub fn make_clickhouse_http_client() -> Result<Client, Error> {
 
 /// Defines all of the ClickHouse tables that we write to from Rust
 /// This will be used to implement per-table ClickHouse write batching.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Enum)]
 pub enum TableName {
     BatchModelInference,
     BatchRequest,
@@ -103,7 +110,7 @@ impl ClickHouseConnectionInfo {
     /// returns Ok(Production{ ... })
     ///
     /// However, for tests that directly test ClickHouse behavior, you can directly create the struct.
-    pub async fn new(database_url: &str) -> Result<Self, Error> {
+    pub async fn new(database_url: &str, batch_config: BatchWritesConfig) -> Result<Self, Error> {
         // Add a query string for the database using the URL crate
         let mut database_url = Url::parse(database_url).map_err(|_| {
             Error::new(ErrorDetails::Config {
@@ -143,12 +150,26 @@ impl ClickHouseConnectionInfo {
             }
         };
 
-        let connection_info = Self::Production {
+        let mut connection_info = Self::Production {
             database_url,
             cluster_name,
             database,
             client: make_clickhouse_http_client()?,
+            batch_sender: None,
         };
+
+        let orig_connection_info = connection_info.clone();
+        match &mut connection_info {
+            Self::Production { batch_sender, .. } => {
+                if batch_config.enabled {
+                    // Create the batch sender using the `ClickHouseConnectionInfo` without the `batch_sender` set
+                    // (since the batcher itself always performs direct writes)
+                    let batcher = BatchSender::new(orig_connection_info, batch_config)?;
+                    *batch_sender = Some(Arc::new(batcher));
+                }
+            }
+            Self::Mock { .. } | Self::Disabled { .. } => {}
+        }
         // If the connection is unhealthy, we won't be able to run / check migrations. So we just fail here.
         connection_info.health().await?;
         Ok(connection_info)
@@ -158,6 +179,15 @@ impl ClickHouseConnectionInfo {
         Self::Mock {
             mock_data: Arc::new(RwLock::new(HashMap::new())),
             healthy,
+        }
+    }
+
+    pub fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
+        match self {
+            Self::Production { batch_sender, .. } => batch_sender
+                .as_ref()
+                .map(|sender| sender.writer_handle.clone()),
+            _ => None,
         }
     }
 
@@ -173,7 +203,10 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn write(
+    /// Writes rows to ClickHouse using our batched write implementation
+    /// (if enabled in the config)
+    /// The provided rows might not yet be sent to ClickHouse when this function completes.
+    pub async fn write_batched(
         &self,
         rows: &[impl Serialize + Send + Sync],
         table: TableName,
@@ -181,13 +214,48 @@ impl ClickHouseConnectionInfo {
         match self {
             Self::Disabled => Ok(()),
             Self::Mock { mock_data, .. } => {
-                write_mock(rows, table.as_str(), &mut mock_data.write().await).await
+                write_mock(
+                    Rows::Unserialized(rows),
+                    table,
+                    &mut mock_data.write().await,
+                )
+                .await
+            }
+            Self::Production {
+                database_url,
+                client,
+                batch_sender,
+                ..
+            } => {
+                write_production(
+                    database_url,
+                    client,
+                    Rows::Unserialized(rows),
+                    table,
+                    batch_sender.as_deref(),
+                )
+                .await
+            }
+        }
+    }
+
+    /// Write rows to ClickHouse without, without using our batched write implementation.
+    /// The provided rows will have been sent to ClickHouse when this function completes.
+    pub async fn write_non_batched<T: Serialize + Send + Sync>(
+        &self,
+        rows: Rows<'_, T>,
+        table: TableName,
+    ) -> Result<(), Error> {
+        match self {
+            Self::Disabled => Ok(()),
+            Self::Mock { mock_data, .. } => {
+                write_mock(rows, table, &mut mock_data.write().await).await
             }
             Self::Production {
                 database_url,
                 client,
                 ..
-            } => write_production(database_url, client, rows, table.as_str()).await,
+            } => write_production(database_url, client, rows, table, None).await,
         }
     }
 
@@ -747,45 +815,75 @@ pub fn escape_string_for_clickhouse_literal(s: &str) -> String {
     s.replace(r#"\"#, r#"\\"#).replace(r#"'"#, r#"\'"#)
 }
 
-async fn write_mock(
-    rows: &[impl Serialize + Send + Sync],
-    table: &str,
+async fn write_mock<T: Serialize + Send + Sync>(
+    rows: Rows<'_, T>,
+    table: TableName,
     tables: &mut RwLockWriteGuard<'_, HashMap<String, Vec<serde_json::Value>>>,
 ) -> Result<(), Error> {
-    for row in rows {
-        let row_value = serde_json::to_value(row).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: e.to_string(),
-            })
-        })?;
-        tables.entry(table.to_string()).or_default().push(row_value);
+    for row in rows.as_json()?.iter() {
+        tables
+            .entry(table.as_str().to_string())
+            .or_default()
+            .push(serde_json::Value::String(row.clone()));
     }
     Ok(())
 }
 
-async fn write_production(
+/// A wrapper type used with `write_non_batched`
+pub enum Rows<'a, T: Serialize + Send + Sync> {
+    /// The rows will be serialized to JSON before being sent to ClickHouse
+    Unserialized(&'a [T]),
+    /// The rows are already serialized to JSON, and will be sent to ClickHouse as-is
+    Serialized(&'a [String]),
+}
+
+impl<T: Serialize + Send + Sync> Rows<'_, T> {
+    fn as_json(&self) -> Result<Cow<'_, [String]>, Error> {
+        match self {
+            Rows::Unserialized(rows) => {
+                let json: Result<Vec<String>, _> = rows
+                    .iter()
+                    .map(|row| {
+                        serde_json::to_string(row).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: e.to_string(),
+                            })
+                        })
+                    })
+                    .collect();
+                json.map(Cow::Owned)
+            }
+            Rows::Serialized(rows) => Ok(Cow::Borrowed(rows)),
+        }
+    }
+}
+
+async fn write_production<T: Serialize + Send + Sync>(
     database_url: &SecretString,
     client: &Client,
-    rows: &[impl Serialize + Send + Sync],
-    table: &str,
+    rows: Rows<'_, T>,
+    table: TableName,
+    batch: Option<&BatchSender>,
 ) -> Result<(), Error> {
+    let is_empty = match &rows {
+        Rows::Unserialized(rows) => rows.is_empty(),
+        Rows::Serialized(rows) => rows.is_empty(),
+    };
     // Empty rows is a no-op
-    if rows.is_empty() {
+    if is_empty {
+        return Ok(());
+    }
+    let rows_json = rows.as_json();
+
+    if let Some(batch_sender) = batch {
+        batch_sender
+            .add_to_batch(table, rows_json?.into_owned())
+            .await?;
         return Ok(());
     }
 
-    let rows_json: Result<Vec<String>, _> = rows
-        .iter()
-        .map(|row| {
-            serde_json::to_string(row).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: e.to_string(),
-                })
-            })
-        })
-        .collect();
-
     let rows_json = rows_json?.join("\n");
+    let table = table.as_str();
 
     // We can wait for the async insert since we're spawning a new tokio task to do the insert
     let query = format!(

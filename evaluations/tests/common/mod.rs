@@ -35,7 +35,7 @@ pub async fn write_chat_fixture_to_dataset(
     }
     let clickhouse = get_clickhouse().await;
     clickhouse
-        .write(&datapoints, TableName::ChatInferenceDatapoint)
+        .write_batched(&datapoints, TableName::ChatInferenceDatapoint)
         .await
         .unwrap();
 }
@@ -59,7 +59,7 @@ pub async fn write_json_fixture_to_dataset(
     }
     let clickhouse = get_clickhouse().await;
     clickhouse
-        .write(&datapoints, TableName::JsonInferenceDatapoint)
+        .write_batched(&datapoints, TableName::JsonInferenceDatapoint)
         .await
         .unwrap();
 }

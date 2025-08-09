@@ -627,11 +627,11 @@ async fn insert_fake_pending_batch_inference_data(
     }
 
     clickhouse
-        .write(batch_inferences.as_slice(), TableName::BatchModelInference)
+        .write_batched(batch_inferences.as_slice(), TableName::BatchModelInference)
         .await
         .unwrap();
     clickhouse
-        .write(&[batch_request], TableName::BatchRequest)
+        .write_batched(&[batch_request], TableName::BatchRequest)
         .await
         .unwrap();
 

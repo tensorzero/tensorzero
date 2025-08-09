@@ -28,6 +28,7 @@ use tokio::{
     time::{self, Duration},
     try_join,
 };
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
 use crate::clickhouse::ClickHouseConnectionInfo;
@@ -41,7 +42,7 @@ lazy_static! {
 
 /// Setup the howdy loop.
 /// This is called from the main function in the gateway or embedded client.
-pub fn setup_howdy(clickhouse: ClickHouseConnectionInfo) {
+pub fn setup_howdy(clickhouse: ClickHouseConnectionInfo, token: CancellationToken) {
     if env::var("TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS").unwrap_or_default() == "1" {
         info!("Pseudonymous usage analytics is disabled");
         return;
@@ -49,11 +50,11 @@ pub fn setup_howdy(clickhouse: ClickHouseConnectionInfo) {
     if let ClickHouseConnectionInfo::Disabled = clickhouse {
         return;
     }
-    tokio::spawn(howdy_loop(clickhouse));
+    tokio::spawn(howdy_loop(clickhouse, token));
 }
 
 /// Loops and sends usage data to the Howdy service every 6 hours.
-pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo) {
+pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo, token: CancellationToken) {
     let client = Client::new();
     let deployment_id = match get_deployment_id(&clickhouse).await {
         Ok(deployment_id) => deployment_id,
@@ -66,7 +67,12 @@ pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo) {
         let copied_clickhouse = clickhouse.clone();
         let copied_client = client.clone();
         let copied_deployment_id = deployment_id.clone();
-        interval.tick().await;
+        tokio::select! {
+            () = token.cancelled() => {
+                break;
+            }
+            _ = interval.tick() => {}
+        }
         tokio::spawn(async move {
             if let Err(e) =
                 send_howdy(&copied_clickhouse, &copied_client, &copied_deployment_id).await

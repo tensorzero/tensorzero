@@ -130,7 +130,11 @@ pub async fn run_evaluation(
     .map_err(|e| anyhow!("Failed to build client: {}", e))?;
     let clients = Arc::new(Clients {
         tensorzero_client: ThrottledTensorZeroClient::new(tensorzero_client, semaphore),
-        clickhouse_client: ClickHouseConnectionInfo::new(&clickhouse_url).await?,
+        clickhouse_client: ClickHouseConnectionInfo::new(
+            &clickhouse_url,
+            config.gateway.observability.batch_writes.clone(),
+        )
+        .await?,
     });
 
     let mut join_set = JoinSet::new();

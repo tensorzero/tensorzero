@@ -12,7 +12,6 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_core::clickhouse::migration_manager::manual_run_migrations;
-use tensorzero_core::howdy::setup_howdy;
 use tokio::signal;
 use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
@@ -188,11 +187,10 @@ async fn main() {
         );
     }
 
-    // Initialize AppState
+    // Initialize GatewayHandle
     let gateway_handle = gateway_util::GatewayHandle::new(config.clone())
         .await
         .expect_pretty("Failed to initialize AppState");
-    setup_howdy(gateway_handle.app_state.clickhouse_connection_info.clone());
 
     // Create a new observability_enabled_pretty string for the log message below
     let observability_enabled_pretty = match &gateway_handle.app_state.clickhouse_connection_info {

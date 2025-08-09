@@ -150,7 +150,6 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
     .await
     .unwrap()
 }
-
 // We use a multi-threaded runtime so that the embedded gateway can use 'block_on'.
 // For consistency, we also use a multi-threaded runtime for the http gateway test.
 
