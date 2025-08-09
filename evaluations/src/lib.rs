@@ -17,7 +17,7 @@ use tensorzero::{
     InferenceResponse,
 };
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::config_parser::MetricConfigOptimize;
+use tensorzero_core::config_parser::{ConfigFileGlob, MetricConfigOptimize};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::{
     clickhouse::ClickHouseConnectionInfo, config_parser::Config, endpoints::datasets::Datapoint,
@@ -95,8 +95,11 @@ pub async fn run_evaluation(
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
     info!(config_file = ?args.config_file, "Loading configuration");
-    let config =
-        Config::load_from_path_optional_verify_credentials(&args.config_file, false).await?;
+    let config = Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new_from_path(&args.config_file)?,
+        false,
+    )
+    .await?;
     debug!("Configuration loaded successfully");
     let evaluation_config = config
         .evaluations
