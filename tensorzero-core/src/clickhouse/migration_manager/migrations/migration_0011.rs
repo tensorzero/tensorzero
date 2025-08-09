@@ -1,5 +1,5 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::Error;
 use async_trait::async_trait;
 
@@ -35,8 +35,17 @@ impl Migration for Migration0011<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `ModelInferenceCache` table
-        let query = r"
-            CREATE TABLE IF NOT EXISTS ModelInferenceCache
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "ReplacingMergeTree",
+                table_name: "ModelInferenceCache",
+                engine_args: &["timestamp", "is_deleted"],
+            },
+        );
+        let query = format!(
+            r"
+            CREATE TABLE IF NOT EXISTS ModelInferenceCache{on_cluster_name}
             (
                 short_cache_key UInt64,
                 long_cache_key FixedString(64), -- for a hex-encoded 256-bit key
@@ -46,12 +55,13 @@ impl Migration for Migration0011<'_> {
                 raw_response String,
                 is_deleted Bool DEFAULT false,
                 INDEX idx_long_cache_key long_cache_key TYPE bloom_filter GRANULARITY 100
-            ) ENGINE = ReplacingMergeTree(timestamp, is_deleted)
+            ) ENGINE = {table_engine_name}
             PARTITION BY toYYYYMM(timestamp)
             ORDER BY (short_cache_key, long_cache_key)
             PRIMARY KEY (short_cache_key)
             SETTINGS index_granularity = 256
-        ";
+        ",
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -70,12 +80,14 @@ impl Migration for Migration0011<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the table */\
-            DROP TABLE IF EXISTS ModelInferenceCache;
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            "/* Drop the table */\
+                DROP TABLE IF EXISTS ModelInferenceCache{on_cluster_name} SYNC;
             /* Drop the `cached` column from ModelInference */\
             ALTER TABLE ModelInference DROP COLUMN cached;
             "
-        .to_string()
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
