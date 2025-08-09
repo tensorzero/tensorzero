@@ -2,10 +2,11 @@
 # │                                  GENERAL                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-# To keep things minimal in this example, we don't set up observability with ClickHouse.
+# Enable observability to support the UI and ClickHouse functionality.
 
 [gateway]
-observability.enabled = false
+observability.enabled = true
+template_filesystem_access.enabled = true
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
@@ -16,11 +17,31 @@ type = "chat"
 tools = ["think", "search_wikipedia", "load_wikipedia_page", "answer_question"]
 tool_choice = "required"
 parallel_tool_calls = true
+system_schema = "functions/multi_hop_rag_agent/system_schema.json"
 
 [functions.multi_hop_rag_agent.variants.baseline]
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
-system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
+system_template = "functions/multi_hop_rag_agent/baseline/system_template.minijinja"
+
+[functions.multi_hop_rag_agent_openai_v1]
+type = "chat"
+system_schema = "functions/multi_hop_rag_agent/system_schema.json"
+user_schema = "functions/multi_hop_rag_agent/user_schema.json"
+
+[functions.multi_hop_rag_agent_openai_v1.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_template = "functions/multi_hop_rag_agent/baseline/system_template.minijinja"
+user_template = "functions/multi_hop_rag_agent/baseline/user_template.minijinja"
+weight = 1
+
+[functions.multi_hop_rag_agent_openai_v1.variants.o3]
+type = "chat_completion"
+model = "openai::o3-mini"
+system_template = "functions/multi_hop_rag_agent/baseline/system_template.minijinja"
+user_template = "functions/multi_hop_rag_agent/baseline/user_template.minijinja"
+weight = 0
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   TOOLS                                    │
