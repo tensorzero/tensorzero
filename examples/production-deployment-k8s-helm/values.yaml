@@ -122,6 +122,7 @@ persistence:
 
 # TensorZero Configuration
 configMap:
+  enabled: true
   data:
     tensorzero.toml: |
       [functions.my_function_name]
