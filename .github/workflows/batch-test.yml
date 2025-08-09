@@ -18,6 +18,7 @@ env:
   GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
   HYPERBOLIC_API_KEY: ${{secrets.HYPERBOLIC_API_KEY}}
   MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+  NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
   SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
