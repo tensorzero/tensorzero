@@ -42,6 +42,11 @@ spec:
             {{- end }}
             {{- end }}
             {{- end }}
+          envFrom:
+            {{- if and .Values.gateway.additionalEnv.secretName (not .Values.gateway.additionalEnv.keys) }}
+            - secretRef:
+                name: {{ .Values.gateway.additionalEnv.secretName }}
+            {{- end }}
           volumeMounts:
             {{- if .Values.configMap.enabled }}
             - name: config-volume

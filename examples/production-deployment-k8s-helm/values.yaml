@@ -19,7 +19,9 @@ gateway:
     port: 3000
 
   additionalEnv:
+    # Set secretName to "" to disable using additional environment variables
     secretName: "tensorzero-secret"
+    # Set keys to an empty list to use all environment variables from the secret
     keys:
       - name: TENSORZERO_CLICKHOUSE_URL
         key: TENSORZERO_CLICKHOUSE_URL
@@ -27,7 +29,6 @@ gateway:
         key: TENSORZERO_GATEWAY_URL
       - name: OPENAI_API_KEY
         key: OPENAI_API_KEY
-      # TODO: include other model provider credentials as needed
 
   resources:
     limits:
@@ -73,7 +74,9 @@ ui:
     port: 4000
 
   additionalEnv:
+    # Set secretName to "" to disable using additional environment variables
     secretName: "tensorzero-secret"
+    # Set keys to an empty list to use all environment variables from the secret
     keys:
       - name: TENSORZERO_CLICKHOUSE_URL
         key: TENSORZERO_CLICKHOUSE_URL
