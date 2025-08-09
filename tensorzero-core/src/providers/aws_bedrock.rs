@@ -169,6 +169,7 @@ impl InferenceProvider for AWSBedrockProvider {
         let InterceptorAndRawBody {
             interceptor,
             get_raw_request,
+            get_raw_response,
         } = build_interceptor(request, model_provider, model_name.to_string());
 
         let new_config = self
@@ -189,7 +190,7 @@ impl InferenceProvider for AWSBedrockProvider {
                         DisplayErrorContext(&e)
                     ),
                     raw_request: get_raw_request().ok(),
-                    raw_response: None,
+                    raw_response: get_raw_response().ok(),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -199,11 +200,13 @@ impl InferenceProvider for AWSBedrockProvider {
         };
 
         let raw_request = get_raw_request()?;
+        let raw_response = get_raw_response()?;
 
         ConverseOutputWithMetadata {
             output,
             latency,
             raw_request,
+            raw_response,
             system: request.system.clone(),
             input_messages: request.messages.clone(),
             model_id: &self.model_id,
@@ -307,6 +310,7 @@ impl InferenceProvider for AWSBedrockProvider {
         let InterceptorAndRawBody {
             interceptor,
             get_raw_request,
+            get_raw_response,
         } = build_interceptor(request, model_provider, model_name.to_string());
         let new_config = self
             .base_config
@@ -326,8 +330,8 @@ impl InferenceProvider for AWSBedrockProvider {
                         "Error sending request to AWS Bedrock: {}",
                         DisplayErrorContext(&e)
                     ),
-                    raw_request: None,
-                    raw_response: None,
+                    raw_request: get_raw_request().ok(),
+                    raw_response: get_raw_response().ok(),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -837,6 +841,7 @@ struct ConverseOutputWithMetadata<'a> {
     output: ConverseOutput,
     latency: Latency,
     raw_request: String,
+    raw_response: String,
     system: Option<String>,
     input_messages: Vec<RequestMessage>,
     model_id: &'a str,
@@ -865,15 +870,13 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             output,
             latency,
             raw_request,
+            raw_response,
             system,
             input_messages,
             model_id,
             function_type,
             json_mode,
         } = value;
-
-        let raw_response = serialize_aws_bedrock_struct(&output)?;
-
         let message = match output.output {
             Some(ConverseOutputType::Message(message)) => Some(message),
             _ => {

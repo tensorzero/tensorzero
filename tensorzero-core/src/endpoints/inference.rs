@@ -239,7 +239,10 @@ pub async fn inference(
         &clickhouse_connection_info,
     )
     .await?;
-    tracing::Span::current().record("episode_id", episode_id.to_string());
+    // Record the episode id if we didn't already have one
+    if params.episode_id.is_none() {
+        tracing::Span::current().record("episode_id", episode_id.to_string());
+    }
 
     let (function, function_name) = find_function(&params, &config)?;
     let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
