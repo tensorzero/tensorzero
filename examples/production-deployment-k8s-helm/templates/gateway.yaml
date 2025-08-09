@@ -54,6 +54,10 @@ spec:
             {{- end }}
           resources:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
+      {{- if .Values.gateway.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.gateway.image.pullSecret }}
+      {{- end }}
       volumes:
         - name: config-volume
           configMap:
