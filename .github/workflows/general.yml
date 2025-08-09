@@ -46,6 +46,11 @@ jobs:
           docker load < gateway-container.tar
           docker load < ui-container.tar
 
+      - name: Create the `object_storage` directory for the multimodal-vision-finetuning example
+        run: |
+          mkdir -p examples/multimodal-vision-finetuning/object_storage
+          chmod 777 examples/multimodal-vision-finetuning/object_storage
+
       - name: Check latest docker-compose
         run: ./ci/check-all-docker-compose.sh
 
