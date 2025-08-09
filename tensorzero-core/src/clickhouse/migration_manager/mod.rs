@@ -53,6 +53,10 @@ fn get_run_migrations_command() -> String {
 /// This is the single source of truth for all migration - it's used during startup to migrate
 /// the database, and in our ClickHouse tests to verify that the migrations apply correctly
 /// to a fresh database.
+/// # Panics
+///
+/// Panics if the constant value `NUM_MIGRATIONS` does not match the number of migrations
+/// defined in this function.
 pub fn make_all_migrations<'a>(
     clickhouse: &'a ClickHouseConnectionInfo,
 ) -> Vec<Box<dyn Migration + Send + Sync + 'a>> {

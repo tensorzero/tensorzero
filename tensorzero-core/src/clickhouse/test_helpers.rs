@@ -18,6 +18,9 @@ lazy_static::lazy_static! {
     pub static ref CLICKHOUSE_REPLICA_URL: Option<String> = std::env::var("TENSORZERO_CLICKHOUSE_REPLICA_URL").ok();
 }
 
+/// # Panics
+///
+/// Panics on ClickHouse connection failure.
 pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
     let clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
     let start = std::time::Instant::now();
@@ -51,6 +54,9 @@ pub async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo
     }
 }
 
+/// # Panics
+///
+/// Panics if unable to retrieve the specified `ChatInferenceDatapoint` from the database.
 pub async fn select_chat_datapoint_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -70,6 +76,9 @@ pub async fn select_chat_datapoint_clickhouse(
     Some(json)
 }
 
+/// # Panics
+///
+/// Panics if unable to retrieve the specified JSON inference datapoint from ClickHouse.
 pub async fn select_json_datapoint_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -89,6 +98,9 @@ pub async fn select_json_datapoint_clickhouse(
     Some(json)
 }
 
+/// # Panics
+///
+/// Panics on failure to retrieve the collection of Chat inference datapoints from the specified dataset.
 pub async fn select_chat_dataset_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     dataset_name: &str,
@@ -113,6 +125,9 @@ pub async fn select_chat_dataset_clickhouse(
     Some(chat_rows)
 }
 
+/// # Panics
+///
+/// Panics on failure to retrieve the collection of datapoints in the specified dataset.
 pub async fn select_json_dataset_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     dataset_name: &str,
@@ -138,6 +153,9 @@ pub async fn select_json_dataset_clickhouse(
     Some(json_rows)
 }
 
+/// # Panics
+///
+/// Panics on failure to retrieve the specified Chat inference record.
 pub async fn select_chat_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -157,6 +175,9 @@ pub async fn select_chat_inference_clickhouse(
     Some(json)
 }
 
+/// # Panics
+///
+/// Panics on failure to retrieve the specified JSON inference record.
 pub async fn select_json_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -177,6 +198,9 @@ pub async fn select_json_inference_clickhouse(
     Some(json)
 }
 
+/// # Panics
+///
+/// Panic on failure to retrieve the specified model inference record.
 pub async fn select_model_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -197,6 +221,9 @@ pub async fn select_model_inference_clickhouse(
     Some(json)
 }
 
+/// # Panics
+///
+/// Panics on failure to retrieve the specified collection of model inferences.
 pub async fn select_model_inferences_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -226,6 +253,9 @@ pub async fn select_model_inferences_clickhouse(
     }
 }
 
+/// # Panics
+///
+/// Panics on failure to retrieve the specified inference tag.
 pub async fn select_inference_tags_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     function_name: &str,
@@ -248,6 +278,9 @@ pub async fn select_inference_tags_clickhouse(
     Some(json)
 }
 
+/// # Panics
+///
+/// Panics on failure to retrieve the specified batch model inference batch record.
 pub async fn select_batch_model_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -268,6 +301,9 @@ pub async fn select_batch_model_inference_clickhouse(
     Some(serde_json::from_str(&text.response).unwrap())
 }
 
+/// # Panics
+///
+/// Panics on failure to retrieve the specified batch model inference batch.
 pub async fn select_batch_model_inferences_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_id: Uuid,
@@ -293,6 +329,9 @@ pub async fn select_batch_model_inferences_clickhouse(
     Some(json_rows)
 }
 
+/// # Panics
+///
+/// Panics on failure to retrieve the specified batch request.
 pub async fn select_latest_batch_request_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_id: Uuid,
@@ -309,6 +348,9 @@ pub async fn select_latest_batch_request_clickhouse(
     Some(json)
 }
 
+/// # Panics
+///
+/// Panics on database failure when retreiving a feedback record from the specified table.
 #[cfg(feature = "e2e_tests")]
 pub async fn select_feedback_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
@@ -327,6 +369,9 @@ pub async fn select_feedback_clickhouse(
     Some(json)
 }
 
+/// # Panics
+///
+/// Panics on database failure when retrieving a feedback by target.
 #[cfg(feature = "e2e_tests")]
 pub async fn select_feedback_by_target_id_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
@@ -440,6 +485,9 @@ pub async fn stale_datapoint_clickhouse(
         .await;
 }
 
+/// # Panics
+///
+/// Panics on failure to retrieve the specified dynamic evaluation run.
 pub async fn select_dynamic_evaluation_run_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     run_id: Uuid,
@@ -464,6 +512,9 @@ pub async fn select_dynamic_evaluation_run_clickhouse(
     Some(serde_json::from_str(&text.response).unwrap())
 }
 
+/// # Panics
+///
+/// Panics on database failure when retrieving the specified dynamic evaluation run episode.
 pub async fn select_dynamic_evaluation_run_episode_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     run_id: Uuid,
@@ -480,6 +531,9 @@ pub async fn select_dynamic_evaluation_run_episode_clickhouse(
     Some(serde_json::from_str(&text.response).unwrap())
 }
 
+/// # Panics
+///
+/// Panics on database failure when retrieving the metric record for the specified tag.
 #[cfg(feature = "e2e_tests")]
 pub async fn select_feedback_tags_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
@@ -511,6 +565,9 @@ pub struct StaticEvaluationHumanFeedback {
     pub evaluator_inference_id: Option<Uuid>,
 }
 
+/// # Panics
+///
+/// Panics on a database failure to retrieve the specified metric for the datapoint.
 #[cfg(feature = "e2e_tests")]
 pub async fn select_human_static_evaluation_feedback_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
