@@ -311,7 +311,7 @@ impl ClientBuilder {
                     },
                     verbose_errors: self.verbose_errors,
                     #[cfg(feature = "e2e_tests")]
-                    last_body: Default::default(),
+                    last_body: Mutex::default(),
                 })
             }
         }
@@ -326,7 +326,7 @@ impl ClientBuilder {
             },
             verbose_errors: false,
             #[cfg(feature = "e2e_tests")]
-            last_body: Default::default(),
+            last_body: Mutex::default(),
         })
     }
 
@@ -350,7 +350,7 @@ impl ClientBuilder {
             }),
             verbose_errors: self.verbose_errors,
             #[cfg(feature = "e2e_tests")]
-            last_body: Default::default(),
+            last_body: Mutex::default(),
         })
     }
 }

@@ -9,6 +9,7 @@ use crate::config_parser::PathWithContents;
 use crate::embeddings::EmbeddingEncodingFormat;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
+use crate::inference::types::extra_body::FilteredInferenceExtraBody;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
 use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
 use crate::inference::types::ContentBlock;
@@ -537,7 +538,7 @@ impl DiclConfig {
         }
         let extra_body = FullExtraBodyConfig {
             extra_body: self.extra_body.clone(),
-            inference_extra_body: Default::default(),
+            inference_extra_body: FilteredInferenceExtraBody::default(),
         };
         let extra_headers = FullExtraHeadersConfig {
             variant_extra_headers: self.extra_headers.clone(),
@@ -845,7 +846,7 @@ mod tests {
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
-                                    path: Default::default(),
+                                    path: object_store::path::Path::default(),
                                 },
                             })),
                         ],

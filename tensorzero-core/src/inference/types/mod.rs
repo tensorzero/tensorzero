@@ -1099,7 +1099,7 @@ impl InferenceResult {
                             ),
                         }
                         .log();
-                        Default::default()
+                        serde_json::Value::Null
                     }
                 }
             })
@@ -2588,8 +2588,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert_eq!(
@@ -2653,8 +2653,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
@@ -2743,8 +2743,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -2823,8 +2823,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -2904,8 +2904,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -3011,8 +3011,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -3120,8 +3120,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -3256,8 +3256,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -3370,8 +3370,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -3456,8 +3456,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -3533,8 +3533,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -3614,8 +3614,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -3679,8 +3679,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -3796,8 +3796,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();

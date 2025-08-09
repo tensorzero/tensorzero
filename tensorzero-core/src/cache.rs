@@ -499,7 +499,10 @@ mod tests {
 
     use uuid::Uuid;
 
-    use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
+    use crate::inference::types::{
+        extra_body::FullExtraBodyConfig, extra_headers::FullExtraHeadersConfig, FunctionType,
+        ModelInferenceRequestJsonMode,
+    };
 
     use super::*;
 
@@ -522,8 +525,8 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
+            extra_headers: FullExtraHeadersConfig::default(),
             extra_cache_key: None,
             stop_sequences: None,
         };
@@ -548,8 +551,8 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
+            extra_headers: FullExtraHeadersConfig::default(),
             extra_cache_key: None,
             stop_sequences: None,
         };
@@ -576,8 +579,8 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
+            extra_headers: FullExtraHeadersConfig::default(),
             extra_cache_key: None,
             stop_sequences: None,
         };
