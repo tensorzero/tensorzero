@@ -83,17 +83,15 @@ pub async fn run_llm_judge_evaluator(
         }));
     }
     debug!("Preparing LLM judge input");
-    let judge_input =
-        match prepare_llm_judge_input(llm_judge_config, input, inference_response, datapoint)? {
-            Some(input) => {
-                debug!("LLM judge input prepared successfully");
-                input
-            }
-            None => {
-                debug!("Cannot prepare LLM judge input, returning None");
-                return Ok(None);
-            }
-        };
+    let judge_input = if let Some(input) =
+        prepare_llm_judge_input(llm_judge_config, input, inference_response, datapoint)?
+    {
+        debug!("LLM judge input prepared successfully");
+        input
+    } else {
+        debug!("Cannot prepare LLM judge input, returning None");
+        return Ok(None);
+    };
 
     debug!("Making LLM judge inference request");
     let params = ClientInferenceParams {
