@@ -89,7 +89,9 @@ RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample inste
 ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
-OptimizationConfig = t.Union[OpenAISFTConfig, FireworksSFTConfig]
+OptimizationConfig = t.Union[
+    OpenAISFTConfig, FireworksSFTConfig, GCPVertexGeminiSFTConfig
+]
 ChatInferenceOutput = t.List[ContentBlock]
 
 
