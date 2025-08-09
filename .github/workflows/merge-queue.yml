@@ -3,6 +3,7 @@ run-name: Merge Queue Checks for ${{ github.ref }}
 
 on:
   workflow_dispatch:
+  push:
   merge_group:
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
@@ -279,7 +280,13 @@ jobs:
   # See 'ci/README.md' at the repository root for more details.
   check-all-live-tests-passed:
     if: always()
-    needs: [check-production-docker-container, ui-tests-e2e-regen-model-inference-cache, live-tests, batch-tests]
+    needs:
+      [
+        check-production-docker-container,
+        ui-tests-e2e-regen-model-inference-cache,
+        live-tests,
+        batch-tests,
+      ]
     runs-on: ubuntu-latest
     steps:
       - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
