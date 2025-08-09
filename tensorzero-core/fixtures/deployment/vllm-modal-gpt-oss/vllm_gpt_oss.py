@@ -117,9 +117,7 @@ VLLM_PORT = 8000
     },
 )
 @modal.concurrent(max_inputs=MAX_INPUTS)
-@modal.web_server(
-    port=VLLM_PORT, startup_timeout=5 * MINUTES, requires_proxy_auth=True
-)
+@modal.web_server(port=VLLM_PORT, startup_timeout=5 * MINUTES, requires_proxy_auth=True)
 def serve():
     import subprocess
 
