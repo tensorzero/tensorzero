@@ -13,8 +13,10 @@ spec:
       app.kubernetes.io/component: gateway
   template:
     metadata:
+      {{- if .Values.configMap.enabled }}
       annotations:
-        checksum/config: {{ toYaml .Values.configMap | sha256sum }}
+        checksum/config: {{ toYaml .Values.configMap.data | sha256sum }}
+      {{- end }}
       labels:
         {{- include "tensorzero.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: gateway
@@ -45,24 +47,35 @@ spec:
                   key: {{ .key }}
             {{- end }}
             {{- end }}
+          envFrom:
+            {{- if and .Values.gateway.additionalEnv.secretName (not .Values.gateway.additionalEnv.keys) }}
+            - secretRef:
+                name: {{ .Values.gateway.additionalEnv.secretName }}
+            {{- end }}
           volumeMounts:
+            {{- if .Values.configMap.enabled }}
             - name: config-volume
               mountPath: /app/config
+            {{- end }}
             {{- if .Values.persistence.enabled }}
             - name: storage-volume
               mountPath: {{ .Values.persistence.mountPath }}
             {{- end }}
           resources:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
+      {{- if or .Values.configMap.enabled .Values.persistence.enabled }}
       volumes:
+        {{- if .Values.configMap.enabled }}
         - name: config-volume
           configMap:
             name: {{ include "tensorzero.fullname" . }}
+        {{- end }}
         {{- if .Values.persistence.enabled }}
         - name: storage-volume
           persistentVolumeClaim:
             claimName: {{ include "tensorzero.fullname" . }}-storage
         {{- end }}
+      {{- end }}
       {{- with .Values.gateway.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

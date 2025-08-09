@@ -14,8 +14,10 @@ spec:
       app.kubernetes.io/component: ui
   template:
     metadata:
+      {{- if .Values.configMap.enabled }}
       annotations:
-        checksum/config: {{ toYaml .Values.configMap | sha256sum }}
+        checksum/config: {{ toYaml .Values.configMap.data | sha256sum }}
+      {{- end }}
       labels:
         {{- include "tensorzero.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: ui
@@ -40,15 +42,24 @@ spec:
             {{- end }}
             {{- end }}
             {{- end }}
+          envFrom:
+            {{- if and .Values.ui.additionalEnv.secretName (not .Values.ui.additionalEnv.keys) }}
+            - secretRef:
+                name: {{ .Values.ui.additionalEnv.secretName }}
+            {{- end }}
           volumeMounts:
+            {{- if .Values.configMap.enabled }}
             - name: config-volume
               mountPath: /app/config
+            {{- end }}
           resources:
             {{- toYaml .Values.ui.resources | nindent 12 }}
+      {{- if .Values.configMap.enabled }}
       volumes:
         - name: config-volume
           configMap:
             name: {{ include "tensorzero.fullname" . }}
+      {{- end }}
       {{- with .Values.ui.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -61,4 +72,4 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-{{- end }} 
+{{- end }}
