@@ -748,7 +748,7 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
 /// - Prepending a default User message with "[listening]" if the first message is not from a User
 /// - Appending a default User message with "[listening]" if the last message is from an Assistant
 fn prepare_messages(
-    mut messages: Vec<AnthropicMessage>,
+    mut messages: Vec<AnthropicMessage<'_>>,
 ) -> std::vec::Vec<providers::anthropic::AnthropicMessage<'_>> {
     // Anthropic also requires that there is at least one message and it is a User message.
     // If it's not we will prepend a default User message.
