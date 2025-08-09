@@ -124,7 +124,7 @@ async fn test_config_from_toml_table_valid() {
     assert_eq!(embedding_model.routing, vec!["openai".into()]);
     assert_eq!(embedding_model.providers.len(), 1);
     let provider = embedding_model.providers.get("openai").unwrap();
-    assert!(matches!(provider, EmbeddingProviderConfig::OpenAI(_)));
+    assert!(matches!(provider.inner, EmbeddingProviderConfig::OpenAI(_)));
 
     // Check that the function for the LLM Judge evaluation is added to the functions table
     let function = config

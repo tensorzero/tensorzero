@@ -5,6 +5,7 @@ import type {
   InferenceResponse,
   VariantInfo,
   ClientInferenceParams,
+  FunctionConfig,
 } from "tensorzero-node";
 import { prepareInferenceActionRequest } from "../api/tensorzero/inference.utils";
 import { getExtraInferenceOptions } from "~/utils/feature_flags";
@@ -24,12 +25,14 @@ export function refreshClientInference(
   datapoint: TensorZeroDatapoint,
   variant: PlaygroundVariantInfo,
   functionName: string,
+  functionConfig: FunctionConfig,
 ) {
   const request = preparePlaygroundInferenceRequest(
     variant,
     functionName,
     datapoint,
     input,
+    functionConfig,
   );
   // The API endpoint takes form data so we need to stringify it and send as data
   const formData = new FormData();
@@ -150,6 +153,7 @@ export function preparePlaygroundInferenceRequest(
   functionName: string,
   datapoint: TensorZeroDatapoint,
   input: DisplayInput,
+  functionConfig: FunctionConfig,
 ): ClientInferenceParams {
   const variantInferenceInfo = getVariantInferenceInfo(variantInfo);
   const request = prepareInferenceActionRequest({
@@ -169,6 +173,7 @@ export function preparePlaygroundInferenceRequest(
     },
     dryrun: true,
     editedVariantInfo: variantInferenceInfo.editedVariantInfo,
+    functionConfig,
   });
   const extraOptions = getExtraInferenceOptions();
   return {

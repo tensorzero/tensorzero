@@ -17,7 +17,10 @@ import { listDatapoints } from "~/utils/tensorzero.server";
 import { tensorZeroResolvedInputToInput } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
-import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
+import type {
+  FunctionConfig,
+  Datapoint as TensorZeroDatapoint,
+} from "tensorzero-node";
 import type { DisplayInput } from "~/utils/clickhouse/common";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "~/components/ui/button";
@@ -180,12 +183,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     datapoint: TensorZeroDatapoint,
     functionName: string,
     variantInfo: PlaygroundVariantInfo,
+    functionConfig: FunctionConfig,
   ) => {
     const request = preparePlaygroundInferenceRequest(
       variantInfo,
       functionName,
       datapoint,
       input,
+      functionConfig,
     );
     const nativeClient = await getNativeTensorZeroClient();
     const inferenceResponse = await nativeClient.inference(request);
@@ -202,7 +207,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   for (const variant of variants) {
     serverInferences.set(variant.name, new Map());
   }
-  if (datapoints && inputs && functionName) {
+  if (datapoints && inputs && functionName && functionConfig) {
     for (let index = 0; index < datapoints.length; index++) {
       const datapoint = datapoints[index];
       const input = inputs[index];
@@ -211,7 +216,13 @@ export async function loader({ request }: Route.LoaderArgs) {
           .get(variant.name)
           ?.set(
             datapoint.id,
-            serverInference(input, datapoint, functionName, variant),
+            serverInference(
+              input,
+              datapoint,
+              functionName,
+              variant,
+              functionConfig,
+            ),
           );
       }
     }
@@ -272,14 +283,6 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     offset,
     limit,
   } = loaderData;
-  const { map, setPromise } = useClientInferences(
-    functionName,
-    datapoints,
-    inputs,
-    variants,
-    serverInferences,
-  );
-
   const functionConfig = useFunctionConfig(functionName);
   if (functionName && !functionConfig) {
     throw data(`Function config not found for function ${functionName}`, {
@@ -287,6 +290,14 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     });
   }
   const configuredVariants = functionConfig?.variants ?? undefined;
+  const { map, setPromise } = useClientInferences(
+    functionName,
+    datapoints,
+    inputs,
+    variants,
+    serverInferences,
+    functionConfig,
+  );
 
   const updateSearchParams = (
     updates: Record<string, string | string[] | null>,
@@ -354,7 +365,8 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
         datapoints.length > 0 &&
         datasetName &&
         inputs &&
-        functionName && (
+        functionName &&
+        functionConfig && (
           <>
             <div className="overflow-x-auto rounded border">
               <div className="min-w-fit">
@@ -474,6 +486,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                                 setPromise={setPromise}
                                 input={inputs[index]}
                                 functionName={functionName}
+                                functionConfig={functionConfig}
                               />
                             </div>
                           );
@@ -578,13 +591,14 @@ function useClientInferences(
   inputs: DisplayInput[] | undefined,
   variants: PlaygroundVariantInfo[],
   serverInferences: NestedPromiseMap<InferenceResponse>,
+  functionConfig: FunctionConfig | null,
 ) {
   const { map, setPromise, setMap } =
     useNestedPromiseMap<InferenceResponse>(serverInferences);
 
   // Single combined effect to handle both server inferences and client inferences
   useEffect(() => {
-    if (!functionName || !datapoints || !inputs) return;
+    if (!functionName || !datapoints || !inputs || !functionConfig) return;
 
     // First check if we need any updates
     let needsUpdate = false;
@@ -632,6 +646,7 @@ function useClientInferences(
           functionName,
           datapoint,
           input,
+          functionConfig,
         );
         const formData = new FormData();
         formData.append("data", JSON.stringify(inferenceRequest));
@@ -650,7 +665,7 @@ function useClientInferences(
 
       return newMap;
     });
-  }, [functionName, datapoints, inputs, setMap, variants]);
+  }, [functionName, datapoints, inputs, variants, setMap, functionConfig]);
 
   return { map, setPromise, setMap };
 }

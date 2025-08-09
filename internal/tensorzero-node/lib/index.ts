@@ -34,12 +34,12 @@ export class TensorZeroClient {
   static async buildEmbedded(
     configPath: string,
     clickhouseUrl?: string | undefined | null,
-    timeout?: number | undefined | null
+    timeout?: number | undefined | null,
   ): Promise<TensorZeroClient> {
     const nativeClient = await NativeTensorZeroClient.buildEmbedded(
       configPath,
       clickhouseUrl,
-      timeout
+      timeout,
     );
     return new TensorZeroClient(nativeClient);
   }
@@ -56,18 +56,18 @@ export class TensorZeroClient {
   }
 
   async experimentalLaunchOptimizationWorkflow(
-    params: LaunchOptimizationWorkflowParams
+    params: LaunchOptimizationWorkflowParams,
   ): Promise<OptimizationJobHandle> {
     const paramsString = safeStringify(params);
     const jobHandleString =
       await this.nativeClient.experimentalLaunchOptimizationWorkflow(
-        paramsString
+        paramsString,
       );
     return JSON.parse(jobHandleString) as OptimizationJobHandle;
   }
 
   async experimentalPollOptimization(
-    jobHandle: OptimizationJobHandle
+    jobHandle: OptimizationJobHandle,
   ): Promise<OptimizationJobInfo> {
     const jobHandleString = safeStringify(jobHandle);
     const statusString =
@@ -92,7 +92,7 @@ export async function getConfig(configPath: string): Promise<Config> {
 function safeStringify(obj: unknown) {
   try {
     return JSON.stringify(obj, (_key, value) =>
-      typeof value === "bigint" ? value.toString() : value
+      typeof value === "bigint" ? value.toString() : value,
     );
   } catch {
     return "null";

@@ -1,20 +1,22 @@
 #![expect(clippy::print_stdout)]
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config_parser::ProviderTypesConfig;
+use tensorzero_core::config_parser::TimeoutsConfig;
 use tensorzero_core::embeddings::{
-    EmbeddingModelConfig, EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest,
-    UninitializedEmbeddingProviderConfig,
+    Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProvider,
+    EmbeddingProviderConfig, EmbeddingRequest, UninitializedEmbeddingProviderConfig,
 };
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
 use tensorzero_core::inference::types::{Latency, ModelInferenceRequestJsonMode};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use crate::providers::common::{E2ETestProvider, E2ETestProviders};
+use crate::providers::common::{E2ETestProvider, E2ETestProviders, EmbeddingTestProvider};
 use tensorzero_core::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
@@ -156,11 +158,16 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let embedding_providers = vec![EmbeddingTestProvider {
+        model_name: "text-embedding-3-small".into(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: vec![],
+        embeddings: embedding_providers,
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: standard_providers.clone(),
@@ -1086,11 +1093,14 @@ async fn test_embedding_request() {
     let provider_config =
         toml::from_str::<UninitializedEmbeddingProviderConfig>(provider_config_serialized)
             .expect("Failed to deserialize EmbeddingProviderConfig")
-            .load(&ProviderTypesConfig::default())
+            .load(
+                &ProviderTypesConfig::default(),
+                Arc::from("good".to_string()),
+            )
             .await
             .unwrap();
     assert!(matches!(
-        provider_config,
+        provider_config.inner,
         EmbeddingProviderConfig::OpenAI(_)
     ));
 
@@ -1103,10 +1113,13 @@ async fn test_embedding_request() {
         providers: [(model_name.as_str().into(), provider_config)]
             .into_iter()
             .collect(),
+        timeouts: TimeoutsConfig::default(),
     };
 
     let request = EmbeddingRequest {
-        input: "This is a test input".to_string(),
+        input: "This is a test input".to_string().into(),
+        dimensions: None,
+        encoding_format: EmbeddingEncodingFormat::Float,
     };
     let api_keys = InferenceCredentials::default();
     let response = model_config
@@ -1125,11 +1138,16 @@ async fn test_embedding_request() {
         )
         .await
         .unwrap();
-    assert_eq!(response.embedding.len(), 1536);
+    let [first_embedding] = response.embeddings.as_slice() else {
+        panic!("Expected exactly one embedding");
+    };
+    assert_eq!(first_embedding.ndims(), 1536);
     assert!(!response.cached);
     // Calculate the L2 norm of the embedding
-    let norm: f32 = response
-        .embedding
+    let norm: f32 = first_embedding
+        .clone()
+        .as_float()
+        .unwrap()
         .iter()
         .map(|&x| x.powi(2))
         .sum::<f32>()
@@ -1189,7 +1207,7 @@ async fn test_embedding_request() {
         .await
         .unwrap();
     assert!(cached_response.cached);
-    assert_eq!(response.embedding, cached_response.embedding);
+    assert_eq!(response.embeddings, cached_response.embeddings);
     assert_eq!(cached_response.usage.input_tokens, 5);
     assert_eq!(cached_response.usage.output_tokens, 0);
 }
@@ -1203,20 +1221,35 @@ async fn test_embedding_sanity_check() {
     let provider_config =
         toml::from_str::<UninitializedEmbeddingProviderConfig>(provider_config_serialized)
             .expect("Failed to deserialize EmbeddingProviderConfig")
-            .load(&ProviderTypesConfig::default())
+            .load(
+                &ProviderTypesConfig::default(),
+                Arc::from("good".to_string()),
+            )
             .await
             .unwrap();
     let client = Client::new();
     let embedding_request_a = EmbeddingRequest {
-        input: "Joe Biden is the president of the United States".to_string(),
+        input: "Joe Biden is the president of the United States"
+            .to_string()
+            .into(),
+        dimensions: None,
+        encoding_format: EmbeddingEncodingFormat::Float,
     };
 
     let embedding_request_b = EmbeddingRequest {
-        input: "Kamala Harris is the vice president of the United States".to_string(),
+        input: "Kamala Harris is the vice president of the United States"
+            .to_string()
+            .into(),
+        dimensions: None,
+        encoding_format: EmbeddingEncodingFormat::Float,
     };
 
     let embedding_request_c = EmbeddingRequest {
-        input: "My favorite systems programming language is Rust".to_string(),
+        input: "My favorite systems programming language is Rust"
+            .to_string()
+            .into(),
+        dimensions: None,
+        encoding_format: EmbeddingEncodingFormat::Float,
     };
     let api_keys = InferenceCredentials::default();
 
@@ -1231,11 +1264,20 @@ async fn test_embedding_sanity_check() {
     let response_a = response_a.expect("Failed to get embedding for request A");
     let response_b = response_b.expect("Failed to get embedding for request B");
     let response_c = response_c.expect("Failed to get embedding for request C");
+    let [embedding_a] = response_a.embeddings.as_slice() else {
+        panic!("Failed to get embedding for request A");
+    };
+    let [embedding_b] = response_b.embeddings.as_slice() else {
+        panic!("Failed to get embedding for request b");
+    };
+    let [embedding_c] = response_c.embeddings.as_slice() else {
+        panic!("Failed to get embedding for request C");
+    };
 
     // Calculate cosine similarities
-    let similarity_ab = cosine_similarity(&response_a.embedding, &response_b.embedding);
-    let similarity_ac = cosine_similarity(&response_a.embedding, &response_c.embedding);
-    let similarity_bc = cosine_similarity(&response_b.embedding, &response_c.embedding);
+    let similarity_ab = cosine_similarity(embedding_a, embedding_b);
+    let similarity_ac = cosine_similarity(embedding_a, embedding_c);
+    let similarity_bc = cosine_similarity(embedding_b, embedding_c);
 
     // Assert that semantically similar sentences have higher similarity (with a margin of 0.3)
     // We empirically determined this by staring at it (no science to it)
@@ -1249,10 +1291,14 @@ async fn test_embedding_sanity_check() {
     );
 }
 
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let magnitude_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let magnitude_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+fn cosine_similarity(a: &Embedding, b: &Embedding) -> f32 {
+    let a = a.clone();
+    let b = b.clone();
+    let a_float = a.as_float().unwrap();
+    let b_float = b.as_float().unwrap();
+    let dot_product: f32 = a_float.iter().zip(b_float.iter()).map(|(x, y)| x * y).sum();
+    let magnitude_a: f32 = a_float.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let magnitude_b: f32 = b_float.iter().map(|x| x * x).sum::<f32>().sqrt();
     dot_product / (magnitude_a * magnitude_b)
 }
 
@@ -1654,4 +1700,36 @@ pub async fn test_parallel_tool_use_default_true_inference_request() {
         Value::Null,
     )
     .await;
+}
+
+#[tokio::test]
+pub async fn test_shorthand_embedding() {
+    let shorthand_model = "openai::text-embedding-3-small";
+    let payload = json!({
+        "input": "Hello, world!",
+        "model": shorthand_model,
+    });
+    let response = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("Shorthand API response: {response_json:?}");
+    assert_eq!(response_json["object"].as_str().unwrap(), "list");
+    assert_eq!(response_json["model"].as_str().unwrap(), shorthand_model);
+    assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
+    assert_eq!(response_json["data"][0]["index"].as_u64().unwrap(), 0);
+    assert_eq!(
+        response_json["data"][0]["object"].as_str().unwrap(),
+        "embedding"
+    );
+    assert!(!response_json["data"][0]["embedding"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert!(response_json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
+    assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
 }
