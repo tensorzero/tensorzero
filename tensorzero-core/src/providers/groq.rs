@@ -86,8 +86,7 @@ impl TryFrom<Credential> for GroqCredentials {
         match credentials {
             Credential::Static(key) => Ok(GroqCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(GroqCredentials::Dynamic(key_name)),
-            Credential::None => Ok(GroqCredentials::None),
-            Credential::Missing => Ok(GroqCredentials::None),
+            Credential::Missing | Credential::None => Ok(GroqCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Groq provider".to_string(),
             })),
@@ -506,7 +505,7 @@ impl GroqRequestMessage<'_> {
             GroqRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
             GroqRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 GroqContentBlock::Text { text } => text.to_lowercase().contains(value),
-                GroqContentBlock::ImageUrl { .. } => false,
+                GroqContentBlock::ImageUrl { .. } |
                 // Don't inspect the contents of 'unknown' blocks
                 GroqContentBlock::Unknown { data: _ } => false,
             }),
@@ -514,7 +513,7 @@ impl GroqRequestMessage<'_> {
                 if let Some(content) = &msg.content {
                     content.iter().any(|c| match c {
                         GroqContentBlock::Text { text } => text.to_lowercase().contains(value),
-                        GroqContentBlock::ImageUrl { .. } => false,
+                        GroqContentBlock::ImageUrl { .. } |
                         // Don't inspect the contents of 'unknown' blocks
                         GroqContentBlock::Unknown { data: _ } => false,
                     })
@@ -1030,8 +1029,7 @@ impl From<GroqFinishReason> for FinishReason {
             GroqFinishReason::Stop => FinishReason::Stop,
             GroqFinishReason::Length => FinishReason::Length,
             GroqFinishReason::ContentFilter => FinishReason::ContentFilter,
-            GroqFinishReason::ToolCalls => FinishReason::ToolCall,
-            GroqFinishReason::FunctionCall => FinishReason::ToolCall,
+            GroqFinishReason::FunctionCall | GroqFinishReason::ToolCalls => FinishReason::ToolCall,
             GroqFinishReason::Unknown => FinishReason::Unknown,
         }
     }

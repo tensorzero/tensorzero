@@ -422,9 +422,6 @@ impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
         let tool_choice = &tool_call_config.tool_choice;
 
         match tool_choice {
-            ToolChoice::Auto => Ok(AnthropicToolChoice::Auto {
-                disable_parallel_tool_use,
-            }),
             ToolChoice::Required => Ok(AnthropicToolChoice::Any {
                 disable_parallel_tool_use,
             }),
@@ -432,7 +429,7 @@ impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
                 name,
                 disable_parallel_tool_use,
             }),
-            ToolChoice::None => Ok(AnthropicToolChoice::Auto {
+            ToolChoice::Auto | ToolChoice::None => Ok(AnthropicToolChoice::Auto {
                 disable_parallel_tool_use,
             }),
         }
@@ -1122,6 +1119,7 @@ fn anthropic_to_tensorzero_stream_message(
     current_tool_name: &mut Option<String>,
     discard_unknown_chunks: bool,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
+    #[expect(clippy::match_same_arms)]
     match message {
         AnthropicStreamMessage::ContentBlockDelta {
             delta: FlattenUnknown::Normal(delta),

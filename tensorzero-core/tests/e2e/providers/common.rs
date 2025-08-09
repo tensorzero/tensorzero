@@ -1726,7 +1726,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                 "Unexpected error: {res}"
             );
         }
-        "google_ai_studio_gemini" => {
+        "google_ai_studio_gemini" | "gcp_vertex_anthropic" | "gcp_vertex_gemini" => {
             // We produce an error by setting a bad 'Content-Length', so just
             // check that an error occurs
             assert!(!res["error"].as_str().unwrap().is_empty());
@@ -1764,11 +1764,6 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                 res["error"].as_str().unwrap().contains("unauthorized"),
                 "Unexpected error: {res}"
             );
-        }
-        "gcp_vertex_anthropic" => {
-            // We produce an error by setting a bad 'Content-Length', so just
-            // check that an error occurs
-            assert!(!res["error"].as_str().unwrap().is_empty());
         }
         "groq" => {
             assert!(
@@ -1828,11 +1823,6 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                 res["error"].as_str().unwrap().contains("Incorrect"),
                 "Unexpected error: {res}"
             );
-        }
-        "gcp_vertex_gemini" => {
-            // We produce an error by setting a bad 'Content-Length', so just
-            // check that an error occurs
-            assert!(!res["error"].as_str().unwrap().is_empty());
         }
         _ => {
             panic!("Got error: {res}");
@@ -4114,13 +4104,11 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
                     let chunk_arguments = block.get("raw_arguments").unwrap().as_str().unwrap();
                     arguments.push_str(chunk_arguments);
                 }
-                "text" => {
+                "text" | "thought" => {
                     // Sometimes the model will also return some text
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
-                }
-                "thought" => {
-                    // Gemini models can return thoughts - ignore them
+                    // Gemini models can also return thoughts - ignore them.
                 }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
@@ -5320,13 +5308,11 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
                     let chunk_arguments = block.get("raw_arguments").unwrap().as_str().unwrap();
                     arguments.push_str(chunk_arguments);
                 }
-                "text" => {
+                "text" | "thought" => {
                     // Sometimes the model will also return some text
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
-                }
-                "thought" => {
-                    // Gemini models can return thoughts - ignore them
+                    // Gemini models can also return thoughts - ignore them.
                 }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
@@ -6584,13 +6570,11 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
                     let chunk_arguments = block.get("raw_arguments").unwrap().as_str().unwrap();
                     arguments.push_str(chunk_arguments);
                 }
-                "text" => {
+                "text" | "thought" => {
                     // Sometimes the model will also return some text
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
-                }
-                "thought" => {
-                    // Gemini models can return thoughts - ignore them
+                    // Gemini models can also return thoughts - ignore them.
                 }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
@@ -7238,13 +7222,11 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
                     let chunk_arguments = block.get("raw_arguments").unwrap().as_str().unwrap();
                     arguments.push_str(chunk_arguments);
                 }
-                "text" => {
+                "text" | "thought" => {
                     // Sometimes the model will also return some text
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
-                }
-                "thought" => {
-                    // Gemini models can return thoughts - ignore them
+                    // Gemini models can also return thoughts - ignore them.
                 }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
@@ -8592,13 +8574,11 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                     let chunk_arguments = block.get("raw_arguments").unwrap().as_str().unwrap();
                     arguments.push_str(chunk_arguments);
                 }
-                "text" => {
+                "text" | "thought" => {
                     // Sometimes the model will also return some text
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
-                }
-                "thought" => {
-                    // Gemini models can return thoughts - ignore them
+                    // Gemini models can also return thoughts - ignore them.
                 }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
