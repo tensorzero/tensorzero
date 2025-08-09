@@ -15,7 +15,7 @@ pub const END_THINK_TAG_LEN: usize = END_THINK_TAG.len();
 /// The function also validates that tags are properly matched - an error is returned
 /// if there are mismatched opening/closing tags.
 ///
-/// Returns a tuple of (cleaned_text, optional_reasoning).
+/// Returns a tuple of (`cleaned_text`, `optional_reasoning`).
 /// The reasoning, if present, will have leading/trailing whitespace trimmed.
 pub fn process_think_blocks(
     text: &str,

@@ -129,7 +129,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     println!("Response: {response:?}");
 }
 
-/// Runs launch_optimization_workflow and then polls for the workflow using the Rust client
+/// Runs `launch_optimization_workflow` and then polls for the workflow using the Rust client
 #[allow(clippy::allow_attributes, dead_code)]
 pub async fn run_workflow_test_case_with_tensorzero_client(
     test_case: &impl OptimizationTestCase,

@@ -197,7 +197,7 @@ fn parse_cursor_edit_output(
 /// This output appears if the user uses CMD-K but doesn't select any text.
 ///
 /// To get the current file name: There is a line in the first user message that says "This is my current file..."
-/// and then the next line is ```path/to/file.ext
+/// and then the next line is `path/to/file.ext`
 /// We can grab this via a regex.
 fn parse_cursor_insert_output(
     messages: &[ResolvedInputMessage],

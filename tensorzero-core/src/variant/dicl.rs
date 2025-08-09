@@ -38,7 +38,7 @@ use super::{
 /// The primary configuration for the Dicl variant
 /// We need a helper to deserialize the config because it relies on
 /// a path to a file for system instructions and we need to use the
-/// load() step to get the fully qualified path.
+/// `load()` step to get the fully qualified path.
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -409,10 +409,10 @@ impl DiclConfig {
         Ok((examples, embedding_response_with_metadata))
     }
 
-    /// Serialize an example into a pair of RequestMessages
+    /// Serialize an example into a pair of `RequestMessages`
     /// The first message is a User message with the input serialized
     /// The second message is an Assistant message with the output as native output blocks
-    ///   - For chat messages, this is a simple vector of ContentBlocks
+    ///   - For chat messages, this is a simple vector of `ContentBlocks`
     ///   - For JSON messages, this is a single JSON output block (as Text)
     fn prepare_message(example: &Example) -> Result<Vec<RequestMessage>, Error> {
         let mut messages = Vec::new();

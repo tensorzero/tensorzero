@@ -19,9 +19,9 @@ impl TemplateConfig<'_> {
         Self { env }
     }
 
-    /// Initializes the TemplateConfig with the given templates, given as a map from template names
+    /// Initializes the `TemplateConfig` with the given templates, given as a map from template names
     /// to template paths.
-    /// If `filesystem_path` is provided, we'll register a minijinja filesystem loader with the specified path
+    /// If `filesystem_path` is provided, we'll register a `minijinja` filesystem loader with the specified path
     pub fn initialize(
         &mut self,
         template_paths: HashMap<String, String>,

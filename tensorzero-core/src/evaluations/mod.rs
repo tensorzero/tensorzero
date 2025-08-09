@@ -772,8 +772,8 @@ impl UninitializedLLMJudgeVariantInfo {
 }
 
 /// NOTE: this function should not be called.
-/// In the code we already have a conversion from UninitializedLLMJudgeVariantConfig to VariantConfig.
-/// We want to make sure that there is an UninitializedLLMJudgeVariantConfig for each VariantConfig.
+/// In the code we already have a conversion from `UninitializedLLMJudgeVariantConfig` to `VariantConfig`.
+/// We want to make sure that there is an `UninitializedLLMJudgeVariantConfig` for each `VariantConfig`.
 /// This function should complain at compile time if we forget to update it when adding a new variant type.
 #[expect(dead_code)]
 #[expect(clippy::unnecessary_wraps)]
