@@ -75,6 +75,7 @@ impl BatchSender {
         // to keep running as long a `Sender` is still active (from inside a
         // `ClickHouseConnectionInfo`). We only exit once all of the `Sender`s are dropped,
         // (and we've finished writing our current batch)
+        // We use `spawn_blocking` to ensure that when the runtime shuts down, it waits for this task to complete.
         let writer_handle = tokio::task::spawn_blocking(move || {
             handle.block_on(async move {
                 tracing::info!("ClickHouse batch write handler started");
