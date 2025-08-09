@@ -21,8 +21,13 @@ CONFIG_PATH = "../../../../examples/data-extraction-ner/config/tensorzero.toml"
 
 FUNCTION_NAME = "extract_entities"
 
+METRIC_NAME = "exact_match"
+
 # The name of the variant to use to grab the templates used for fine-tuning
-TEMPLATE_VARIANT_NAME = "gpt_4o_mini"  # It's OK that this variant uses a different model than the one we're fine-tuning
+TEMPLATE_VARIANT_NAME = "gpt_4o_mini"
+
+# If the metric is a float metric, you can set the threshold to filter the data
+FLOAT_METRIC_THRESHOLD = 0.5
 
 # Fraction of the data to use for validation
 VAL_FRACTION = 0.2
@@ -42,141 +47,68 @@ import os
 import tempfile
 import time
 import warnings
-from pathlib import Path
 from pprint import pprint
 from typing import Any, Dict, List, Optional
 
-import numpy as np
 import openai
-import pandas as pd
 import toml
-from clickhouse_connect import get_client
 from IPython.display import clear_output
-from minijinja import Environment
-
-# %% [markdown]
-# Load the TensorZero configuration file.
-#
-
-# %%
-config_path = Path(CONFIG_PATH)
-
-assert config_path.exists(), f"{CONFIG_PATH} does not exist"
-assert config_path.is_file(), f"{CONFIG_PATH} is not a file"
-
-with config_path.open("r") as f:
-    config = toml.load(f)
-
-# %% [markdown]
-# Retrieve the configuration for the variant with the templates we'll use for fine-tuning.
-#
-
-# %%
-assert "functions" in config, "No `[functions]` section found in config"
-assert FUNCTION_NAME in config["functions"], (
-    f"No function named `{FUNCTION_NAME}` found in config"
-)
-assert "variants" in config["functions"][FUNCTION_NAME], (
-    f"No variants section found for function `{FUNCTION_NAME}`"
-)
-assert TEMPLATE_VARIANT_NAME in config["functions"][FUNCTION_NAME]["variants"], (
-    f"No variant named `{TEMPLATE_VARIANT_NAME}` found in function `{FUNCTION_NAME}`"
+from tensorzero import (
+    FloatMetricFilter,
+    TensorZeroGateway,
 )
 
-function_type = config["functions"][FUNCTION_NAME]["type"]
-variant = config["functions"][FUNCTION_NAME]["variants"][TEMPLATE_VARIANT_NAME]
-
-variant
-
 # %% [markdown]
-# Retrieve the system, user, and assistant templates in the variant (if any), and initialize a minijinja environment with them.
+# Initialize the TensorZero client
 #
 
 # %%
-templates = {}
-
-if "assistant_template" in variant:
-    assistant_template_path = config_path.parent / variant["assistant_template"]
-    with assistant_template_path.open("r") as f:
-        templates["assistant"] = f.read()
-
-if "system_template" in variant:
-    system_template_path = config_path.parent / variant["system_template"]
-    with system_template_path.open("r") as f:
-        templates["system"] = f.read()
-
-if "user_template" in variant:
-    user_template_path = config_path.parent / variant["user_template"]
-    with user_template_path.open("r") as f:
-        templates["user"] = f.read()
-
-env = Environment(templates=templates)
-
-# %% [markdown]
-# Initialize the ClickHouse client.
-#
-
-# %%
-assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, (
-    "TENSORZERO_CLICKHOUSE_URL environment variable not set"
+tensorzero_client = TensorZeroGateway.build_embedded(
+    config_file=CONFIG_PATH,
+    clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"],
+    timeout=15,
 )
 
-clickhouse_client = get_client(dsn=os.environ["TENSORZERO_CLICKHOUSE_URL"])
-
 # %% [markdown]
-# Determine the ClickHouse table name for the function.
+# Set the metric filter as needed
 #
 
 # %%
-inference_table_name = {"chat": "ChatInference", "json": "JsonInference"}.get(
-    function_type
+comparison_operator = ">="
+metric_node = FloatMetricFilter(
+    metric_name=METRIC_NAME,
+    value=FLOAT_METRIC_THRESHOLD,
+    comparison_operator=comparison_operator,
 )
+# metric_node = BooleanMetricFilter(
+#     metric_name=METRIC_NAME,
+#     value=True  # or False
+# )
 
-if inference_table_name is None:
-    raise ValueError(f"Unsupported function type: {function_type}")
+metric_node
 
 # %% [markdown]
-# Query the inferences and feedback from ClickHouse.
-#
-# If the metric is a float metric, we need to filter the data based on the threshold.
+# Query the inferences from ClickHouse
 #
 
 # %%
-query = f"""
-SELECT
-    i.variant_name,
-    i.input,
-    i.output,
-    f.value,
-    i.episode_id
-FROM
-    {inference_table_name} i
-JOIN
-    (SELECT
-        inference_id,
-        value,
-        ROW_NUMBER() OVER (PARTITION BY inference_id ORDER BY timestamp DESC) as rn
-    FROM
-        DemonstrationFeedback
-    ) f ON i.id = f.inference_id AND f.rn = 1
-WHERE
-    i.function_name = %(function_name)s
-LIMIT %(max_samples)s
-"""
-
-params = {
-    "function_name": FUNCTION_NAME,
-    "max_samples": MAX_SAMPLES,
-}
-
-df = clickhouse_client.query_df(query, params)
-
-df.head()
-
+stored_inferences = tensorzero_client.experimental_list_inferences(
+    function_name=FUNCTION_NAME,
+    variant_name=None,
+    output_source="inference",  # could also be "demonstration"
+    filters=metric_node,
+    limit=MAX_SAMPLES,
+)
 
 # %% [markdown]
 # Render the inputs using the templates.
 #
+
+# %%
+rendered_inferences = tensorzero_client.experimental_render_inferences(
+    stored_inferences=stored_inferences,
+    variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
+)
 
 
 # %%
@@ -190,8 +122,6 @@ def render_message(message: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
     for content_block in message["content"]:
         if content_block["type"] == "text":
             parsed_content = content_block["value"]
-            if not isinstance(parsed_content, str):
-                parsed_content = env.render_template(role, **parsed_content)
             content.append({"type": "text", "text": parsed_content})
         elif content_block["type"] == "raw_text":
             content.append({"type": "text", "text": content_block["value"]})
@@ -247,35 +177,30 @@ def render_output(
     content: List[str] = []
     tool_calls: List[Dict[str, Any]] = []
 
-    if function_type == "json":
-        return {"role": "assistant", "content": output["raw"]}
-    elif function_type == "chat":
-        for content_block in output:
-            if content_block["type"] == "text":
-                content.append({"type": "text", "text": content_block["text"]})
-            elif content_block["type"] == "thought":
-                content.append(
-                    {"type": "text", "text": f"<think>{content_block['text']}</think>"}
-                )
-            elif content_block["type"] == "tool_call":
-                tool_calls.append(
-                    {
-                        "function": {
-                            "arguments": json.dumps(content_block["arguments"]),
-                            "name": content_block["name"],
-                        },
-                        "id": content_block["id"],
-                        "type": "function",
-                    }
-                )
-            else:
-                warnings.warn(
-                    f"We do not support content block type: {content_block['type']}, dropping example.",
-                    UserWarning,
-                )
-                return None
-    else:
-        raise ValueError(f"Unsupported function type: {function_type}")
+    for content_block in output:
+        if content_block["type"] == "text":
+            content.append({"type": "text", "text": content_block["text"]})
+        elif content_block["type"] == "thought":
+            content.append(
+                {"type": "text", "text": f"<think>{content_block['text']}</think>"}
+            )
+        elif content_block["type"] == "tool_call":
+            tool_calls.append(
+                {
+                    "function": {
+                        "arguments": json.dumps(content_block["arguments"]),
+                        "name": content_block["name"],
+                    },
+                    "id": content_block["id"],
+                    "type": "function",
+                }
+            )
+        else:
+            warnings.warn(
+                f"We do not support content block type: {content_block['type']}, dropping example.",
+                UserWarning,
+            )
+            return None
 
     # Once we finish collecting all blocks, create one assistant message.
     output_message: Dict[str, Any] = {"role": "assistant"}
@@ -288,31 +213,25 @@ def render_output(
 
 
 def sample_to_openai_messages(sample) -> List[Dict[str, Any]]:
-    function_input = json.loads(sample["input"])
-
     rendered_messages = []
 
     # Add the system message to the rendered messages
     # If there is data passed in or a system template there must be a system message
-    system = function_input.get("system", {})
-    if len(system) > 0 or system_template_path:
-        if system_template_path:
-            system_message = env.render_template("system", **system)
-            rendered_messages.append({"role": "system", "content": system_message})
-        else:
-            rendered_messages.append({"role": "system", "content": system})
+    system = sample.system
+    if system:
+        rendered_messages.append({"role": "system", "content": system})
 
     # Add the input messages to the rendered messages
-    for message in function_input["messages"]:
+    for message in sample.messages:
         rendered_message = render_message(message)
         if rendered_message is None:
             # `render_message` will return None if the message contains an unknown or unsupported content block.
             # The entire example is dropped if this is the case.
             return None
-        rendered_messages.extend(render_message(message))
+        rendered_messages.extend(rendered_message)
 
     # Add the output to the messages
-    output = json.loads(sample["value"])
+    output = sample.output
     rendered_output = render_output(output)
     if rendered_output is None:
         # `render_output` will return None if the output contains an unknown or unsupported content block.
@@ -323,12 +242,8 @@ def sample_to_openai_messages(sample) -> List[Dict[str, Any]]:
     return {"messages": rendered_messages}
 
 
-df["openai_messages"] = df.apply(sample_to_openai_messages, axis=1)
-
-# Drop null rows
-df = df[df["openai_messages"].notna()]
-
-df.head()
+# %%
+openai_samples = [sample_to_openai_messages(sample) for sample in stored_inferences]
 
 # %% [markdown]
 # Split the data into training and validation sets for fine-tuning.
@@ -336,26 +251,22 @@ df.head()
 
 # %%
 # Get unique episode_ids
-unique_episode_ids = df["episode_id"].unique()
+episode_ids = list(set(sample.episode_id for sample in stored_inferences))
+split_index = int(len(episode_ids) * VAL_FRACTION)
+train_episode_ids = episode_ids[:split_index]
+val_episode_ids = episode_ids[split_index:]
 
-# Shuffle the unique episode_ids
-np.random.seed(42)
-np.random.shuffle(unique_episode_ids)
+train_samples = [
+    sample for sample in stored_inferences if sample.episode_id in train_episode_ids
+]
+val_samples = [
+    sample for sample in stored_inferences if sample.episode_id in val_episode_ids
+]
 
-# Calculate the split index for episode_ids
-split_index = int(len(unique_episode_ids) * (1 - VAL_FRACTION))
 
-# Split the episode_ids into training and validation sets
-train_episode_ids = unique_episode_ids[:split_index]
-val_episode_ids = unique_episode_ids[split_index:]
-
-# Create training and validation DataFrames based on episode_ids
-train_df = df[df["episode_id"].isin(train_episode_ids)]
-val_df = df[df["episode_id"].isin(val_episode_ids)]
-
-print(f"Training set size: {len(train_df)}")
-print(f"Validation set size: {len(val_df)}")
-print(f"Actual validation fraction: {len(val_df) / len(df):.2f}")
+print(f"Training set size: {len(train_samples)}")
+print(f"Validation set size: {len(val_samples)}")
+print(f"Actual validation fraction: {len(val_samples) / len(stored_inferences):.2f}")
 
 
 # %% [markdown]
@@ -364,10 +275,10 @@ print(f"Actual validation fraction: {len(val_df) / len(df):.2f}")
 
 
 # %%
-def upload_dataset_to_openai(df: pd.DataFrame, openai_client: openai.OpenAI) -> str:
+def upload_dataset_to_openai(samples, openai_client: openai.OpenAI) -> str:
     with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
         # Write the openai_messages to the temporary file
-        for item in df["openai_messages"]:
+        for item in samples:
             json.dump(item, f)
             f.write("\n")
         f.flush()
@@ -381,8 +292,8 @@ def upload_dataset_to_openai(df: pd.DataFrame, openai_client: openai.OpenAI) -> 
 
 openai_client = openai.OpenAI()
 
-train_file_object_id = upload_dataset_to_openai(train_df, openai_client)
-val_file_object_id = upload_dataset_to_openai(val_df, openai_client)
+train_file_object_id = upload_dataset_to_openai(train_samples, openai_client)
+val_file_object_id = upload_dataset_to_openai(val_samples, openai_client)
 
 # %% [markdown]
 # Launch the fine-tuning job.
@@ -435,30 +346,6 @@ print(toml.dumps(model_config))
 # %% [markdown]
 # Finally, add a new variant to your function to use the fine-tuned model.
 #
-
-# %%
-variant_config = {
-    "type": "chat_completion",
-    "model": fine_tuned_model,
-}
-
-system_template = variant.get("system_template")
-if system_template:
-    variant_config["system_template"] = system_template
-
-user_template = variant.get("user_template")
-if user_template:
-    variant_config["user_template"] = user_template
-
-assistant_template = variant.get("assistant_template")
-if assistant_template:
-    variant_config["assistant_template"] = assistant_template
-
-full_variant_config = {
-    "functions": {FUNCTION_NAME: {"variants": {fine_tuned_model: variant_config}}}
-}
-
-print(toml.dumps(full_variant_config))
 
 # %% [markdown]
 # You're all set!
