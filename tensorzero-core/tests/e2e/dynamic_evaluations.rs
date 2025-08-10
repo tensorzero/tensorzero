@@ -90,6 +90,7 @@ async fn test_dynamic_evaluation() {
         } else {
             panic!("Expected a non-streaming response");
         };
+        tokio::time::sleep(Duration::from_millis(500)).await;
         // We won't test the output here but will grab from ClickHouse so we can check the variant name
         // and tags
         let clickhouse = get_clickhouse().await;
