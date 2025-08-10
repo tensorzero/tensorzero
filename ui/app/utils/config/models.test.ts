@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { dump_optimizer_output } from "./models";
-import type { OptimizerOutput } from "tensorzero-node";
+import type { OptimizerOutput, TimeoutsConfig } from "tensorzero-node";
 
 describe("dump_optimizer_output", () => {
   it("should create correct config for fireworks model", async () => {
@@ -14,7 +14,7 @@ describe("dump_optimizer_output", () => {
           parse_think_blocks: false,
           api_key_location: null,
           discard_unknown_chunks: false,
-          timeouts: null,
+          timeouts: {} as TimeoutsConfig,
         },
       },
       timeouts: {
@@ -43,7 +43,7 @@ describe("dump_optimizer_output", () => {
           api_base: null,
           api_key_location: null,
           discard_unknown_chunks: false,
-          timeouts: null,
+          timeouts: {} as TimeoutsConfig,
         },
       },
       timeouts: {
