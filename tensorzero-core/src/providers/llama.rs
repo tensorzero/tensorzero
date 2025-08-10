@@ -170,7 +170,7 @@ impl InferenceProvider for LlamaProvider {
                 })
             })?;
 
-            let response = serde_json::from_str(&raw_response).map_err(|e| {
+            let actual_response: LlamaActualResponse = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!(
                         "Error parsing JSON response: {}",
@@ -181,6 +181,9 @@ impl InferenceProvider for LlamaProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
+
+            // Convert LlamaActualResponse to LlamaResponse format
+            let response = convert_llama_actual_response_to_llama_response(actual_response)?;
 
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
@@ -760,29 +763,87 @@ fn tensorzero_to_llama_assistant_messages(
     Ok(vec![message])
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "type")]
-enum LlamaResponseFormat<'a> {
-    #[default]
-    Text,
-    JsonObject {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        schema: Option<&'a Value>, // the desired JSON schema
-    },
-}
+// Llama 4 doesn't support response_format field, so we don't need this enum
 
-impl<'a> LlamaResponseFormat<'a> {
-    fn new(json_mode: &ModelInferenceRequestJsonMode, output_schema: Option<&'a Value>) -> Self {
-        match json_mode {
-            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
-                LlamaResponseFormat::JsonObject {
-                    schema: output_schema,
-                }
-            }
-            ModelInferenceRequestJsonMode::Off => LlamaResponseFormat::Text,
+// Convert LlamaActualResponse to LlamaResponse format
+fn convert_llama_actual_response_to_llama_response(
+    actual_response: LlamaActualResponse,
+) -> Result<LlamaResponse, Error> {
+    let completion_message = actual_response.completion_message;
+    
+    // Extract usage from metrics
+    let mut prompt_tokens = 0;
+    let mut completion_tokens = 0;
+    let mut total_tokens = 0;
+    
+    for metric in &actual_response.metrics {
+        match metric.metric.as_str() {
+            "num_prompt_tokens" => prompt_tokens = metric.value,
+            "num_completion_tokens" => completion_tokens = metric.value,
+            "num_total_tokens" => total_tokens = metric.value,
+            _ => {}
         }
     }
+    
+    let usage = LlamaUsage {
+        prompt_tokens,
+        completion_tokens,
+        total_tokens,
+    };
+    
+    // Convert completion_message to LlamaResponseMessage
+    let message = LlamaResponseMessage {
+        content: Some(completion_message.content.text),
+        tool_calls: None, // Llama doesn't support tool calls in this format
+    };
+    
+    // Convert stop_reason to LlamaFinishReason
+    let finish_reason = match completion_message.stop_reason.as_str() {
+        "stop" => LlamaFinishReason::Stop,
+        "length" => LlamaFinishReason::Length,
+        "content_filter" => LlamaFinishReason::ContentFilter,
+        _ => LlamaFinishReason::Unknown,
+    };
+    
+    let choice = LlamaResponseChoice {
+        index: 0,
+        message,
+        finish_reason,
+    };
+    
+    Ok(LlamaResponse {
+        choices: vec![choice],
+        usage,
+    })
+}
+
+// Actual Llama API response structures
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(super) struct LlamaCompletionMessage {
+    pub role: String,
+    pub stop_reason: String,
+    pub content: LlamaContent,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(super) struct LlamaContent {
+    #[serde(rename = "type")]
+    pub content_type: String,
+    pub text: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(super) struct LlamaMetric {
+    pub metric: String,
+    pub value: u32,
+    pub unit: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(super) struct LlamaActualResponse {
+    pub id: String,
+    pub completion_message: LlamaCompletionMessage,
+    pub metrics: Vec<LlamaMetric>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -896,8 +957,7 @@ struct LlamaRequest<'a> {
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<LlamaResponseFormat<'a>>,
+    // Llama 4 doesn't support response_format field
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<LlamaTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -913,10 +973,7 @@ impl<'a> LlamaRequest<'a> {
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<LlamaRequest<'a>, Error> {
-        let response_format = Some(LlamaResponseFormat::new(
-            &request.json_mode,
-            request.output_schema,
-        ));
+        // Llama 4 doesn't support response_format field
         let stream_options = if request.stream {
             Some(StreamOptions {
                 include_usage: true,
@@ -955,7 +1012,7 @@ impl<'a> LlamaRequest<'a> {
             frequency_penalty: request.frequency_penalty,
             stream: request.stream,
             stream_options,
-            response_format,
+            // Llama 4 doesn't support response_format field
             tools,
             tool_choice,
             parallel_tool_calls,
@@ -1416,7 +1473,7 @@ mod tests {
         assert_eq!(llama_request.presence_penalty, Some(0.1));
         assert_eq!(llama_request.frequency_penalty, Some(0.2));
         assert!(llama_request.stream);
-        assert_eq!(llama_request.response_format, Some(LlamaResponseFormat::Text));
+        // Llama 4 doesn't support response_format field
         assert!(llama_request.tools.is_none());
         assert_eq!(llama_request.tool_choice, None);
         assert!(llama_request.parallel_tool_calls.is_none());
@@ -1462,10 +1519,7 @@ mod tests {
         assert_eq!(llama_request.presence_penalty, None);
         assert_eq!(llama_request.frequency_penalty, None);
         assert!(!llama_request.stream);
-        assert_eq!(
-            llama_request.response_format,
-            Some(LlamaResponseFormat::JsonObject { schema: None })
-        );
+        // Llama 4 doesn't support response_format field
         assert!(llama_request.tools.is_some());
         let tools = llama_request.tools.as_ref().unwrap();
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
@@ -1521,11 +1575,7 @@ mod tests {
         assert_eq!(llama_request.top_p, None);
         assert_eq!(llama_request.presence_penalty, None);
         assert_eq!(llama_request.frequency_penalty, None);
-        // Resolves to normal JSON mode since no schema is provided (this shouldn't really happen in practice)
-        assert_eq!(
-            llama_request.response_format,
-            Some(LlamaResponseFormat::JsonObject { schema: None })
-        );
+        // Llama 4 doesn't support response_format field
 
         // Test request with strict JSON mode with an output schema
         let output_schema = json!({});
@@ -1569,13 +1619,7 @@ mod tests {
         assert_eq!(llama_request.top_p, None);
         assert_eq!(llama_request.presence_penalty, None);
         assert_eq!(llama_request.frequency_penalty, None);
-        let expected_schema = serde_json::json!({});
-        assert_eq!(
-            llama_request.response_format,
-            Some(LlamaResponseFormat::JsonObject {
-                schema: Some(&expected_schema),
-            })
-        );
+        // Llama 4 doesn't support response_format field
     }
 
     #[test]
@@ -1628,7 +1672,6 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(LlamaResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
@@ -1726,7 +1769,6 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(LlamaResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
@@ -1794,7 +1836,6 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(LlamaResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
@@ -1852,7 +1893,6 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(LlamaResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
@@ -2156,41 +2196,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_new_llama_response_format() {
-        // Test JSON mode On
-        let json_mode = ModelInferenceRequestJsonMode::On;
-        let output_schema = None;
-        let format = LlamaResponseFormat::new(&json_mode, output_schema);
-        assert_eq!(format, LlamaResponseFormat::JsonObject { schema: None });
-
-        // Test JSON mode Off
-        let json_mode = ModelInferenceRequestJsonMode::Off;
-        let format = LlamaResponseFormat::new(&json_mode, output_schema);
-        assert_eq!(format, LlamaResponseFormat::Text);
-
-        // Test JSON mode Strict with no schema
-        let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let format = LlamaResponseFormat::new(&json_mode, output_schema);
-        assert_eq!(format, LlamaResponseFormat::JsonObject { schema: None });
-
-        // Test JSON mode Strict with schema
-        let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let json_schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "foo": {"type": "string"}
-            }
-        });
-        let output_schema = Some(&json_schema);
-        let format = LlamaResponseFormat::new(&json_mode, output_schema);
-        assert_eq!(
-            format,
-            LlamaResponseFormat::JsonObject {
-                schema: output_schema
-            }
-        );
-    }
+    // Llama 4 doesn't support response_format field, so this test is no longer needed
 
     #[test]
     fn test_tensorzero_to_llama_system_message() {
@@ -2429,4 +2435,4 @@ mod tests {
             r#"{"content":[{"type":"text","text":"My first message"},{"type":"text","text":"My second message"}]}"#
         );
     }
-}
+} 

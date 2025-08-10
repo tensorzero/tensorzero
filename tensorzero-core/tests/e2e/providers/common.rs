@@ -9931,7 +9931,7 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
         "output_schema": output_schema.clone(),
         "extra_headers": extra_headers.extra_headers,
     });
-
+    
     let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
