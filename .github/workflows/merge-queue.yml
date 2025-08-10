@@ -54,6 +54,9 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
     timeout-minutes: 30
+    strategy:
+      matrix:
+        batch_writes: [true, false]
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -124,6 +127,13 @@ jobs:
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+          echo "TENSORZERO_CLICKHOUSE_BATCH_WRITES=${{ matrix.batch_writes }}" >> $GITHUB_ENV
+
+      - name: Configure batch writes in tensorzero.toml
+        if: matrix.batch_writes == true
+        run: |
+          echo "[gateway.observability.batch_writes]" >> tensorzero-core/tests/e2e/tensorzero.toml
+          echo "enabled = true" >> tensorzero-core/tests/e2e/tensorzero.toml
 
       - name: Download provider-proxy cache
         # When running as a cron job, don't use the provider-proxy cache.
