@@ -1127,7 +1127,7 @@ async fn test_embedding_request() {
             &request,
             &model_name,
             &InferenceClients {
-                http_client: &Default::default(),
+                http_client: &Client::default(),
                 credentials: &api_keys,
                 clickhouse_connection_info: &clickhouse,
                 cache_options: &CacheOptions {
@@ -1195,7 +1195,7 @@ async fn test_embedding_request() {
             &request,
             &model_name,
             &InferenceClients {
-                http_client: &Default::default(),
+                http_client: &Client::default(),
                 credentials: &api_keys,
                 clickhouse_connection_info: &clickhouse,
                 cache_options: &CacheOptions {

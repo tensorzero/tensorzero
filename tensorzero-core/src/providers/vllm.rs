@@ -464,7 +464,10 @@ mod tests {
     use super::*;
 
     use crate::{
-        inference::types::{FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
+        inference::types::{
+            extra_body::FullExtraBodyConfig, FunctionType, ModelInferenceRequestJsonMode,
+            RequestMessage, Role,
+        },
         providers::{
             openai::{
                 OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
@@ -505,7 +508,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -545,7 +548,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -625,7 +628,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let vllm_response_with_metadata = VLLMResponseWithMetadata {
@@ -723,7 +726,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -767,7 +770,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let vllm_request = VLLMRequest::new(&model_name, &request_without_tools).unwrap();
