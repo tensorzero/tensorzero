@@ -174,7 +174,7 @@ impl StreamResponse {
 
 /// Creates a fully-qualified name from a model and provider name, suitable for using
 /// in `ContentBlock::Unknown.model_provider_name`
-/// Note that 'model_name' is a name from `[models]`, which is not necessarily
+/// Note that `model_name` is a name from `[models]`, which is not necessarily
 /// the same as the underlying name passed to a specific provider api
 pub fn fully_qualified_name(model_name: &str, provider_name: &str) -> String {
     format!("tensorzero::model_name::{model_name}::provider_name::{provider_name}")

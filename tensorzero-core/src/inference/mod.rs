@@ -62,11 +62,11 @@ pub trait InferenceProvider {
 }
 
 /// A trait implemented for providers which can be 'wrapped' by another provider.
-/// The AWS Sagemaker provider takes in a 'WrappedProvider', and uses it to build the request
-/// body (which gets wrapped in SigV4) and to deserialized the response body retrieved from the
+/// The AWS Sagemaker provider takes in a `WrappedProvider`, and uses it to build the request
+/// body (which gets wrapped in `SigV4`) and to deserialized the response body retrieved from the
 /// AWS sdk.
 ///
-/// Currently, we only implement `WrappedProvider` for `OpenAI`
+/// Currently, we only implement `WrappedProvider` for OpenAI
 pub trait WrappedProvider: Debug {
     fn thought_block_provider_type_suffix(&self) -> Cow<'static, str>;
 
