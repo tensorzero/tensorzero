@@ -151,6 +151,9 @@ jobs:
         run: |
           ./ci/run-provider-proxy.sh ci
 
+      - name: Debugging with ssh
+        uses: lhotari/action-upterm@v1
+
       - name: Launch the gateway for E2E tests
         run: |
           TENSORZERO_E2E_PROXY="http://localhost:3003" cargo run-e2e > e2e_logs.txt 2>&1 &
