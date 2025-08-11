@@ -955,6 +955,8 @@ struct UninitializedFunctionConfigJson {
     user_schema: Option<TomlRelativePath>,
     assistant_schema: Option<TomlRelativePath>,
     output_schema: Option<TomlRelativePath>, // schema will default to {} if not specified
+    #[serde(default)]
+    description: Option<String>,
 }
 
 impl UninitializedFunctionConfig {
@@ -1066,7 +1068,7 @@ impl UninitializedFunctionConfig {
                     assistant_schema,
                     output_schema,
                     implicit_tool_call_config,
-                    description: None,
+                    description: params.description,
                 }))
             }
         }

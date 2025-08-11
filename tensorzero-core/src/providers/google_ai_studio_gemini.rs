@@ -539,7 +539,7 @@ impl<'a> TryFrom<&'a RequestMessage> for GeminiContent<'a> {
 /// to merge the signature with the next block).
 fn convert_non_thought_content_block(
     block: &ContentBlock,
-) -> Result<FlattenUnknown<GeminiPartData>, Error> {
+) -> Result<FlattenUnknown<'_, GeminiPartData<'_>>, Error> {
     match block {
         ContentBlock::Text(Text { text }) => {
             Ok(FlattenUnknown::Normal(GeminiPartData::Text { text }))
