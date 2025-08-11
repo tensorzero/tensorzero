@@ -32,10 +32,13 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          # Get the tag name from the release
-          VERSION="${{ github.event.release.tag_name }}"
-          # Remove 'v' prefix if present
-          VERSION="${VERSION#v}"
+          # For testing on branches, use "test" version
+          if [ "${{ github.event_name }}" == "release" ]; then
+            # Get the tag name from the release
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            VERSION="test"
+          fi
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "Chart version will be: ${VERSION}"
 
