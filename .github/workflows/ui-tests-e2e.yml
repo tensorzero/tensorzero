@@ -223,7 +223,6 @@ jobs:
           echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
           echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
-          echo "VITE_TENSORZERO_FORCE_CACHE_ON=1" >> fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=${{ secrets.FIREWORKS_ACCOUNT_ID }}" >> fixtures/.env-gateway
           echo "FIREWORKS_API_KEY=${{ secrets.FIREWORKS_API_KEY }}" >> fixtures/.env-gateway
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> fixtures/.env-gateway
