@@ -1137,6 +1137,9 @@ def test_sync_inference_caching(sync_client: TensorZeroGateway):
     assert usage.input_tokens == 10
     assert usage.output_tokens == 1
 
+    # Wait for the cache entry to be written to ClickHouse
+    time.sleep(1)
+
     # Test caching
     result = sync_client.inference(
         function_name="basic_test",
@@ -1208,6 +1211,9 @@ def test_sync_inference_streaming_caching(sync_client: TensorZeroGateway):
     assert final_chunk.usage is not None
     assert final_chunk.usage.input_tokens == 10
     assert final_chunk.usage.output_tokens == 16
+
+    # Wait for the cache entry to be written to ClickHouse
+    time.sleep(1)
 
     # Test caching
     stream = sync_client.inference(
