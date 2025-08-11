@@ -379,7 +379,44 @@ mod tests {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.to_string().contains("Invalid api_key_location"));
+    }
 
-        // The important part is testing that CredentialLocation::None is rejected
+    #[test]
+    fn test_successful_creation_with_env_credentials() {
+        // Assuming CredentialLocation::Env("NVIDIA_API_KEY".to_string()) is valid
+        let result = NvidiaNimProvider::new(
+            "meta/llama-3.1-8b-instruct".to_string(),
+            None,
+            Some(CredentialLocation::Env("NVIDIA_API_KEY".to_string())),
+        );
+
+        assert!(result.is_ok(), "Expected provider creation to succeed with Env credentials");
+    }
+
+    #[test]
+    fn test_missing_model_name() {
+        // Empty model name should be rejected
+        let result = NvidiaNimProvider::new(
+            "".to_string(),
+            None,
+            Some(CredentialLocation::Env("NVIDIA_API_KEY".to_string())),
+        );
+
+        assert!(result.is_err(), "Expected provider creation to fail for empty model name");
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("model_name"), "Error message should reference model_name");
+    }
+
+#[test]
+fn test_invalid_dynamic_credential_key() {
+    // Provide a dynamic credential with an empty string key (likely invalid)
+    let result = NvidiaNimProvider::new(
+        "meta/llama-3.1-8b-instruct".to_string(),
+        None,
+        Some(CredentialLocation::Dynamic("".to_string())),
+    );
+
+    assert!(result.is_err(), "Expected provider creation to fail with empty dynamic credential key");
     }
 }
+
