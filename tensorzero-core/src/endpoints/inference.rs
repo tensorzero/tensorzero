@@ -208,6 +208,7 @@ pub async fn inference<T: Send + 'static>(
     http_client: &reqwest::Client,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
+    // See 'create_stream' for more details about this parameter
     extra_handle: T,
 ) -> Result<InferenceOutput, Error> {
     let span = tracing::Span::current();
@@ -567,6 +568,11 @@ fn create_stream<T: Send + 'static>(
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
+    // An arbitrary 'handle' parameter, which is guaranteed to be dropped after `clickhouse_connection_info`
+    // This is used by the embedded Rust client to ensure that we only drop the last reference to the client
+    // after all outstanding streams have finished (so that we can block in `Drop` from Python without risking
+    // a deadlock due to a `ClickHouseConnectionInfo` being kept alive by a stream in Python
+    // See `GatewayHandle` for more details
     extra_handle: T,
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
