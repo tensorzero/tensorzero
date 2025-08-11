@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { VariantInfo, ChatCompletionConfig } from "tensorzero-node";
 import { Sheet, SheetContent, SheetFooter } from "~/components/ui/sheet";
 import { PageHeader } from "~/components/layout/PageLayout";
@@ -6,6 +6,9 @@ import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { CodeEditor } from "~/components/ui/code-editor";
+
+type TemplateType = "system" | "user" | "assistant";
+type TemplateKey = `${TemplateType}_template`;
 
 interface VariantEditorProps {
   variantInfo: VariantInfo;
@@ -28,6 +31,13 @@ export function VariantEditor({
     config,
   );
 
+  // Which templates existed when we opened?
+  const initialHas = useRef({
+    system: !!config?.system_template,
+    user: !!config?.user_template,
+    assistant: !!config?.assistant_template,
+  });
+
   if (variantInfo.inner.type !== "chat_completion" || !config) {
     return (
       <Sheet open={isOpen} onOpenChange={onClose}>
@@ -40,18 +50,24 @@ export function VariantEditor({
     );
   }
 
-  const updateTemplate = (
-    type: "system" | "user" | "assistant",
-    contents: string,
-  ) => {
+  const updateTemplate = (type: TemplateType, contents: string) => {
     setEditedConfig((prev) => {
       if (!prev) return prev;
-      return {
-        ...prev,
-        [`${type}_template`]: contents
-          ? { contents, path: prev[`${type}_template`]?.path || "" }
-          : null,
-      };
+
+      const key: TemplateKey = `${type}_template`;
+      const hadInitially = initialHas.current[type];
+      if (hadInitially) {
+        // Keep an object even when empty so the editor stays visible/editable.
+        const prevPath = prev[key]?.path || "";
+        return {
+          ...prev,
+          [key]: { contents, path: prevPath },
+        };
+      } else {
+        // Don't allow adding a new template if it's not initially present.
+        // (at least for now)
+        return prev;
+      }
     });
   };
 
@@ -104,13 +120,11 @@ export function VariantEditor({
               <CardTitle>Templates</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* TODO before editing: fix the case where if you clear a template the template is no longer editable */}
-
               <div className="space-y-4">
                 <Label>System Template</Label>
-                {editedConfig?.system_template ? (
+                {initialHas.current.system ? (
                   <CodeEditor
-                    value={editedConfig.system_template.contents}
+                    value={editedConfig?.system_template?.contents ?? ""}
                     allowedLanguages={["jinja2", "text"]}
                     onChange={(value) => updateTemplate("system", value)}
                     className="min-h-[200px]"
@@ -126,9 +140,9 @@ export function VariantEditor({
 
               <div className="space-y-4">
                 <Label>User Template</Label>
-                {editedConfig?.user_template ? (
+                {initialHas.current.user ? (
                   <CodeEditor
-                    value={editedConfig.user_template.contents}
+                    value={editedConfig?.user_template?.contents ?? ""}
                     allowedLanguages={["jinja2", "text"]}
                     onChange={(value) => updateTemplate("user", value)}
                     className="min-h-[200px]"
@@ -144,9 +158,9 @@ export function VariantEditor({
 
               <div className="space-y-8">
                 <Label>Assistant Template</Label>
-                {editedConfig?.assistant_template ? (
+                {initialHas.current.assistant ? (
                   <CodeEditor
-                    value={editedConfig.assistant_template.contents}
+                    value={editedConfig?.assistant_template?.contents ?? ""}
                     allowedLanguages={["jinja2", "text"]}
                     onChange={(value) => updateTemplate("assistant", value)}
                     className="min-h-[200px]"
