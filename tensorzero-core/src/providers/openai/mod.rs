@@ -1156,20 +1156,45 @@ pub fn prepare_openai_messages<'a>(
     json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
     provider_type: &str,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
+    // Throw an error if both system and developer are defined
+    if system.is_some() && developer.is_some() {
+        return Err(Error::new(ErrorDetails::InternalError {
+            message: "Cannot specify both system and developer messages".to_string(),
+        }));
+    }
+
     let mut openai_messages = Vec::with_capacity(messages.len());
     for message in messages {
         openai_messages.extend(tensorzero_to_openai_messages(message, provider_type)?);
     }
-    if let Some(system_msg) =
-        tensorzero_to_openai_system_message(system, json_mode, &openai_messages)
-    {
-        openai_messages.insert(0, system_msg);
+
+    match (system, developer) {
+        // If developer is provided, use developer logic
+        (_, Some(developer)) => {
+            if let Some(developer_msg) =
+                tensorzero_to_openai_developer_message(Some(developer), json_mode, &openai_messages)
+            {
+                openai_messages.insert(0, developer_msg);
+            }
+        }
+        // If only system is provided, use system logic
+        (Some(system), None) => {
+            if let Some(system_msg) =
+                tensorzero_to_openai_system_message(Some(system), json_mode, &openai_messages)
+            {
+                openai_messages.insert(0, system_msg);
+            }
+        }
+        // If neither is provided, use system logic for backwards compatibility (handles JSON mode)
+        (None, None) => {
+            if let Some(system_msg) =
+                tensorzero_to_openai_system_message(None, json_mode, &openai_messages)
+            {
+                openai_messages.insert(0, system_msg);
+            }
+        }
     }
-    if let Some(developer_msg) =
-        tensorzero_to_openai_developer_message(developer, json_mode, &openai_messages)
-    {
-        openai_messages.insert(0, developer_msg);
-    }
+
     Ok(openai_messages)
 }
 
