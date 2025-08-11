@@ -323,7 +323,7 @@ async fn test_cache_stream_write_and_read() {
 }
 
 #[traced_test]
-#[tokio::test(flavor = "multi_thread")]
+#[tokio::test]
 pub async fn test_dont_cache_invalid_tool_call() {
     // We can't
     let is_batched_writes = match std::env::var("TENSORZERO_CLICKHOUSE_BATCH_WRITES") {
@@ -332,8 +332,10 @@ pub async fn test_dont_cache_invalid_tool_call() {
     };
     if is_batched_writes {
         // Skip test if batched writes are enabled
-        // TODO: understand why this test fails when batched writes are enabled
-        // Seems like the desired log is being logged.
+        // The message is logged from the batch writer tokio task, which may run
+        // a different thread when the multi-threaded tokio runtime is used (and fail to be captured)
+        // We cannot use the single-threaded tokio runtime here, since we need to call 'block_in_place'
+        // from GatewayHandle
         return;
     }
     let client = make_embedded_gateway().await;
