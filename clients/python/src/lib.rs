@@ -281,10 +281,10 @@ fn make_dummy_client(py: Python<'_>) -> PyResult<Client> {
     match dummy_client {
         Ok(client) => Ok(client),
         Err(e) => {
-            return Err(tensorzero_core_error(
+            Err(tensorzero_core_error(
                 py,
                 &format!("Failed to construct dummy client: {e:?}"),
-            )?);
+            )?)
         }
     }
 }
