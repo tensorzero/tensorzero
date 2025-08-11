@@ -1,0 +1,18 @@
+{
+    "type": "object",
+    "properties": {
+      "root_causes": {
+        "type": "array",
+        "description": "A list of plausible root causes explaining the failure of the LLM output.",
+        "items": {
+          "type": "string",
+          "description": "A hypothetical cause explaining a possible reason for failure."
+        },
+        "minItems": 1
+      }
+    },
+    "required": [
+      "root_causes"
+    ],
+    "additionalProperties": false
+  }
