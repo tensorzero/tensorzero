@@ -26,6 +26,37 @@ use crate::{
     stored_inference::RenderedSample,
 };
 
+/// Recursively transforms JSON by replacing TomlRelativePath objects with their template strings.
+/// This is needed because OpenAI API expects plain strings, not TomlRelativePath objects.
+fn extract_template_strings_from_json(value: &mut serde_json::Value) -> Result<(), Error> {
+    match value {
+        serde_json::Value::Object(obj) => {
+            // Check if this object is a TomlRelativePath (has __tensorzero_remapped_path and __data)
+            if let (Some(serde_json::Value::String(_path)), Some(serde_json::Value::String(data))) =
+                (obj.get("__tensorzero_remapped_path"), obj.get("__data"))
+            {
+                // Replace the entire object with just the template string
+                *value = serde_json::Value::String(data.clone());
+            } else {
+                // Recursively process all values in the object
+                for val in obj.values_mut() {
+                    extract_template_strings_from_json(val)?;
+                }
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            // Recursively process all values in the array
+            for val in arr.iter_mut() {
+                extract_template_strings_from_json(val)?;
+            }
+        }
+        _ => {
+            // Primitive values don't need transformation
+        }
+    }
+    Ok(())
+}
+
 const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
 
 #[derive(Debug, Clone, Serialize)]
@@ -304,11 +335,21 @@ impl Optimizer for OpenAIRFTConfig {
             self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
             None,
         )?;
+        // First serialize to JSON with TomlRelativePath objects
+        let mut body_json = serde_json::to_value(&body).map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to serialize request body: {e}"),
+            })
+        })?;
+
+        // Transform TomlRelativePath objects to template strings for OpenAI API
+        extract_template_strings_from_json(&mut body_json)?;
+
         let mut request = client.post(url);
         if let Some(api_key) = api_key {
             request = request.bearer_auth(api_key.expose_secret());
         }
-        let res = request.json(&body).send().await.map_err(|e| {
+        let res = request.json(&body_json).send().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceClient {
                 status_code: e.status(),
                 message: format!(
@@ -316,7 +357,7 @@ impl Optimizer for OpenAIRFTConfig {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
+                raw_request: Some(serde_json::to_string(&body_json).unwrap_or_default()),
                 raw_response: None,
             })
         })?;
