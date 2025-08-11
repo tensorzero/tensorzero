@@ -791,10 +791,19 @@ fn convert_llama_actual_response_to_llama_response(
         total_tokens,
     };
     
-    // Convert completion_message to LlamaResponseMessage
+    // Convert completion_message to LlamaResponseMessage (support tool calls or text)
+    let (message_content, message_tool_calls) = match (
+        completion_message.content.as_ref(),
+        completion_message.tool_calls.as_ref(),
+    ) {
+        (Some(content), _) => (Some(content.text.clone()), None),
+        (None, Some(tool_calls)) => (None, Some(tool_calls.clone())),
+        (None, None) => (None, None),
+    };
+
     let message = LlamaResponseMessage {
-        content: Some(completion_message.content.text),
-        tool_calls: None, // Llama doesn't support tool calls in this format
+        content: message_content,
+        tool_calls: message_tool_calls,
     };
     
     // Convert stop_reason to LlamaFinishReason
@@ -802,6 +811,7 @@ fn convert_llama_actual_response_to_llama_response(
         "stop" => LlamaFinishReason::Stop,
         "length" => LlamaFinishReason::Length,
         "content_filter" => LlamaFinishReason::ContentFilter,
+        "tool_calls" => LlamaFinishReason::ToolCalls,
         _ => LlamaFinishReason::Unknown,
     };
     
@@ -822,7 +832,10 @@ fn convert_llama_actual_response_to_llama_response(
 pub(super) struct LlamaCompletionMessage {
     pub role: String,
     pub stop_reason: String,
-    pub content: LlamaContent,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<LlamaContent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<LlamaResponseToolCall>>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1047,7 +1060,8 @@ struct LlamaResponseFunctionCall {
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
 pub(super) struct LlamaResponseToolCall {
     id: String,
-    r#type: LlamaToolType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    r#type: Option<LlamaToolType>,
     function: LlamaResponseFunctionCall,
 }
 
@@ -1723,7 +1737,7 @@ mod tests {
                     content: None,
                     tool_calls: Some(vec![LlamaResponseToolCall {
                         id: "call1".to_string(),
-                        r#type: LlamaToolType::Function,
+                        r#type: Some(LlamaToolType::Function),
                         function: LlamaResponseFunctionCall {
                             name: "test_function".to_string(),
                             arguments: "{}".to_string(),
