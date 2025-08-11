@@ -384,18 +384,22 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                       return (
                         <div
                           key={variant.name}
-                          className="flex items-center justify-between gap-2 border-r p-4 font-mono font-medium last:border-r-0"
+                          className="flex items-center gap-2 border-r p-4 font-mono font-medium last:border-r-0"
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
                             {variant.type === "builtin" ? (
                               <Link
                                 to={`/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variant.name)}`}
-                                className="max-w-full truncate font-mono text-blue-600 hover:text-blue-800 hover:underline"
+                                className="min-w-0 truncate font-mono text-blue-600 hover:text-blue-800 hover:underline"
+                                title={variant.name}
                               >
                                 {getDisplayVariantName(variant)}
                               </Link>
                             ) : (
-                              <span className="max-w-full truncate font-mono text-gray-500">
+                              <span
+                                className="min-w-0 truncate font-mono text-gray-500"
+                                title={variant.name}
+                              >
                                 {getDisplayVariantName(variant)}
                               </span>
                             )}
@@ -414,6 +418,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                           <Button
                             variant="ghost"
                             size="icon"
+                            className="shrink-0"
                             onClick={() => {
                               updateSearchParams({
                                 variants: JSON.stringify(
