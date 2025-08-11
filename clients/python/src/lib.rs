@@ -207,9 +207,14 @@ impl Drop for BaseTensorZeroGateway {
 
 #[pyclass]
 struct AsyncStreamWrapper {
-    #[expect(dead_code)]
-    client: Arc<Client>,
+    client: Option<Arc<Client>>,
     stream: Arc<Mutex<InferenceStream>>,
+}
+
+impl Drop for AsyncStreamWrapper {
+    fn drop(&mut self) {
+        self.client.take();
+    }
 }
 
 #[pymethods]
@@ -245,9 +250,14 @@ impl AsyncStreamWrapper {
 
 #[pyclass]
 struct StreamWrapper {
-    #[expect(dead_code)]
-    client: Arc<Client>,
+    client: Option<Arc<Client>>,
     stream: Arc<Mutex<InferenceStream>>,
+}
+
+impl Drop for StreamWrapper {
+    fn drop(&mut self) {
+        self.client.take();
+    }
 }
 
 #[pymethods]
@@ -838,7 +848,7 @@ impl TensorZeroGateway {
             InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
             InferenceOutput::Streaming(stream) => Ok(StreamWrapper {
                 stream: Arc::new(Mutex::new(stream)),
-                client: client,
+                client: Some(client),
             }
             .into_pyobject(py)?
             .into_any()
@@ -1460,7 +1470,7 @@ impl AsyncTensorZeroGateway {
                     InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
                     InferenceOutput::Streaming(stream) => Ok(AsyncStreamWrapper {
                         stream: Arc::new(Mutex::new(stream)),
-                        client,
+                        client: Some(client),
                     }
                     .into_pyobject(py)?
                     .into_any()
