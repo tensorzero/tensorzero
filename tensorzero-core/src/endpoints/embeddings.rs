@@ -52,6 +52,7 @@ pub async fn embeddings(
             }));
         }
     }
+
     let request = EmbeddingRequest {
         input: params.input,
         dimensions: params.dimensions,

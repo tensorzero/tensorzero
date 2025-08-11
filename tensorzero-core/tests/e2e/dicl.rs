@@ -380,7 +380,7 @@ async fn embed_insert_example(
     };
     let api_keys = InferenceCredentials::default();
     let response = provider_config
-        .embed(&request, &client, &api_keys)
+        .embed(&request, &client, &api_keys, &(&provider_config).into())
         .await
         .unwrap();
 
