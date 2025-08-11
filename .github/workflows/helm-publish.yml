@@ -1,0 +1,98 @@
+# This workflow publishes the Helm chart to R2 when we tag a release.
+name: Publish Helm chart
+
+on:
+  workflow_dispatch:
+  release:
+    types: [released]
+
+jobs:
+  publish-helm-chart:
+    name: Publish Helm chart to R2
+    runs-on: ubuntu-latest
+    # Only run on actual releases, not on pushes to main
+    if: github.event_name == 'release'
+    permissions:
+      contents: read
+    # Required secrets:
+    # - R2_ACCESS_KEY_ID: Cloudflare R2 access key ID
+    # - R2_SECRET_ACCESS_KEY: Cloudflare R2 secret access key
+    # - R2_ENDPOINT_URL: Cloudflare R2 endpoint URL (e.g., https://ACCOUNT_ID.r2.cloudflarestorage.com)
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          # Get the tag name from the release
+          VERSION="${{ github.event.release.tag_name }}"
+          # Remove 'v' prefix if present
+          VERSION="${VERSION#v}"
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Chart version will be: ${VERSION}"
+
+      - name: Update Chart.yaml version
+        run: |
+          cd examples/production-deployment-k8s-helm
+          # Update the version field in Chart.yaml
+          sed -i "s/^version:.*/version: ${{ steps.version.outputs.VERSION }}/" Chart.yaml
+          # Update the appVersion field in Chart.yaml to match
+          sed -i "s/^appVersion:.*/appVersion: \"${{ steps.version.outputs.VERSION }}\"/" Chart.yaml
+          echo "Updated Chart.yaml:"
+          cat Chart.yaml
+
+      - name: Package Helm chart
+        run: |
+          cd examples/production-deployment-k8s-helm
+          helm package .
+          echo "Packaged chart:"
+          ls -la tensorzero-*.tgz
+
+      - name: Configure AWS CLI for R2
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.R2_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          aws configure set default.region auto
+          aws configure set default.s3.signature_version s3v4
+
+      - name: Download existing index.yaml
+        continue-on-error: true
+        run: |
+          cd examples/production-deployment-k8s-helm
+          # Try to download existing index.yaml from R2
+          aws s3 cp s3://tensorzero-helm-charts/index.yaml ./existing-index.yaml \
+            --endpoint-url ${{ secrets.R2_ENDPOINT_URL }} || echo "No existing index.yaml found"
+
+      - name: Generate index.yaml
+        run: |
+          cd examples/production-deployment-k8s-helm
+          if [ -f existing-index.yaml ]; then
+            echo "Merging with existing index.yaml"
+            helm repo index . --url https://helm.tensorzero.com --merge existing-index.yaml
+          else
+            echo "Creating new index.yaml"
+            helm repo index . --url https://helm.tensorzero.com
+          fi
+          echo "Generated index.yaml:"
+          cat index.yaml
+
+      - name: Upload chart package to R2
+        run: |
+          cd examples/production-deployment-k8s-helm
+          CHART_FILE=$(ls tensorzero-*.tgz)
+          aws s3 cp ${CHART_FILE} s3://tensorzero-helm-charts/${CHART_FILE} \
+            --endpoint-url ${{ secrets.R2_ENDPOINT_URL }}
+          echo "Uploaded ${CHART_FILE} to R2"
+
+      - name: Upload index.yaml to R2
+        run: |
+          cd examples/production-deployment-k8s-helm
+          aws s3 cp index.yaml s3://tensorzero-helm-charts/index.yaml \
+            --endpoint-url ${{ secrets.R2_ENDPOINT_URL }}
+          echo "Uploaded index.yaml to R2"
