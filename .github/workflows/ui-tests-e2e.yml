@@ -248,6 +248,16 @@ jobs:
         run: |
           docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml logs -t
 
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
+        with:
+          name: playwright-report-e2e-base-path
+          path: |
+            ui/playwright-report/
+            ui/test-results/
+          retention-days: 7
+
   # Test that the ui e2e tests pass with model inference cache included in this commit
   # and no model provider secrets set.
   ui-tests-e2e-existing-model-inference-cache:
