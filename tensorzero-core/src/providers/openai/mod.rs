@@ -1066,6 +1066,19 @@ impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
     }
 }
 
+impl From<ToolCall> for OpenAIRequestToolCall<'static> {
+    fn from(tool_call: ToolCall) -> Self {
+        OpenAIRequestToolCall {
+            id: Cow::Owned(tool_call.id),
+            r#type: OpenAIToolType::Function,
+            function: OpenAIRequestFunctionCall {
+                name: Cow::Owned(tool_call.name),
+                arguments: Cow::Owned(tool_call.arguments),
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OpenAIAssistantRequestMessage<'a> {
     #[serde(

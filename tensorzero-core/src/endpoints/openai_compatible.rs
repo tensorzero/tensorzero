@@ -19,6 +19,8 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures::Stream;
 use mime::MediaType;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio_stream::StreamExt;
@@ -273,7 +275,7 @@ enum OpenAICompatibleMessage {
     Tool(OpenAICompatibleToolMessage),
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum OpenAICompatibleResponseFormat {
@@ -282,20 +284,35 @@ enum OpenAICompatibleResponseFormat {
     JsonObject,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
 enum JsonSchemaInfoOption {
     JsonSchema(JsonSchemaInfo),
     DeprecatedJsonSchema(Value),
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct JsonSchemaInfo {
+impl std::fmt::Display for JsonSchemaInfoOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "JsonSchemaInfo"))]
+pub struct JsonSchemaInfo {
     name: String,
     description: Option<String>,
     schema: Option<Value>,
     #[serde(default)]
     strict: bool,
+}
+
+impl std::fmt::Display for JsonSchemaInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

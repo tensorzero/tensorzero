@@ -1,16 +1,18 @@
+use pyo3::prelude::*;
+
 use std::{
     borrow::Cow,
     path::{Path, PathBuf},
 };
 
+#[cfg(feature = "pyo3")]
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::error::{Error, ErrorDetails};
 use serde::{Deserialize, Serialize};
 use toml::{
     de::{DeTable, DeValue},
     Spanned, Table,
 };
-
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
-use crate::error::{Error, ErrorDetails};
 
 /// Wrapper type to enforce proper handling of toml-relative paths.
 /// When we add support for config globbing, we'll require deserializing
@@ -18,11 +20,19 @@ use crate::error::{Error, ErrorDetails};
 /// track the original `.toml` file in order to perform correct relative path resolution.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
+/// TODO: Add a pyclass attribute to the TomlRelativePath struct
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "TomlRelativePath"))]
 pub struct TomlRelativePath {
     __tensorzero_remapped_path: PathBuf,
     /// This should be set for dynamic variants to indicate what the file contents would have been at this remapped path.
     #[serde(default)]
     __data: Option<String>,
+}
+
+impl std::fmt::Display for TomlRelativePath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.__tensorzero_remapped_path.display())
+    }
 }
 
 impl TomlRelativePath {
