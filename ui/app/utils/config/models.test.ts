@@ -14,7 +14,14 @@ describe("dump_optimizer_output", () => {
           parse_think_blocks: false,
           api_key_location: null,
           discard_unknown_chunks: false,
-          timeouts: {} as TimeoutsConfig,
+          timeouts: {
+            non_streaming: {
+              total_ms: null,
+            },
+            streaming: {
+              ttft_ms: null,
+            },
+          },
         },
       },
       timeouts: {

@@ -3,7 +3,6 @@ import FineTuningStatus from "./FineTuningStatus";
 import type {
   OptimizationJobInfo,
   OptimizationJobHandle,
-  TimeoutsConfig,
 } from "tensorzero-node";
 import { withRouter } from "storybook-addon-remix-react-router";
 
@@ -109,7 +108,10 @@ export const Completed: Story = {
             type: "openai",
             model_name: "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
             api_base: null,
-            timeouts: {} as TimeoutsConfig,
+            timeouts: {
+              non_streaming: { total_ms: null },
+              streaming: { ttft_ms: null },
+            },
             discard_unknown_chunks: false,
             api_key_location: null,
           },
@@ -170,7 +172,10 @@ export const LongJobId: Story = {
             type: "openai",
             model_name: "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
             api_base: null,
-            timeouts: {} as TimeoutsConfig,
+            timeouts: {
+              non_streaming: { total_ms: null },
+              streaming: { ttft_ms: null },
+            },
             discard_unknown_chunks: false,
             api_key_location: null,
           },
