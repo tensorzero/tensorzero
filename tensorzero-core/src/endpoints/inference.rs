@@ -153,7 +153,7 @@ pub async fn inference_handler(
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
     let inference_output =
-        inference(config, &http_client, clickhouse_connection_info, params).await?;
+        inference(config, &http_client, clickhouse_connection_info, params, ()).await?;
     match inference_output {
         InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
         InferenceOutput::Streaming(stream) => {
@@ -193,7 +193,7 @@ pub struct InferenceIds {
 
 #[instrument(
     name="inference",
-    skip(config, http_client, clickhouse_connection_info, params),
+    skip(config, http_client, clickhouse_connection_info, params, extra_handle),
     fields(
         function_name,
         model_name,
@@ -203,11 +203,12 @@ pub struct InferenceIds {
         otel.name = "function_inference"
     )
 )]
-pub async fn inference(
+pub async fn inference<T: Send + 'static>(
     config: Arc<Config>,
     http_client: &reqwest::Client,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
+    extra_handle: T,
 ) -> Result<InferenceOutput, Error> {
     let span = tracing::Span::current();
     if let Some(function_name) = &params.function_name {
@@ -402,6 +403,7 @@ pub async fn inference(
                 inference_metadata,
                 stream,
                 clickhouse_connection_info,
+                extra_handle,
             );
 
             return Ok(InferenceOutput::Streaming(Box::pin(stream)));
@@ -559,12 +561,13 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
     }
 }
 
-fn create_stream(
+fn create_stream<T: Send + 'static>(
     function: Arc<FunctionConfig>,
     config: Arc<Config>,
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
+    extra_handle: T,
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
@@ -707,6 +710,8 @@ fn create_stream(
                         ).await;
 
                 }
+                drop(clickhouse_connection_info);
+                drop(extra_handle);
             };
             if async_write {
                 tokio::spawn(write_future);
