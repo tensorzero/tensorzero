@@ -239,6 +239,11 @@ jobs:
           TENSORZERO_CI: 1
         run: pnpm ui:test:e2e --grep "@credentials"
 
+      - name: Print docker compose logs
+        if: always()
+        run: |
+          docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml logs -t
+
   # Test that the ui e2e tests pass with model inference cache included in this commit
   # and no model provider secrets set.
   ui-tests-e2e-existing-model-inference-cache:
