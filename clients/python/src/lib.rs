@@ -24,6 +24,7 @@ use python_helpers::{
     parse_feedback_response, parse_inference_chunk, parse_inference_response, parse_tool,
     python_uuid_to_uuid,
 };
+use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
 use tensorzero_core::{
     clickhouse::{query_builder::OrderBy, ClickhouseFormat},
     config_parser::{ConfigPyClass, FunctionsConfigPyClass},
@@ -174,6 +175,26 @@ fn _start_http_gateway(
 #[pyclass(subclass)]
 struct BaseTensorZeroGateway {
     client: Arc<Client>,
+    dummy_client: Option<Client>,
+}
+
+impl Drop for BaseTensorZeroGateway {
+    fn drop(&mut self) {
+        // We need to be inside a Tokio content when the `Client` is dropped.
+        // We might be the last holder of the `Arc`, so enter the Tokio runtime.
+        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
+        if let Some(dummy_client) = self.dummy_client.take() {
+            // Use our dummy client to move out of `self.client` (we cannot clone the Arc,
+            // as the original instance would still exist in `self.client`, and be dropped
+            // outside of this `drop` method.
+            let real_client = std::mem::replace(&mut self.client, Arc::new(dummy_client));
+            drop(real_client);
+        } else {
+            tracing::error!(
+                "BaseTensorZeroGateway dropped without a dummy client. {IMPOSSIBLE_ERROR_MESSAGE}"
+            );
+        }
+    }
 }
 
 #[pyclass]
@@ -236,6 +257,30 @@ impl StreamWrapper {
     }
 }
 
+/// Constructs a dummy embedded client. We use this so that we can move out of the real 'client'
+/// field of `BaseTensorZeroGateway` when it is dropped.
+fn make_dummy_client(py: Python<'_>) -> PyResult<Client> {
+    let dummy_client = tokio_block_on_without_gil(py, async move {
+        ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: None,
+            clickhouse_url: None,
+            timeout: None,
+            verify_credentials: false,
+        })
+        .build()
+        .await
+    });
+    match dummy_client {
+        Ok(client) => Ok(client),
+        Err(e) => {
+            return Err(tensorzero_core_error(
+                py,
+                &format!("Failed to construct dummy client: {e:?}"),
+            )?);
+        }
+    }
+}
+
 #[pymethods]
 impl BaseTensorZeroGateway {
     #[new]
@@ -275,6 +320,7 @@ impl BaseTensorZeroGateway {
 
         Ok(Self {
             client: Arc::new(client),
+            dummy_client: Some(make_dummy_client(py)?),
         })
     }
 
@@ -559,6 +605,7 @@ impl TensorZeroGateway {
         };
         let instance = PyClassInitializer::from(BaseTensorZeroGateway {
             client: Arc::new(client),
+            dummy_client: Some(make_dummy_client(cls.py())?),
         })
         .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
@@ -637,6 +684,7 @@ impl TensorZeroGateway {
         // Construct an instance of `TensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
         let instance = PyClassInitializer::from(BaseTensorZeroGateway {
             client: Arc::new(client),
+            dummy_client: Some(make_dummy_client(cls.py())?),
         })
         .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
@@ -1174,6 +1222,7 @@ impl AsyncTensorZeroGateway {
             client_builder = client_builder.with_http_client(http_client);
         }
         let client_fut = client_builder.build();
+        let dummy_client = make_dummy_client(cls.py())?;
         let build_gateway = async move {
             let client = client_fut.await;
             // We need to interact with Python objects here (to build up a Python `AsyncTensorZeroGateway`),
@@ -1192,6 +1241,7 @@ impl AsyncTensorZeroGateway {
                 // Construct an instance of `AsyncTensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
                 let instance = PyClassInitializer::from(BaseTensorZeroGateway {
                     client: Arc::new(client),
+                    dummy_client: Some(dummy_client),
                 })
                 .add_subclass(AsyncTensorZeroGateway {});
                 Py::new(py, instance)
@@ -1272,7 +1322,7 @@ impl AsyncTensorZeroGateway {
             verify_credentials: true,
         })
         .build();
-
+        let dummy_client = make_dummy_client(cls.py())?;
         let fut = async move {
             let client = client_fut.await;
             // We need to interact with Python objects here (to build up a Python `AsyncTensorZeroGateway`),
@@ -1291,6 +1341,7 @@ impl AsyncTensorZeroGateway {
                 // Construct an instance of `AsyncTensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
                 let instance = PyClassInitializer::from(BaseTensorZeroGateway {
                     client: Arc::new(client),
+                    dummy_client: Some(dummy_client),
                 })
                 .add_subclass(AsyncTensorZeroGateway {});
                 Py::new(py, instance)
