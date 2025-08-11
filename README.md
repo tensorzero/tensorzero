@@ -14,6 +14,8 @@
 
 Take what you need, adopt incrementally, and complement with other tools.
 
+<video src="https://github.com/user-attachments/assets/04a8466e-27d8-4189-b305-e7cecb6881ee"></video>
+
 ---
 
 <p align="center">
@@ -306,15 +308,31 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 - [ ] Soon: AI-assisted debugging and root cause analysis; AI-assisted data labeling
 
 <table>
-  <tr></tr> <!-- flip highlight order -->
-  <tr>
-    <td width="50%" align="center" valign="middle"><b>Observability » Inference</b></td>
-    <td width="50%" align="center" valign="middle"><b>Observability » Function</b></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/2cc3cc9a-f33f-4e94-b8de-07522326f80a"></td>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/00ae6605-8fa0-4efd-8238-ae8ea589860f"></td>
-  </tr>
+<tr></tr> <!-- flip highlight order -->
+<tr>
+<td width="50%" align="center" valign="middle"><b>Observability » UI</b></td>
+<td width="50%" align="center" valign="middle"><b>Observability » Programmatic</b></td>
+</tr>
+<tr>
+<td width="50%" align="center" valign="middle"><video src="https://github.com/user-attachments/assets/a23e4c95-18fa-482c-8423-6078fb4cf285"></video></td>
+<td width="50%" align="left" valign="middle">
+  
+```python
+t0.experimental_list_inferences(
+  function_name="sales_agent",
+  variant_name="qwen3-promptv2",
+  filters=BooleanMetricFilter(
+      metric_name="converted_sale",
+      value=True,
+  ),
+  order_by=[OrderBy(by="timestamp", direction="DESC")],
+  limit=100_000,
+  # ... and more ...
+)
+```
+
+</td>
+</tr>
 </table>
 
 <br>
@@ -340,7 +358,7 @@ Optimize closed-source and open-source models using supervised fine-tuning (SFT)
     <td width="50%" align="center" valign="middle"><b>Preference Fine-tuning (DPO) &mdash; Jupyter Notebook</b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/cf7acf66-732b-43b3-af2a-5eba1ce40f6f"></td>
+    <td width="50%" align="center" valign="middle"><video src="https://github.com/user-attachments/assets/82f76be7-5e02-4ada-b503-69dfa209a442"></video></td>
     <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/a67a0634-04a7-42b0-b934-9130cb7cdf51"></td>
   </tr>
 </table>
