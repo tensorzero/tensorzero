@@ -207,6 +207,8 @@ impl Drop for BaseTensorZeroGateway {
 
 #[pyclass]
 struct AsyncStreamWrapper {
+    #[expect(dead_code)]
+    client: Arc<Client>,
     stream: Arc<Mutex<InferenceStream>>,
 }
 
@@ -243,6 +245,8 @@ impl AsyncStreamWrapper {
 
 #[pyclass]
 struct StreamWrapper {
+    #[expect(dead_code)]
+    client: Arc<Client>,
     stream: Arc<Mutex<InferenceStream>>,
 }
 
@@ -280,12 +284,10 @@ fn make_dummy_client(py: Python<'_>) -> PyResult<Client> {
     });
     match dummy_client {
         Ok(client) => Ok(client),
-        Err(e) => {
-            Err(tensorzero_core_error(
-                py,
-                &format!("Failed to construct dummy client: {e:?}"),
-            )?)
-        }
+        Err(e) => Err(tensorzero_core_error(
+            py,
+            &format!("Failed to construct dummy client: {e:?}"),
+        )?),
     }
 }
 
@@ -804,32 +806,30 @@ impl TensorZeroGateway {
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
     ) -> PyResult<Py<PyAny>> {
-        let fut =
-            this.as_super()
-                .client
-                .inference(BaseTensorZeroGateway::prepare_inference_params(
-                    py,
-                    input,
-                    function_name,
-                    model_name,
-                    episode_id,
-                    stream,
-                    params,
-                    variant_name,
-                    dryrun,
-                    output_schema,
-                    allowed_tools,
-                    additional_tools,
-                    tool_choice,
-                    parallel_tool_calls,
-                    internal.unwrap_or(false),
-                    tags,
-                    credentials,
-                    cache_options,
-                    extra_body,
-                    extra_headers,
-                    include_original_response.unwrap_or(false),
-                )?);
+        let client = this.as_super().client.clone();
+        let fut = client.inference(BaseTensorZeroGateway::prepare_inference_params(
+            py,
+            input,
+            function_name,
+            model_name,
+            episode_id,
+            stream,
+            params,
+            variant_name,
+            dryrun,
+            output_schema,
+            allowed_tools,
+            additional_tools,
+            tool_choice,
+            parallel_tool_calls,
+            internal.unwrap_or(false),
+            tags,
+            credentials,
+            cache_options,
+            extra_body,
+            extra_headers,
+            include_original_response.unwrap_or(false),
+        )?);
 
         // We're in the synchronous `TensorZeroGateway` class, so we need to block on the Rust future,
         // and then return the result to the Python caller directly (not wrapped in a Python `Future`).
@@ -838,6 +838,7 @@ impl TensorZeroGateway {
             InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
             InferenceOutput::Streaming(stream) => Ok(StreamWrapper {
                 stream: Arc::new(Mutex::new(stream)),
+                client: client,
             }
             .into_pyobject(py)?
             .into_any()
@@ -1459,6 +1460,7 @@ impl AsyncTensorZeroGateway {
                     InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
                     InferenceOutput::Streaming(stream) => Ok(AsyncStreamWrapper {
                         stream: Arc::new(Mutex::new(stream)),
+                        client,
                     }
                     .into_pyobject(py)?
                     .into_any()
