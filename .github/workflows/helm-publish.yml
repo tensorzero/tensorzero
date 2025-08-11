@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
   release:
     types: [released]
+  push:
 
 jobs:
   publish-helm-chart:
