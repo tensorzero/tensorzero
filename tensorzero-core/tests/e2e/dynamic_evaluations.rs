@@ -266,6 +266,7 @@ async fn test_dynamic_evaluation_other_function() {
     };
     // We won't test the output here but will grab from ClickHouse so we can check the variant name
     // and tags
+    tokio::time::sleep(Duration::from_millis(100)).await;
     let clickhouse = get_clickhouse().await;
     let result = select_chat_inference_clickhouse(&clickhouse, response.inference_id())
         .await
@@ -292,6 +293,8 @@ async fn test_dynamic_evaluation_variant_error() {
     };
     let result = client.dynamic_evaluation_run(params).await.unwrap();
     let run_id = result.run_id;
+    // Sleep for 100ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(Duration::from_millis(100)).await;
     let clickhouse = get_clickhouse().await;
     let run_row = select_dynamic_evaluation_run_clickhouse(&clickhouse, run_id)
         .await
