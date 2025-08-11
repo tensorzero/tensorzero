@@ -361,6 +361,15 @@ async fn main() {
 
     // Print whether observability is enabled
     tracing::info!("├ Observability: {observability_enabled_pretty}");
+    if config.gateway.observability.batch_writes.enabled {
+        tracing::info!(
+            "├ Batch Writes: enabled (flush_interval_ms = {}, max_rows = {})",
+            config.gateway.observability.batch_writes.flush_interval_ms,
+            config.gateway.observability.batch_writes.max_rows
+        );
+    } else {
+        tracing::info!("├ Batch Writes: disabled");
+    }
 
     // Print whether OpenTelemetry is enabled
     if config.gateway.export.otlp.traces.enabled {
