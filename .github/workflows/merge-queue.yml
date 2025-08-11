@@ -135,6 +135,7 @@ jobs:
         run: |
           echo "[gateway.observability.batch_writes]" >> tensorzero-core/tests/e2e/tensorzero.toml
           echo "enabled = true" >> tensorzero-core/tests/e2e/tensorzero.toml
+          echo "flush_interval_ms = 90" >> tensorzero-core/tests/e2e/tensorzero.toml
 
       - name: Download provider-proxy cache
         # When running as a cron job, don't use the provider-proxy cache.
