@@ -717,6 +717,7 @@ routing = ["openai"]
 [embedding_models.text-embedding-3-small.providers.openai]
 type = "openai"
 model_name = "text-embedding-3-small"
+extra_body = [{ pointer = "/user", value = "my_user" }]
 
 [embedding_models.azure-text-embedding-3-small]
 routing = ["azure"]

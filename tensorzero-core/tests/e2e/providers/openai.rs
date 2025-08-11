@@ -1251,13 +1251,14 @@ async fn test_embedding_sanity_check() {
         dimensions: None,
         encoding_format: EmbeddingEncodingFormat::Float,
     };
+    let request_info = (&provider_config).into();
     let api_keys = InferenceCredentials::default();
 
     // Compute all 3 embeddings concurrently
     let (response_a, response_b, response_c) = tokio::join!(
-        provider_config.embed(&embedding_request_a, &client, &api_keys),
-        provider_config.embed(&embedding_request_b, &client, &api_keys),
-        provider_config.embed(&embedding_request_c, &client, &api_keys)
+        provider_config.embed(&embedding_request_a, &client, &api_keys, &request_info),
+        provider_config.embed(&embedding_request_b, &client, &api_keys, &request_info),
+        provider_config.embed(&embedding_request_c, &client, &api_keys, &request_info)
     );
 
     // Unwrap the results

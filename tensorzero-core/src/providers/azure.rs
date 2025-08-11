@@ -11,12 +11,13 @@ use url::Url;
 use crate::cache::ModelProviderRequest;
 use crate::embeddings::{
     Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingProvider,
-    EmbeddingProviderResponse, EmbeddingRequest,
+    EmbeddingProviderRequestInfo, EmbeddingProviderResponse, EmbeddingRequest,
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -291,28 +292,36 @@ impl EmbeddingProvider for AzureProvider {
         request: &EmbeddingRequest,
         client: &reqwest::Client,
         dynamic_api_keys: &InferenceCredentials,
+        model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let request_url = get_azure_embedding_url(&self.endpoint, &self.deployment_id)?;
         let request_body = AzureEmbeddingRequest::new(request);
 
-        let request = client
+        let request_builder = client
             .post(request_url)
-            .header("api-key", api_key.expose_secret())
-            .json(&request_body);
+            .header("api-key", api_key.expose_secret());
         let start_time = Instant::now();
-        let response = request.send().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceClient {
-                status_code: e.status(),
+
+        let request_body_value = serde_json::to_value(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
                 message: format!(
-                    "Error sending request to Azure: {}",
+                    "Error serializing Azure embedding request: {}",
                     DisplayOrDebugGateway::new(e)
                 ),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                raw_response: None,
             })
         })?;
+
+        let (response, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
+            &FullExtraBodyConfig::default(), // No overrides supported
+            &Default::default(),             // No extra headers for embeddings yet
+            model_provider_data,
+            &self.deployment_id,
+            request_body_value,
+            request_builder,
+        )
+        .await?;
         if response.status().is_success() {
             let raw_response = response.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
@@ -320,7 +329,7 @@ impl EmbeddingProvider for AzureProvider {
                         "Error parsing text response: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
@@ -332,7 +341,7 @@ impl EmbeddingProvider for AzureProvider {
                             "Error parsing JSON response: {}",
                             DisplayOrDebugGateway::new(e)
                         ),
-                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                        raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
                     })
@@ -348,8 +357,7 @@ impl EmbeddingProvider for AzureProvider {
             )?)
         } else {
             let status = response.status();
-            let raw_request = serde_json::to_string(&request_body).unwrap_or_default();
-            let response = response.text().await.map_err(|e| {
+            let response_text = response.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!(
                         "Error parsing error response: {}",
@@ -363,7 +371,7 @@ impl EmbeddingProvider for AzureProvider {
             Err(handle_openai_error(
                 &raw_request,
                 status,
-                &response,
+                &response_text,
                 PROVIDER_TYPE,
             ))
         }
