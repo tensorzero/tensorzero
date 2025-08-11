@@ -220,10 +220,10 @@ jobs:
           echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
           echo "VITE_TENSORZERO_FORCE_CACHE_ON=1" >> fixtures/.env
-          echo "FIREWORKS_ACCOUNT_ID=${{ secrets.FIREWORKS_ACCOUNT_ID }}" >> fixtures/.env
-          echo "FIREWORKS_API_KEY=${{ secrets.FIREWORKS_API_KEY }}" >> fixtures/.env
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> fixtures/.env
-          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> fixtures/.env
+          echo "FIREWORKS_ACCOUNT_ID=${{ secrets.FIREWORKS_ACCOUNT_ID }}" >> fixtures/.env-gateway
+          echo "FIREWORKS_API_KEY=${{ secrets.FIREWORKS_API_KEY }}" >> fixtures/.env-gateway
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> fixtures/.env-gateway
+          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> fixtures/.env-gateway
           echo "S3_ACCESS_KEY_ID=${{ secrets.S3_ACCESS_KEY_ID }}" >> fixtures/.env
           echo "S3_SECRET_ACCESS_KEY=${{ secrets.S3_SECRET_ACCESS_KEY }}" >> fixtures/.env
 
