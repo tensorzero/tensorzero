@@ -34,6 +34,7 @@ cargo run-e2e > e2e_logs.txt 2>&1 &
         count=$((count + 1))
         if [ $count -ge $max_attempts ]; then
         echo "Gateway failed to become healthy after $max_attempts attempts"
+        cat e2e_logs.txt
         exit 1
         fi
     done

@@ -3,4 +3,9 @@
 export type ObservabilityConfig = {
   enabled: boolean | null;
   async_writes: boolean;
+  /**
+   * If `true`, then we skip checking/applying migrations if the `TensorZeroMigration` table
+   * contains exactly the migrations that we expect to have run.
+   */
+  skip_completed_migrations: boolean;
 };

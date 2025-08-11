@@ -70,6 +70,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         let InterceptorAndRawBody {
             interceptor,
             get_raw_request,
+            get_raw_response,
         } = build_interceptor(
             request.request,
             model_provider,
@@ -102,7 +103,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                         DisplayErrorContext(&e)
                     ),
                     raw_request: get_raw_request().ok(),
-                    raw_response: None,
+                    raw_response: get_raw_response().ok(),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -148,6 +149,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         let InterceptorAndRawBody {
             interceptor,
             get_raw_request,
+            get_raw_response,
         } = build_interceptor(
             request.request,
             model_provider,
@@ -178,7 +180,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                         DisplayErrorContext(&e)
                     ),
                     raw_request: get_raw_request().ok(),
-                    raw_response: None,
+                    raw_response: get_raw_response().ok(),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
