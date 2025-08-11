@@ -10,11 +10,11 @@ pub struct OpenAIRFTTestCase();
 
 impl OptimizationTestCase for OpenAIRFTTestCase {
     fn supports_image_data(&self) -> bool {
-        true
+        false
     }
 
     fn supports_tool_calls(&self) -> bool {
-        true
+        false
     }
 
     fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {

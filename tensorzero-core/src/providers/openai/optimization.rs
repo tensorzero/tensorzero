@@ -103,7 +103,7 @@ pub struct ReinforcementHyperparameters {
     pub reasoning_effort: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "Grader"))]
@@ -151,6 +151,112 @@ impl std::fmt::Display for Grader {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+impl Serialize for Grader {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+
+        match self {
+            Grader::StringCheck {
+                name,
+                operation,
+                input,
+                reference,
+            } => {
+                let mut map = serializer.serialize_map(Some(5))?;
+                map.serialize_entry("type", "string_check")?;
+                map.serialize_entry("name", name)?;
+                map.serialize_entry("operation", operation)?;
+                // Extract the template string from TomlRelativePath
+                let input_str = input.read().unwrap_or_else(|_| input.to_string());
+                map.serialize_entry("input", &input_str)?;
+                let reference_str = reference.read().unwrap_or_else(|_| reference.to_string());
+                map.serialize_entry("reference", &reference_str)?;
+                map.end()
+            }
+            Grader::TextSimilarity {
+                name,
+                evaluation_metric,
+                input,
+                reference,
+            } => {
+                let mut map = serializer.serialize_map(Some(5))?;
+                map.serialize_entry("type", "text_similarity")?;
+                map.serialize_entry("name", name)?;
+                map.serialize_entry("evaluation_metric", evaluation_metric)?;
+                // Extract the template string from TomlRelativePath
+                let input_str = input.read().unwrap_or_else(|_| input.to_string());
+                map.serialize_entry("input", &input_str)?;
+                let reference_str = reference.read().unwrap_or_else(|_| reference.to_string());
+                map.serialize_entry("reference", &reference_str)?;
+                map.end()
+            }
+            Grader::ScoreModel {
+                name,
+                model,
+                input,
+                range,
+            } => {
+                let mut map = serializer.serialize_map(Some(5))?;
+                map.serialize_entry("type", "score_model")?;
+                map.serialize_entry("name", name)?;
+                map.serialize_entry("model", model)?;
+                map.serialize_entry("input", input)?;
+                if let Some(r) = range {
+                    map.serialize_entry("range", r)?;
+                }
+                map.end()
+            }
+            Grader::LabelModel {
+                name,
+                model,
+                labels,
+                passing_labels,
+                input,
+            } => {
+                let mut map = serializer.serialize_map(Some(6))?;
+                map.serialize_entry("type", "label_model")?;
+                map.serialize_entry("name", name)?;
+                map.serialize_entry("model", model)?;
+                map.serialize_entry("labels", labels)?;
+                map.serialize_entry("passing_labels", passing_labels)?;
+                map.serialize_entry("input", input)?;
+                map.end()
+            }
+            Grader::Python {
+                name,
+                source,
+                image_tag,
+            } => {
+                let mut map = serializer.serialize_map(Some(4))?;
+                map.serialize_entry("type", "python")?;
+                map.serialize_entry("name", name)?;
+                // Extract the source code from TomlRelativePath
+                let source_str = source.read().unwrap_or_else(|_| source.to_string());
+                map.serialize_entry("source", &source_str)?;
+                if let Some(tag) = image_tag {
+                    map.serialize_entry("image_tag", tag)?;
+                }
+                map.end()
+            }
+            Grader::Multi {
+                calculate_output,
+                graders,
+                name,
+            } => {
+                let mut map = serializer.serialize_map(Some(4))?;
+                map.serialize_entry("type", "multi")?;
+                map.serialize_entry("name", name)?;
+                map.serialize_entry("calculate_output", calculate_output)?;
+                map.serialize_entry("graders", graders)?;
+                map.end()
+            }
+        }
     }
 }
 
@@ -317,6 +423,7 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAISupervisedRow<'a> {
         };
         let mut messages = prepare_openai_messages(
             inference.input.system.as_deref(),
+            None,
             &inference.input.messages,
             None,
             PROVIDER_TYPE,
@@ -376,6 +483,7 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAIReinforcementRow<'a> {
             None => (false, vec![]),
         };
         let messages = prepare_openai_messages(
+            None,
             inference.input.system.as_deref(),
             &inference.input.messages,
             None,

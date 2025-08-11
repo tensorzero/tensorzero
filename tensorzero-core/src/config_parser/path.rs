@@ -1,3 +1,4 @@
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
 use std::{
@@ -5,7 +6,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[cfg(feature = "pyo3")]
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::{Error, ErrorDetails};
 use serde::{Deserialize, Serialize};

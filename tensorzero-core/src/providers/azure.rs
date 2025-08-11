@@ -528,6 +528,7 @@ impl<'a> AzureRequest<'a> {
         let response_format = AzureResponseFormat::new(request.json_mode, request.output_schema);
         let messages = prepare_openai_messages(
             request.system.as_deref(),
+            None,
             &request.messages,
             Some(&request.json_mode),
             PROVIDER_TYPE,

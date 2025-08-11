@@ -358,6 +358,7 @@ impl<'a> XAIRequest<'a> {
 
         let messages = prepare_openai_messages(
             request.system.as_deref(),
+            None,
             &request.messages,
             Some(&request.json_mode),
             PROVIDER_TYPE,
