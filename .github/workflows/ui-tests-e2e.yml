@@ -139,8 +139,7 @@ jobs:
         id: e2e_tests_credentials
         env:
           TENSORZERO_CI: 1
-        # We currently have no tests that require credentials
-        run: pnpm ui:test:e2e --grep "@credentials" --pass-with-no-tests
+        run: pnpm ui:test:e2e --grep "@credentials"
 
       - name: Print Docker Compose logs
         if: always()
