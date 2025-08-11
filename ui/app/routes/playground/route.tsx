@@ -538,6 +538,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
           }
           return (
             <VariantEditor
+              key={editingVariant.name}
               variantInfo={variantInfo}
               confirmVariantInfo={(newVariantInfo) => {
                 const newVariantName = getNewVariantName(editingVariant.name);
