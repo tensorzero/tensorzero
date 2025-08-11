@@ -8,6 +8,6 @@ dependencies = [
     "ipykernel",
     "notebook",
     "pandas",
-    "tensorzero",
+    "tensorzero > 2025.8.0",
     "tqdm",
 ]
