@@ -19,6 +19,7 @@ jobs:
     # Required secrets:
     # - R2_ACCESS_KEY_ID: Cloudflare R2 access key ID
     # - R2_SECRET_ACCESS_KEY: Cloudflare R2 secret access key
+    # Required variables:
     # - R2_ENDPOINT_URL: Cloudflare R2 endpoint URL (e.g., https://ACCOUNT_ID.r2.cloudflarestorage.com)
     steps:
       - name: Check out the repo
@@ -29,35 +30,70 @@ jobs:
         with:
           version: 'latest'
 
-      - name: Extract version from tag
+      - name: Extract version from Cargo.toml
         id: version
         run: |
-          # For testing on branches, use "test" version
-          if [ "${{ github.event_name }}" == "release" ]; then
-            # Get the tag name from the release
-            VERSION="${{ github.event.release.tag_name }}"
-          else
-            VERSION="0.0.0"
-          fi
+          echo "=== Extracting version from Cargo.toml ==="
+          echo "Current directory: $(pwd)"
+          echo "Cargo.toml contents (first 30 lines):"
+          head -30 Cargo.toml
+          echo ""
+          echo "Looking for version line..."
+          # Extract version from Cargo.toml workspace.package section
+          VERSION=$(grep -E '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-          echo "Chart version will be: ${VERSION}"
+          echo "Extracted version: ${VERSION}"
+          echo "========================="
 
       - name: Update Chart.yaml version
         run: |
           cd examples/production-deployment-k8s-helm
+          echo "=== Updating Chart.yaml ==="
+          echo "Current directory: $(pwd)"
+          echo ""
+          echo "Chart.yaml BEFORE updates:"
+          echo "----------------------------"
+          cat Chart.yaml
+          echo "----------------------------"
+          echo ""
           # Update the version field in Chart.yaml
           sed -i "s/^version:.*/version: ${{ steps.version.outputs.VERSION }}/" Chart.yaml
           # Update the appVersion field in Chart.yaml to match
           sed -i "s/^appVersion:.*/appVersion: \"${{ steps.version.outputs.VERSION }}\"/" Chart.yaml
-          echo "Updated Chart.yaml:"
+          echo "Chart.yaml AFTER updates:"
+          echo "----------------------------"
           cat Chart.yaml
+          echo "----------------------------"
+          echo "========================="
 
       - name: Package Helm chart
         run: |
           cd examples/production-deployment-k8s-helm
+          echo "=== Packaging Helm chart ==="
+          echo "Current directory: $(pwd)"
+          echo ""
+          echo "Files in directory before packaging:"
+          ls -la
+          echo ""
           helm package .
-          echo "Packaged chart:"
-          ls -la tensorzero-*.tgz
+          echo ""
+          echo "Files in directory after packaging:"
+          ls -la
+          echo ""
+          echo "Package details:"
+          for pkg in tensorzero-*.tgz; do
+            if [ -f "$pkg" ]; then
+              echo "  Package: $pkg"
+              echo "  Size: $(ls -lh $pkg | awk '{print $5}')"
+              echo "  MD5: $(md5sum $pkg | awk '{print $1}')"
+              echo "  SHA256: $(sha256sum $pkg | awk '{print $1}')"
+              echo ""
+              echo "  Package contents:"
+              tar -tzf "$pkg" | head -20
+              echo "  ..."
+            fi
+          done
+          echo "========================="
 
       - name: Configure AWS CLI for R2
         run: |
@@ -70,22 +106,51 @@ jobs:
         continue-on-error: true
         run: |
           cd examples/production-deployment-k8s-helm
+          echo "=== Downloading existing index.yaml from R2 ==="
+          echo "Current directory: $(pwd)"
+          echo "R2 endpoint: ${{ vars.R2_ENDPOINT_URL }}"
+          echo ""
           # Try to download existing index.yaml from R2
-          aws s3 cp s3://tensorzero-helm-charts/index.yaml ./existing-index.yaml \
-            --endpoint-url ${{ secrets.R2_ENDPOINT_URL }} || echo "No existing index.yaml found"
+          if aws s3 cp s3://tensorzero-helm-charts/index.yaml ./existing-index.yaml \
+            --endpoint-url ${{ vars.R2_ENDPOINT_URL }}; then
+            echo "Successfully downloaded existing index.yaml"
+            echo ""
+            echo "Existing index.yaml contents:"
+            echo "----------------------------"
+            cat existing-index.yaml
+            echo "----------------------------"
+          else
+            echo "No existing index.yaml found (this is normal for first run)"
+          fi
+          echo "========================="
 
       - name: Generate index.yaml
         run: |
           cd examples/production-deployment-k8s-helm
+          echo "=== Generating index.yaml ==="
+          echo "Current directory: $(pwd)"
+          echo ""
+          echo "Package files present:"
+          ls -la tensorzero-*.tgz 2>/dev/null || echo "No package files found"
+          echo ""
           if [ -f existing-index.yaml ]; then
             echo "Merging with existing index.yaml"
             helm repo index . --url https://helm.tensorzero.com --merge existing-index.yaml
           else
-            echo "Creating new index.yaml"
+            echo "Creating new index.yaml (no existing index to merge)"
             helm repo index . --url https://helm.tensorzero.com
           fi
-          echo "Generated index.yaml:"
+          echo ""
+          echo "Generated index.yaml contents:"
+          echo "----------------------------"
           cat index.yaml
+          echo "----------------------------"
+          echo ""
+          echo "index.yaml file details:"
+          echo "  Size: $(ls -lh index.yaml | awk '{print $5}')"
+          echo "  Lines: $(wc -l < index.yaml)"
+          echo "  MD5: $(md5sum index.yaml | awk '{print $1}')"
+          echo "========================="
       - name: Debugging with ssh
         uses: lhotari/action-upterm@v1
 
@@ -94,12 +159,12 @@ jobs:
       #     cd examples/production-deployment-k8s-helm
       #     CHART_FILE=$(ls tensorzero-*.tgz)
       #     aws s3 cp ${CHART_FILE} s3://tensorzero-helm-charts/${CHART_FILE} \
-      #       --endpoint-url ${{ secrets.R2_ENDPOINT_URL }}
+      #       --endpoint-url ${{ vars.R2_ENDPOINT_URL }}
       #     echo "Uploaded ${CHART_FILE} to R2"
 
       # - name: Upload index.yaml to R2
       #   run: |
       #     cd examples/production-deployment-k8s-helm
       #     aws s3 cp index.yaml s3://tensorzero-helm-charts/index.yaml \
-      #       --endpoint-url ${{ secrets.R2_ENDPOINT_URL }}
+      #       --endpoint-url ${{ vars.R2_ENDPOINT_URL }}
       #     echo "Uploaded index.yaml to R2"
