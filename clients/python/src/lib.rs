@@ -137,12 +137,25 @@ impl Drop for LocalHttpGateway {
     }
 }
 
+/// Runs a function inside the Tokio runtime, with the GIL released.
+/// This is used when we need to drop a TensorZero client (or a type that holds it),
+/// so that we can block on the ClickHouse batcher shutting down, without holding the GIL.
+fn in_tokio_runtime_no_gil<F: FnOnce() + Send>(f: F) {
+    Python::with_gil(|py| {
+        py.allow_threads(|| {
+            let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
+            f();
+        });
+    })
+}
+
 #[pymethods]
 impl LocalHttpGateway {
     fn close(&mut self) {
         // We need to be inside a Tokio content when the `Client` is dropped (if batch writes are enabled)
-        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
-        self.shutdown_handle.take();
+        in_tokio_runtime_no_gil(|| {
+            self.shutdown_handle.take();
+        })
     }
 }
 
@@ -190,18 +203,19 @@ impl Drop for BaseTensorZeroGateway {
     fn drop(&mut self) {
         // We need to be inside a Tokio content when the `Client` is dropped.
         // We might be the last holder of the `Arc`, so enter the Tokio runtime.
-        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
-        if let Some(dummy_client) = self.dummy_client.take() {
-            // Use our dummy client to move out of `self.client` (we cannot clone the Arc,
-            // as the original instance would still exist in `self.client`, and be dropped
-            // outside of this `drop` method.
-            let real_client = std::mem::replace(&mut self.client, Arc::new(dummy_client));
-            drop(real_client);
-        } else {
-            tracing::error!(
+        in_tokio_runtime_no_gil(|| {
+            if let Some(dummy_client) = self.dummy_client.take() {
+                // Use our dummy client to move out of `self.client` (we cannot clone the Arc,
+                // as the original instance would still exist in `self.client`, and be dropped
+                // outside of this `drop` method.
+                let real_client = std::mem::replace(&mut self.client, Arc::new(dummy_client));
+                drop(real_client);
+            } else {
+                tracing::error!(
                 "BaseTensorZeroGateway dropped without a dummy client. {IMPOSSIBLE_ERROR_MESSAGE}"
             );
-        }
+            }
+        });
     }
 }
 
@@ -211,8 +225,9 @@ impl Drop for BaseTensorZeroGateway {
 fn drop_stream_in_tokio(stream: &mut Arc<Mutex<InferenceStream>>) {
     if let Some(mutex) = Arc::get_mut(stream) {
         let real_stream = std::mem::replace(mutex, Mutex::new(Box::pin(futures::stream::empty())));
-        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
-        drop(real_stream);
+        in_tokio_runtime_no_gil(|| {
+            drop(real_stream);
+        });
     }
 }
 
