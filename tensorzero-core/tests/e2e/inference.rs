@@ -3841,6 +3841,9 @@ async fn test_multiple_text_blocks_in_message() {
     let response = response.json::<Value>().await.unwrap();
     let inference_id = response.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    // Sleep for 100ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
     // Get the ClickHouse inference
     let clickhouse = get_clickhouse().await;
     let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
