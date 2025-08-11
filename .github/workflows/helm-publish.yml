@@ -37,7 +37,7 @@ jobs:
             # Get the tag name from the release
             VERSION="${{ github.event.release.tag_name }}"
           else
-            VERSION="test"
+            VERSION="0.0.0"
           fi
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "Chart version will be: ${VERSION}"
