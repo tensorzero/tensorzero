@@ -230,8 +230,8 @@ jobs:
       - name: Start docker containers
         run: |
           export TENSORZERO_SKIP_LARGE_FIXTURES=1
-          docker compose -f ui/fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up -d
-          docker compose -f ui/fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml wait fixtures
+          docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml up -d
+          docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml wait fixtures
 
       - name: Run UI E2E tests that require credentials
         id: e2e_tests_credentials
