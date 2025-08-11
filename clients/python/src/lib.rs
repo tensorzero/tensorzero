@@ -131,9 +131,17 @@ struct LocalHttpGateway {
     shutdown_handle: Option<ShutdownHandle>,
 }
 
+impl Drop for LocalHttpGateway {
+    fn drop(&mut self) {
+        self.close();
+    }
+}
+
 #[pymethods]
 impl LocalHttpGateway {
     fn close(&mut self) {
+        // We need to be inside a Tokio content when the `Client` is dropped (if batch writes are enabled)
+        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         self.shutdown_handle.take();
     }
 }
