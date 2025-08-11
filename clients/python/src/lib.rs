@@ -205,15 +205,25 @@ impl Drop for BaseTensorZeroGateway {
     }
 }
 
+/// Helper method to drop an `InferenceStream` inside a Tokio runtime.
+/// An `InferenceStream` holds a reference to a `Client`, and thus may need to block
+/// inside Tokio when it gets dropped
+fn drop_stream_in_tokio(stream: &mut Arc<Mutex<InferenceStream>>) {
+    if let Some(mutex) = Arc::get_mut(stream) {
+        let real_stream = std::mem::replace(mutex, Mutex::new(Box::pin(futures::stream::empty())));
+        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
+        drop(real_stream);
+    }
+}
+
 #[pyclass]
 struct AsyncStreamWrapper {
-    client: Option<Arc<Client>>,
     stream: Arc<Mutex<InferenceStream>>,
 }
 
 impl Drop for AsyncStreamWrapper {
     fn drop(&mut self) {
-        self.client.take();
+        drop_stream_in_tokio(&mut self.stream);
     }
 }
 
@@ -250,13 +260,12 @@ impl AsyncStreamWrapper {
 
 #[pyclass]
 struct StreamWrapper {
-    client: Option<Arc<Client>>,
     stream: Arc<Mutex<InferenceStream>>,
 }
 
 impl Drop for StreamWrapper {
     fn drop(&mut self) {
-        self.client.take();
+        drop_stream_in_tokio(&mut self.stream);
     }
 }
 
@@ -848,7 +857,6 @@ impl TensorZeroGateway {
             InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
             InferenceOutput::Streaming(stream) => Ok(StreamWrapper {
                 stream: Arc::new(Mutex::new(stream)),
-                client: Some(client),
             }
             .into_pyobject(py)?
             .into_any()
@@ -1470,7 +1478,6 @@ impl AsyncTensorZeroGateway {
                     InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
                     InferenceOutput::Streaming(stream) => Ok(AsyncStreamWrapper {
                         stream: Arc::new(Mutex::new(stream)),
-                        client: Some(client),
                     }
                     .into_pyobject(py)?
                     .into_any()
