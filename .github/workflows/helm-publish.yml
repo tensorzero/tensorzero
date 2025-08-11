@@ -3,15 +3,17 @@ name: Publish Helm chart
 
 on:
   workflow_dispatch:
-  release:
-    types: [released]
+  push:
+    branches: ['**']
+  # release:
+  #   types: [released]
 
 jobs:
   publish-helm-chart:
     name: Publish Helm chart to R2
     runs-on: ubuntu-latest
     # Only run on actual releases, not on pushes to main
-    if: github.event_name == 'release'
+    # if: github.event_name == 'release'
     permissions:
       contents: read
     # Required secrets:
@@ -81,18 +83,20 @@ jobs:
           fi
           echo "Generated index.yaml:"
           cat index.yaml
+      - name: Debugging with ssh
+        uses: lhotari/action-upterm@v1
 
-      - name: Upload chart package to R2
-        run: |
-          cd examples/production-deployment-k8s-helm
-          CHART_FILE=$(ls tensorzero-*.tgz)
-          aws s3 cp ${CHART_FILE} s3://tensorzero-helm-charts/${CHART_FILE} \
-            --endpoint-url ${{ secrets.R2_ENDPOINT_URL }}
-          echo "Uploaded ${CHART_FILE} to R2"
+      # - name: Upload chart package to R2
+      #   run: |
+      #     cd examples/production-deployment-k8s-helm
+      #     CHART_FILE=$(ls tensorzero-*.tgz)
+      #     aws s3 cp ${CHART_FILE} s3://tensorzero-helm-charts/${CHART_FILE} \
+      #       --endpoint-url ${{ secrets.R2_ENDPOINT_URL }}
+      #     echo "Uploaded ${CHART_FILE} to R2"
 
-      - name: Upload index.yaml to R2
-        run: |
-          cd examples/production-deployment-k8s-helm
-          aws s3 cp index.yaml s3://tensorzero-helm-charts/index.yaml \
-            --endpoint-url ${{ secrets.R2_ENDPOINT_URL }}
-          echo "Uploaded index.yaml to R2"
+      # - name: Upload index.yaml to R2
+      #   run: |
+      #     cd examples/production-deployment-k8s-helm
+      #     aws s3 cp index.yaml s3://tensorzero-helm-charts/index.yaml \
+      #       --endpoint-url ${{ secrets.R2_ENDPOINT_URL }}
+      #     echo "Uploaded index.yaml to R2"
