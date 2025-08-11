@@ -150,7 +150,7 @@ test("playground should work for data with tools", async ({ page }) => {
   // (two of the datapoints have the same input, and could trample on each other's
   // cache entries)
   await page.goto(
-    "/playground?functionName=multi_hop_rag_agent&datasetName=tool_call_examples&variant=baseline",
+    '/playground?functionName=multi_hop_rag_agent&datasetName=tool_call_examples&variants=%5B%7B"type"%3A"builtin"%2C"name"%3A"baseline"%7D%5D',
   );
 
   // Verify the selections are visible
