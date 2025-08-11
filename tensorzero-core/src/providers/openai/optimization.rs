@@ -466,6 +466,7 @@ pub struct OpenAIPreferenceRow<'a> {
 #[derive(Debug, Serialize)]
 pub struct OpenAIReinforcementRow<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
+    #[serde(flatten)]
     output: OpenAIReinforcementOutput<'a>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<OpenAISFTTool<'a>>,
@@ -742,8 +743,8 @@ mod tests {
         };
         let row = OpenAIReinforcementRow::try_from(&inference).unwrap();
         assert_eq!(row.messages.len(), 2); // System and User messages (no assistant message added)
-        let OpenAIRequestMessage::System(system_message) = &row.messages[0] else {
-            panic!("First message should be a system message");
+        let OpenAIRequestMessage::Developer(system_message) = &row.messages[0] else {
+            panic!("First message should be a developer message");
         };
         assert_eq!(
             system_message.content,
