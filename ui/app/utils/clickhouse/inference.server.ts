@@ -556,7 +556,7 @@ export async function queryInferenceById(
             variant_name,
             episode_id,
             function_type
-        FROM InferenceById FINAL
+        FROM InferenceById
         WHERE id_uint = toUInt128({id:UUID})
         LIMIT 1
     )
