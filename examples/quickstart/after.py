@@ -14,17 +14,6 @@ with TensorZeroGateway.build_embedded(
                 }
             ]
         },
-        output_schema={
-            "type": "object",
-            "properties": {"haiku": {"type": "string"}, "rating": {"type": "integer"}},
-            "required": ["haiku", "rating"],
-            "additionalProperties": False,
-        },
-        params={
-            "chat_completion": {
-                "json_mode": "strict",
-            }
-        },
     )
 
 print(response)

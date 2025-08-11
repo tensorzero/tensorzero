@@ -134,11 +134,11 @@ impl ClickHouseConnectionInfo {
         // Get the cluster name from the `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` environment variable
         let cluster_name = match std::env::var("TENSORZERO_CLICKHOUSE_CLUSTER_NAME") {
             Ok(cluster_name) => {
-                tracing::info!("The gateway is expecting a self-hosted replicated ClickHouse deployment with cluster name `{cluster_name}`. Note: The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` doesn't apply to ClickHouse Cloud or self-managed single-node deployments.");
+                tracing::info!("Using ClickHouse cluster name: {cluster_name}");
                 Some(cluster_name)
             }
             Err(_) => {
-                tracing::debug!("The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` wasn't provided, so the gateway will assume that ClickHouse is not running a self-hosted replicated cluster. Note: This variable doesn't apply to ClickHouse Cloud or self-managed single-node deployments.");
+                tracing::info!("No ClickHouse cluster name provided");
                 None
             }
         };
