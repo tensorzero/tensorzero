@@ -13,6 +13,10 @@ on:
         required: true
       FIREWORKS_API_KEY:
         required: true
+      S3_ACCESS_KEY_ID:
+        required: true
+      S3_SECRET_ACCESS_KEY:
+        required: true
 
 jobs:
   ui-tests-no-network:
