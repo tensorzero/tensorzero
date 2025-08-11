@@ -223,7 +223,13 @@ test("editing variants works @credentials", async ({ page }) => {
 
   // edit the system prompt to say "write a haiku about the given topic. You are additional required to include the word \"obtuse\""
   // Wait for the editor content to be available and clear it
-  const systemTemplateEditor = page.locator(".cm-content").first();
+  // Target the system template editor specifically within the modal/sheet content
+  const systemTemplateEditor = page
+    .getByRole("dialog")
+    .getByText("System Template")
+    .locator("..")
+    .locator(".cm-content")
+    .first();
   await systemTemplateEditor.waitFor({ state: "visible" });
 
   // Select all content and replace it, using force to bypass modal overlay issues
