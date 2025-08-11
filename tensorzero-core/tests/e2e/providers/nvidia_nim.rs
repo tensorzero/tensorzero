@@ -84,6 +84,14 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let image_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "nvidia-nim-image".to_string(),
+        model_name: "meta/llama-3.1-8b-instruct".into(),
+        model_provider_name: "nvidia_nim".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -102,5 +110,6 @@ async fn get_providers() -> E2ETestProviders {
         shorthand_inference: shorthand_providers.clone(),
         embeddings: vec![],
         reasoning_inference: reasoning_providers,
+        image_inference: image_providers,
     }
 }
