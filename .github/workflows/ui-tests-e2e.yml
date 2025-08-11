@@ -113,6 +113,7 @@ jobs:
           # The 'ui-tests-e2e' job tests that the UI container starts without some of these variables set,
           echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
+          echo "ANTHROPIC_API_KEY=not_used" >> fixtures/.env
           echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
           echo "OPENAI_API_KEY=not_used" >> fixtures/.env
           echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env

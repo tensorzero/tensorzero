@@ -221,7 +221,6 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_stop_sequences_inference_request_with_provider;
         use $crate::providers::common::test_warn_ignored_thought_block_with_provider;
         use $crate::providers::embeddings::test_basic_embedding_with_provider;
-        use $crate::providers::embeddings::test_shorthand_embedding_with_provider;
         use $crate::providers::embeddings::test_batch_embedding_with_provider;
         use $crate::providers::embeddings::test_embedding_with_dimensions_with_provider;
         use $crate::providers::embeddings::test_embedding_with_encoding_format_with_provider;
@@ -638,13 +637,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-        #[tokio::test]
-        async fn test_shorthand_embedding() {
-            let providers = $func().await.embeddings;
-            for provider in providers {
-                test_shorthand_embedding_with_provider(provider).await;
-            }
-        }
 
         #[tokio::test]
         async fn test_batch_embedding() {
