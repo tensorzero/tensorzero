@@ -13,7 +13,7 @@ use crate::{
     config_parser::{path::TomlRelativePath, TimeoutsConfig},
     endpoints::openai_compatible::JsonSchemaInfo,
     error::{Error, ErrorDetails},
-    inference::types::{ContentBlock, ContentBlockChatOutput, Role},
+    inference::types::{ContentBlock, ContentBlockChatOutput},
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     optimization::{OptimizationJobInfo, OptimizerOutput},
     providers::openai::{OpenAIRequestToolCall, PROVIDER_TYPE},
@@ -260,12 +260,14 @@ impl Serialize for Grader {
     }
 }
 
+#[cfg(feature = "pyo3")]
 impl<'py> FromPyObject<'py> for Box<Grader> {
     fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
         Ok(Box::new(Grader::extract_bound(ob)?))
     }
 }
 
+#[cfg(feature = "pyo3")]
 impl<'py> IntoPyObject<'py> for Box<Grader> {
     type Target = <Grader as IntoPyObject<'py>>::Target;
     type Output = <Grader as IntoPyObject<'py>>::Output;
@@ -273,18 +275,6 @@ impl<'py> IntoPyObject<'py> for Box<Grader> {
 
     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         (*self).into_pyobject(py)
-    }
-}
-
-// TODO: Implement this correctly
-impl std::default::Default for Grader {
-    fn default() -> Self {
-        Grader::StringCheck {
-            name: String::new(),
-            operation: OpenAIStringCheckOp::Eq,
-            input: TomlRelativePath::new_fake_path(String::new(), String::new()),
-            reference: TomlRelativePath::new_fake_path(String::new(), String::new()),
-        }
     }
 }
 
@@ -332,14 +322,31 @@ impl std::fmt::Display for OpenAISimilarityMetric {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIModelGraderInput"))]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-pub enum OpenAIModelGraderInput {
-    Message(OpenAIModelGraderInputMessage),
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIModelGraderInputMessage"))]
+pub struct OpenAIModelGraderInput {
+    pub role: OpenAIRFTRole,
+    pub content: TomlRelativePath,
+}
+
+impl Serialize for OpenAIModelGraderInput {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("OpenAIModelGraderInput", 2)?;
+        state.serialize_field("role", &self.role)?;
+        // Extract the template string from TomlRelativePath
+        let content_str = self
+            .content
+            .read()
+            .unwrap_or_else(|_| self.content.to_string());
+        state.serialize_field("content", &content_str)?;
+        state.end()
+    }
 }
 
 impl std::fmt::Display for OpenAIModelGraderInput {
@@ -349,19 +356,29 @@ impl std::fmt::Display for OpenAIModelGraderInput {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIModelGraderInputMessage"))]
-pub struct OpenAIModelGraderInputMessage {
-    role: Role,
-    content: TomlRelativePath,
+#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+#[ts(export)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "pyo3", pyclass)]
+pub enum OpenAIRFTRole {
+    Developer,
+    User,
 }
 
-impl std::fmt::Display for OpenAIModelGraderInputMessage {
+impl std::fmt::Display for OpenAIRFTRole {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
-        write!(f, "{json}")
+        match self {
+            OpenAIRFTRole::User => write!(f, "user"),
+            OpenAIRFTRole::Developer => write!(f, "developer"),
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl OpenAIRFTRole {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
     }
 }
 

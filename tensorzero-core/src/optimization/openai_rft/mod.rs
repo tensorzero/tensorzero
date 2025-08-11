@@ -51,7 +51,7 @@ pub struct OpenAIRFTConfig {
     pub suffix: Option<String>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTConfig"))]
