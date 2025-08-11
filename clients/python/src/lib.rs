@@ -146,7 +146,7 @@ fn in_tokio_runtime_no_gil<F: FnOnce() + Send>(f: F) {
             let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
             f();
         });
-    })
+    });
 }
 
 #[pymethods]
@@ -155,7 +155,7 @@ impl LocalHttpGateway {
         // We need to be inside a Tokio content when the `Client` is dropped (if batch writes are enabled)
         in_tokio_runtime_no_gil(|| {
             self.shutdown_handle.take();
-        })
+        });
     }
 }
 
