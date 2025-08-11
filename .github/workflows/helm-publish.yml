@@ -3,10 +3,8 @@ name: Publish Helm chart
 
 on:
   workflow_dispatch:
-  push:
-    branches: ["**"]
-  # release:
-  #   types: [released]
+  release:
+    types: [released]
 
 jobs:
   publish-helm-chart:
