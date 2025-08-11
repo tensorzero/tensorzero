@@ -610,6 +610,110 @@ mod tests {
     }
 
     #[test]
+    fn test_convert_to_rft_row() {
+        let inference = RenderedSample {
+            function_name: "test".to_string(),
+            input: ModelInput {
+                system: Some("You are a helpful assistant named Dr. M.M. Patel.".to_string()),
+                messages: vec![RequestMessage {
+                    role: Role::User,
+                    content: vec![ContentBlock::Text(Text {
+                        text: "What is the capital of France?".to_string(),
+                    })],
+                }],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "The capital of France is Paris.".to_string(),
+            })]),
+            episode_id: Some(uuid::Uuid::now_v7()),
+            inference_id: Some(uuid::Uuid::now_v7()),
+            tool_params: None,
+            output_schema: None,
+            dispreferred_outputs: vec![],
+            tags: HashMap::new(),
+        };
+        let row = OpenAIReinforcementRow::try_from(&inference).unwrap();
+        assert_eq!(row.messages.len(), 2); // System and User messages (no assistant message added)
+        let OpenAIRequestMessage::System(system_message) = &row.messages[0] else {
+            panic!("First message should be a system message");
+        };
+        assert_eq!(
+            system_message.content,
+            "You are a helpful assistant named Dr. M.M. Patel."
+        );
+        let OpenAIRequestMessage::User(user_message) = &row.messages[1] else {
+            panic!("Second message should be a user message");
+        };
+        let OpenAIContentBlock::Text { text } = &user_message.content[0] else {
+            panic!("User message should be a text message");
+        };
+        assert_eq!(text, "What is the capital of France?");
+
+        // Check the output structure
+        assert_eq!(
+            row.output.reference_text,
+            Some("The capital of France is Paris.".to_string())
+        );
+        assert!(row.output.reference_tools.is_none());
+        assert!(!row.parallel_tool_calls);
+        assert_eq!(row.tools.len(), 0);
+    }
+
+    #[test]
+    fn test_convert_to_rft_row_with_tool_calls() {
+        use crate::tool::ToolCallOutput;
+
+        let inference = RenderedSample {
+            function_name: "test".to_string(),
+            input: ModelInput {
+                system: Some("You are a helpful assistant.".to_string()),
+                messages: vec![RequestMessage {
+                    role: Role::User,
+                    content: vec![ContentBlock::Text(Text {
+                        text: "What's the weather like?".to_string(),
+                    })],
+                }],
+            },
+            output: Some(vec![
+                ContentBlockChatOutput::Text(Text {
+                    text: "I'll check the weather for you.".to_string(),
+                }),
+                ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                    id: "call_123".to_string(),
+                    name: Some("get_weather".to_string()),
+                    raw_name: "get_weather".to_string(),
+                    raw_arguments: r#"{"location": "New York"}"#.to_string(),
+                    arguments: Some(serde_json::json!({"location": "New York"})),
+                }),
+            ]),
+            episode_id: Some(uuid::Uuid::now_v7()),
+            inference_id: Some(uuid::Uuid::now_v7()),
+            tool_params: None,
+            output_schema: None,
+            dispreferred_outputs: vec![],
+            tags: HashMap::new(),
+        };
+        let row = OpenAIReinforcementRow::try_from(&inference).unwrap();
+
+        // Check the output structure
+        assert_eq!(
+            row.output.reference_text,
+            Some("I'll check the weather for you.".to_string())
+        );
+        assert!(row.output.reference_tools.is_some());
+        let tool_calls = row.output.reference_tools.unwrap();
+        assert_eq!(tool_calls.len(), 1);
+        assert_eq!(tool_calls[0].id, "call_123");
+        assert_eq!(tool_calls[0].function.name, "get_weather");
+        assert_eq!(
+            tool_calls[0].function.arguments,
+            r#"{"location": "New York"}"#
+        );
+        assert!(!row.parallel_tool_calls);
+        assert_eq!(row.tools.len(), 0);
+    }
+
+    #[test]
     fn test_convert_to_optimizer_status() {
         // Test for "succeeded" status with a model output
         let succeeded_model = json!({
