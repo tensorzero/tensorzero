@@ -106,7 +106,6 @@ jobs:
           docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml down
           docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml rm -f
 
-
       - name: Upload new model inference cache
         if: inputs.regen_cache == true
         uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
