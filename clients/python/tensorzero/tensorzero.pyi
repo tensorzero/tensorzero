@@ -38,12 +38,6 @@ from tensorzero.types import (
 )
 
 @final
-class OpenAIGrader: ...
-
-@final
-class OpenAIRFTResponseFormat: ...
-
-@final
 class ResolvedInputMessage:
     role: Literal["user", "assistant"]
     content: List[ContentBlock]
@@ -167,10 +161,8 @@ class OpenAIRFTConfig:
         self,
         *,
         model: str,
-        grader: Union[Dict[str, Any], OpenAIGrader],
-        response_format: Optional[
-            Union[Dict[str, Any], OpenAIRFTResponseFormat]
-        ] = None,
+        grader: Dict[str, Any],
+        response_format: Optional[Dict[str, Any]] = None,
         batch_size: Optional[int] = None,
         compute_multiplier: Optional[float] = None,
         eval_interval: Optional[int] = None,
@@ -1029,12 +1021,10 @@ __all__ = [
     "FunctionsConfig",
     "FireworksSFTConfig",
     "GCPVertexGeminiSFTConfig",
-    "OpenAIGrader",
     "TensorZeroGateway",
     "LocalHttpGateway",
     "MixtureOfNConfig",
     "_start_http_gateway",
-    "OpenAIRFTResponseFormat",
     "OpenAIRFTConfig",
     "OpenAISFTConfig",
     "OptimizationJobHandle",
