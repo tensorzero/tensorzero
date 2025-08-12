@@ -239,7 +239,7 @@ test("editing variants works @credentials", async ({ page }) => {
     'Write a haiku about the given topic. You are additionally required to include the word "obtuse".',
   );
 
-  // submit the edit
+  // save the edit
   await page.getByRole("button", { name: "Save Changes" }).click();
 
   // Wait for the modal to close
