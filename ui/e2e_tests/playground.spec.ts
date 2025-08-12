@@ -87,9 +87,13 @@ test("playground should work for extract_entities JSON function with 2 variants"
     page.getByRole("heading", { name: "Reference Output" }),
   ).toHaveCount(2);
 
-  // For JSON functions, outputs are displayed in CodeMirror editors rather than textboxes
-  // Verify that there are CodeMirror editors for each variant and datapoint
-  await expect(page.locator(".cm-editor")).toHaveCount(4);
+  // For JSON functions, we should have CodeMirror editors for:
+  // - 2 Input sections (one per datapoint)
+  // - 2 Reference Output sections (one per datapoint)
+  // - 4 Variant Output sections (2 variants × 2 datapoints)
+  // Total: 8 CodeMirror editors
+  // Wait for all editors to load before counting
+  await expect(page.locator(".cm-editor")).toHaveCount(8);
 
   // Verify that there are no errors
   await expect(
