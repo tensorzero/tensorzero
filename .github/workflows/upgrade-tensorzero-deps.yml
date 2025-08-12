@@ -52,7 +52,7 @@ jobs:
           echo "Discovering projects that depend on tensorzero..."
 
           # Find all pyproject.toml files that contain 'tensorzero' dependency
-          projects=$(git ls-files "**/pyproject.toml" | xargs grep -l "tensorzero")
+          projects=$(git ls-files "**/pyproject.toml" | xargs -r grep -l "tensorzero")
 
           echo "Found projects:"
           echo "$projects"
