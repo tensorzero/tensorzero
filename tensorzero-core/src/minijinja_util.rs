@@ -206,6 +206,8 @@ const MIXTURE_OF_N_FUSER_CANDIDATES: &str = r"Here are the candidate answers (wi
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::jsonschema_util::StaticJSONSchema;
+
     use super::*;
     use serde_json::json;
 
@@ -287,6 +289,48 @@ pub(crate) mod tests {
         let result = templates.template_message("user_with_join", &context);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Hello, hello, hello, world!");
+    }
+
+    pub fn test_system_template_schema() -> StaticJSONSchema {
+        StaticJSONSchema::from_value(&json!({
+            "type": "object",
+            "properties": {
+                "assistant_name": {
+                    "type": "string"
+                }
+            },
+            "required": ["assistant_name"]
+        }))
+        .unwrap()
+    }
+
+    pub fn test_user_template_schema() -> StaticJSONSchema {
+        StaticJSONSchema::from_value(&json!({
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "age": {
+                    "type": "number"
+                }
+            },
+            "required": ["name", "age"]
+        }))
+        .unwrap()
+    }
+
+    pub fn test_assistant_template_schema() -> StaticJSONSchema {
+        StaticJSONSchema::from_value(&json!({
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                }
+            },
+            "required": ["reason"]
+        }))
+        .unwrap()
     }
 
     pub fn get_test_template_config<'a>() -> TemplateConfig<'a> {
