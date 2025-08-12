@@ -13,7 +13,7 @@ BASE_URL=$(echo "$TENSORZERO_CLICKHOUSE_URL" | sed -E 's#(https?://[^/]+).*#\1#'
 # This is used for display purposes only
 DISPLAY_BASE_URL=$(
   echo "$TENSORZERO_CLICKHOUSE_URL" |
-  sed -E 's#(https?://)[^@/]*@?([^/?]+).*#\1\2#'
+  sed -E 's#(https?://)([^@/]*@)?([^/?]+).*#\1\3#'
 )
 
 
