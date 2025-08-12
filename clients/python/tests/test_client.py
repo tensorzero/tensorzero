@@ -17,10 +17,12 @@ uv run pytest
 ```
 """
 
+import asyncio
 import base64
 import inspect
 import json
 import os
+import tempfile
 import threading
 import time
 import typing as t
@@ -31,6 +33,7 @@ from uuid import UUID
 
 import pytest
 import tensorzero
+from clickhouse_connect import get_client  # type: ignore
 from openai import AsyncOpenAI, OpenAI
 from tensorzero import (
     AsyncTensorZeroGateway,
@@ -1134,6 +1137,9 @@ def test_sync_inference_caching(sync_client: TensorZeroGateway):
     assert usage.input_tokens == 10
     assert usage.output_tokens == 1
 
+    # Wait for the cache entry to be written to ClickHouse
+    time.sleep(1)
+
     # Test caching
     result = sync_client.inference(
         function_name="basic_test",
@@ -1205,6 +1211,9 @@ def test_sync_inference_streaming_caching(sync_client: TensorZeroGateway):
     assert final_chunk.usage is not None
     assert final_chunk.usage.input_tokens == 10
     assert final_chunk.usage.output_tokens == 16
+
+    # Wait for the cache entry to be written to ClickHouse
+    time.sleep(1)
 
     # Test caching
     stream = sync_client.inference(
@@ -3249,3 +3258,48 @@ def test_sync_include_original_response_json(sync_client: TensorZeroGateway):
     )
     assert isinstance(response, JsonInferenceResponse)
     assert response.original_response == '{"answer":"Hello"}'
+
+
+@pytest.mark.asyncio
+async def test_async_clickhouse_batch_writes():
+    # Create a temp file and write to it
+    with tempfile.NamedTemporaryFile() as temp_file:
+        temp_file.write(b"gateway.observability.enabled = true\n")
+        temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
+        client_fut = AsyncTensorZeroGateway.build_embedded(
+            config_file=temp_file.name,
+            clickhouse_url=clickhouse_url,
+        )
+        assert inspect.isawaitable(client_fut)
+        client = await client_fut
+        num_inferences = 100
+        futures: t.List[t.Awaitable[t.Any]] = []
+        episode_id = str(uuid7())
+        for _ in range(num_inferences):
+            futures.append(
+                client.inference(
+                    model_name="dummy::good",
+                    episode_id=episode_id,
+                    input={
+                        "messages": [{"role": "user", "content": "Hello, world!"}],
+                    },
+                )
+            )
+
+        results = await asyncio.gather(*futures)
+        assert len(results) == num_inferences
+
+        # Wait for results to be written to ClickHouse
+        await asyncio.sleep(1)
+
+        expected_inference_ids = set(result.inference_id for result in results)
+
+        clickhouse_client = get_client(dsn=clickhouse_url)
+        clickhouse_result = clickhouse_client.query_df(  # type: ignore
+            f"SELECT * FROM ChatInference where episode_id = '{episode_id}'"
+        )
+        assert len(clickhouse_result) == num_inferences  # type: ignore
+
+        actual_inference_ids = set(row.id for row in clickhouse_result.iloc)  # type: ignore
+        assert actual_inference_ids == expected_inference_ids
