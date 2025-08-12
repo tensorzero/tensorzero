@@ -34,7 +34,7 @@ use tensorzero_core::clickhouse::migration_manager::{
 };
 use tensorzero_core::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_core::clickhouse::{
-    make_clickhouse_http_client, ClickHouseConnectionInfo, TableName,
+    make_clickhouse_http_client, ClickHouseConnectionInfo, Rows, TableName,
 };
 
 pub struct DeleteDbOnDrop {
@@ -91,6 +91,7 @@ pub fn get_clean_clickhouse(allow_db_missing: bool) -> (ClickHouseConnectionInfo
         database: database.clone(),
         cluster_name,
         client: make_clickhouse_http_client().unwrap(),
+        batch_sender: None,
     };
     (
         clickhouse.clone(),
@@ -177,6 +178,7 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
         database,
         cluster_name: _,
         client: _,
+        batch_sender: _,
     } = clickhouse
     else {
         panic!("ClickHouseConnectionInfo is not a Production connection");
@@ -367,7 +369,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
 
     let matching_chat_by_id = clickhouse
         .run_query_synchronous_no_params(
-            format!("SELECT id_uint, toUInt128(episode_id) as episode_id_uint FROM InferenceById FINAL WHERE function_type = 'chat' AND id_uint = '{sample_chat_id}' LIMIT 1 FORMAT JSONEachRow"),
+            format!("SELECT id_uint, toUInt128(episode_id) as episode_id_uint FROM InferenceById WHERE function_type = 'chat' AND id_uint = '{sample_chat_id}' LIMIT 1 FORMAT JSONEachRow"),
         )
         .await
         .unwrap();
@@ -385,7 +387,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
 
     let matching_chat_by_episode_id = clickhouse
         .run_query_synchronous_no_params(
-            format!("SELECT * FROM InferenceByEpisodeId FINAL WHERE function_type = 'chat' AND episode_id_uint = '{sample_chat_episode_id}' LIMIT 1 FORMAT JSONEachRow"),
+            format!("SELECT * FROM InferenceByEpisodeId WHERE function_type = 'chat' AND episode_id_uint = '{sample_chat_episode_id}' LIMIT 1 FORMAT JSONEachRow"),
         )
         .await
         .unwrap();
@@ -413,7 +415,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
 
     let matching_json_by_id = clickhouse
         .run_query_synchronous_no_params(
-            format!("SELECT id_uint, toUInt128(episode_id) as episode_id_uint FROM InferenceById FINAL WHERE function_type = 'json' AND id_uint = '{sample_json_id}' LIMIT 1 FORMAT JSONEachRow"),
+            format!("SELECT id_uint, toUInt128(episode_id) as episode_id_uint FROM InferenceById WHERE function_type = 'json' AND id_uint = '{sample_json_id}' LIMIT 1 FORMAT JSONEachRow"),
         )
         .await
         .unwrap();
@@ -429,7 +431,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
 
     let matching_json_by_episode_id = clickhouse
         .run_query_synchronous_no_params(
-            format!("SELECT * FROM InferenceByEpisodeId FINAL WHERE function_type = 'json' AND episode_id_uint = '{sample_json_episode_id}' LIMIT 1 FORMAT JSONEachRow"),
+            format!("SELECT * FROM InferenceByEpisodeId WHERE function_type = 'json' AND episode_id_uint = '{sample_json_episode_id}' LIMIT 1 FORMAT JSONEachRow"),
         )
         .await
         .unwrap();
@@ -796,7 +798,7 @@ async fn test_bad_clickhouse_write() {
     let payload =
         json!({"target_id": Uuid::now_v7(), "value": true, "name": "test", "id": Uuid::now_v7()});
     let err = clickhouse
-        .write(&[payload], TableName::BooleanMetricFeedback)
+        .write_batched(&[payload], TableName::BooleanMetricFeedback)
         .await
         .unwrap_err();
     assert!(
@@ -868,10 +870,10 @@ async fn test_deployment_id_oldest() {
     // Add a row to the DeploymentID table and make sure that it isn't returned
     let new_deployment_id = "foo";
     clickhouse
-        .write(
-            &[serde_json::json!({
+        .write_non_batched(
+            Rows::Unserialized(&[serde_json::json!({
                 "deployment_id": new_deployment_id,
-            })],
+            })]),
             TableName::DeploymentID,
         )
         .await

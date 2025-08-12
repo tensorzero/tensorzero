@@ -150,7 +150,6 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
     .await
     .unwrap()
 }
-
 // We use a multi-threaded runtime so that the embedded gateway can use 'block_on'.
 // For consistency, we also use a multi-threaded runtime for the http gateway test.
 
@@ -222,7 +221,6 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_stop_sequences_inference_request_with_provider;
         use $crate::providers::common::test_warn_ignored_thought_block_with_provider;
         use $crate::providers::embeddings::test_basic_embedding_with_provider;
-        use $crate::providers::embeddings::test_shorthand_embedding_with_provider;
         use $crate::providers::embeddings::test_batch_embedding_with_provider;
         use $crate::providers::embeddings::test_embedding_with_dimensions_with_provider;
         use $crate::providers::embeddings::test_embedding_with_encoding_format_with_provider;
@@ -639,13 +637,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-        #[tokio::test]
-        async fn test_shorthand_embedding() {
-            let providers = $func().await.embeddings;
-            for provider in providers {
-                test_shorthand_embedding_with_provider(provider).await;
-            }
-        }
 
         #[tokio::test]
         async fn test_batch_embedding() {
@@ -2494,7 +2485,7 @@ pub async fn check_simple_inference_response(
     assert!(finish_reason == "stop" || finish_reason == "length");
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;

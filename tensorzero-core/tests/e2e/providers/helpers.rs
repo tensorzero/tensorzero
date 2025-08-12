@@ -32,6 +32,12 @@ pub fn get_extra_headers() -> UnfilteredInferenceExtraHeaders {
             name: "Modal-Key".to_string(),
             kind: ExtraHeaderKind::Value(modal_key.clone()),
         });
+        extra_headers.push(InferenceExtraHeader::Provider {
+            model_provider_name: "tensorzero::model_name::gpt-oss-20b-vllm::provider_name::vllm"
+                .to_string(),
+            name: "Modal-Key".to_string(),
+            kind: ExtraHeaderKind::Value(modal_key.clone()),
+        });
     }
     if let Ok(modal_secret) = env::var("MODAL_SECRET") {
         extra_headers.push(InferenceExtraHeader::Provider {
@@ -52,6 +58,12 @@ pub fn get_extra_headers() -> UnfilteredInferenceExtraHeaders {
             model_provider_name:
                 "tensorzero::model_name::Qwen/Qwen2.5-1.5B-Instruct::provider_name::sglang"
                     .to_string(),
+            name: "Modal-Secret".to_string(),
+            kind: ExtraHeaderKind::Value(modal_secret.clone()),
+        });
+        extra_headers.push(InferenceExtraHeader::Provider {
+            model_provider_name: "tensorzero::model_name::gpt-oss-20b-vllm::provider_name::vllm"
+                .to_string(),
             name: "Modal-Secret".to_string(),
             kind: ExtraHeaderKind::Value(modal_secret.clone()),
         });

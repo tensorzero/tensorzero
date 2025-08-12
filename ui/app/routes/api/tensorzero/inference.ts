@@ -25,7 +25,6 @@ export async function action({ request }: Route.ActionArgs): Promise<Response> {
         { status: 400 },
       );
     }
-
     if (isTensorZeroServerError(error)) {
       return Response.json({ error: error.message }, { status: error.status });
     }

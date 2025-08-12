@@ -1,5 +1,6 @@
 #![expect(clippy::print_stdout)]
 use std::collections::HashMap;
+use std::{collections::HashSet, sync::Arc};
 
 use crate::{
     otel::{
@@ -21,6 +22,13 @@ use tensorzero::{
 };
 use tensorzero_core::{
     clickhouse::test_helpers::get_clickhouse_replica,
+    clickhouse::{
+        test_helpers::{
+            select_all_model_inferences_by_chat_episode_id_clickhouse,
+            select_chat_inferences_clickhouse,
+        },
+        ClickHouseConnectionInfo,
+    },
     endpoints::inference::ChatInferenceResponse,
     inference::types::{
         ContentBlock, ContentBlockOutput, File, RequestMessage, ResolvedInput,
@@ -33,6 +41,7 @@ use tensorzero_core::{
     },
     tool::{ToolCall, ToolCallInput},
 };
+use tokio::task::JoinSet;
 use tracing_test::traced_test;
 use url::Url;
 use uuid::Uuid;
@@ -3832,6 +3841,9 @@ async fn test_multiple_text_blocks_in_message() {
     let response = response.json::<Value>().await.unwrap();
     let inference_id = response.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    // Sleep for 100ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
     // Get the ClickHouse inference
     let clickhouse = get_clickhouse().await;
     let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
@@ -3851,4 +3863,132 @@ async fn test_multiple_text_blocks_in_message() {
         input.messages[0].content[1],
         ResolvedInputMessageContent::Text { .. }
     ));
+}
+
+// We don't use the word 'batch' in the test name, since we already
+// group those tests as 'batch inference' tests
+#[tokio::test(flavor = "multi_thread")]
+async fn test_clickhouse_bulk_insert_off_default() {
+    let client = Arc::new(
+        make_embedded_gateway_with_config(
+            "
+    ",
+        )
+        .await,
+    );
+
+    let ClickHouseConnectionInfo::Production { batch_sender, .. } = client
+        .get_app_state_data()
+        .unwrap()
+        .clickhouse_connection_info
+        .clone()
+    else {
+        panic!("Clickhouse client was not production!");
+    };
+    assert!(
+        batch_sender.is_none(),
+        "Batching should not have been enabled!"
+    );
+}
+
+// We don't use the word 'batch' in the test name, since we already
+// group those tests as 'batch inference' tests
+#[tokio::test(flavor = "multi_thread")]
+async fn test_clickhouse_bulk_insert() {
+    let client = Arc::new(
+        make_embedded_gateway_with_config(
+            "
+    [gateway.observability]
+    enabled = true
+    batch_writes = { enabled = true }
+    ",
+        )
+        .await,
+    );
+
+    let ClickHouseConnectionInfo::Production { batch_sender, .. } = client
+        .get_app_state_data()
+        .unwrap()
+        .clickhouse_connection_info
+        .clone()
+    else {
+        panic!("Clickhouse client was not production!");
+    };
+    assert!(batch_sender.is_some(), "Batching was not enabled!");
+
+    let mut join_set = JoinSet::new();
+    let episode_id = Uuid::now_v7();
+    let inference_count = 10_000;
+    for _ in 0..inference_count {
+        let client = client.clone();
+        join_set.spawn(async move {
+            client
+                .inference(ClientInferenceParams {
+                    episode_id: Some(episode_id),
+                    model_name: Some("dummy::my-model".to_string()),
+                    input: ClientInput {
+                        system: None,
+                        messages: vec![ClientInputMessage {
+                            role: Role::User,
+                            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                                text: "What is the name of the capital city of Japan?".to_string(),
+                            })],
+                        }],
+                    },
+                    ..Default::default()
+                })
+                .await
+                .unwrap()
+        });
+    }
+    let mut expected_inference_ids = HashSet::new();
+    while let Some(result) = join_set.join_next().await {
+        let result = result.unwrap();
+        let InferenceOutput::NonStreaming(response) = result else {
+            panic!("Expected non-streaming response");
+        };
+        expected_inference_ids.insert(response.inference_id());
+    }
+    assert_eq!(expected_inference_ids.len(), inference_count);
+
+    assert_eq!(Arc::strong_count(&client), 1);
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+    let clickhouse_client = get_clickhouse().await;
+    let inferences = select_chat_inferences_clickhouse(&clickhouse_client, episode_id)
+        .await
+        .unwrap();
+    let actual_inference_ids = inferences
+        .iter()
+        .map(|i| {
+            i.get("id")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .parse::<Uuid>()
+                .unwrap()
+        })
+        .collect::<HashSet<_>>();
+
+    assert_eq!(actual_inference_ids.len(), inference_count);
+    assert_eq!(actual_inference_ids, expected_inference_ids);
+
+    let model_inferences =
+        select_all_model_inferences_by_chat_episode_id_clickhouse(episode_id, &clickhouse_client)
+            .await
+            .unwrap();
+
+    let actual_model_inference_ids = model_inferences
+        .iter()
+        .map(|i| {
+            i.get("inference_id")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .parse::<Uuid>()
+                .unwrap()
+        })
+        .collect::<HashSet<_>>();
+    assert_eq!(actual_model_inference_ids.len(), inference_count);
+    assert_eq!(actual_model_inference_ids, expected_inference_ids);
 }

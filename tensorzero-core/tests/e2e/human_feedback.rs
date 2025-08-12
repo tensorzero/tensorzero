@@ -129,6 +129,7 @@ async fn e2e_test_comment_human_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
+    sleep(Duration::from_millis(100)).await;
     let clickhouse = get_clickhouse().await;
     let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
         .await
