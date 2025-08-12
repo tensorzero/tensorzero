@@ -47,4 +47,4 @@ Selector labels
 {{- define "tensorzero.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "tensorzero.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
-{{- end }}
+{{- end }} 

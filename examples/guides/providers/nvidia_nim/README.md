@@ -53,7 +53,7 @@ routing = ["nvidia_nim"]
 
 [models.llama_3_1_8b_instruct.providers.nvidia_nim]
 type = "nvidia_nim"
-model_name = "meta/llama-3.1-8b-instruct"
+model_name = "meta/llama-3.1-8b-instruct" 
 
 [functions.my_function_name]
 type = "chat"

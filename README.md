@@ -114,7 +114,7 @@ Take what you need, adopt incrementally, and complement with other tools.
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/groq">Groq</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/hyperbolic">Hyperbolic</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/mistral">Mistral</a></b></li>
-        <!-- pathing to be created for tensorzero.com/docs/gateway/guides/providers/nvidia-nim,
+        <!-- pathing to be created for tensorzero.com/docs/gateway/guides/providers/nvidia-nim, 
         can be found in examples\guides\providers\nvidia_nim\README.md -->
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/nvidia-nim">NVIDIA NIM</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openai">OpenAI</a></b></li>
