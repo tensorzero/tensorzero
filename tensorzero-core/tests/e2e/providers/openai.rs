@@ -1734,3 +1734,29 @@ pub async fn test_shorthand_embedding() {
     assert!(response_json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
     assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
 }
+
+#[tokio::test]
+pub async fn test_embedding_extra_body() {
+    let payload = json!({
+        "input": "Hello, world!",
+        "model": "voyage_3_5_lite_256",
+    });
+    let response = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:?}");
+    assert_eq!(response_json["object"].as_str().unwrap(), "list");
+    // voyage-3.5-lite outputs 1024 dimensions by default, but we use extra_body to tell it to output 256.
+    assert_eq!(
+        response_json["data"][0]["embedding"]
+            .as_array()
+            .unwrap()
+            .len(),
+        256
+    );
+}
