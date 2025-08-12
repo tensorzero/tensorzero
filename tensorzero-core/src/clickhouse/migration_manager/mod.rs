@@ -178,10 +178,10 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
 
     let migrations: Vec<Box<dyn Migration + Send + Sync>> = make_all_migrations(clickhouse);
     if skip_completed_migrations && should_skip_migrations(clickhouse, &migrations).await {
-        tracing::info!("All migrations have already been applied");
+        tracing::debug!("All migrations have already been applied");
         return Ok(());
     }
-    tracing::info!("All migrations have not yet been applied, running migrations");
+    tracing::debug!("All migrations have not yet been applied, running migrations");
     let database_exists = clickhouse.check_database_exists().await?;
     if !database_exists {
         if clickhouse.is_cluster_configured() && !manual_run {

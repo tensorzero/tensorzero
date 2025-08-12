@@ -146,11 +146,8 @@ test("playground should work for image_judger function with images in input", as
 });
 
 test("playground should work for data with tools", async ({ page }) => {
-  // We set 'limit=1' so that we don't make parallel inference requests
-  // (two of the datapoints have the same input, and could trample on each other's
-  // cache entries)
   await page.goto(
-    "/playground?functionName=multi_hop_rag_agent&datasetName=tool_call_examples&variant=baseline",
+    '/playground?functionName=multi_hop_rag_agent&datasetName=tool_call_examples&variants=%5B%7B"type"%3A"builtin"%2C"name"%3A"baseline"%7D%5D',
   );
 
   // Verify the selections are visible
@@ -198,4 +195,58 @@ test("playground should work for data with tools", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Inference Error" }),
   ).toHaveCount(0);
+});
+
+test("editing variants works @credentials", async ({ page }) => {
+  await page.goto(
+    '/playground?functionName=write_haiku&datasetName=foo&variants=%5B%7B"type"%3A"builtin"%2C"name"%3A"initial_prompt_gpt4o_mini"%7D%5D',
+  );
+
+  // Verify the selections are visible
+  await expect(page.getByText("write_haiku")).toBeVisible();
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "foo" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "initial_prompt_gpt4o_mini" }),
+  ).toBeVisible();
+
+  // Try to edit the variant
+  // First, click the edit button
+  await page.getByRole("button", { name: "Edit" }).click();
+
+  // Wait till the modal is open
+  await expect(page.getByText("Variant Configuration")).toBeVisible();
+
+  // Wait for modal animations to complete
+  await page.waitForTimeout(1000);
+
+  // edit the system prompt to say "write a haiku about the given topic. You are additional required to include the word \"obtuse\""
+  // Wait for the editor content to be available and clear it
+  // Target the system template editor specifically within the modal/sheet content
+  const systemTemplateEditor = page
+    .getByRole("dialog")
+    .getByText("System Template")
+    .locator("..")
+    .locator(".cm-content")
+    .first();
+  await systemTemplateEditor.waitFor({ state: "visible" });
+
+  // Select all content and replace it, using force to bypass modal overlay issues
+  await systemTemplateEditor.click({ force: true });
+  await page.keyboard.press("Control+a");
+  await page.keyboard.type(
+    'Write a haiku about the given topic. You are additionally required to include the word "obtuse".',
+  );
+
+  // save the edit
+  await page.getByRole("button", { name: "Save Changes" }).click();
+
+  // Wait for the modal to close
+  await expect(page.getByText("Variant Configuration")).not.toBeVisible();
+
+  // Wait for the inference to complete and assert that the generated output contains the word "obtuse"
+  await expect(
+    page.getByRole("textbox").filter({ hasText: "obtuse" }).first(),
+  ).toBeVisible({ timeout: 10000 });
 });

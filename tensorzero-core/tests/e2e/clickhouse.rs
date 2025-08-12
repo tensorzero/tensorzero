@@ -369,7 +369,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
 
     let matching_chat_by_id = clickhouse
         .run_query_synchronous_no_params(
-            format!("SELECT id_uint, toUInt128(episode_id) as episode_id_uint FROM InferenceById FINAL WHERE function_type = 'chat' AND id_uint = '{sample_chat_id}' LIMIT 1 FORMAT JSONEachRow"),
+            format!("SELECT id_uint, toUInt128(episode_id) as episode_id_uint FROM InferenceById WHERE function_type = 'chat' AND id_uint = '{sample_chat_id}' LIMIT 1 FORMAT JSONEachRow"),
         )
         .await
         .unwrap();
@@ -387,7 +387,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
 
     let matching_chat_by_episode_id = clickhouse
         .run_query_synchronous_no_params(
-            format!("SELECT * FROM InferenceByEpisodeId FINAL WHERE function_type = 'chat' AND episode_id_uint = '{sample_chat_episode_id}' LIMIT 1 FORMAT JSONEachRow"),
+            format!("SELECT * FROM InferenceByEpisodeId WHERE function_type = 'chat' AND episode_id_uint = '{sample_chat_episode_id}' LIMIT 1 FORMAT JSONEachRow"),
         )
         .await
         .unwrap();
@@ -415,7 +415,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
 
     let matching_json_by_id = clickhouse
         .run_query_synchronous_no_params(
-            format!("SELECT id_uint, toUInt128(episode_id) as episode_id_uint FROM InferenceById FINAL WHERE function_type = 'json' AND id_uint = '{sample_json_id}' LIMIT 1 FORMAT JSONEachRow"),
+            format!("SELECT id_uint, toUInt128(episode_id) as episode_id_uint FROM InferenceById WHERE function_type = 'json' AND id_uint = '{sample_json_id}' LIMIT 1 FORMAT JSONEachRow"),
         )
         .await
         .unwrap();
@@ -431,7 +431,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
 
     let matching_json_by_episode_id = clickhouse
         .run_query_synchronous_no_params(
-            format!("SELECT * FROM InferenceByEpisodeId FINAL WHERE function_type = 'json' AND episode_id_uint = '{sample_json_episode_id}' LIMIT 1 FORMAT JSONEachRow"),
+            format!("SELECT * FROM InferenceByEpisodeId WHERE function_type = 'json' AND episode_id_uint = '{sample_json_episode_id}' LIMIT 1 FORMAT JSONEachRow"),
         )
         .await
         .unwrap();

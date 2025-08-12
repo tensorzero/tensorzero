@@ -1030,8 +1030,9 @@ pub async fn get_completed_batch_inference_response(
                 let query = format!(
                     "WITH inf_lookup AS (
                         SELECT episode_id
-                        FROM InferenceById FINAL
+                        FROM InferenceById
                         WHERE id_uint = toUInt128(toUUID('{}'))
+                        LIMIT 1
                     )
                     SELECT
                         ci.id as inference_id,
@@ -1129,8 +1130,9 @@ pub async fn get_completed_batch_inference_response(
                 let query = format!(
                     "WITH inf_lookup AS (
                         SELECT episode_id
-                        FROM InferenceById FINAL
+                        FROM InferenceById
                         WHERE id_uint = toUInt128(toUUID('{}'))
+                        LIMIT 1
                     )
                     SELECT
                         ji.id as inference_id,
