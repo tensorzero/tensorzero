@@ -13,8 +13,8 @@ jobs:
   clickhouse-tests:
     name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
 
-    # Test the working profile from main workflow first to establish baseline
-    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-large-cache-volume' || 'ubuntu-latest' }}
+    # Retry tensorzero-16x32 profile to check if previous failure was transient
+    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-16x32' || 'ubuntu-latest' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     strategy:
       matrix:
