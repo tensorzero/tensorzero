@@ -5,6 +5,14 @@ from tensorzero import ContentBlock, RenderedSample, Text, Thought, ToolCall, To
 from tensorzero.internal import OutputMessage
 
 
+def warning_message(role: str) -> str:
+    return (
+        f"Provider may not support multiple content blocks per message. "
+        f"We have chosen to concatenate the text across all content blocks for the message with role '{role}'. "
+        f"You may want to manually review this behavior."
+    )
+
+
 def tensorzero_to_openai_tools(tools: Optional[List[Any]]) -> List[Dict[str, Any]]:
     """Convert TensorZero tools to OpenAI format."""
     chatml_tools: List[Dict[str, Any]] = []
@@ -69,6 +77,7 @@ def tensorzero_message_to_openai(
         chatml_message: Dict[str, Any] = {"role": message.role}
         if content:
             if join_text_blocks:
+                warnings.warn(warning_message(message.role), UserWarning)
                 chatml_message["content"] = "\n".join(content)
             else:
                 chatml_message["content"] = [
@@ -116,6 +125,7 @@ def tensorzero_output_to_openai(
     output_message: Dict[str, Any] = {"role": "assistant"}
     if content:
         if join_text_blocks:
+            warnings.warn(warning_message("assistant"), UserWarning)
             output_message["content"] = "\n".join(content)
         else:
             output_message["content"] = [{"type": "text", "text": c} for c in content]

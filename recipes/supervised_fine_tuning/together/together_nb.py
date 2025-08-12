@@ -17,11 +17,11 @@
 #
 
 # %%
-CONFIG_PATH = "../../../../examples/data-extraction-ner/config/tensorzero.toml"
+CONFIG_PATH = "../../../examples/data-extraction-ner/config/tensorzero.toml"
 
 FUNCTION_NAME = "extract_entities"
 
-METRIC_NAME = "exact_match"
+METRIC_NAME = "jaccard_similarity"
 
 # The name of the variant to use to grab the templates used for fine-tuning
 TEMPLATE_VARIANT_NAME = "gpt_4o_mini"  # It's OK that this variant uses a different model than the one we're fine-tuning
@@ -44,23 +44,31 @@ MODEL_NAME = "meta-llama/Meta-Llama-3.1-8B-Instruct-Reference"
 DROP_INVALID_MESSAGES = True
 
 # %%
+import os
+import sys
+
+tensorzero_path = os.path.abspath(os.path.join(os.getcwd(), "../../../"))
+if tensorzero_path not in sys.path:
+    sys.path.append(tensorzero_path)
+
+# %%
 import json
 import os
 import subprocess
 import tempfile
 import time
-import warnings
 from pprint import pprint
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import requests
 import toml
 from IPython.display import clear_output
 from tensorzero import (
     FloatMetricFilter,
-    RenderedSample,
     TensorZeroGateway,
 )
+
+from recipes.util import tensorzero_rendered_samples_to_conversations, train_val_split
 
 # %% [markdown]
 # Initialize the TensorZero client
@@ -83,6 +91,7 @@ metric_node = FloatMetricFilter(
     value=FLOAT_METRIC_THRESHOLD,
     comparison_operator=comparison_operator,
 )
+# from tensorzero import BooleanMetricFilter
 # metric_node = BooleanMetricFilter(
 #     metric_name=METRIC_NAME,
 #     value=True  # or False
@@ -108,218 +117,31 @@ stored_inferences = tensorzero_client.experimental_list_inferences(
 #
 
 # %%
-rendered_inferences = tensorzero_client.experimental_render_inferences(
+rendered_samples = tensorzero_client.experimental_render_inferences(
     stored_inferences=stored_inferences,
     variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
 )
 
-
-# %% [markdown]
-# Render the inputs using the templates.
-#
-
-
-# %%
-def warning_message(role: str) -> str:
-    return (
-        f"Together.ai does not support multiple content blocks per message. "
-        f"We have chosen to concatenate the text across all content blocks for the message with role '{role}'. "
-        f"You may want to manually review this behavior."
-    )
-
-
-def render_message(message: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
-    role = message.role
-    assert role in ["user", "assistant"], f"Invalid role: {role}"
-    content: List[Dict[str, Any]] = []
-    tool_calls: List[Dict[str, Any]] = []
-    rendered_messages: List[Dict[str, Any]] = []
-
-    for content_block in message.content:
-        if content_block.type not in ["text", "raw_text"] and DROP_INVALID_MESSAGES:
-            warnings.warn(
-                f"Together.ai may not support content block type: {content_block.type}, dropping example.",
-                UserWarning,
-            )
-            return None
-        if content_block.type == "text":
-            parsed_content = content_block.value
-            content.append({"type": "text", "text": parsed_content})
-        elif content_block.type == "raw_text":
-            content.append({"type": "text", "text": content_block.value})
-        elif content_block.type == "thought":
-            content.append(
-                {"type": "text", "text": f"<think>{content_block['text']}</think>"}
-            )
-        elif (
-            content_block.type == "tool_call"
-            and role == "assistant"
-            and not DROP_INVALID_MESSAGES
-        ):
-            warnings.warn(
-                "Together.ai may not support tool calls in assistant messages.",
-                UserWarning,
-            )
-            tool_calls.append(
-                {
-                    "function": {
-                        "arguments": json.dumps(content_block.arguments),
-                        "name": content_block.name,
-                    },
-                    "id": content_block.id,
-                    "type": "function",
-                }
-            )
-        elif (
-            content_block.type == "tool_result"
-            and role == "user"
-            and not DROP_INVALID_MESSAGES
-        ):
-            warnings.warn(
-                "Together.ai may not support tool results in user messages.",
-                UserWarning,
-            )
-            # Tool results get priority so that they follow the tool call in the conversation.
-            # Any other "user" content will be appended in another message below.
-            rendered_messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": content_block.id,
-                    "content": content_block.result,
-                }
-            )
-        else:
-            warnings.warn(
-                f"We do not support content block type: {content_block.type}, dropping example.",
-                UserWarning,
-            )
-            return None
-
-    if content or tool_calls:
-        role_message: Dict[str, Any] = {"role": role}
-        if content:
-            if len(content) > 1:
-                warnings.warn(warning_message(role), UserWarning)
-            role_message["content"] = "\n".join([c.text for c in content])
-        if tool_calls:
-            role_message["tool_calls"] = tool_calls
-        rendered_messages.append(role_message)
-
-    return rendered_messages
-
-
-def render_output(
-    output: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
-    """
-    Parses the assistant message from an observation using the provided function configuration.
-    """
-    content: List[Dict[str, Any]] = []
-    tool_calls: List[Dict[str, Any]] = []
-
-    for content_block in output:
-        if content_block.type != "text" and DROP_INVALID_MESSAGES:
-            warnings.warn(
-                f"Together.ai may not support content block type: {content_block.type}, dropping example.",
-                UserWarning,
-            )
-            return None
-        if content_block.type == "text":
-            content.append({"type": "text", "text": content_block.text})
-        elif content_block.type == "thought":
-            content.append(
-                {"type": "text", "text": f"<think>{content_block.text}</think>"}
-            )
-        elif content_block.type == "tool_call" and not DROP_INVALID_MESSAGES:
-            warnings.warn(
-                "Together.ai may not support tool calls in assistant messages.",
-                UserWarning,
-            )
-            tool_calls.append(
-                {
-                    "function": {
-                        "arguments": json.dumps(content_block.arguments),
-                        "name": content_block.name,
-                    },
-                    "id": content_block.id,
-                    "type": "function",
-                }
-            )
-        else:
-            warnings.warn(
-                f"We do not support content block type: {content_block.type}, dropping example.",
-                UserWarning,
-            )
-            return None
-
-    # Once we finish collecting all blocks, create one assistant message.
-    output_message: Dict[str, Any] = {"role": "assistant"}
-    if content:
-        if len(content) > 1:
-            warnings.warn(warning_message("assistant"), UserWarning)
-        output_message["content"] = "\n".join([c.text for c in content])
-    if tool_calls:
-        output_message["tool_calls"] = tool_calls
-
-    return output_message
-
-
-def sample_to_conversational_messages(sample: RenderedSample) -> List[Dict[str, Any]]:
-    rendered_messages = []
-
-    # Add the system message to the rendered messages
-    # If there is data passed in or a system template there must be a system message
-    system = sample.system
-    if system:
-        rendered_messages.append({"role": "system", "content": system})
-
-    # Add the input messages to the rendered messages
-    for message in sample.messages:
-        rendered_message = render_message(message)
-        if rendered_message is None:
-            # `render_message` will return None if the message contains an unknown or unsupported content block.
-            # The entire example is dropped if this is the case.
-            return None
-        rendered_messages.extend(rendered_message)
-
-    # Add the output to the messages
-    output = sample.output
-    rendered_output = render_output(output)
-    if rendered_output is None:
-        # `render_output` will return None if the output contains an unknown or unsupported content block.
-        # The entire example is dropped if this is the case.
-        return None
-    rendered_messages.append(rendered_output)
-
-    return {"messages": rendered_messages}
-
-
 # %% [markdown]
 # Split the data into training and validation sets for fine-tuning.
-#
 
 # %%
-# Get unique episode_ids
-episode_ids = list(set(sample.episode_id for sample in stored_inferences))
-split_index = int(len(episode_ids) * VAL_FRACTION)
-train_episode_ids = episode_ids[:split_index]
-val_episode_ids = episode_ids[split_index:]
+train_samples, val_samples = train_val_split(
+    rendered_samples,
+    val_size=VAL_FRACTION,
+    last_inference_only=True,
+)
 
-train_samples = [
-    sample_to_conversational_messages(sample)
-    for sample in rendered_inferences
-    if sample.episode_id in train_episode_ids
-]
-val_samples = [
-    sample_to_conversational_messages(sample)
-    for sample in rendered_inferences
-    if sample.episode_id in val_episode_ids
-]
+# %% [markdown]
+# Convert the rendered samples to openai format
 
-
-print(f"Training set size: {len(train_samples)}")
-print(f"Validation set size: {len(val_samples)}")
-print(f"Actual validation fraction: {len(val_samples) / len(stored_inferences):.2f}")
+# %%
+train_samples = tensorzero_rendered_samples_to_conversations(
+    train_samples, conversation_key="messages", join_text_blocks=True
+)
+val_samples = tensorzero_rendered_samples_to_conversations(
+    val_samples, conversation_key="messages", join_text_blocks=True
+)
 
 
 # %% [markdown]
