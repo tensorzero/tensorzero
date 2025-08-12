@@ -59,7 +59,7 @@ pub struct Supervised {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Reinforcement {
-    pub grader: Box<Grader>,
+    pub grader: Box<OpenAIGrader>,
     pub hyperparameters: Option<ReinforcementHyperparameters>,
 }
 
@@ -106,9 +106,9 @@ pub struct ReinforcementHyperparameters {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "Grader"))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIGrader"))]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum Grader {
+pub enum OpenAIGrader {
     StringCheck {
         name: String,
         operation: OpenAIStringCheckOp,
@@ -142,12 +142,12 @@ pub enum Grader {
     },
     Multi {
         calculate_output: String, // Expression to combine grader outputs
-        graders: HashMap<String, Box<Grader>>,
+        graders: HashMap<String, Box<OpenAIGrader>>,
         name: String,
     },
 }
 
-impl std::fmt::Display for Grader {
+impl std::fmt::Display for OpenAIGrader {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -155,17 +155,17 @@ impl std::fmt::Display for Grader {
 }
 
 #[cfg(feature = "pyo3")]
-impl<'py> FromPyObject<'py> for Box<Grader> {
+impl<'py> FromPyObject<'py> for Box<OpenAIGrader> {
     fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
-        Ok(Box::new(Grader::extract_bound(ob)?))
+        Ok(Box::new(OpenAIGrader::extract_bound(ob)?))
     }
 }
 
 #[cfg(feature = "pyo3")]
-impl<'py> IntoPyObject<'py> for Box<Grader> {
-    type Target = <Grader as IntoPyObject<'py>>::Target;
-    type Output = <Grader as IntoPyObject<'py>>::Output;
-    type Error = <Grader as IntoPyObject<'py>>::Error;
+impl<'py> IntoPyObject<'py> for Box<OpenAIGrader> {
+    type Target = <OpenAIGrader as IntoPyObject<'py>>::Target;
+    type Output = <OpenAIGrader as IntoPyObject<'py>>::Output;
+    type Error = <OpenAIGrader as IntoPyObject<'py>>::Error;
 
     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         (*self).into_pyobject(py)

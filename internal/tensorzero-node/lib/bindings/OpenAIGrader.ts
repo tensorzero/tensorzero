@@ -4,7 +4,7 @@ import type { OpenAISimilarityMetric } from "./OpenAISimilarityMetric";
 import type { OpenAIStringCheckOp } from "./OpenAIStringCheckOp";
 import type { TomlRelativePath } from "./TomlRelativePath";
 
-export type Grader =
+export type OpenAIGrader =
   | {
       type: "string_check";
       name: string;
@@ -43,6 +43,6 @@ export type Grader =
   | {
       type: "multi";
       calculate_output: string;
-      graders: { [key in string]?: Grader };
+      graders: { [key in string]?: OpenAIGrader };
       name: string;
     };

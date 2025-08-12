@@ -38,7 +38,7 @@ from tensorzero.types import (
 )
 
 # Forward references for OpenAI RFT types that are defined in Rust
-class Grader: ...
+class OpenAIGrader: ...
 class OpenAIRFTCompatibleResponseFormat: ...
 
 @final
@@ -165,7 +165,7 @@ class OpenAIRFTConfig:
         self,
         *,
         model: str,
-        grader: Union[Dict[str, Any], "Grader"],
+        grader: Union[Dict[str, Any], "OpenAIGrader"],
         response_format: Optional[
             Union[Dict[str, Any], "OpenAIRFTCompatibleResponseFormat"]
         ] = None,
@@ -1027,7 +1027,7 @@ __all__ = [
     "FunctionsConfig",
     "FireworksSFTConfig",
     "GCPVertexGeminiSFTConfig",
-    "Grader",
+    "OpenAIGrader",
     "TensorZeroGateway",
     "LocalHttpGateway",
     "MixtureOfNConfig",

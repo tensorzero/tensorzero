@@ -6,7 +6,7 @@ use tensorzero_core::optimization::{
     UninitializedOptimizerInfo,
 };
 use tensorzero_core::providers::openai::optimization::{
-    Grader, OpenAIModelGraderInput, OpenAIRFTRole, OpenAIStringCheckOp,
+    OpenAIGrader, OpenAIModelGraderInput, OpenAIRFTRole, OpenAIStringCheckOp,
 };
 
 pub struct OpenAIRFTTestCase();
@@ -25,13 +25,13 @@ impl OptimizationTestCase for OpenAIRFTTestCase {
             inner: UninitializedOptimizerConfig::OpenAIRFT(UninitializedOpenAIRFTConfig {
                 // Use a model that supports images and tool calls
                 model: "o4-mini-2025-04-16".to_string(),
-                grader: Grader::Multi {
+                grader: OpenAIGrader::Multi {
                     name: "test_grader".to_string(),
                     graders: {
                         let mut map = HashMap::new();
                         map.insert(
                             "string_check_grader".to_string(),
-                            Box::new(Grader::StringCheck {
+                            Box::new(OpenAIGrader::StringCheck {
                                 name: "string_check_grader".to_string(),
                                 operation: OpenAIStringCheckOp::Eq,
                                 input: TomlRelativePath::new_fake_path(
@@ -46,7 +46,7 @@ impl OptimizationTestCase for OpenAIRFTTestCase {
                         );
                         map.insert(
                             "score_model_grader".to_string(),
-                            Box::new(Grader::ScoreModel {
+                            Box::new(OpenAIGrader::ScoreModel {
                                 name: "score_model_grader".to_string(),
                                 model: "gpt-4.1-nano-2025-04-14".to_string(),
                                 input: vec![

@@ -16,9 +16,9 @@ use crate::{
     providers::openai::{
         default_api_key_location,
         optimization::{
-            convert_to_optimizer_status, Grader, OpenAIFineTuningJob, OpenAIFineTuningMethod,
-            OpenAIFineTuningRequest, OpenAIRFTCompatibleResponseFormat, OpenAIReinforcementRow,
-            Reinforcement, ReinforcementHyperparameters,
+            convert_to_optimizer_status, OpenAIFineTuningJob, OpenAIFineTuningMethod,
+            OpenAIFineTuningRequest, OpenAIGrader, OpenAIRFTCompatibleResponseFormat,
+            OpenAIReinforcementRow, Reinforcement, ReinforcementHyperparameters,
         },
         upload_openai_file, OpenAICredentials, DEFAULT_CREDENTIALS, OPENAI_DEFAULT_BASE_URL,
         PROVIDER_TYPE,
@@ -33,7 +33,7 @@ const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
 #[cfg_attr(test, ts(export))]
 pub struct OpenAIRFTConfig {
     pub model: String,
-    pub grader: Grader,
+    pub grader: OpenAIGrader,
     pub response_format: Option<OpenAIRFTCompatibleResponseFormat>,
     pub batch_size: Option<usize>,
     pub compute_multiplier: Option<f64>,
@@ -57,7 +57,7 @@ pub struct OpenAIRFTConfig {
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTConfig"))]
 pub struct UninitializedOpenAIRFTConfig {
     pub model: String,
-    pub grader: Grader,
+    pub grader: OpenAIGrader,
     pub response_format: Option<OpenAIRFTCompatibleResponseFormat>,
     pub batch_size: Option<usize>,
     pub compute_multiplier: Option<f64>,
@@ -108,8 +108,8 @@ impl UninitializedOpenAIRFTConfig {
         seed: Option<u64>,
         suffix: Option<String>,
     ) -> PyResult<Self> {
-        // Deserialize the grader from Python dict to Rust Grader
-        let grader: Grader = if let Ok(grader) = grader.extract::<Grader>() {
+        // Deserialize the grader from Python dict to Rust OpenAIGrader
+        let grader: OpenAIGrader = if let Ok(grader) = grader.extract::<OpenAIGrader>() {
             // If it's already a Grader object, use it directly
             grader
         } else {
@@ -201,7 +201,7 @@ impl UninitializedOpenAIRFTConfig {
     fn __init__(
         this: Py<Self>,
         model: String,
-        grader: Grader,
+        grader: OpenAIGrader,
         response_format: Option<OpenAIRFTCompatibleResponseFormat>,
         batch_size: Option<usize>,
         compute_multiplier: Option<f64>,
