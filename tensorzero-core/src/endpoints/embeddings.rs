@@ -4,7 +4,7 @@ use serde::Deserialize;
 use tracing::instrument;
 
 use crate::{
-    cache::CacheOptions,
+    cache::CacheParamsOptions,
     clickhouse::ClickHouseConnectionInfo,
     config_parser::Config,
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
@@ -21,8 +21,12 @@ pub struct Params {
     pub model_name: String,
     pub dimensions: Option<u32>,
     pub encoding_format: EmbeddingEncodingFormat,
+    // if true, the embedding will not be stored
+    pub dryrun: Option<bool>,
     #[serde(default)]
     pub credentials: InferenceCredentials,
+    #[serde(default)]
+    pub cache_options: CacheParamsOptions,
 }
 
 #[instrument(
@@ -33,6 +37,7 @@ pub struct Params {
 pub async fn embeddings(
     config: Arc<Config>,
     http_client: &reqwest::Client,
+    clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
 ) -> Result<EmbeddingResponse, Error> {
     let span = tracing::Span::current();
@@ -57,14 +62,12 @@ pub async fn embeddings(
         dimensions: params.dimensions,
         encoding_format: params.encoding_format,
     };
-    // Caching and clickhouse writes are disabled in the embeddings endpoint for now
-    let cache_options = CacheOptions::default();
-    let clickhouse = ClickHouseConnectionInfo::Disabled;
+    let dryrun = params.dryrun.unwrap_or(false);
     let clients = InferenceClients {
         http_client,
         credentials: &params.credentials,
-        cache_options: &cache_options,
-        clickhouse_connection_info: &clickhouse,
+        cache_options: &(params.cache_options, dryrun).into(),
+        clickhouse_connection_info: &clickhouse_connection_info,
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)
