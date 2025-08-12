@@ -1,12 +1,12 @@
-use secrecy::SecretString;
-use std::{borrow::Cow, sync::OnceLock, time::Duration};
-use url::Url;
 use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource};
 use secrecy::ExposeSecret;
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
+use std::{borrow::Cow, sync::OnceLock, time::Duration};
 use tokio::time::Instant;
+use url::Url;
 
 use crate::{
     cache::ModelProviderRequest,
@@ -251,7 +251,9 @@ pub(super) fn prepare_nvidia_nim_messages<'a>(
     Ok(messages)
 }
 
-fn tensorzero_to_nvidia_nim_system_message(system: Option<&str>) -> Option<OpenAIRequestMessage<'_>> {
+fn tensorzero_to_nvidia_nim_system_message(
+    system: Option<&str>,
+) -> Option<OpenAIRequestMessage<'_>> {
     system.map(|instructions| {
         OpenAIRequestMessage::System(OpenAISystemRequestMessage {
             content: Cow::Borrowed(instructions),
@@ -737,7 +739,10 @@ fn nvidia_nim_to_tensorzero_chunk(
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
-            message: format!("Response has invalid number of choices: {}. Expected 1.", chunk.choices.len()),
+            message: format!(
+                "Response has invalid number of choices: {}. Expected 1.",
+                chunk.choices.len()
+            ),
             provider_type: PROVIDER_TYPE.to_string(),
             raw_request: None,
             raw_response: Some(raw_message.clone()),
@@ -986,15 +991,16 @@ mod tests {
                     provider.api_base.as_str(),
                     "https://integrate.api.nvidia.com/v1/"
                 );
-            },
+            }
             Err(e) => {
                 // Based on the actual error: "API key missing for provider: nvidia_nim"
                 // Your implementation validates credentials at creation time
                 assert!(
-                    e.to_string().contains("API key missing") ||
-                    e.to_string().contains("nvidia_nim") ||
-                    e.to_string().contains("missing"),
-                    "Unexpected error for Env credentials: {}", e
+                    e.to_string().contains("API key missing")
+                        || e.to_string().contains("nvidia_nim")
+                        || e.to_string().contains("missing"),
+                    "Unexpected error for Env credentials: {}",
+                    e
                 );
             }
         }
@@ -1015,14 +1021,15 @@ mod tests {
                 // If empty model names are allowed at provider creation
                 assert_eq!(provider.model_name(), "");
                 println!("Provider allows empty model names - validation at request time");
-            },
+            }
             Err(e) => {
                 // If empty model names are rejected at provider creation
                 assert!(
-                    e.to_string().contains("model") ||
-                    e.to_string().contains("name") ||
-                    e.to_string().contains("empty"),
-                    "Expected error about model name, got: {}", e
+                    e.to_string().contains("model")
+                        || e.to_string().contains("name")
+                        || e.to_string().contains("empty"),
+                    "Expected error about model name, got: {}",
+                    e
                 );
                 println!("Provider rejects empty model names at creation time");
             }
@@ -1040,7 +1047,10 @@ mod tests {
 
         // Updated expectation: provider creation should succeed with empty dynamic credential key
         // The validation happens when trying to retrieve the actual API key
-        assert!(result.is_ok(), "Provider creation should succeed with empty dynamic credential key");
+        assert!(
+            result.is_ok(),
+            "Provider creation should succeed with empty dynamic credential key"
+        );
 
         if result.is_ok() {
             let provider = result.unwrap();
@@ -1057,18 +1067,22 @@ mod tests {
             "meta/llama-3.1-8b-instruct".to_string(),
             None,
             Some(CredentialLocation::Dynamic("missing_key".to_string())),
-        ).unwrap();
+        )
+        .unwrap();
 
         // This is where the validation should happen - when trying to get the API key
         let empty_creds = InferenceCredentials::new();
         let result = provider.credentials.get_api_key(&empty_creds);
 
-        assert!(result.is_err(), "Should fail when API key is not found in credentials");
+        assert!(
+            result.is_err(),
+            "Should fail when API key is not found in credentials"
+        );
         let error = result.unwrap_err();
         assert!(
-            error.to_string().contains("API key missing") ||
-            error.to_string().contains("NVIDIA NIM") ||
-            error.to_string().contains("missing_key"),
+            error.to_string().contains("API key missing")
+                || error.to_string().contains("NVIDIA NIM")
+                || error.to_string().contains("missing_key"),
             "Error should indicate missing API key: {}",
             error
         );
@@ -1079,7 +1093,7 @@ mod tests {
         // Test various edge cases for model names that should be valid at provider level
         let edge_cases = vec![
             "",  // Empty string
-            " ",  // Just whitespace
+            " ", // Just whitespace
             "model-with-hyphens",
             "model_with_underscores",
             "model/with/slashes",
@@ -1119,7 +1133,8 @@ mod tests {
             "meta/llama-3.1-8b-instruct".to_string(),
             None,
             Some(CredentialLocation::Env("NVIDIA_API_KEY".to_string())),
-        ).expect("Failed to create provider");
+        )
+        .expect("Failed to create provider");
 
         println!("Provider configured for integration test:");
         println!("- Model: {}", provider.model_name());
@@ -1133,7 +1148,10 @@ mod tests {
 
         // For now, just verify provider is configured correctly
         assert_eq!(provider.model_name(), "meta/llama-3.1-8b-instruct");
-        assert_eq!(provider.api_base.as_str(), "https://integrate.api.nvidia.com/v1/");
+        assert_eq!(
+            provider.api_base.as_str(),
+            "https://integrate.api.nvidia.com/v1/"
+        );
     }
 
     #[tokio::test]
@@ -1153,7 +1171,8 @@ mod tests {
                 model.to_string(),
                 None,
                 Some(CredentialLocation::Env("NVIDIA_API_KEY".to_string())),
-            ).expect(&format!("Failed to create provider for model: {}", model));
+            )
+            .expect(&format!("Failed to create provider for model: {}", model));
 
             assert_eq!(provider.model_name(), model);
 
@@ -1174,7 +1193,8 @@ mod tests {
             "invalid/nonexistent-model".to_string(),
             None,
             Some(CredentialLocation::Env("NVIDIA_API_KEY".to_string())),
-        ).expect("Failed to create provider");
+        )
+        .expect("Failed to create provider");
 
         // TODO: Test actual API call with invalid model
         // let response = provider.chat_completion(invalid_request).await;
@@ -1197,7 +1217,8 @@ mod tests {
             "custom-model".to_string(),
             Some(custom_url),
             Some(CredentialLocation::Env("NVIDIA_API_KEY".to_string())),
-        ).expect("Failed to create provider with custom endpoint");
+        )
+        .expect("Failed to create provider with custom endpoint");
 
         assert_eq!(provider.api_base.as_str(), "http://localhost:8000/v1/");
 
