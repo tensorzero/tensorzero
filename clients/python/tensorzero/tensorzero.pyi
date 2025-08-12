@@ -113,6 +113,7 @@ class RenderedSample:
 @final
 class OptimizationJobHandle:
     OpenAISFT: Type["OptimizationJobHandle"]
+    OpenAIRFT: Type["OptimizationJobHandle"]
     FireworksSFT: Type["OptimizationJobHandle"]
     GCPVertexGeminiSFT: Type["OptimizationJobHandle"]
     TogetherSFT: Type["OptimizationJobHandle"]
@@ -126,6 +127,7 @@ class OptimizationJobStatus:
 @final
 class OptimizationJobInfo:
     OpenAISFT: Type["OptimizationJobInfo"]
+    OpenAIRFT: Type["OptimizationJobInfo"]
     FireworksSFT: Type["OptimizationJobInfo"]
     GCPVertexGeminiSFT: Type["OptimizationJobInfo"]
     TogetherSFT: Type["OptimizationJobInfo"]
@@ -147,6 +149,27 @@ class OpenAISFTConfig:
         batch_size: Optional[int] = None,
         learning_rate_multiplier: Optional[float] = None,
         n_epochs: Optional[int] = None,
+        credentials: Optional[str] = None,
+        api_base: Optional[str] = None,
+        seed: Optional[int] = None,
+        suffix: Optional[str] = None,
+    ) -> None: ...
+
+@final
+class OpenAIRFTConfig:
+    def __init__(
+        self,
+        *,
+        model: str,
+        grader: Dict[str, Any],
+        response_format: Optional[Dict[str, Any]] = None,
+        batch_size: Optional[int] = None,
+        compute_multiplier: Optional[float] = None,
+        eval_interval: Optional[int] = None,
+        eval_samples: Optional[int] = None,
+        learning_rate_multiplier: Optional[float] = None,
+        n_epochs: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
         credentials: Optional[str] = None,
         api_base: Optional[str] = None,
         seed: Optional[int] = None,
