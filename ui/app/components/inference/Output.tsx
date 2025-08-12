@@ -77,11 +77,19 @@ function JsonInferenceOutputComponent({
     output.raw ?? undefined,
   );
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string | undefined>();
 
   useEffect(() => {
     // Update display value when output.raw changes externally
     setDisplayValue(output.raw ?? undefined);
   }, [output.raw]);
+
+  useEffect(() => {
+    // Switch to raw tab when entering edit mode
+    if (isEditing) {
+      setActiveTab("raw");
+    }
+  }, [isEditing]);
 
   const handleRawChange = (value: string | undefined) => {
     if (onOutputChange && value !== undefined) {
@@ -98,7 +106,11 @@ function JsonInferenceOutputComponent({
         });
       } catch {
         setJsonError("Invalid JSON format");
-        onOutputChange(null);
+        onOutputChange({
+          ...output,
+          raw: value,
+          parsed: null,
+        });
       }
     }
   };
@@ -126,10 +138,15 @@ function JsonInferenceOutputComponent({
   const defaultTab = isEditing ? "raw" : output.parsed ? "parsed" : "raw";
 
   return (
-    <SnippetTabs tabs={tabs} defaultTab={defaultTab}>
-      {(activeTab) => (
+    <SnippetTabs
+      tabs={tabs}
+      defaultTab={defaultTab}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+    >
+      {(currentTab) => (
         <SnippetContent maxHeight={maxHeight}>
-          {activeTab === "parsed" ? (
+          {currentTab === "parsed" ? (
             <>
               {output.parsed ? (
                 <>
@@ -146,7 +163,7 @@ function JsonInferenceOutputComponent({
                 <EmptyMessage message="The inference output failed to parse against the schema." />
               )}
             </>
-          ) : activeTab === "raw" ? (
+          ) : currentTab === "raw" ? (
             <>
               <CodeEditor
                 allowedLanguages={["json"]}
