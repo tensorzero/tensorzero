@@ -42,7 +42,16 @@ jobs:
         id: get_version
         run: |
           echo "Fetching latest tensorzero version from PyPI..."
-          latest_version=$(curl -s https://pypi.org/pypi/tensorzero/json | jq -r '.info.version')
+          response=$(curl -sSf https://pypi.org/pypi/tensorzero/json)
+          if [ $? -ne 0 ] || [ -z "$response" ]; then
+            echo "Error: Failed to fetch tensorzero info from PyPI." >&2
+            exit 1
+          fi
+          latest_version=$(echo "$response" | jq -r '.info.version')
+          if [ -z "$latest_version" ] || [ "$latest_version" = "null" ]; then
+            echo "Error: Failed to extract version from PyPI response." >&2
+            exit 1
+          fi
           echo "Latest version: $latest_version"
           echo "version=$latest_version" >> $GITHUB_OUTPUT
 
