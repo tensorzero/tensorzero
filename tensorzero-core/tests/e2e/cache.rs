@@ -325,7 +325,6 @@ async fn test_cache_stream_write_and_read() {
 #[traced_test]
 #[tokio::test]
 pub async fn test_dont_cache_invalid_tool_call() {
-    // We can't
     let is_batched_writes = match std::env::var("TENSORZERO_CLICKHOUSE_BATCH_WRITES") {
         Ok(value) => value == "true",
         Err(_) => false,
