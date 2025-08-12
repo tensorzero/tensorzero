@@ -34,7 +34,8 @@ test("should show the function detail page for default function", async ({
   page,
 }) => {
   await page.goto("/observability/functions/tensorzero::default");
-  await expect(page.getByText("Variants")).toBeVisible();
+
+  await expect(page.getByRole("heading", { name: "Variants" })).toBeVisible();
 
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
