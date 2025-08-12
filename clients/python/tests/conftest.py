@@ -122,7 +122,11 @@ def mixed_rendered_samples(
                 Tool(
                     name="test",
                     description="test",
-                    parameters={"foo": "bar"},
+                    parameters={
+                        "type": "object",
+                        "properties": {"foo": {"type": "string", "description": "bar"}},
+                        "required": ["foo"],
+                    },
                     strict=False,
                 )
             ],
