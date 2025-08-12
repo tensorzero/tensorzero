@@ -96,10 +96,19 @@ jobs:
 
       - name: Configure AWS CLI for R2
         run: |
+          echo "=== Configuring AWS CLI for R2 ==="
+          echo "R2 endpoint: ${{ vars.R2_ENDPOINT_URL }}"
+          echo "Access key ID length: ${#R2_ACCESS_KEY_ID}"
+          echo "Secret key length: ${#R2_SECRET_ACCESS_KEY}"
           aws configure set aws_access_key_id ${{ secrets.R2_ACCESS_KEY_ID }}
           aws configure set aws_secret_access_key ${{ secrets.R2_SECRET_ACCESS_KEY }}
           aws configure set default.region auto
           aws configure set default.s3.signature_version s3v4
+          echo "AWS CLI configured"
+          echo "========================="
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
       - name: Download existing index.yaml
         continue-on-error: true
