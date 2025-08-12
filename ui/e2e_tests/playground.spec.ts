@@ -93,7 +93,6 @@ test("playground should work for extract_entities JSON function with 2 variants"
   // - 4 Variant Output sections (2 variants × 2 datapoints)
   // Total: 8 CodeMirror editors
   // Wait for all editors to load before counting
-  await page.locator(".cm-editor").nth(7).waitFor();
   await expect(page.locator(".cm-editor")).toHaveCount(8);
 
   // Verify that there are no errors
