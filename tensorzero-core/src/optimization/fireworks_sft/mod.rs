@@ -845,7 +845,7 @@ impl JobHandle for FireworksSFTJobHandle {
                         },
                         extra_headers: None,
                         extra_body: None,
-                        timeouts: None,
+                        timeouts: TimeoutsConfig::default(),
                         discard_unknown_chunks: false,
                     };
                     Ok(OptimizationJobInfo::Completed {
