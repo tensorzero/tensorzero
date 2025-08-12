@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use std::env;
 use std::time::{Duration, Instant};
 
-use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
+use crate::config_parser::BatchWritesConfig;
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails};
 use crate::serde_util::deserialize_u64;
@@ -354,8 +355,8 @@ pub async fn insert_migration_record(
     let migration_id = migration.migration_num()?;
     let migration_name = migration.name();
     clickhouse
-        .write(
-            &[MigrationRecordDatabaseInsert {
+        .write_non_batched(
+            Rows::Unserialized(&[MigrationRecordDatabaseInsert {
                 migration_id,
                 migration_name,
                 gateway_version: TENSORZERO_VERSION.to_string(),
@@ -364,7 +365,7 @@ pub async fn insert_migration_record(
                     .to_string(),
                 execution_time_ms: execution_time.as_millis() as u64,
                 applied_at: None,
-            }],
+            }]),
             TableName::TensorZeroMigration,
         )
         .await?;
@@ -390,7 +391,8 @@ pub async fn manual_run_migrations() -> Result<(), Error> {
         }
         .into());
     };
-    let clickhouse = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&clickhouse_url, BatchWritesConfig::default()).await?;
     run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
         // If we manually run the migrations, we should not skip any.
