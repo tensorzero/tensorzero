@@ -122,8 +122,8 @@ function JsonInferenceOutputComponent({
     });
   }
 
-  // Set default tab to Parsed if it has content, otherwise Raw
-  const defaultTab = output.parsed ? "parsed" : "raw";
+  // Set default tab to Raw when editing, otherwise Parsed if it has content
+  const defaultTab = isEditing ? "raw" : output.parsed ? "parsed" : "raw";
 
   return (
     <SnippetTabs tabs={tabs} defaultTab={defaultTab}>
