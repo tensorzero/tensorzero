@@ -4,7 +4,7 @@ The `fireworks.ipynb` notebook provides a step-by-step recipe to perform supervi
 
 ## Setup
 
-1. Create a `.env` file with the `OPENAI_API_KEY`, `FIREWORKS_API_KEY`, and `FIREWORKS_ACCOUNT_ID` environment variables (see `.env.example` for an example).
+1. Create a `.env` file with the `FIREWORKS_API_KEY`, and `FIREWORKS_ACCOUNT_ID` environment variables (see `.env.example` for an example).
 2. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI, and a development ClickHouse sdatabase (run the [quickstart guide](https://www.tensorzero.com/docs/quickstart/) or an example in /examples if your ClickHouse database is not yet populated with data).
 3. Run the `fireworks.ipynb` Jupyter notebook.
 
