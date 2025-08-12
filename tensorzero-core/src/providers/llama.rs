@@ -124,7 +124,7 @@ impl InferenceProvider for LlamaProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_url = "https://api.llama.com/v1/chat/completions".to_string();
+        let request_url = "https://api.llama.ai/v1/chat/completions".to_string();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
 
@@ -235,7 +235,7 @@ impl InferenceProvider for LlamaProvider {
                     ),
                 })
             })?;
-        let request_url = "https://api.llama.com/v1/chat/completions".to_string();
+        let request_url = "https://api.llama.ai/v1/chat/completions".to_string();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_builder = http_client.post(request_url);
@@ -327,21 +327,56 @@ pub fn stream_llama(
                         if message.data == "[DONE]" {
                             break;
                         }
-                        let data: Result<LlamaChatChunk, Error> =
-                            serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
-                                message: format!(
-                                    "Error parsing chunk. Error: {e}",
-                                    ),
-                                raw_request: None,
-                                raw_response: Some(message.data.clone()),
-                                provider_type: provider_type.clone(),
-                            }));
-
+                        
+                        // Log the raw message for debugging
+                        if message.data.contains("error") || message.data.contains("Stream ended") {
+                            eprintln!("DEBUG: Received message: {}", message.data);
+                        }
+                        
                         let latency = start_time.elapsed();
-                        let stream_message = data.and_then(|d| {
-                            llama_to_tensorzero_chunk(d, latency, &mut tool_call_ids)
-                        });
-                        yield stream_message;
+                        // Try to parse as new streaming format first, then fall back to old format
+                        let data: Result<ProviderInferenceResponseChunk, Error> = {
+                            // Check if this is an error message from the API
+                            if message.data.contains("error") || message.data.contains("Stream ended") {
+                                Err(Error::new(ErrorDetails::InferenceServer {
+                                    message: format!("Llama API error: {}", message.data),
+                                    raw_request: None,
+                                    raw_response: Some(message.data.clone()),
+                                    provider_type: provider_type.clone(),
+                                }))
+                            } else {
+                                // First try the new streaming format
+                                if let Ok(streaming_response) = serde_json::from_str::<LlamaStreamingResponse>(&message.data) {
+                                    llama_streaming_to_tensorzero_chunk(streaming_response, latency, &mut tool_call_ids)
+                                } else {
+                                    // Fall back to old format for backward compatibility
+                                    let old_chunk: LlamaChatChunk = serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
+                                        message: format!(
+                                            "Error parsing chunk. Error: {e}",
+                                            ),
+                                        raw_request: None,
+                                        raw_response: Some(message.data.clone()),
+                                        provider_type: provider_type.clone(),
+                                    }))?;
+                                    llama_to_tensorzero_chunk(old_chunk, latency, &mut tool_call_ids)
+                                }
+                            }
+                        };
+                        
+                        // Only yield if we have content or a finish reason
+                        match &data {
+                            Ok(chunk) if !chunk.content.is_empty() || chunk.finish_reason.is_some() => {
+                                yield data;
+                            }
+                            Ok(_) => {
+                                // Skip empty chunks but continue processing
+                                continue;
+                            }
+                            Err(_) => {
+                                // Yield errors so they can be handled
+                                yield data;
+                            }
+                        }
                     }
                 },
             }
@@ -1220,6 +1255,49 @@ struct LlamaDelta {
     tool_calls: Option<Vec<LlamaToolCallChunk>>,
 }
 
+// New streaming response format structures
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct LlamaStreamingEvent {
+    #[serde(rename = "event_type")]
+    event_type: String,
+    delta: LlamaStreamingDelta,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct LlamaStreamingDelta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<String>,
+    #[serde(rename = "type")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<LlamaStreamingToolCall>>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct LlamaStreamingToolCall {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    index: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    function: Option<LlamaStreamingFunctionCall>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct LlamaStreamingFunctionCall {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    arguments: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct LlamaStreamingResponse {
+    id: String,
+    event: LlamaStreamingEvent,
+}
+
 // Custom deserializer function for empty string to None
 // This is required because SGLang (which depends on this code) returns "" in streaming chunks instead of null
 fn empty_string_as_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
@@ -1329,6 +1407,100 @@ fn llama_to_tensorzero_chunk(
     Ok(ProviderInferenceResponseChunk::new(
         content,
         usage,
+        raw_message,
+        latency,
+        finish_reason,
+    ))
+}
+
+/// Maps the new Llama streaming response format to a TensorZero chunk
+fn llama_streaming_to_tensorzero_chunk(
+    response: LlamaStreamingResponse,
+    latency: Duration,
+    tool_call_ids: &mut Vec<String>,
+) -> Result<ProviderInferenceResponseChunk, Error> {
+    let raw_message = serde_json::to_string(&response).map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!(
+                "Error serializing streaming response from Llama: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
+            raw_request: None,
+            raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
+            provider_type: PROVIDER_TYPE.to_string(),
+        })
+    })?;
+
+    let mut content = vec![];
+    let mut finish_reason = None;
+
+    // Handle different event types
+    match response.event.event_type.as_str() {
+        "start" => {
+            // Start event - no content yet
+        }
+        "text" => {
+            if let Some(text) = response.event.delta.text {
+                content.push(ContentBlockChunk::Text(TextChunk {
+                    text,
+                    id: "0".to_string(),
+                }));
+            }
+        }
+        "tool_calls" => {
+            if let Some(tool_calls) = response.event.delta.tool_calls {
+                for tool_call in tool_calls {
+                    let id = match tool_call.id {
+                        Some(id) => {
+                            tool_call_ids.push(id.clone());
+                            id
+                        }
+                        None => {
+                            // Generate a default ID if none provided
+                            let default_id = format!("tool_call_{}", tool_call_ids.len());
+                            tool_call_ids.push(default_id.clone());
+                            default_id
+                        }
+                    };
+
+                    if let Some(function) = tool_call.function {
+                        content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
+                            id,
+                            raw_name: Some(function.name.unwrap_or_default()),
+                            raw_arguments: function.arguments.unwrap_or_default(),
+                        }));
+                    }
+                }
+            }
+        }
+        "stop" => {
+            finish_reason = Some(FinishReason::Stop);
+        }
+        "error" => {
+            return Err(Error::new(ErrorDetails::InferenceServer {
+                message: "Streaming error event received".to_string(),
+                raw_request: None,
+                raw_response: Some(raw_message.clone()),
+                provider_type: PROVIDER_TYPE.to_string(),
+            }));
+        }
+        "done" => {
+            // Stream completion event
+            finish_reason = Some(FinishReason::Stop);
+        }
+        "end" => {
+            // Alternative stream completion event
+            finish_reason = Some(FinishReason::Stop);
+        }
+        _ => {
+            // Unknown event type - log but continue
+            // Don't fail on unknown event types, just skip them
+        }
+    }
+
+    Ok(ProviderInferenceResponseChunk::new(
+        content,
+        None, // No usage info in streaming chunks
         raw_message,
         latency,
         finish_reason,

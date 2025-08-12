@@ -49,7 +49,7 @@ async fn get_providers() -> E2ETestProviders {
         variant_name: "llama-dynamic".to_string(),
         model_name: "llama-scout-llama".into(),
         model_provider_name: "llama".into(),
-        credentials,
+        credentials: credentials.clone(),
     }];
 
     let shorthand_providers = vec![E2ETestProvider {
@@ -86,7 +86,13 @@ async fn get_providers() -> E2ETestProviders {
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
-        dynamic_tool_use_inference: standard_providers.clone(),
+        dynamic_tool_use_inference: vec![E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "llama".to_string(),
+            model_name: "llama-scout-llama".into(),
+            model_provider_name: "llama".into(),
+            credentials: credentials.clone(),
+        }],
         parallel_tool_use_inference: standard_providers.clone(),
         json_mode_inference: json_providers.clone(),
         image_inference: vec![],
