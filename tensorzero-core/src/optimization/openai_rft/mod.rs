@@ -17,8 +17,8 @@ use crate::{
         default_api_key_location,
         optimization::{
             convert_to_optimizer_status, OpenAIFineTuningJob, OpenAIFineTuningMethod,
-            OpenAIFineTuningRequest, OpenAIGrader, OpenAIRFTCompatibleResponseFormat,
-            OpenAIReinforcementRow, Reinforcement, ReinforcementHyperparameters,
+            OpenAIFineTuningRequest, OpenAIGrader, OpenAIRFTResponseFormat, OpenAIReinforcementRow,
+            Reinforcement, ReinforcementHyperparameters,
         },
         upload_openai_file, OpenAICredentials, DEFAULT_CREDENTIALS, OPENAI_DEFAULT_BASE_URL,
         PROVIDER_TYPE,
@@ -34,7 +34,7 @@ const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
 pub struct OpenAIRFTConfig {
     pub model: String,
     pub grader: OpenAIGrader,
-    pub response_format: Option<OpenAIRFTCompatibleResponseFormat>,
+    pub response_format: Option<OpenAIRFTResponseFormat>,
     pub batch_size: Option<usize>,
     pub compute_multiplier: Option<f64>,
     pub eval_interval: Option<usize>,
@@ -58,7 +58,7 @@ pub struct OpenAIRFTConfig {
 pub struct UninitializedOpenAIRFTConfig {
     pub model: String,
     pub grader: OpenAIGrader,
-    pub response_format: Option<OpenAIRFTCompatibleResponseFormat>,
+    pub response_format: Option<OpenAIRFTResponseFormat>,
     pub batch_size: Option<usize>,
     pub compute_multiplier: Option<f64>,
     pub eval_interval: Option<usize>,
@@ -130,28 +130,27 @@ impl UninitializedOpenAIRFTConfig {
             })?
         };
 
-        // Deserialize the response_format from Python dict to Rust OpenAIRFTCompatibleResponseFormat
-        let response_format: Option<OpenAIRFTCompatibleResponseFormat> =
-            if let Some(rf) = response_format {
-                if let Ok(response_format) = rf.extract::<OpenAIRFTCompatibleResponseFormat>() {
-                    // If it's already a ResponseFormat object, use it directly
-                    Some(response_format)
-                } else {
-                    // Otherwise, try to deserialize from a Python dict
-                    let json_str = py.import("json")?.getattr("dumps")?.call1((rf,))?;
-                    let json_string: String = json_str.extract()?;
-
-                    let response_format: OpenAIRFTCompatibleResponseFormat =
-                        serde_json::from_str(&json_string).map_err(|e| {
-                            PyErr::new::<PyValueError, _>(format!(
-                                "Failed to deserialize response_format: {e}"
-                            ))
-                        })?;
-                    Some(response_format)
-                }
+        // Deserialize the response_format from Python dict to Rust OpenAIRFTResponseFormat
+        let response_format: Option<OpenAIRFTResponseFormat> = if let Some(rf) = response_format {
+            if let Ok(response_format) = rf.extract::<OpenAIRFTResponseFormat>() {
+                // If it's already a ResponseFormat object, use it directly
+                Some(response_format)
             } else {
-                None
-            };
+                // Otherwise, try to deserialize from a Python dict
+                let json_str = py.import("json")?.getattr("dumps")?.call1((rf,))?;
+                let json_string: String = json_str.extract()?;
+
+                let response_format: OpenAIRFTResponseFormat = serde_json::from_str(&json_string)
+                    .map_err(|e| {
+                    PyErr::new::<PyValueError, _>(format!(
+                        "Failed to deserialize response_format: {e}"
+                    ))
+                })?;
+                Some(response_format)
+            }
+        } else {
+            None
+        };
 
         // Use Deserialize to convert the string to a CredentialLocation
         let credentials =
@@ -202,7 +201,7 @@ impl UninitializedOpenAIRFTConfig {
         this: Py<Self>,
         model: String,
         grader: OpenAIGrader,
-        response_format: Option<OpenAIRFTCompatibleResponseFormat>,
+        response_format: Option<OpenAIRFTResponseFormat>,
         batch_size: Option<usize>,
         compute_multiplier: Option<f64>,
         eval_interval: Option<usize>,

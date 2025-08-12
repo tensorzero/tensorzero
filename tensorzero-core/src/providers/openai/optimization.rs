@@ -261,19 +261,16 @@ impl OpenAIRFTRole {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-#[cfg_attr(
-    feature = "pyo3",
-    pyclass(str, name = "OpenAIRFTCompatibleResponseFormat")
-)]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTResponseFormat"))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-pub enum OpenAIRFTCompatibleResponseFormat {
+pub enum OpenAIRFTResponseFormat {
     JsonSchema {
         json_schema: RFTJsonSchemaInfoOption,
     },
 }
 
-impl std::fmt::Display for OpenAIRFTCompatibleResponseFormat {
+impl std::fmt::Display for OpenAIRFTResponseFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
