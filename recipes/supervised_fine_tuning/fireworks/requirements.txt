@@ -612,16 +612,6 @@ matplotlib-inline==0.1.7 \
     # via
     #   ipykernel
     #   ipython
-minijinja==2.11.0 \
-    --hash=sha256:20f6ffdcffc89161b1c9948db4c76bc180fed62c303391ace101df99acaab61c \
-    --hash=sha256:62a162271723a14b0df1d3cd1fbf4657dc3f1268c98eba3f143ee81199b981df \
-    --hash=sha256:630fa6964392ce9be4b2499fb50142281c8d444450e1ededffb1b6c92dec2788 \
-    --hash=sha256:900ad73945ed7bc5c371e0fd4e6faf1fb6a6aaa413575d90f82fcad6b80e199c \
-    --hash=sha256:a3f9ad56641ed88c89d5f0e67466d1c272b2c694f3fc92d159fce1ab0f03b2f7 \
-    --hash=sha256:e0d9b3cd53ce6cc58b4ddba6ff57085736c35b86fd8a4dc92e3b04a1c9f45eaf \
-    --hash=sha256:e606bd731364797d77b97d00d9b2dac15ffba15e03c3d075363f857d81cf91e0 \
-    --hash=sha256:fa3c5c22ddf035e71890a2a4615b0637aca08f5eeb03192ea321b395c5439833
-    # via tensorzero-recipes-supervised-fine-tuning-metrics-fireworks
 mistune==3.1.3 \
     --hash=sha256:1a32314113cff28aa6432e99e522677c8587fd83e3d51c29b82a52409c842bd9 \
     --hash=sha256:a7035c21782b2becb6be62f8f25d3df81ccb4d6fa477a6525b15af06539f02a0
@@ -701,7 +691,7 @@ numpy==2.0.2 ; python_full_version < '3.10' \
     --hash=sha256:ec9852fb39354b5a45a80bdab5ac02dd02b15f44b3804e9f00c556bf24b4bded \
     --hash=sha256:f15975dfec0cf2239224d80e32c3170b1d168335eaedee69da84fbe9f1f9cd04 \
     --hash=sha256:f26b258c385842546006213344c50655ff1555a9338e2e5e02a0756dc3e803dd
-    # via pandas
+    # via tensorzero-recipes-supervised-fine-tuning-metrics-fireworks
 numpy==2.2.6 ; python_full_version == '3.10.*' \
     --hash=sha256:038613e9fb8c72b0a41f025a7e4c3f0b7a1b5d768ece4796b674c8f3fe13efff \
     --hash=sha256:0678000bb9ac1475cd454c6b8c799206af8107e310843532b04d49649c717a47 \
@@ -758,7 +748,7 @@ numpy==2.2.6 ; python_full_version == '3.10.*' \
     --hash=sha256:fd83c01228a688733f1ded5201c678f0c53ecc1006ffbc404db9f7a899ac6249 \
     --hash=sha256:fe27749d33bb772c80dcd84ae7e8df2adc920ae8297400dabec45f0dedb3f6de \
     --hash=sha256:fee4236c876c4e8369388054d02d0e9bb84821feb1a64dd59e137e6511a551f8
-    # via pandas
+    # via tensorzero-recipes-supervised-fine-tuning-metrics-fireworks
 numpy==2.3.2 ; python_full_version >= '3.11' \
     --hash=sha256:07b62978075b67eee4065b166d000d457c82a1efe726cce608b9db9dd66a73a5 \
     --hash=sha256:087ffc25890d89a43536f75c5fe8770922008758e8eeeef61733957041ed2f9b \
@@ -834,7 +824,7 @@ numpy==2.3.2 ; python_full_version >= '3.11' \
     --hash=sha256:fb1752a3bb9a3ad2d6b090b88a9a0ae1cd6f004ef95f75825e2f382c183b2097 \
     --hash=sha256:fc927d7f289d14f5e037be917539620603294454130b6de200091e23d27dc9be \
     --hash=sha256:fed5527c4cf10f16c6d0b6bee1f89958bccb0ad2522c8cadc2efd318bcd545f5
-    # via pandas
+    # via tensorzero-recipes-supervised-fine-tuning-metrics-fireworks
 overrides==7.7.0 \
     --hash=sha256:55158fa3d93b98cc75299b1e67078ad9003ca27945c76162c1c0766d6f91820a \
     --hash=sha256:c7ed9d062f78b8e4c1a7b70bd8796b35ead4d9f510227ef9c5dc7626c60d7e49
@@ -849,50 +839,6 @@ packaging==25.0 \
     #   jupyterlab
     #   jupyterlab-server
     #   nbconvert
-pandas==2.3.1 \
-    --hash=sha256:025e92411c16cbe5bb2a4abc99732a6b132f439b8aab23a59fa593eb00704232 \
-    --hash=sha256:09e3b1587f0f3b0913e21e8b32c3119174551deb4a4eba4a89bc7377947977e7 \
-    --hash=sha256:0a95b9ac964fe83ce317827f80304d37388ea77616b1425f0ae41c9d2d0d7bb2 \
-    --hash=sha256:0f951fbb702dacd390561e0ea45cdd8ecfa7fb56935eb3dd78e306c19104b9b0 \
-    --hash=sha256:1b916a627919a247d865aed068eb65eb91a344b13f5b57ab9f610b7716c92de1 \
-    --hash=sha256:1c78cf43c8fde236342a1cb2c34bcff89564a7bfed7e474ed2fffa6aed03a956 \
-    --hash=sha256:1d12f618d80379fde6af007f65f0c25bd3e40251dbd1636480dfffce2cf1e6da \
-    --hash=sha256:22c2e866f7209ebc3a8f08d75766566aae02bcc91d196935a1d9e59c7b990ac9 \
-    --hash=sha256:2323294c73ed50f612f67e2bf3ae45aea04dce5690778e08a09391897f35ff88 \
-    --hash=sha256:2b0540963d83431f5ce8870ea02a7430adca100cec8a050f0811f8e31035541b \
-    --hash=sha256:2ba6aff74075311fc88504b1db890187a3cd0f887a5b10f5525f8e2ef55bfdb9 \
-    --hash=sha256:2eb789ae0274672acbd3c575b0598d213345660120a257b47b5dafdc618aec83 \
-    --hash=sha256:2f4d6feeba91744872a600e6edbbd5b033005b431d5ae8379abee5bcfa479fab \
-    --hash=sha256:342e59589cc454aaff7484d75b816a433350b3d7964d7847327edda4d532a2e3 \
-    --hash=sha256:3462c3735fe19f2638f2c3a40bd94ec2dc5ba13abbb032dd2fa1f540a075509d \
-    --hash=sha256:3583d348546201aff730c8c47e49bc159833f971c2899d6097bce68b9112a4f1 \
-    --hash=sha256:4645f770f98d656f11c69e81aeb21c6fca076a44bed3dcbb9396a4311bc7f6d8 \
-    --hash=sha256:4d544806b485ddf29e52d75b1f559142514e60ef58a832f74fb38e48d757b299 \
-    --hash=sha256:56a342b231e8862c96bdb6ab97170e203ce511f4d0429589c8ede1ee8ece48b8 \
-    --hash=sha256:5db9637dbc24b631ff3707269ae4559bce4b7fd75c1c4d7e13f40edc42df4444 \
-    --hash=sha256:689968e841136f9e542020698ee1c4fbe9caa2ed2213ae2388dc7b81721510d3 \
-    --hash=sha256:6de8547d4fdb12421e2d047a2c446c623ff4c11f47fddb6b9169eb98ffba485a \
-    --hash=sha256:6f3bf5ec947526106399a9e1d26d40ee2b259c66422efdf4de63c848492d91bb \
-    --hash=sha256:782647ddc63c83133b2506912cc6b108140a38a37292102aaa19c81c83db2928 \
-    --hash=sha256:7dcb79bf373a47d2a40cf7232928eb7540155abbc460925c2c96d2d30b006eb4 \
-    --hash=sha256:8dfc17328e8da77be3cf9f47509e5637ba8f137148ed0e9b5241e1baf526e20a \
-    --hash=sha256:9026bd4a80108fac2239294a15ef9003c4ee191a0f64b90f170b40cfb7cf2d22 \
-    --hash=sha256:911580460fc4884d9b05254b38a6bfadddfcc6aaef856fb5859e7ca202e45275 \
-    --hash=sha256:98bcc8b5bf7afed22cc753a28bc4d9e26e078e777066bc53fac7904ddef9a678 \
-    --hash=sha256:9b7ff55f31c4fcb3e316e8f7fa194566b286d6ac430afec0d461163312c5841e \
-    --hash=sha256:ac942bfd0aca577bef61f2bc8da8147c4ef6879965ef883d8e8d5d2dc3e744b8 \
-    --hash=sha256:b3cd4273d3cb3707b6fffd217204c52ed92859533e31dc03b7c5008aa933aaab \
-    --hash=sha256:b4b0de34dc8499c2db34000ef8baad684cfa4cbd836ecee05f323ebfba348c7d \
-    --hash=sha256:ca7ed14832bce68baef331f4d7f294411bed8efd032f8109d690df45e00c4679 \
-    --hash=sha256:cd05b72ec02ebfb993569b4931b2e16fbb4d6ad6ce80224a3ee838387d83a191 \
-    --hash=sha256:dd71c47a911da120d72ef173aeac0bf5241423f9bfea57320110a978457e069e \
-    --hash=sha256:e5635178b387bd2ba4ac040f82bc2ef6e6b500483975c4ebacd34bec945fda12 \
-    --hash=sha256:e6723a27ad7b244c0c79d8e7007092d7c8f0f11305770e2f4cd778b3ad5f9f85 \
-    --hash=sha256:ec6c851509364c59a5344458ab935e6451b31b818be467eb24b0fe89bd05b6b9 \
-    --hash=sha256:fe37e757f462d31a9cd7580236a82f353f5713a80e059a29753cf938c6775d96 \
-    --hash=sha256:fe67dc676818c186d5a3d5425250e40f179c2a89145df477dd82945eaea89e97 \
-    --hash=sha256:fe7317f578c6a153912bd2292f02e40c1d8f253e93c599e82620c7f69755c74f
-    # via tensorzero-recipes-supervised-fine-tuning-metrics-fireworks
 pandocfilters==1.5.1 \
     --hash=sha256:002b4a555ee4ebc03f8b66307e287fa492e4a77b4ea14d3f934328297bb4939e \
     --hash=sha256:93be382804a9cdb0a7267585f157e5d1731bbe5545a85b268d6f5fe6232de2bc
@@ -954,7 +900,6 @@ python-dateutil==2.9.0.post0 \
     # via
     #   arrow
     #   jupyter-client
-    #   pandas
 python-dotenv==1.1.1 \
     --hash=sha256:31f23644fe2602f88ff55e1f5c79ba497e01224ee7737937930c448e4d0e24dc \
     --hash=sha256:a8a6399716257f45be6a007360200409fce5cda2661e3dec71d23dc15f6189ab
@@ -966,9 +911,7 @@ python-json-logger==3.3.0 \
 pytz==2025.2 \
     --hash=sha256:360b9e3dbb49a209c21ad61809c7fb453643e048b38924c765813546746e81c3 \
     --hash=sha256:5ddf76296dd8c44c26eb8f4b6f35488f3ccbf6fbbd7adee0b7262d43f0ec2f00
-    # via
-    #   clickhouse-connect
-    #   pandas
+    # via clickhouse-connect
 pywin32==311 ; platform_python_implementation != 'PyPy' and sys_platform == 'win32' \
     --hash=sha256:0502d1facf1fed4839a9a51ccbcc63d952cf318f78ffc00a7e78528ac27d7a2b \
     --hash=sha256:184eb5e436dea364dcd3d2316d577d625c0351bf237c4e9a5fabbcfa5a58b151 \
@@ -1454,10 +1397,6 @@ typing-extensions==4.14.1 \
     #   python-json-logger
     #   referencing
     #   tensorzero
-tzdata==2025.2 \
-    --hash=sha256:1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8 \
-    --hash=sha256:b60a638fcc0daffadf82fe0f57e53d06bdec2f36c4df66280ae79bce6bd6f2b9
-    # via pandas
 uri-template==1.3.0 \
     --hash=sha256:0e00f8eb65e18c7de20d595a14336e9f337ead580c70934141624b6d1ffdacc7 \
     --hash=sha256:a44a133ea12d44a0c0f06d7d42a52d71282e77e2f937d8abd5655b8d56fc1363
