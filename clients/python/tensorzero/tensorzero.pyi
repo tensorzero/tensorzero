@@ -1025,6 +1025,7 @@ __all__ = [
     "LocalHttpGateway",
     "MixtureOfNConfig",
     "_start_http_gateway",
+    "OpenAIRFTConfig",
     "OpenAISFTConfig",
     "OptimizationJobHandle",
     "OptimizationJobInfo",
