@@ -2,7 +2,7 @@ import { Loader2 } from "lucide-react";
 import { Suspense, memo } from "react";
 import { Await, useAsyncError } from "react-router";
 import { Refresh } from "~/components/icons/Icons";
-import NewOutput from "~/components/inference/NewOutput";
+import { Output } from "~/components/inference/Output";
 import { Button } from "~/components/ui/button";
 import { CodeEditor } from "~/components/ui/code-editor";
 import { refreshClientInference } from "./utils";
@@ -110,7 +110,7 @@ const DatapointPlaygroundOutput = memo(
               return (
                 <>
                   {refreshButton}
-                  <NewOutput output={output} maxHeight={480} />
+                  <Output output={output} maxHeight={480} />
                 </>
               );
             }}

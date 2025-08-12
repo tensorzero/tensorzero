@@ -11,7 +11,7 @@ import {
 } from "react-router";
 import { v7 as uuid } from "uuid";
 import InputSnippet from "~/components/inference/InputSnippet";
-import Output from "~/components/inference/Output";
+import { Output } from "~/components/inference/Output";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import {
   PageHeader,

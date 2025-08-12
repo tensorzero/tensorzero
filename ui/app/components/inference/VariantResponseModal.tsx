@@ -11,7 +11,7 @@ import { Separator } from "~/components/ui/separator";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
-import NewOutput from "~/components/inference/NewOutput";
+import { Output } from "~/components/inference/Output";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { Card, CardContent } from "~/components/ui/card";
 import type { VariantResponseInfo } from "~/routes/api/tensorzero/inference.utils";
@@ -50,7 +50,7 @@ function ResponseColumn({
           <>
             {response.output && (
               <div className="flex-1">
-                <NewOutput output={response.output} />
+                <Output output={response.output} />
               </div>
             )}
 

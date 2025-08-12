@@ -12,7 +12,7 @@ import {
 } from "~/components/layout/SnippetLayout";
 import { TextMessage } from "~/components/layout/SnippetContent";
 import { parseInferenceOutput } from "~/utils/clickhouse/inference";
-import NewOutput from "~/components/inference/NewOutput";
+import { Output } from "~/components/inference/Output";
 
 interface FeedbackTableModalProps {
   feedback: FeedbackRow;
@@ -56,7 +56,7 @@ export function DemonstrationModal({ feedback }: FeedbackTableModalProps) {
 
       <SectionsGroup>
         <SectionLayout>
-          <NewOutput output={parsedOutput} />
+          <Output output={parsedOutput} />
         </SectionLayout>
       </SectionsGroup>
     </PageLayout>

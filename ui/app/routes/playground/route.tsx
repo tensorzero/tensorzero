@@ -31,7 +31,7 @@ import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
 import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.server";
 import InputSnippet from "~/components/inference/InputSnippet";
-import OutputRust from "~/components/inference/NewOutputRust";
+import { Output } from "~/components/inference/Output";
 import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
 import { safeParseInt } from "~/utils/common";
@@ -419,7 +419,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                             Reference Output
                           </h3>
                           {datapoint.output ? (
-                            <OutputRust output={datapoint.output} />
+                            <Output output={datapoint.output} />
                           ) : (
                             <div className="text-sm text-gray-500">None</div>
                           )}

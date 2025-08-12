@@ -1,17 +1,17 @@
-import NewOutput from "./NewOutput";
+import { Output } from "./Output";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { withRouter } from "storybook-addon-remix-react-router";
 
 const meta = {
   title: "NewOutput",
-  component: NewOutput,
+  component: Output,
   decorators: [withRouter],
   render: (args) => (
     <div className="w-[80vw] p-4">
-      <NewOutput {...args} />
+      <Output {...args} />
     </div>
   ),
-} satisfies Meta<typeof NewOutput>;
+} satisfies Meta<typeof Output>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

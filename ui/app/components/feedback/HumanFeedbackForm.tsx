@@ -5,7 +5,7 @@ import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
 } from "tensorzero-node";
-import Output from "../inference/Output";
+import { Output } from "../inference/Output";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
