@@ -13,8 +13,8 @@ jobs:
   clickhouse-tests:
     name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
 
-    # Start with tensorzero-2x8 to test the smallest profile first
-    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-2x8' || 'ubuntu-latest' }}
+    # Test tensorzero-4x16 profile after 2x8 failed
+    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-4x16' || 'ubuntu-latest' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     strategy:
       matrix:
