@@ -6,9 +6,8 @@ requires-python = ">=3.9"
 dependencies = [
     "clickhouse-connect",
     "ipykernel",
-    "minijinja",
     "notebook",
-    "pandas",
+    "numpy",
     "tensorzero",
     "toml",
     "dotenv"
