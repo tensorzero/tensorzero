@@ -3952,7 +3952,7 @@ async fn test_clickhouse_bulk_insert() {
     assert_eq!(expected_inference_ids.len(), inference_count);
 
     assert_eq!(Arc::strong_count(&client), 1);
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
     let clickhouse_client = get_clickhouse().await;
     let inferences = select_chat_inferences_clickhouse(&clickhouse_client, episode_id)
