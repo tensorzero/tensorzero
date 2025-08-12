@@ -16,8 +16,8 @@ jobs:
     permissions:
       contents: read
     # Required secrets:
-    # - R2_ACCESS_KEY_ID: Cloudflare R2 access key ID
-    # - R2_SECRET_ACCESS_KEY: Cloudflare R2 secret access key
+    # - HELM_PUBLISH_ACCESS_KEY_ID: Cloudflare R2 access key ID
+    # - HELM_PUBLISH_SECRET_ACCESS_KEY: Cloudflare R2 secret access key
     # Required variables:
     # - R2_ENDPOINT_URL: Cloudflare R2 endpoint URL (e.g., https://ACCOUNT_ID.r2.cloudflarestorage.com)
     steps:
@@ -98,17 +98,15 @@ jobs:
         run: |
           echo "=== Configuring AWS CLI for R2 ==="
           echo "R2 endpoint: ${{ vars.R2_ENDPOINT_URL }}"
-          echo "Access key ID length: ${#R2_ACCESS_KEY_ID}"
-          echo "Secret key length: ${#R2_SECRET_ACCESS_KEY}"
-          aws configure set aws_access_key_id ${{ secrets.R2_ACCESS_KEY_ID }}
-          aws configure set aws_secret_access_key ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          aws configure set aws_access_key_id ${{ secrets.HELM_PUBLISH_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.HELM_PUBLISH_SECRET_ACCESS_KEY }}
           aws configure set default.region auto
           aws configure set default.s3.signature_version s3v4
           echo "AWS CLI configured"
           echo "========================="
         env:
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCESS_KEY_ID: ${{ secrets.HELM_PUBLISH_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.HELM_PUBLISH_SECRET_ACCESS_KEY }}
 
       - name: Download existing index.yaml
         continue-on-error: true
