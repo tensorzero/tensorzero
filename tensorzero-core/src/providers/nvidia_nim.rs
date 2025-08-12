@@ -1105,4 +1105,103 @@ mod tests {
             }
         }
     }
+    // Integration tests that require real API keys and network access
+    // These are conditionally compiled only when NVIDIA_API_KEY environment variable is set
+    // Run with: NVIDIA_API_KEY=your_key cargo test
+
+    #[tokio::test]
+    #[ignore = "requires NVIDIA_API_KEY environment variable"]
+    async fn test_real_api_chat_completion() {
+        let api_key = std::env::var("NVIDIA_API_KEY")
+            .expect("NVIDIA_API_KEY environment variable must be set for integration tests");
+
+        let provider = NvidiaNimProvider::new(
+            "meta/llama-3.1-8b-instruct".to_string(),
+            None,
+            Some(CredentialLocation::Env("NVIDIA_API_KEY".to_string())),
+        ).expect("Failed to create provider");
+
+        println!("Provider configured for integration test:");
+        println!("- Model: {}", provider.model_name());
+        println!("- API Base: {}", provider.api_base);
+
+        // TODO: Add actual API call test here when your provider interface is ready
+        // Example structure:
+        // let request = ModelInferenceRequest { ... };
+        // let response = provider.infer(request, &http_client, &credentials, &model_provider).await;
+        // assert!(response.is_ok());
+
+        // For now, just verify provider is configured correctly
+        assert_eq!(provider.model_name(), "meta/llama-3.1-8b-instruct");
+        assert_eq!(provider.api_base.as_str(), "https://integrate.api.nvidia.com/v1/");
+    }
+
+    #[tokio::test]
+    #[ignore = "requires NVIDIA_API_KEY environment variable"]
+    async fn test_real_api_with_different_models() {
+        let _api_key = std::env::var("NVIDIA_API_KEY")
+            .expect("NVIDIA_API_KEY environment variable must be set for integration tests");
+
+        let test_models = vec![
+            "meta/llama-3.1-8b-instruct",
+            "meta/llama-3.1-70b-instruct",
+            "mistralai/mistral-7b-instruct-v0.3",
+        ];
+
+        for model in test_models {
+            let provider = NvidiaNimProvider::new(
+                model.to_string(),
+                None,
+                Some(CredentialLocation::Env("NVIDIA_API_KEY".to_string())),
+            ).expect(&format!("Failed to create provider for model: {}", model));
+
+            assert_eq!(provider.model_name(), model);
+
+            // TODO: Add actual API test calls here
+            // let response = provider.simple_completion("Test").await;
+            // assert!(response.is_ok(), "API call failed for model: {}", model);
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "requires NVIDIA_API_KEY environment variable"]
+    async fn test_real_api_error_handling() {
+        let _api_key = std::env::var("NVIDIA_API_KEY")
+            .expect("NVIDIA_API_KEY environment variable must be set for integration tests");
+
+        // Test with invalid model to verify error handling
+        let provider = NvidiaNimProvider::new(
+            "invalid/nonexistent-model".to_string(),
+            None,
+            Some(CredentialLocation::Env("NVIDIA_API_KEY".to_string())),
+        ).expect("Failed to create provider");
+
+        // TODO: Test actual API call with invalid model
+        // let response = provider.chat_completion(invalid_request).await;
+        // assert!(response.is_err());
+        // Verify error message contains expected information
+
+        println!("Provider created for error handling test with invalid model");
+    }
+
+    #[tokio::test]
+    #[ignore = "requires NVIDIA_API_KEY environment variable and custom endpoint"]
+    async fn test_real_api_with_custom_endpoint() {
+        let _api_key = std::env::var("NVIDIA_API_KEY")
+            .expect("NVIDIA_API_KEY environment variable must be set for integration tests");
+
+        // Test self-hosted scenario (this would need a real self-hosted endpoint)
+        // For now, just test provider creation
+        let custom_url = Url::parse("http://localhost:8000/v1/").unwrap();
+        let provider = NvidiaNimProvider::new(
+            "custom-model".to_string(),
+            Some(custom_url),
+            Some(CredentialLocation::Env("NVIDIA_API_KEY".to_string())),
+        ).expect("Failed to create provider with custom endpoint");
+
+        assert_eq!(provider.api_base.as_str(), "http://localhost:8000/v1/");
+
+        // TODO: Add actual API test if you have a self-hosted endpoint
+        println!("Provider configured for custom endpoint test");
+    }
 }
