@@ -1,6 +1,7 @@
 #![expect(clippy::print_stdout)]
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::E2ETestProvider;
+use crate::providers::helpers::get_extra_headers;
 use futures::StreamExt;
 use reqwest::Client;
 use reqwest::StatusCode;
@@ -33,6 +34,7 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
                     "content": "What is the capital city of Japan?"
                 }
             ]},
+        "extra_headers": get_extra_headers(),
         "stream": false,
         "tags": {"foo": "bar"},
     });
@@ -166,13 +168,15 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    assert_eq!(
+    // We have lots of different 'max_tokens' values for different models,
+    // so we just check that it's greater than 0
+    assert!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
-            .unwrap(),
-        800
+            .unwrap()
+            > 0
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -271,6 +275,7 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
                 }
             ]},
         "stream": true,
+        "extra_headers": get_extra_headers(),
         "tags": {"key": tag_value},
     });
 
@@ -426,13 +431,14 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    assert_eq!(
+    // We have lots of different 'max_tokens' values for different models,
+    assert!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
-            .unwrap(),
-        800
+            .unwrap()
+            > 0
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -540,6 +546,7 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
                 }
             ]},
         "stream": false,
+        "extra_headers": get_extra_headers(),
     });
 
     let response = Client::new()
@@ -634,13 +641,14 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    assert_eq!(
+    // We have lots of different 'max_tokens' values for different models,
+    assert!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
-            .unwrap(),
-        800
+            .unwrap()
+            > 0
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -749,6 +757,7 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
                 }
             ]},
         "stream": true,
+        "extra_headers": get_extra_headers(),
     });
 
     let mut event_source = Client::new()
@@ -880,13 +889,14 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    assert_eq!(
+    // We have lots of different 'max_tokens' values for different models,
+    assert!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
-            .unwrap(),
-        800
+            .unwrap()
+            > 0
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();

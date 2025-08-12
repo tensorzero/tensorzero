@@ -309,10 +309,42 @@ pub struct ObservabilityConfig {
     pub enabled: Option<bool>,
     #[serde(default)]
     pub async_writes: bool,
+    #[serde(default)]
+    pub batch_writes: BatchWritesConfig,
     /// If `true`, then we skip checking/applying migrations if the `TensorZeroMigration` table
     /// contains exactly the migrations that we expect to have run.
     #[serde(default)]
     pub skip_completed_migrations: bool,
+}
+
+fn default_flush_interval_ms() -> u64 {
+    100
+}
+
+fn default_max_rows() -> usize {
+    1000
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct BatchWritesConfig {
+    pub enabled: bool,
+    #[serde(default = "default_flush_interval_ms")]
+    pub flush_interval_ms: u64,
+    #[serde(default = "default_max_rows")]
+    pub max_rows: usize,
+}
+
+impl Default for BatchWritesConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            flush_interval_ms: default_flush_interval_ms(),
+            max_rows: default_max_rows(),
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -722,6 +754,27 @@ impl Config {
     /// Validate the config
     #[instrument(skip_all)]
     async fn validate(&mut self) -> Result<(), Error> {
+        if self.gateway.observability.batch_writes.enabled
+            && self.gateway.observability.async_writes
+        {
+            return Err(ErrorDetails::Config {
+                message: "Batch writes and async writes cannot be enabled at the same time"
+                    .to_string(),
+            }
+            .into());
+        }
+        if self.gateway.observability.batch_writes.flush_interval_ms == 0 {
+            return Err(ErrorDetails::Config {
+                message: "Batch writes flush interval must be greater than 0".to_string(),
+            }
+            .into());
+        }
+        if self.gateway.observability.batch_writes.max_rows == 0 {
+            return Err(ErrorDetails::Config {
+                message: "Batch writes max rows must be greater than 0".to_string(),
+            }
+            .into());
+        }
         // Validate each function
         for (function_name, function) in &self.functions {
             if function_name.starts_with("tensorzero::") {
@@ -1058,6 +1111,8 @@ struct UninitializedFunctionConfigJson {
     user_schema: Option<TomlRelativePath>,
     assistant_schema: Option<TomlRelativePath>,
     output_schema: Option<TomlRelativePath>, // schema will default to {} if not specified
+    #[serde(default)]
+    description: Option<String>,
 }
 
 impl UninitializedFunctionConfig {
@@ -1169,7 +1224,7 @@ impl UninitializedFunctionConfig {
                     assistant_schema,
                     output_schema,
                     implicit_tool_call_config,
-                    description: None,
+                    description: params.description,
                 }))
             }
         }

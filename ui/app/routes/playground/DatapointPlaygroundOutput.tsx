@@ -5,14 +5,18 @@ import { Refresh } from "~/components/icons/Icons";
 import NewOutput from "~/components/inference/NewOutput";
 import { Button } from "~/components/ui/button";
 import { CodeEditor } from "~/components/ui/code-editor";
-import { refreshClientInference } from "./utils";
+import { refreshClientInference, type PlaygroundVariantInfo } from "./utils";
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import type { Datapoint, InferenceResponse } from "tensorzero-node";
+import type {
+  Datapoint,
+  FunctionConfig,
+  InferenceResponse,
+} from "tensorzero-node";
 
 interface DatapointPlaygroundOutputProps {
   datapoint: Datapoint;
-  variantName: string;
-  serverInference: Promise<InferenceResponse> | undefined;
+  variant: PlaygroundVariantInfo;
+  inferencePromise: Promise<InferenceResponse> | undefined;
   isLoading?: boolean;
   setPromise: (
     variantName: string,
@@ -21,16 +25,18 @@ interface DatapointPlaygroundOutputProps {
   ) => void;
   input: DisplayInput;
   functionName: string;
+  functionConfig: FunctionConfig;
 }
 const DatapointPlaygroundOutput = memo(
   function DatapointPlaygroundOutput({
     datapoint,
-    variantName,
-    serverInference,
+    variant,
+    inferencePromise,
     setPromise,
     input,
     functionName,
     isLoading,
+    functionConfig,
   }: DatapointPlaygroundOutputProps) {
     const loadingIndicator = (
       <div className="flex min-h-[8rem] items-center justify-center">
@@ -47,8 +53,9 @@ const DatapointPlaygroundOutput = memo(
             setPromise,
             input,
             datapoint,
-            variantName,
+            variant,
             functionName,
+            functionConfig,
           );
         }}
       >
@@ -56,7 +63,7 @@ const DatapointPlaygroundOutput = memo(
       </Button>
     );
 
-    if (!serverInference) {
+    if (!inferencePromise) {
       return isLoading ? (
         loadingIndicator
       ) : (
@@ -73,7 +80,7 @@ const DatapointPlaygroundOutput = memo(
       <div className="group relative">
         <Suspense fallback={loadingIndicator}>
           <Await
-            resolve={serverInference}
+            resolve={inferencePromise}
             errorElement={
               <>
                 {refreshButton}
@@ -115,11 +122,12 @@ const DatapointPlaygroundOutput = memo(
   (prevProps, nextProps) => {
     return (
       prevProps.datapoint.id === nextProps.datapoint.id &&
-      prevProps.variantName === nextProps.variantName &&
+      prevProps.variant.name === nextProps.variant.name &&
       prevProps.functionName === nextProps.functionName &&
-      prevProps.serverInference === nextProps.serverInference &&
+      prevProps.inferencePromise === nextProps.inferencePromise &&
       prevProps.setPromise === nextProps.setPromise &&
-      JSON.stringify(prevProps.input) === JSON.stringify(nextProps.input)
+      JSON.stringify(prevProps.input) === JSON.stringify(nextProps.input) &&
+      prevProps.isLoading === nextProps.isLoading
     );
   },
 );

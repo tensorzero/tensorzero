@@ -65,6 +65,11 @@ pub struct E2ETestProvider {
     pub supports_batch_inference: bool,
 }
 
+#[derive(Clone, Debug)]
+pub struct EmbeddingTestProvider {
+    pub model_name: String,
+}
+
 /// Enforce that every provider implements a common set of tests.
 ///
 /// To achieve that, each provider should call the `generate_provider_tests!` macro along with a
@@ -94,6 +99,7 @@ pub struct E2ETestProviders {
     pub pdf_inference: Vec<E2ETestProvider>,
 
     pub shorthand_inference: Vec<E2ETestProvider>,
+    pub embeddings: Vec<EmbeddingTestProvider>,
 }
 
 pub async fn make_http_gateway() -> tensorzero::Client {
@@ -144,7 +150,6 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
     .await
     .unwrap()
 }
-
 // We use a multi-threaded runtime so that the embedded gateway can use 'block_on'.
 // For consistency, we also use a multi-threaded runtime for the http gateway test.
 
@@ -215,6 +220,14 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_pdf_inference_with_provider_filesystem;
         use $crate::providers::common::test_stop_sequences_inference_request_with_provider;
         use $crate::providers::common::test_warn_ignored_thought_block_with_provider;
+        use $crate::providers::embeddings::test_basic_embedding_with_provider;
+        use $crate::providers::embeddings::test_batch_embedding_with_provider;
+        use $crate::providers::embeddings::test_embedding_with_dimensions_with_provider;
+        use $crate::providers::embeddings::test_embedding_with_encoding_format_with_provider;
+        use $crate::providers::embeddings::test_embedding_with_user_parameter_with_provider;
+        use $crate::providers::embeddings::test_embedding_invalid_model_error_with_provider;
+        use $crate::providers::embeddings::test_embedding_large_batch_with_provider;
+        use $crate::providers::embeddings::test_embedding_consistency_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -613,6 +626,71 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.simple_inference;
             for provider in providers {
                 test_multiple_text_blocks_in_message_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_basic_embedding() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_basic_embedding_with_provider(provider).await;
+            }
+        }
+
+
+        #[tokio::test]
+        async fn test_batch_embedding() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_batch_embedding_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_with_dimensions() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_with_dimensions_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_with_encoding_format() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_with_encoding_format_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_with_user_parameter() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_with_user_parameter_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_invalid_model_error() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_invalid_model_error_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_large_batch() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_large_batch_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_consistency() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_consistency_with_provider(provider).await;
             }
         }
 
@@ -2407,7 +2485,7 @@ pub async fn check_simple_inference_response(
     assert!(finish_reason == "stop" || finish_reason == "length");
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;

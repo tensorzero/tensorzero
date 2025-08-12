@@ -1,4 +1,5 @@
 #![expect(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
+use crate::config_parser::BatchWritesConfig;
 use crate::endpoints::datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint};
 use crate::endpoints::dynamic_evaluation_run::{
     DynamicEvaluationRunEpisodeRow, DynamicEvaluationRunRow,
@@ -15,17 +16,30 @@ use uuid::Uuid;
 
 lazy_static::lazy_static! {
     pub static ref CLICKHOUSE_URL: String = std::env::var("TENSORZERO_CLICKHOUSE_URL").expect("Environment variable TENSORZERO_CLICKHOUSE_URL must be set");
+    pub static ref CLICKHOUSE_REPLICA_URL: Option<String> = std::env::var("TENSORZERO_CLICKHOUSE_REPLICA_URL").ok();
 }
 
 pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
     let clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
     let start = std::time::Instant::now();
     println!("Connecting to ClickHouse");
-    let res = ClickHouseConnectionInfo::new(clickhouse_url.as_ref())
+    let res = ClickHouseConnectionInfo::new(clickhouse_url.as_ref(), BatchWritesConfig::default())
         .await
         .expect("Failed to connect to ClickHouse");
     println!("Connected to ClickHouse in {:?}", start.elapsed());
     res
+}
+
+pub async fn get_clickhouse_replica() -> Option<ClickHouseConnectionInfo> {
+    let clickhouse_url = CLICKHOUSE_REPLICA_URL.as_ref()?;
+    let clickhouse_url = url::Url::parse(clickhouse_url).unwrap();
+    let start = std::time::Instant::now();
+    println!("Connecting to ClickHouse");
+    let res = ClickHouseConnectionInfo::new(clickhouse_url.as_ref(), BatchWritesConfig::default())
+        .await
+        .expect("Failed to connect to ClickHouse");
+    println!("Connected to ClickHouse in {:?}", start.elapsed());
+    Some(res)
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -125,6 +139,33 @@ pub async fn select_json_dataset_clickhouse(
     Some(json_rows)
 }
 
+pub async fn select_chat_inferences_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    episode_id: Uuid,
+) -> Option<Vec<Value>> {
+    #[cfg(feature = "e2e_tests")]
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query =
+        format!("SELECT * FROM ChatInference WHERE episode_id = '{episode_id}' FORMAT JSONEachRow");
+
+    let text = clickhouse_connection_info
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let json_rows: Vec<Value> = text
+        .response
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+
+    if json_rows.is_empty() {
+        None
+    } else {
+        Some(json_rows)
+    }
+}
+
 pub async fn select_chat_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -184,6 +225,34 @@ pub async fn select_model_inference_clickhouse(
     Some(json)
 }
 
+pub async fn select_all_model_inferences_by_chat_episode_id_clickhouse(
+    episode_id: Uuid,
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+) -> Option<Vec<Value>> {
+    #[cfg(feature = "e2e_tests")]
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+        "SELECT * FROM ModelInference WHERE inference_id IN (SELECT id FROM ChatInference WHERE episode_id = '{episode_id}') FORMAT JSONEachRow"
+    );
+
+    let text = clickhouse_connection_info
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let json_rows: Vec<Value> = text
+        .response
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+
+    if json_rows.is_empty() {
+        None
+    } else {
+        Some(json_rows)
+    }
+}
+
 pub async fn select_model_inferences_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -191,7 +260,6 @@ pub async fn select_model_inferences_clickhouse(
     #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
-    // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
         "SELECT * FROM ModelInference WHERE inference_id = '{inference_id}' FORMAT JSONEachRow"
     );

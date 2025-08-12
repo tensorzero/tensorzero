@@ -4,6 +4,8 @@ use tensorzero_core::optimization::{
     UninitializedOptimizerInfo,
 };
 
+// Currently unused in 'mock_tests.rs'
+#[allow(clippy::allow_attributes, dead_code)]
 pub struct TogetherSFTTestCase();
 
 impl OptimizationTestCase for TogetherSFTTestCase {
