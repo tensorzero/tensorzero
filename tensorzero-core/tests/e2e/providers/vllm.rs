@@ -68,11 +68,20 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let reasoning_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "vllm-gpt-oss-20b".to_string(),
+        model_name: "gpt-oss-20b-vllm".to_string(),
+        model_provider_name: "vllm".to_string(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
-        reasoning_inference: vec![],
+        reasoning_inference: reasoning_providers,
+        embeddings: vec![],
         inference_params_inference: providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: tool_providers.clone(),

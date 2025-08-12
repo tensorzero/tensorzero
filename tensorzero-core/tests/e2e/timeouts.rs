@@ -204,6 +204,8 @@ async fn test_inference_ttft_ms(payload: Value, json: bool) {
         }
     }
 
+    // Sleep for 100ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     let clickhouse = get_clickhouse().await;
 
     let inference = if json {

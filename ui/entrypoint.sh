@@ -13,7 +13,7 @@ BASE_URL=$(echo "$TENSORZERO_CLICKHOUSE_URL" | sed -E 's#(https?://[^/]+).*#\1#'
 # This is used for display purposes only
 DISPLAY_BASE_URL=$(
   echo "$TENSORZERO_CLICKHOUSE_URL" |
-  sed -E 's#(https?://)[^@/]*@?([^/?]+).*#\1\2#'
+  sed -E 's#(https?://)([^@/]*@)?([^/?]+).*#\1\3#'
 )
 
 
@@ -23,7 +23,6 @@ if ! curl -s --connect-timeout 5 "$BASE_URL/ping" > /dev/null; then
   echo "Error: Failed to connect to ClickHouse at $DISPLAY_BASE_URL/ping"
   exit 1
 fi
-
 
 # Check if evaluations binary is available and executable
 if ! command -v evaluations &> /dev/null; then
@@ -37,6 +36,7 @@ if ! evaluations -h &> /dev/null; then
   exit 1
 fi
 
-cd /app
+cd /app/ui
 
-pnpm --filter=tensorzero-ui run start
+# Launch React Router
+./node_modules/.bin/react-router-serve ./build/server/index.js

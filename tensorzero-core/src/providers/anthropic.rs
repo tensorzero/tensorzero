@@ -33,6 +33,7 @@ use crate::model::{
     build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
     ModelProvider,
 };
+use crate::providers;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -231,10 +232,10 @@ impl InferenceProvider for AnthropicProvider {
                     message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
-                    raw_response: Some(response_text),
+                    raw_response: Some(response_text.clone()),
                 })
             })?;
-            handle_anthropic_error(response_code, error_body.error, raw_request)
+            handle_anthropic_error(response_code, error_body.error, raw_request, response_text)
         }
     }
 
@@ -664,7 +665,7 @@ impl<'a> AnthropicRequestBody<'a> {
             .iter()
             .map(AnthropicMessage::try_from)
             .collect::<Result<Vec<_>, _>>()?;
-        let messages = prepare_messages(request_messages)?;
+        let messages = prepare_messages(request_messages);
         let messages = if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
@@ -692,11 +693,17 @@ impl<'a> AnthropicRequestBody<'a> {
             .filter(|t| !t.is_empty())
             .and(request.tool_config.as_ref())
             .and_then(|c| c.as_ref().try_into().ok());
+
+        let max_tokens = match request.max_tokens {
+            Some(max_tokens) => Ok(max_tokens),
+            None => get_default_max_tokens(model_name),
+        }?;
+
         // NOTE: Anthropic does not support seed
         Ok(AnthropicRequestBody {
             model: model_name,
             messages,
-            max_tokens: request.max_tokens.unwrap_or(4096),
+            max_tokens,
             stream: Some(request.stream),
             system,
             temperature: request.temperature,
@@ -708,10 +715,41 @@ impl<'a> AnthropicRequestBody<'a> {
     }
 }
 
+/// Returns the default max_tokens for a given Anthropic model name, or an error if unknown.
+///
+/// Anthropic requires that the user provides `max_tokens`, but the value depends on the model.
+/// We maintain a library of known maximum values, and ask the user to hardcode it if it's unknown.
+fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
+    if model_name.starts_with("claude-3-haiku") || model_name.starts_with("claude-3-opus") {
+        Ok(4_096)
+    } else if model_name.starts_with("claude-3-5-haiku")
+        || model_name.starts_with("claude-3-5-sonnet")
+    {
+        Ok(8_192)
+    } else if model_name.starts_with("claude-3-7-sonnet")
+        || model_name.starts_with("claude-sonnet-4-202")
+        || model_name == "claude-sonnet-4-0"
+    {
+        Ok(64_000)
+    } else if model_name.starts_with("claude-opus-4-202") || model_name == "claude-opus-4-0" {
+        Ok(32_000)
+    } else {
+        Err(Error::new(ErrorDetails::InferenceClient {
+            message: format!("The TensorZero Gateway doesn't know the output token limit for `{model_name}` and Anthropic requires you to provide a `max_tokens` value. Please set `max_tokens` in your configuration or inference request."),
+            status_code: None,
+            provider_type: PROVIDER_TYPE.into(),
+            raw_request: None,
+            raw_response: None,
+        }))
+    }
+}
+
 /// Modifies the message array to satisfy Anthropic API requirements by:
 /// - Prepending a default User message with "[listening]" if the first message is not from a User
 /// - Appending a default User message with "[listening]" if the last message is from an Assistant
-fn prepare_messages(mut messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMessage>, Error> {
+fn prepare_messages(
+    mut messages: Vec<AnthropicMessage<'_>>,
+) -> std::vec::Vec<providers::anthropic::AnthropicMessage<'_>> {
     // Anthropic also requires that there is at least one message and it is a User message.
     // If it's not we will prepend a default User message.
     match messages.first() {
@@ -745,7 +783,7 @@ fn prepare_messages(mut messages: Vec<AnthropicMessage>) -> Result<Vec<Anthropic
             });
         }
     }
-    Ok(messages)
+    messages
 }
 
 fn prefill_json_message(messages: Vec<AnthropicMessage>) -> Vec<AnthropicMessage> {
@@ -998,6 +1036,7 @@ fn handle_anthropic_error(
     response_code: StatusCode,
     response_body: AnthropicErrorBody,
     raw_request: String,
+    raw_response: String,
 ) -> Result<ProviderInferenceResponse, Error> {
     match response_code {
         StatusCode::UNAUTHORIZED
@@ -1007,14 +1046,14 @@ fn handle_anthropic_error(
             status_code: Some(response_code),
             provider_type: PROVIDER_TYPE.to_string(),
             raw_request: Some(raw_request),
-            raw_response: serde_json::to_string(&response_body).ok(),
+            raw_response: Some(raw_response),
             message: response_body.message,
         }
         .into()),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
         // These are all captured in _ since they have the same error behavior
         _ => Err(ErrorDetails::InferenceServer {
-            raw_response: serde_json::to_string(&response_body).ok(),
+            raw_response: Some(raw_response),
             message: response_body.message,
             provider_type: PROVIDER_TYPE.to_string(),
             raw_request: Some(raw_request),
@@ -1177,7 +1216,7 @@ fn anthropic_to_tensorzero_stream_message(
                         id,
                         raw_name: Some(name),
                         // As far as I can tell this is always {} so we ignore
-                        raw_arguments: "".to_string(),
+                        raw_arguments: String::new(),
                     })],
                     None,
                     raw_message,
@@ -1510,7 +1549,7 @@ mod tests {
 
     #[test]
     fn test_initialize_anthropic_request_body() {
-        let model = "claude".to_string();
+        let model = "claude-3-7-sonnet-latest".to_string();
         let listening_message = AnthropicMessage {
             role: AnthropicRole::User,
             content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
@@ -1580,7 +1619,7 @@ mod tests {
                     AnthropicMessage::try_from(&inference_request.messages[0]).unwrap(),
                     listening_message.clone(),
                 ],
-                max_tokens: 4096,
+                max_tokens: 64_000,
                 stream: Some(false),
                 system: Some("test_system"),
                 temperature: None,
@@ -1686,7 +1725,7 @@ mod tests {
                     .iter()
                     .map(|m| AnthropicMessage::try_from(m).unwrap())
                     .collect(),
-                max_tokens: 4096,
+                max_tokens: 64_000,
                 stream: Some(false),
                 system: None,
                 temperature: None,
@@ -1755,6 +1794,129 @@ mod tests {
     }
 
     #[test]
+    fn test_get_default_max_tokens_in_new_anthropic_request_body() {
+        let messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["Hello".to_string().into()],
+        }];
+
+        let request = ModelInferenceRequest {
+            messages: messages.clone(),
+            ..Default::default()
+        };
+
+        let request_with_max_tokens = ModelInferenceRequest {
+            messages,
+            max_tokens: Some(100),
+            ..Default::default()
+        };
+
+        let model = "claude-opus-4-20250514".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 32_000);
+
+        let model = "claude-opus-4-20250514".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-sonnet-4-20250514".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 64_000);
+
+        let model = "claude-sonnet-4-20250514".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-3-7-sonnet-20250219".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 64_000);
+
+        let model = "claude-3-7-sonnet-20250219".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-3-5-sonnet-20241022".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 8_192);
+
+        let model = "claude-3-5-sonnet-20241022".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-3-5-haiku-20241022".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 8_192);
+
+        let model = "claude-3-5-haiku-20241022".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-opus-4-0".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 32_000);
+
+        let model = "claude-opus-4-0".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-sonnet-4-0".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 64_000);
+
+        let model = "claude-sonnet-4-0".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-3-7-sonnet-latest".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 64_000);
+
+        let model = "claude-3-7-sonnet-latest".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-3-5-sonnet-latest".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 8_192);
+
+        let model = "claude-3-5-sonnet-latest".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-3-5-haiku-latest".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 8_192);
+
+        let model = "claude-3-5-haiku-latest".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-3-haiku-20240307".to_string();
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 4_096);
+
+        let model = "claude-3-haiku-20240307".to_string();
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-3-5-ballad-latest".to_string(); // fake model
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert!(body.is_err());
+
+        let model = "claude-3-5-ballad-latest".to_string(); // fake model
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-4-5-haiku-20260101".to_string(); // fake model
+        let body = AnthropicRequestBody::new(&model, &request);
+        assert!(body.is_err());
+
+        let model = "claude-4-5-haiku-20260101".to_string(); // fake model
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+    }
+
+    #[test]
     fn test_prepare_messages() {
         let listening_message = AnthropicMessage {
             role: AnthropicRole::User,
@@ -1765,7 +1927,7 @@ mod tests {
 
         // Test case 1: Empty messages - should add listening message
         let messages = vec![];
-        let result = prepare_messages(messages).unwrap();
+        let result = prepare_messages(messages);
         assert_eq!(result, vec![listening_message.clone()]);
 
         // Test case 2: First message is Assistant - should prepend listening message
@@ -1783,7 +1945,7 @@ mod tests {
                 })],
             },
         ];
-        let result = prepare_messages(messages).unwrap();
+        let result = prepare_messages(messages);
         assert_eq!(
             result,
             vec![
@@ -1818,7 +1980,7 @@ mod tests {
                 })],
             },
         ];
-        let result = prepare_messages(messages).unwrap();
+        let result = prepare_messages(messages);
         assert_eq!(
             result,
             vec![
@@ -1859,7 +2021,7 @@ mod tests {
                 })],
             },
         ];
-        let result = prepare_messages(messages.clone()).unwrap();
+        let result = prepare_messages(messages.clone());
         assert_eq!(result, messages);
 
         // Test case 5: Both first Assistant and last Assistant - should add listening messages at both ends
@@ -1883,7 +2045,7 @@ mod tests {
                 })],
             },
         ];
-        let result = prepare_messages(messages).unwrap();
+        let result = prepare_messages(messages);
         assert_eq!(
             result,
             vec![
@@ -1917,7 +2079,7 @@ mod tests {
                 text: "Hi",
             })],
         }];
-        let result = prepare_messages(messages).unwrap();
+        let result = prepare_messages(messages);
         assert_eq!(
             result,
             vec![
@@ -1939,7 +2101,7 @@ mod tests {
                 text: "Hello",
             })],
         }];
-        let result = prepare_messages(messages.clone()).unwrap();
+        let result = prepare_messages(messages.clone());
         assert_eq!(result, messages);
     }
 
@@ -1950,8 +2112,12 @@ mod tests {
             message: "test_message".to_string(),
         };
         let response_code = StatusCode::BAD_REQUEST;
-        let result =
-            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
+        let result = handle_anthropic_error(
+            response_code,
+            error_body.clone(),
+            "raw request".to_string(),
+            "raw response".to_string(),
+        );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1960,12 +2126,16 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some("raw request".to_string()),
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some("raw response".to_string()),
             }
         );
         let response_code = StatusCode::UNAUTHORIZED;
-        let result =
-            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
+        let result = handle_anthropic_error(
+            response_code,
+            error_body.clone(),
+            "raw request".to_string(),
+            "raw response".to_string(),
+        );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1974,12 +2144,16 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some("raw request".to_string()),
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some("raw response".to_string()),
             }
         );
         let response_code = StatusCode::TOO_MANY_REQUESTS;
-        let result =
-            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
+        let result = handle_anthropic_error(
+            response_code,
+            error_body.clone(),
+            "raw request".to_string(),
+            "raw response".to_string(),
+        );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1988,32 +2162,40 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some("raw request".to_string()),
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some("raw response".to_string()),
             }
         );
         let response_code = StatusCode::NOT_FOUND;
-        let result =
-            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
+        let result = handle_anthropic_error(
+            response_code,
+            error_body.clone(),
+            "raw request".to_string(),
+            "raw response".to_string(),
+        );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: Some("raw request".to_string()),
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some("raw response".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }
         );
         let response_code = StatusCode::INTERNAL_SERVER_ERROR;
-        let result =
-            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
+        let result = handle_anthropic_error(
+            response_code,
+            error_body.clone(),
+            "raw request".to_string(),
+            "raw response".to_string(),
+        );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: Some("raw request".to_string()),
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some("raw response".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }
         );
@@ -2385,7 +2567,7 @@ mod tests {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool1".to_string());
                 assert_eq!(tool_call.raw_name, Some("calculator".to_string()));
-                assert_eq!(tool_call.raw_arguments, "".to_string());
+                assert_eq!(tool_call.raw_arguments, String::new());
             }
             _ => panic!("Expected a tool call content block"),
         }
@@ -2665,7 +2847,7 @@ mod tests {
             content: vec![],
             created: 0,
             usage: None,
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
         };
@@ -2682,7 +2864,7 @@ mod tests {
         let chunk = ProviderInferenceResponseChunk {
             created: 0,
             usage: None,
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
             content: vec![ContentBlockChunk::Text(TextChunk {
@@ -2704,7 +2886,7 @@ mod tests {
         let chunk = ProviderInferenceResponseChunk {
             created: 0,
             usage: None,
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
             content: vec![
@@ -2726,7 +2908,7 @@ mod tests {
         let chunk = ProviderInferenceResponseChunk {
             created: 0,
             usage: None,
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
             content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {

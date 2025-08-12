@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::config_parser::path::TomlRelativePath;
 use crate::config_parser::{LoadableConfig, PathWithContents};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -46,19 +46,22 @@ pub struct ChatCompletionConfig {
     pub stop_sequences: Option<Vec<String>>,
     pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     pub retries: RetryConfig,
+    #[cfg_attr(test, ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
+    #[cfg_attr(test, ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
     pub weight: Option<f64>,
     pub model: Arc<str>,
-    pub system_template: Option<PathBuf>,
-    pub user_template: Option<PathBuf>,
-    pub assistant_template: Option<PathBuf>,
+    pub system_template: Option<TomlRelativePath>,
+    pub user_template: Option<TomlRelativePath>,
+    pub assistant_template: Option<TomlRelativePath>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub max_tokens: Option<u32>,
@@ -71,27 +74,29 @@ pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
     pub retries: RetryConfig,
     #[serde(default)]
+    #[ts(skip)]
     pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
+    #[ts(skip)]
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
 impl LoadableConfig<ChatCompletionConfig> for UninitializedChatCompletionConfig {
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<ChatCompletionConfig, Error> {
+    fn load(self) -> Result<ChatCompletionConfig, Error> {
         Ok(ChatCompletionConfig {
             weight: self.weight,
             model: self.model,
             system_template: self
                 .system_template
-                .map(|path| PathWithContents::from_path(path, Some(&base_path)))
+                .map(PathWithContents::from_path)
                 .transpose()?,
             user_template: self
                 .user_template
-                .map(|path| PathWithContents::from_path(path, Some(&base_path)))
+                .map(PathWithContents::from_path)
                 .transpose()?,
             assistant_template: self
                 .assistant_template
-                .map(|path| PathWithContents::from_path(path, Some(&base_path)))
+                .map(PathWithContents::from_path)
                 .transpose()?,
             temperature: self.temperature,
             top_p: self.top_p,
@@ -119,13 +124,14 @@ impl ChatCompletionConfig {
             Role::User => self.user_template.as_ref(),
             Role::Assistant => self.assistant_template.as_ref(),
         }
-        .map(|x| {
-            x.path
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
-        })
-        .transpose()?;
-        prepare_request_message(message, templates, template_path, template_schema_info)
+        .map(|x| x.path.get_template_key());
+
+        prepare_request_message(
+            message,
+            templates,
+            template_path.as_deref(),
+            template_schema_info,
+        )
     }
 
     pub fn prepare_system_message(
@@ -137,23 +143,26 @@ impl ChatCompletionConfig {
         let template_path = self
             .system_template
             .as_ref()
-            .map(|x| {
-                x.path
-                    .to_str()
-                    .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
-            })
-            .transpose()?;
-        prepare_system_message(system, templates, template_path, template_schema_info)
+            .map(|x| x.path.get_template_key());
+        prepare_system_message(
+            system,
+            templates,
+            template_path.as_deref(),
+            template_schema_info,
+        )
     }
 
     fn prepare_request<'a, 'request>(
         &'a self,
         input: &ResolvedInput,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         stream: bool,
         inference_params: &mut InferenceParams,
-    ) -> Result<ModelInferenceRequest<'request>, Error> {
+    ) -> Result<ModelInferenceRequest<'request>, Error>
+    where
+        'a: 'request,
+    {
         let messages = input
             .messages
             .iter()
@@ -188,6 +197,7 @@ impl ChatCompletionConfig {
             inference_extra_body: inference_config
                 .extra_body
                 .clone()
+                .into_owned()
                 .filter(inference_config.variant_name),
         };
 
@@ -196,6 +206,7 @@ impl ChatCompletionConfig {
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
+                .into_owned()
                 .filter(inference_config.variant_name),
         };
 
@@ -231,7 +242,7 @@ pub fn prepare_model_input(
         template_schema_info,
     )?;
     let mut templated_messages = Vec::with_capacity(messages.len());
-    for message in messages.iter() {
+    for message in messages {
         let template_name = match message.role {
             Role::Assistant => assistant_template_name,
             Role::User => user_template_name,
@@ -311,7 +322,7 @@ fn prepare_request_message(
             }
         }
     };
-    for block in message.content.iter() {
+    for block in &message.content {
         match block {
             ResolvedInputMessageContent::Text { value } => {
                 let text_content= match template_name {
@@ -377,7 +388,7 @@ impl Variant for ChatCompletionConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -412,7 +423,7 @@ impl Variant for ChatCompletionConfig {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -533,7 +544,7 @@ impl Variant for ChatCompletionConfig {
         inputs: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_configs: &'a [InferenceConfig<'a, 'a>],
+        inference_configs: &'a [InferenceConfig<'a>],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -600,15 +611,13 @@ pub enum TemplateKind {
 pub fn validate_template_and_schema(
     kind: TemplateKind,
     schema: Option<&StaticJSONSchema>,
-    template: Option<&PathBuf>,
+    template: Option<&TomlRelativePath>,
     templates: &TemplateConfig,
 ) -> Result<(), Error> {
     match (schema, template) {
         (None, Some(template)) => {
-            let template_name = template
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))?;
-            let undeclared_vars = templates.get_undeclared_variables(template_name)?;
+            let template_name = template.get_template_key();
+            let undeclared_vars = templates.get_undeclared_variables(&template_name)?;
             let allowed_var = match kind {
                 TemplateKind::System => SYSTEM_TEXT_TEMPLATE_VAR,
                 TemplateKind::User => USER_TEXT_TEMPLATE_VAR,
@@ -644,6 +653,7 @@ pub fn validate_template_and_schema(
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::path::PathBuf;
 
     use super::*;
 
@@ -763,15 +773,15 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             assistant_template: Some(PathWithContents {
                 path: assistant_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             json_mode: Some(JsonMode::On),
             ..Default::default()
@@ -859,15 +869,15 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             assistant_template: Some(PathWithContents {
                 path: assistant_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             json_mode: Some(JsonMode::On),
             ..Default::default()
@@ -985,7 +995,7 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1011,7 +1021,7 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1047,11 +1057,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1156,7 +1166,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1211,7 +1221,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1244,11 +1254,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1263,7 +1273,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1309,11 +1319,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1347,7 +1357,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1426,7 +1436,7 @@ mod tests {
             templates: &templates,
             tool_config: Some(&weather_tool_config),
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1515,7 +1525,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1581,7 +1591,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1592,11 +1602,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             extra_body: Default::default(),
             ..Default::default()
@@ -1694,7 +1704,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: Some(&output_schema),
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1705,11 +1715,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         };
@@ -1795,7 +1805,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: Some(&output_schema),
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1806,11 +1816,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             temperature: Some(0.5),
             top_p: Some(0.9),
@@ -1954,11 +1964,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         }));
@@ -1981,7 +1991,7 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2020,11 +2030,11 @@ mod tests {
             weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             user_template: Some(PathWithContents {
                 path: user_template_name.into(),
-                contents: "".to_string(),
+                contents: String::new(),
             }),
             ..Default::default()
         }));
@@ -2045,7 +2055,7 @@ mod tests {
             templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -2148,7 +2158,7 @@ mod tests {
             templates,
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -2257,7 +2267,7 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2333,7 +2343,7 @@ mod tests {
             tool_config: None,
             dynamic_output_schema: Some(&dynamic_output_schema),
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
@@ -2367,16 +2377,16 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_both_some() {
         let templates = get_test_template_config();
-        let schema = StaticJSONSchema::from_path(
-            PathBuf::from("fixtures/config/functions/templates_with_variables/system_schema.json"),
-            PathBuf::new(),
-        )
+        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+            "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
+            None,
+        ))
         .unwrap();
         let template = PathBuf::from("test_validate_template_and_schema_both_some");
         let result = validate_template_and_schema(
             TemplateKind::System,
             Some(&schema),
-            Some(&template),
+            Some(&TomlRelativePath::new_for_tests(template, None)),
             &templates,
         );
         assert!(result.is_ok());
@@ -2386,8 +2396,12 @@ mod tests {
     fn test_validate_template_and_schema_template_no_needs_variables() {
         let templates = get_test_template_config();
         let template = PathBuf::from("system_filled");
-        let result =
-            validate_template_and_schema(TemplateKind::System, None, Some(&template), &templates);
+        let result = validate_template_and_schema(
+            TemplateKind::System,
+            None,
+            Some(&TomlRelativePath::new_for_tests(template, None)),
+            &templates,
+        );
         assert!(result.is_ok());
     }
 
@@ -2395,9 +2409,13 @@ mod tests {
     fn test_validate_template_and_schema_template_needs_variables() {
         let templates = get_test_template_config(); // Template needing variables
         let template = PathBuf::from("greeting");
-        let err =
-            validate_template_and_schema(TemplateKind::System, None, Some(&template), &templates)
-                .unwrap_err();
+        let err = validate_template_and_schema(
+            TemplateKind::System,
+            None,
+            Some(&TomlRelativePath::new_for_tests(template, None)),
+            &templates,
+        )
+        .unwrap_err();
         let details = err.get_details();
 
         if let ErrorDetails::Config { message } = details {
@@ -2413,10 +2431,10 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_schema_some_template_none() {
         let templates = get_test_template_config(); // Default TemplateConfig
-        let schema = StaticJSONSchema::from_path(
-            PathBuf::from("fixtures/config/functions/templates_with_variables/system_schema.json"),
-            PathBuf::new(),
-        )
+        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+            "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
+            None,
+        ))
         .unwrap();
         let err =
             validate_template_and_schema(TemplateKind::System, Some(&schema), None, &templates)

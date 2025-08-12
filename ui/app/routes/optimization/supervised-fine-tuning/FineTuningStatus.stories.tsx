@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import FineTuningStatus from "./FineTuningStatus";
-import type { SFTJobStatus } from "~/utils/supervised_fine_tuning/common";
+import type {
+  OptimizationJobInfo,
+  OptimizationJobHandle,
+} from "tensorzero-node";
 import { withRouter } from "storybook-addon-remix-react-router";
 
 const meta = {
@@ -32,54 +35,64 @@ const baseFormData = {
   jobId: "01234567-89ab-cdef-0123-456789abcdef",
 };
 
-const baseRawData = {
-  status: "ok" as const,
-  info: {
-    id: "ftjob-abc123xyz789",
-    object: "fine_tuning.job",
-    created_at: 1640995200,
-    finished_at: null,
-    model: "gpt-4o-mini-2024-07-18",
-    organization_id: "org-123456789",
-    result_files: [],
-    status: "running",
-    validation_file: "file-abc123xyz789",
-    training_file: "file-def456uvw012",
-  },
-};
-
 export const Idle: Story = {
   args: {
     status: { status: "idle" },
+    formData: baseFormData,
     result: null,
+    jobHandle: {
+      type: "openai_sft",
+      job_id: "ftjob-abc123xyz789",
+      job_url: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
+      job_api_url:
+        "https://api.openai.com/v1/fine_tuning/jobs/ftjob-abc123xyz789",
+      credential_location: null,
+    } as OptimizationJobHandle,
   },
 };
 
 export const Running: Story = {
   args: {
     status: {
-      status: "running",
-      modelProvider: "openai",
-      formData: baseFormData,
-      jobUrl: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
-      rawData: baseRawData,
-    } satisfies SFTJobStatus,
+      status: "pending",
+      message: "Fine-tuning job is currently running",
+      estimated_finish: new Date(Date.now() + 3600000), // 1 hour from now
+      trained_tokens: 150000n,
+      error: null,
+    } as OptimizationJobInfo,
+    formData: baseFormData,
     result: null,
+    jobHandle: {
+      type: "openai_sft",
+      job_id: "ftjob-abc123xyz789",
+      job_url: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
+      job_api_url:
+        "https://api.openai.com/v1/fine_tuning/jobs/ftjob-abc123xyz789",
+      credential_location: null,
+    } as OptimizationJobHandle,
   },
 };
 
 export const RunningWithEstimatedCompletion: Story = {
   args: {
     status: {
-      status: "running",
-      modelProvider: "openai",
-      formData: baseFormData,
-      jobUrl: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
-      rawData: baseRawData,
-      estimatedCompletionTime: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
-    } satisfies SFTJobStatus,
-
+      status: "pending",
+      message:
+        "Fine-tuning job is currently running with estimated completion time",
+      estimated_finish: new Date(Date.now() + 3600000), // 1 hour from now
+      trained_tokens: 500000n,
+      error: null,
+    } as OptimizationJobInfo,
+    formData: baseFormData,
     result: null,
+    jobHandle: {
+      type: "openai_sft",
+      job_id: "ftjob-abc123xyz789",
+      job_url: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
+      job_api_url:
+        "https://api.openai.com/v1/fine_tuning/jobs/ftjob-abc123xyz789",
+      credential_location: null,
+    } as OptimizationJobHandle,
   },
 };
 
@@ -87,39 +100,62 @@ export const Completed: Story = {
   args: {
     status: {
       status: "completed",
-      modelProvider: "openai",
-      formData: baseFormData,
-      jobUrl: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
-      rawData: {
-        status: "ok",
-        info: {
-          ...baseRawData.info,
-          status: "succeeded",
-          finished_at: 1640998800,
-          fine_tuned_model:
-            "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
+      output: {
+        type: "model",
+        routing: ["ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123"],
+        providers: {
+          "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123": {
+            type: "openai",
+            model_name: "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
+            api_base: null,
+            timeouts: {
+              non_streaming: { total_ms: null },
+              streaming: { ttft_ms: null },
+            },
+            discard_unknown_chunks: false,
+            api_key_location: null,
+          },
+        },
+        timeouts: {
+          non_streaming: {
+            total_ms: null,
+          },
+          streaming: {
+            ttft_ms: null,
+          },
         },
       },
-      result: "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
-    } satisfies SFTJobStatus,
-    result: null,
+    },
+    formData: baseFormData,
+    result: "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
+    jobHandle: {
+      type: "openai_sft",
+      job_id: "ftjob-abc123xyz789",
+      job_url: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
+      job_api_url:
+        "https://api.openai.com/v1/fine_tuning/jobs/ftjob-abc123xyz789",
+      credential_location: null,
+    } as OptimizationJobHandle,
   },
 };
 
 export const Error: Story = {
   args: {
     status: {
-      status: "error",
-      modelProvider: "openai",
-      formData: baseFormData,
-      jobUrl: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
-      rawData: {
-        status: "error",
-        message: "Training data validation failed: Invalid format in line 42",
-      },
+      status: "failed",
+      message: "Training data validation failed: Invalid format in line 42",
       error: "Training data validation failed: Invalid format in line 42",
-    } satisfies SFTJobStatus,
+    } as OptimizationJobInfo,
+    formData: baseFormData,
     result: null,
+    jobHandle: {
+      type: "openai_sft",
+      job_id: "ftjob-abc123xyz789",
+      job_url: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
+      job_api_url:
+        "https://api.openai.com/v1/fine_tuning/jobs/ftjob-abc123xyz789",
+      credential_location: null,
+    } as OptimizationJobHandle,
   },
 };
 
@@ -128,29 +164,48 @@ export const LongJobId: Story = {
   args: {
     status: {
       status: "completed",
-      modelProvider: "openai",
-      formData: {
-        ...baseFormData,
-        jobId:
-          "01234567-89ab-cdef-0123-456789abcdef-very-long-suffix-that-wraps",
-        function:
-          "very_long_function_name_that_might_wrap_on_smaller_screens_or_might_not_but_hopefully_does_when_this_id_does_finally_terminate",
-        variant:
-          "extremely_long_variant_name_that_definitely_wraps_around_in_the_ui",
-      },
-      jobUrl: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
-      rawData: {
-        status: "ok",
-        info: {
-          ...baseRawData.info,
-          status: "succeeded",
-          finished_at: 1640998800,
-          fine_tuned_model:
-            "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
+      output: {
+        type: "model",
+        routing: ["ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123"],
+        providers: {
+          "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123": {
+            type: "openai",
+            model_name: "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
+            api_base: null,
+            timeouts: {
+              non_streaming: { total_ms: null },
+              streaming: { ttft_ms: null },
+            },
+            discard_unknown_chunks: false,
+            api_key_location: null,
+          },
+        },
+        timeouts: {
+          non_streaming: {
+            total_ms: 300000n,
+          },
+          streaming: {
+            ttft_ms: 300000n,
+          },
         },
       },
-      result: "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
-    } satisfies SFTJobStatus,
-    result: null,
+    },
+    formData: {
+      ...baseFormData,
+      jobId: "01234567-89ab-cdef-0123-456789abcdef-very-long-suffix-that-wraps",
+      function:
+        "very_long_function_name_that_might_wrap_on_smaller_screens_or_might_not_but_hopefully_does_when_this_id_does_finally_terminate",
+      variant:
+        "extremely_long_variant_name_that_definitely_wraps_around_in_the_ui",
+    },
+    result: "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
+    jobHandle: {
+      type: "openai_sft",
+      job_id: "ftjob-abc123xyz789",
+      job_url: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
+      job_api_url:
+        "https://api.openai.com/v1/fine_tuning/jobs/ftjob-abc123xyz789",
+      credential_location: null,
+    } as OptimizationJobHandle,
   },
 };

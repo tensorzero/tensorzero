@@ -16,6 +16,14 @@ crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
+    // TODO - fine-tune a better model and add it back to our tests
+    let _tuned = E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "gcp-vertex-gemini-flash-lite-tuned".to_string(),
+        model_name: "gemini-2.0-flash-lite-tuned".into(),
+        model_provider_name: "gcp_vertex_gemini".into(),
+        credentials: HashMap::new(),
+    };
     let standard_providers = vec![
         E2ETestProvider {
             supports_batch_inference: true,
@@ -28,13 +36,6 @@ async fn get_providers() -> E2ETestProviders {
             supports_batch_inference: false,
             variant_name: "gcp-vertex-gemini-pro".to_string(),
             model_name: "gcp-gemini-2.5-pro".into(),
-            model_provider_name: "gcp_vertex_gemini".into(),
-            credentials: HashMap::new(),
-        },
-        E2ETestProvider {
-            supports_batch_inference: false,
-            variant_name: "gcp-vertex-gemini-flash-lite-tuned".to_string(),
-            model_name: "gemini-2.0-flash-lite-tuned".into(),
             model_provider_name: "gcp_vertex_gemini".into(),
             credentials: HashMap::new(),
         },
@@ -118,13 +119,6 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "gcp_vertex_gemini".into(),
             credentials: HashMap::new(),
         },
-        E2ETestProvider {
-            supports_batch_inference: false,
-            variant_name: "gcp-vertex-gemini-flash-lite-tuned".to_string(),
-            model_name: "gemini-2.0-flash-lite-tuned".into(),
-            model_provider_name: "gcp_vertex_gemini".into(),
-            credentials: HashMap::new(),
-        },
     ];
 
     let json_mode_off_providers = vec![E2ETestProvider {
@@ -141,12 +135,6 @@ async fn get_providers() -> E2ETestProviders {
         model_name: "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001".into(),
         model_provider_name: "gcp_vertex_gemini".into(),
         credentials: HashMap::new(),
-    }, E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "gcp_vertex_gemini_shorthand_endpoint".to_string(),
-        model_name: "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/endpoints/945488740422254592".into(),
-        model_provider_name: "gcp_vertex_gemini".into(),
-        credentials: HashMap::new(),
     }];
 
     E2ETestProviders {
@@ -154,6 +142,7 @@ async fn get_providers() -> E2ETestProviders {
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: vec![],
+        embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: vec![],
         tool_use_inference: tool_providers.clone(),
@@ -256,5 +245,5 @@ async fn test_gcp_vertex_gemini_bad_model_id() {
 
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     let error = response_json.get("error").unwrap().as_str().unwrap();
-    assert!(error.contains("Model or endpoint not found. You may be specifying the wrong one of these. Standard GCP models should use a `model_id` and not an `endpoint_id`, while fine-tuned models should use an `endpoint_id`."))
+    assert!(error.contains("Model or endpoint not found. You may be specifying the wrong one of these. Standard GCP models should use a `model_id` and not an `endpoint_id`, while fine-tuned models should use an `endpoint_id`."));
 }

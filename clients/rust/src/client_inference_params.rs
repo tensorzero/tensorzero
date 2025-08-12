@@ -5,11 +5,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero_core::{
     cache::CacheParamsOptions,
+    config_parser::UninitializedVariantInfo,
     endpoints::inference::{InferenceParams, Params},
     error::Error,
-    inference::types::extra_body::UnfilteredInferenceExtraBody,
-    inference::types::extra_headers::UnfilteredInferenceExtraHeaders,
-    inference::types::{Input, InputMessage, InputMessageContent},
+    inference::types::{
+        extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
+        Input, InputMessage, InputMessageContent,
+    },
     tool::DynamicToolParams,
 };
 use uuid::Uuid;
@@ -19,7 +21,8 @@ use crate::client_input::{test_client_input_to_input, ClientInput};
 // This is a copy-paste of the `Params` struct from `tensorzero_core::endpoints::inference::Params`.
 // with just the `credentials` field adjusted to allow serialization.
 /// The expected payload is a JSON object with the following fields:
-#[derive(Clone, Debug, Serialize, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default, ts_rs::TS)]
+#[ts(export)]
 pub struct ClientInferenceParams {
     // The function name. Exactly one of `function_name` or `model_name` must be provided.
     pub function_name: Option<String>,
@@ -59,6 +62,7 @@ pub struct ClientInferenceParams {
     // If provided for a JSON inference, the inference will use the specified output schema instead of the
     // configured one. We only lazily validate this schema.
     pub output_schema: Option<Value>,
+    #[ts(type = "Map<string, string>")]
     pub credentials: HashMap<String, ClientSecretString>,
     pub cache_options: CacheParamsOptions,
     /// If `true`, add an `original_response` field to the response, containing the raw string response from the model.
@@ -66,10 +70,21 @@ pub struct ClientInferenceParams {
     /// if the fuser/judge model failed
     #[serde(default)]
     pub include_original_response: bool,
+    // NOTE: Currently, ts_rs does not handle #[serde(transparent)] correctly,
+    // so we disable the type generation for the extra_body and extra_headers fields.
+    // I tried doing a direct #[ts(type = "InferenceExtraBody[]")] and
+    // a #[ts(as = "Vec<InferenceExtraBody>")] and these would generate the types but then
+    // type checking would fail because the ClientInferenceParams struct would not be
+    // generated with the correct import.
+    //
+    // Not sure if this is solvable with the existing crate.
     #[serde(default)]
+    #[ts(skip)]
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
+    #[ts(skip)]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
 }
 
 impl TryFrom<ClientInferenceParams> for Params {
@@ -112,6 +127,7 @@ impl TryFrom<ClientInferenceParams> for Params {
             include_original_response: this.include_original_response,
             extra_body: this.extra_body,
             extra_headers: this.extra_headers,
+            internal_dynamic_variant_config: this.internal_dynamic_variant_config,
         })
     }
 }
@@ -139,6 +155,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         include_original_response,
         extra_body,
         extra_headers,
+        internal_dynamic_variant_config,
     } = client_params;
     let _ = Params {
         function_name,
@@ -158,6 +175,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         include_original_response,
         extra_body,
         extra_headers,
+        internal_dynamic_variant_config,
     };
 }
 

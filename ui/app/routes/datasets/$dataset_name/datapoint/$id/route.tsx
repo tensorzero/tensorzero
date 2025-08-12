@@ -21,13 +21,14 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { Badge } from "~/components/ui/badge";
-import { useConfig } from "~/context/config";
-import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
+import { useFunctionConfig } from "~/context/config";
+import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference.utils";
 import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
 } from "~/routes/api/tensorzero/inference.utils";
 import type { DisplayInputMessage } from "~/utils/clickhouse/common";
+
 import {
   ParsedDatasetRowSchema,
   type ParsedDatasetRow,
@@ -37,12 +38,16 @@ import {
   getDatasetCounts,
   staleDatapoint,
 } from "~/utils/clickhouse/datasets.server";
-import { getConfig } from "~/utils/config/index.server";
+import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { logger } from "~/utils/logger";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import { DatapointActions } from "./DatapointActions";
 import DatapointBasicInfo from "./DatapointBasicInfo";
+import type {
+  JsonInferenceOutput,
+  ContentBlockChatOutput,
+} from "tensorzero-node";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -77,7 +82,10 @@ export async function action({ request }: ActionFunctionArgs) {
   const parsedFormData: ParsedDatasetRow =
     ParsedDatasetRowSchema.parse(cleanedData);
   const config = await getConfig();
-  const functionConfig = config.functions[parsedFormData.function_name];
+  const functionConfig = await getFunctionConfig(
+    parsedFormData.function_name,
+    config,
+  );
   if (!functionConfig) {
     return new Response(
       `Failed to find function config for function ${parsedFormData.function_name}`,
@@ -93,7 +101,7 @@ export async function action({ request }: ActionFunctionArgs) {
       parsedFormData.id,
       functionType,
     );
-    const datasetCounts = await getDatasetCounts();
+    const datasetCounts = await getDatasetCounts({});
     const datasetCount = datasetCounts.find(
       (count) => count.dataset_name === parsedFormData.dataset_name,
     );
@@ -117,30 +125,35 @@ export async function action({ request }: ActionFunctionArgs) {
       // For future reference:
       // These two calls would be a transaction but ClickHouse doesn't support
 
-      const datapoint = {
+      const baseDatapoint = {
         function_name: parsedFormData.function_name,
         input: transformedInput,
         output: transformedOutput,
         tags: parsedFormData.tags || {},
         auxiliary: parsedFormData.auxiliary,
         is_custom: true, // we're saving it after an edit, so it's custom
-        ...(functionType === "json"
-          ? {
-              output_schema:
-                parsedFormData["output_schema" as keyof typeof parsedFormData],
-            }
-          : {}),
-        ...(functionType === "chat" && "tool_params" in parsedFormData
-          ? {
-              tool_params:
-                parsedFormData["tool_params" as keyof typeof parsedFormData],
-            }
-          : {}),
         source_inference_id: parsedFormData.source_inference_id,
+        id: uuid(), // We generate a new ID here because we want old evaluation runs to be able to point to the correct data.
       };
+
+      let datapoint;
+      if (functionType === "json" && "output_schema" in parsedFormData) {
+        datapoint = {
+          ...baseDatapoint,
+          output_schema: parsedFormData.output_schema,
+        };
+      } else if (functionType === "chat" && "tool_params" in parsedFormData) {
+        datapoint = {
+          ...baseDatapoint,
+          tool_params: parsedFormData.tool_params,
+        };
+      } else {
+        throw new Error(
+          `Unexpected function type "${functionType}" or missing required properties on datapoint`,
+        );
+      }
       const { id } = await getTensorZeroClient().updateDatapoint(
         parsedFormData.dataset_name,
-        uuid(),
         datapoint,
       );
       await staleDatapoint(
@@ -195,10 +208,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
   const [originalInput] = useState(datapoint.input);
   const [originalOutput] = useState(datapoint.output);
-  const [output, setOutput] = useState<typeof datapoint.output>(
-    datapoint.output,
-  );
-  const config = useConfig();
+  const [output, setOutput] = useState<
+    ContentBlockChatOutput[] | JsonInferenceOutput | null
+  >(datapoint.output ?? null);
   const [isEditing, setIsEditing] = useState(false);
 
   const canSave = useMemo(() => {
@@ -215,7 +227,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
   const handleReset = () => {
     setInput(datapoint.input);
-    setOutput(datapoint.output);
+    setOutput(datapoint.output ?? null);
   };
 
   const handleSystemChange = (system: string | object) =>
@@ -259,9 +271,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     }
   };
 
-  const variants = Object.keys(
-    config.functions[datapoint.function_name]?.variants || {},
-  );
+  const functionConfig = useFunctionConfig(datapoint.function_name);
+  const variants = Object.keys(functionConfig?.variants || {});
 
   const variantInferenceFetcher = useInferenceActionFetcher();
   const variantSource = "datapoint";
@@ -344,7 +355,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             <Output
               output={output}
               isEditing={isEditing}
-              onOutputChange={(output) => setOutput(output ?? undefined)}
+              onOutputChange={(output) => setOutput(output)}
             />
           </SectionLayout>
         )}
@@ -439,6 +450,9 @@ function transformOutputForTensorZero(
   if (output === null || output === undefined) {
     return null;
   } else if ("raw" in output) {
+    if (output.raw === null) {
+      return null;
+    }
     return JSON.parse(output.raw);
   } else if (typeof output === "object") {
     return JSON.parse(JSON.stringify(output));

@@ -216,7 +216,7 @@ async fn test_create_delete_datapoint_chat() {
     assert!(list_datapoints_response.status().is_success());
     let list_datapoints_json = list_datapoints_response.json::<Vec<Value>>().await.unwrap();
     // Test that the auxiliary field is not returned by the list datapoints API
-    for datapoint in list_datapoints_json.iter() {
+    for datapoint in &list_datapoints_json {
         assert!(datapoint.get("auxiliary").is_none());
     }
     let list_datapoints = list_datapoints_json
@@ -1018,7 +1018,7 @@ async fn test_create_delete_datapoint_json() {
     assert!(list_datapoints_response.status().is_success());
     let list_datapoints = list_datapoints_response.json::<Vec<Value>>().await.unwrap();
     assert_eq!(list_datapoints.len(), 2);
-    for datapoint in list_datapoints.iter() {
+    for datapoint in &list_datapoints {
         // Test that the auxiliary field is not returned by the list datapoints API
         assert!(datapoint.get("auxiliary").is_none());
     }
@@ -1458,6 +1458,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
 
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
@@ -1568,6 +1569,7 @@ async fn test_datapoint_insert_output_none_chat() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 
@@ -1832,6 +1834,7 @@ async fn test_datapoint_insert_output_inherit_json() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 
@@ -1944,6 +1947,7 @@ async fn test_datapoint_insert_output_none_json() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 
@@ -2172,6 +2176,7 @@ async fn test_datapoint_missing_demonstration() {
         .await
         .unwrap();
     assert!(response.status().is_success());
+    tokio::time::sleep(Duration::from_secs(1)).await;
     let response_json = response.json::<Value>().await.unwrap();
     let episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
     let episode_id = Uuid::parse_str(episode_id).unwrap();

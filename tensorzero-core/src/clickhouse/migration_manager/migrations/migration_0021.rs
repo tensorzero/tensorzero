@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use super::{check_column_exists, check_table_exists, get_default_expression};
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 
 /// This migration adds a ReplacingMergeTree table TagInference.
@@ -114,9 +114,18 @@ impl Migration for Migration0021<'_> {
             })?
             + view_offset)
             .as_secs();
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "ReplacingMergeTree",
+                table_name: "TagInference",
+                engine_args: &["updated_at", "is_deleted"],
+            },
+        );
 
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS TagInference
+        let query = format!(
+            r"
+            CREATE TABLE IF NOT EXISTS TagInference{on_cluster_name}
                 (
                     key String,
                     value String,
@@ -127,57 +136,58 @@ impl Migration for Migration0021<'_> {
                     function_type Enum8('chat' = 1, 'json' = 2),
                     is_deleted Bool DEFAULT false,
                     updated_at DateTime64(6, 'UTC') DEFAULT now64()
-                ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
-                ORDER BY (key, value, inference_id)"#;
+                ) ENGINE = {table_engine_name}
+                ORDER BY (key, value, inference_id)",
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add the staled_at column to both datapoint tables
-        let query = r#"
+        let query = r"
             ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Nullable(DateTime64(6, 'UTC'));
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
-        let query = r#"
+        let query = r"
             ALTER TABLE JsonInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Nullable(DateTime64(6, 'UTC'));
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Update the defaults of updated_at for the Datapoint tables to be now64
-        let query = r#"
+        let query = r"
             ALTER TABLE ChatInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now64();
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
-        let query = r#"
+        let query = r"
             ALTER TABLE JsonInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now64();
-        "#;
+        ";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
-        let view_where_clause = if !clean_start {
-            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
-        } else {
+        let view_where_clause = if clean_start {
             String::new()
+        } else {
+            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         };
 
         let query = format!(
-            r#"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS TagChatInferenceView
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS TagChatInferenceView{on_cluster_name}
             TO TagInference
             AS
                 SELECT
@@ -191,7 +201,7 @@ impl Migration for Migration0021<'_> {
                 FROM ChatInference
                 ARRAY JOIN mapKeys(tags) as key
                 {view_where_clause};
-        "#
+        "
         );
         let _ = self
             .clickhouse
@@ -199,8 +209,8 @@ impl Migration for Migration0021<'_> {
             .await?;
 
         let query = format!(
-            r#"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS TagJsonInferenceView
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS TagJsonInferenceView{on_cluster_name}
             TO TagInference
             AS
                 SELECT
@@ -214,7 +224,7 @@ impl Migration for Migration0021<'_> {
                 FROM JsonInference
                 ARRAY JOIN mapKeys(tags) as key
                 {view_where_clause};
-        "#
+        "
         );
         let _ = self
             .clickhouse
@@ -227,7 +237,7 @@ impl Migration for Migration0021<'_> {
 
             let insert_chat_inference = async {
                 let query = format!(
-                    r#"
+                    r"
                     INSERT INTO TagInference (key, value, function_name, variant_name, episode_id, inference_id, function_type)
                     SELECT
                         key,
@@ -240,7 +250,7 @@ impl Migration for Migration0021<'_> {
                     FROM ChatInference
                     ARRAY JOIN mapKeys(tags) as key
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#
+                "
                 );
                 self.clickhouse
                     .run_query_synchronous_no_params(query.to_string())
@@ -249,7 +259,7 @@ impl Migration for Migration0021<'_> {
 
             let insert_json_inference = async {
                 let query = format!(
-                    r#"
+                    r"
                     INSERT INTO TagInference (key, value, function_name, variant_name, episode_id, inference_id, function_type)
                     SELECT
                         key,
@@ -262,7 +272,7 @@ impl Migration for Migration0021<'_> {
                     FROM JsonInference
                     ARRAY JOIN mapKeys(tags) as key
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#
+                "
                 );
                 self.clickhouse
                     .run_query_synchronous_no_params(query.to_string())
@@ -276,20 +286,20 @@ impl Migration for Migration0021<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the materialized views */\
-        DROP VIEW IF EXISTS TagChatInferenceView;
-        DROP VIEW IF EXISTS TagJsonInferenceView;
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!("/* Drop the materialized views */\
+        DROP VIEW IF EXISTS TagChatInferenceView{on_cluster_name};
+        DROP VIEW IF EXISTS TagJsonInferenceView{on_cluster_name};
         \n
         /* Drop the `TagInference` table */\
-        DROP TABLE IF EXISTS TagInference;
+        DROP TABLE IF EXISTS TagInference{on_cluster_name} SYNC;
         /* Drop the `staled_at` column in the datapoint tables */\
         ALTER TABLE ChatInferenceDatapoint DROP COLUMN staled_at;
         ALTER TABLE JsonInferenceDatapoint DROP COLUMN staled_at;
         /* Revert the change to the default of `updated_at` in the datapoint tables */\
         ALTER TABLE ChatInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now();
         ALTER TABLE JsonInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now();
-    "
-        .to_string()
+    ")
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

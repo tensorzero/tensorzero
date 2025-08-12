@@ -29,7 +29,7 @@ pub async fn delete_datapoint(
     let datapoint = clickhouse.run_query_synchronous(
         "SELECT * FROM {table_name:Identifier} WHERE dataset_name={dataset_name:String} AND function_name={function_name:String} AND id = {id:String} ORDER BY updated_at DESC LIMIT 1 FORMAT JSONEachRow;".to_string(),
         &HashMap::from([
-            ("table_name", datapoint_kind.table_name()),
+            ("table_name", datapoint_kind.table_name().as_str()),
             ("function_name", function_name),
             ("dataset_name", dataset_name),
             ("id", datapoint_id.to_string().as_str())
@@ -48,7 +48,7 @@ pub async fn delete_datapoint(
         format!("{}", chrono::Utc::now().format(CLICKHOUSE_DATETIME_FORMAT)).into();
 
     clickhouse
-        .write(&[datapoint_json], datapoint_kind.table_name())
+        .write_batched(&[datapoint_json], datapoint_kind.table_name())
         .await
         .unwrap();
 }

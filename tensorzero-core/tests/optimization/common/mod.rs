@@ -83,6 +83,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     };
     let model_config = model_config
         .load("test-fine-tuned-model", &ProviderTypesConfig::default())
+        .await
         .unwrap();
     let system = "You are a helpful assistant named Dr. M.M. Patel.".to_string();
     let messages = vec![RequestMessage {
@@ -140,6 +141,7 @@ pub async fn run_workflow_test_case_with_tensorzero_client(
         query_variant_name: None,
         filters: None,
         output_source: InferenceOutputSource::Inference,
+        order_by: None,
         limit: Some(10),
         offset: None,
         val_fraction: None,
@@ -211,6 +213,7 @@ fn generate_text_example() -> RenderedSample {
         dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
             text: "The capital of France is Marseille.".to_string(),
         })]],
+        tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
     }
 }
 
@@ -306,6 +309,7 @@ fn generate_tool_call_example() -> RenderedSample {
         inference_id: Some(Uuid::now_v7()),
         output_schema: None,
         dispreferred_outputs: vec![],
+        tags: HashMap::new(),
     }
 }
 
@@ -350,6 +354,7 @@ fn generate_image_example() -> RenderedSample {
         dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
             text: "Blue!".to_string(),
         })]],
+        tags: HashMap::new(),
     }
 }
 

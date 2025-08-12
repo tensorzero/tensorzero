@@ -68,13 +68,9 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "groq".into(),
             credentials: HashMap::new(),
         },
-        E2ETestProvider {
-            supports_batch_inference: false,
-            variant_name: "groq-implicit".to_string(),
-            model_name: "mixtral-groq".into(),
-            model_provider_name: "groq".into(),
-            credentials: HashMap::new(),
-        },
+        // Groq gives 500 errors when tool calls fail to parse. We don't test
+        // json_mode = "implicit_tool" here for that reason.
+        // We don't recommend its use with Groq.
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "groq-strict".to_string(),
@@ -89,6 +85,7 @@ async fn get_providers() -> E2ETestProviders {
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: vec![],
+        embeddings: vec![],
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: standard_providers.clone(),

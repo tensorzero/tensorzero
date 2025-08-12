@@ -236,6 +236,9 @@ async fn e2e_test_best_of_n_template_no_schema() {
     });
     assert_eq!(echoed_content, expected_content);
 
+    // Sleep for 100ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
     let clickhouse = get_clickhouse().await;
     let results: Vec<Value> = select_model_inferences_clickhouse(&clickhouse, inference_id)
         .await

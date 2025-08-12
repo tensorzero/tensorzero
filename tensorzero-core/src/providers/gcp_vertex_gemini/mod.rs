@@ -183,7 +183,7 @@ pub async fn make_gcp_object_store(
 
     match credentials {
         GCPVertexCredentials::Static { raw, parsed: _ } => {
-            builder = builder.with_service_account_key(raw.expose_secret())
+            builder = builder.with_service_account_key(raw.expose_secret());
         }
         GCPVertexCredentials::Dynamic(key_name) => {
             let key = dynamic_api_keys.get(key_name).ok_or_else(|| {
@@ -421,7 +421,7 @@ pub fn parse_shorthand_url<'a>(
 // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations
 pub fn location_subdomain_prefix(location: &str) -> String {
     if location == "global" {
-        "".to_string()
+        String::new()
     } else {
         format!("{location}-")
     }
@@ -1878,7 +1878,7 @@ pub fn prepare_gcp_vertex_gemini_messages<'a>(
     provider_type: &str,
 ) -> Result<Vec<GCPVertexGeminiContent<'a>>, Error> {
     let mut gcp_vertex_gemini_messages = Vec::with_capacity(messages.len());
-    for message in messages.iter() {
+    for message in messages {
         gcp_vertex_gemini_messages.push(tensorzero_to_gcp_vertex_gemini_content(
             message.role.into(),
             Cow::Borrowed(&message.content),
@@ -2093,6 +2093,7 @@ pub fn tensorzero_to_gcp_vertex_gemini_content<'a>(
     Ok(message)
 }
 
+#[expect(clippy::unnecessary_wraps)]
 pub(crate) fn process_output_schema(output_schema: &Value) -> Result<Value, Error> {
     let mut schema = output_schema.clone();
 
@@ -4144,7 +4145,7 @@ mod tests {
             thought: false,
             thought_signature: None,
             data: FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(
-                "".to_string(),
+                String::new(),
             )),
         };
         let valid_text_part = GCPVertexGeminiResponseContentPart {

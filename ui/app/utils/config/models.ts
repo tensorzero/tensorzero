@@ -1,40 +1,32 @@
 import { stringify } from "smol-toml";
-import type { ProviderConfig } from "tensorzero-node";
+import type { OptimizerOutput } from "tensorzero-node";
 
-type ProviderType = ProviderConfig["type"];
-
-function createProviderConfig(
-  type: ProviderType,
-  model_name: string,
-): ProviderConfig {
-  switch (type) {
-    case "fireworks":
-      return { type, model_name, parse_think_blocks: false };
-    case "openai":
-      return { type, model_name, api_base: null };
-    default:
-      throw new Error(`Provider ${type} requires additional configuration`);
+export function dump_optimizer_output(optimizerOutput: OptimizerOutput) {
+  /// Drop type key from the optimizer output
+  const { type, ...rest } = optimizerOutput;
+  if (type !== "model") {
+    throw new Error(`Only model type is supported, got ${type}`);
   }
-}
-
-export function get_fine_tuned_provider_config(
-  model_name: string,
-  model_provider_type: ProviderType,
-) {
-  const providerConfig = createProviderConfig(model_provider_type, model_name);
-  return providerConfig;
-}
-
-export function dump_provider_config(
-  modelName: string,
-  providerConfig: ProviderConfig,
-) {
+  if (rest.routing.length !== 1) {
+    throw new Error(`Expected 1 routing entry, got ${rest.routing.length}`);
+  }
+  const modelName = rest.routing[0];
+  const providerConfig = rest.providers[modelName];
+  // drop the timeout config
+  // allow it to be unused
+  if (!providerConfig) {
+    throw new Error(
+      `Provider config not found for model ${modelName} when dumping optimizer output.`,
+    );
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { timeouts, ...restProviderConfig } = providerConfig;
   const fullyQualifiedProviderConfig = {
     models: {
       [modelName]: {
         routing: [modelName],
         providers: {
-          [modelName]: providerConfig,
+          [modelName]: restProviderConfig,
         },
       },
     },

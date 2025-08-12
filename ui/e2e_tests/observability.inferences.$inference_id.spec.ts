@@ -337,6 +337,63 @@ test("should be able to add chat demonstration feedback via the inference page",
   await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
 });
 
+test("should be able to add demonstration feedback via Try with variant flow", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0196374b-0d7d-7422-b6dc-e94c572cc79b",
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Click on "Try with variant" button
+  await page.getByText("Try with variant").click();
+
+  // Wait for the dropdown menu to appear and select a variant
+  // Look for variant options and click on one that's not the current variant
+  const variantOption = page
+    .getByRole("menuitem")
+    .filter({ hasText: "initial_prompt_gpt4o_mini" });
+  await variantOption.waitFor({ state: "visible" });
+  await variantOption.click();
+
+  // Wait for the variant response modal to open and show results
+  await page.getByRole("dialog").waitFor({ state: "visible" });
+
+  // Wait for the variant inference to complete and show the "Add as Demonstration" button
+  await page
+    .getByText("Add as Demonstration")
+    .waitFor({ state: "visible", timeout: 15000 });
+
+  // Click the "Add as Demonstration" button
+  await page.getByText("Add as Demonstration").click();
+
+  // Wait for the modal to close and the page to redirect with newFeedbackId
+  await page.waitForURL((url) => url.searchParams.has("newFeedbackId"), {
+    timeout: 10000,
+  });
+
+  // Verify the modal is closed (no longer visible)
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+
+  // Verify the toast appears (look for "Feedback Added" text)
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("Feedback Added"),
+  ).toBeVisible();
+
+  // Get the feedback ID from URL and verify it appears in the feedback table
+  const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
+  if (!newFeedbackId) {
+    throw new Error("newFeedbackId is not present in the url");
+  }
+
+  // Assert that the feedback ID is visible in the feedback table
+  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
+});
+
 test("should be able to add a datapoint from the inference page", async ({
   page,
 }) => {
@@ -378,9 +435,41 @@ test("should be able to add a datapoint from the inference page", async ({
   });
 
   // Assert that the page URL starts with /datasets/test_json_dataset/datapoint/
-  await expect(page.url()).toMatch(
+  expect(page.url()).toMatch(
     new RegExp(`/datasets/${datasetName}/datapoint/.*`),
   );
+
+  // Next, let's delete the dataset by going to the list datasets page
+  await page.goto("/datasets");
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Find the row containing our dataset
+  const datasetRow = page.locator("tr").filter({ hasText: datasetName });
+
+  // Hover over the row to make the delete button visible
+  await datasetRow.hover();
+
+  // Click on the delete button (trash icon)
+  const deleteButton = datasetRow
+    .locator("button")
+    .filter({ has: page.locator("svg") });
+  await deleteButton.click();
+
+  // Wait for the shadcn dialog to appear and click the Delete button
+  const dialog = page.locator('div[role="dialog"]');
+  await dialog.waitFor({ state: "visible" });
+
+  // Click the destructive "Delete" button in the dialog
+  await dialog.getByRole("button", { name: /Delete/ }).click();
+
+  // Wait for the deletion to complete and page to update
+  await page.waitForTimeout(1000);
+
+  // Assert that the dataset name is not in the list of datasets anymore
+  await expect(
+    page.locator("tr").filter({ hasText: datasetName }),
+  ).not.toBeVisible();
 });
 
 test("should load an inference page with a tool call", async ({ page }) => {

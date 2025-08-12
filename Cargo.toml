@@ -3,7 +3,6 @@ members = [
     "tensorzero-core",
     "tensorzero-core/tests/mock-inference-provider",
     "gateway",
-    "ui/app/utils/minijinja",
     "internal/tensorzero-node",
     "clients/rust",
     "clients/python",
@@ -15,8 +14,8 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.7.3"
-rust-version = "1.85.0"
+version = "2025.8.2"
+rust-version = "1.86.0"
 license = "Apache-2.0"
 
 [workspace.dependencies]
@@ -32,7 +31,7 @@ uuid = { version = "1.17.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.134", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
 tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
-toml = "0.8.23"
+toml = "0.9.5"
 reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
 http = "1.3.1"
@@ -43,7 +42,7 @@ pyo3 = { version = "0.24.2", features = ["experimental-async", "abi3-py39"] }
 axum = { version = "0.8", features = ["macros"] }
 anyhow = "1.0.98"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.41", features = ["derive"] }
+clap = { version = "4.5.43", features = ["derive"] }
 futures = "0.3.30"
 lazy_static = { version = "1.5.0" }
 url = "2.5.4"
@@ -74,15 +73,24 @@ unsafe_code = "forbid"
 allow_attributes = "deny"
 dbg_macro = "deny"
 expect_used = "deny"
+explicit_iter_loop = "deny"
+if_not_else = "deny"
+ignored_unit_patterns = "deny"
+manual_string_new = "deny"
 match_bool = "deny"
+needless_raw_string_hashes = "deny"
 panic = "deny"
 print_stderr = "deny"
 print_stdout = "deny"
 redundant_closure_for_method_calls = "deny"
+semicolon-if-nothing-returned = "deny"
 todo = "deny"
+trivially_copy_pass_by_ref = "deny"
 unimplemented = "deny"
 uninlined_format_args = "deny"
+unnecessary_wraps = "deny"
 unreachable = "deny"
+unused_self = "deny"
 unwrap_used = "deny"
 
 [profile.performance]
@@ -90,6 +98,3 @@ inherits = "release"
 lto = "fat"
 codegen-units = 1
 incremental = false
-
-[profile.release.package.minijinja-bindings]
-opt-level = "s"

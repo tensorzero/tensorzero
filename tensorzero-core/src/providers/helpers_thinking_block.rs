@@ -58,6 +58,8 @@ pub enum ThinkingState {
     Finished,
 }
 
+pub const THINK_CHUNK_ID: u64 = 1;
+
 impl ThinkingState {
     pub fn get_id(&self) -> String {
         match self {

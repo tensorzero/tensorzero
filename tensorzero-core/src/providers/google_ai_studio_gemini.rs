@@ -539,7 +539,7 @@ impl<'a> TryFrom<&'a RequestMessage> for GeminiContent<'a> {
 /// to merge the signature with the next block).
 fn convert_non_thought_content_block(
     block: &ContentBlock,
-) -> Result<FlattenUnknown<GeminiPartData>, Error> {
+) -> Result<FlattenUnknown<'_, GeminiPartData<'_>>, Error> {
     match block {
         ContentBlock::Text(Text { text }) => {
             Ok(FlattenUnknown::Normal(GeminiPartData::Text { text }))
@@ -2375,7 +2375,7 @@ mod tests {
     #[test]
     fn test_try_from_with_empty_text_chunks() {
         // Setup a response with empty text chunks that should be filtered out
-        let empty_text = GeminiResponseContentPartData::Text("".to_string());
+        let empty_text = GeminiResponseContentPartData::Text(String::new());
         let non_empty_text = GeminiResponseContentPartData::Text("Non-empty text".to_string());
         let content = GeminiResponseContent {
             parts: vec![

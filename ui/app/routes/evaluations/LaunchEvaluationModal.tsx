@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { useDatasetCountFetcher } from "~/routes/api/datasets/count_dataset_function.route";
-import { useConfig } from "~/context/config";
+import { useConfig, useFunctionConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
@@ -58,6 +58,8 @@ function EvaluationForm({
     function_name =
       config.evaluations[selectedEvaluationName]?.function_name ?? null;
   }
+  const functionConfig = useFunctionConfig(function_name);
+
   const { count: datasetCount, isLoading: datasetLoading } =
     useDatasetCountFetcher(selectedDatasetName, function_name);
   count = datasetCount;
@@ -124,9 +126,11 @@ function EvaluationForm({
       />
 
       <DatasetSelector
+        functionName={function_name ?? undefined}
         selected={selectedDatasetName ?? undefined}
         onSelect={setSelectedDatasetName}
         allowCreation={false}
+        disabled={!selectedEvaluationName}
       />
 
       <div className="text-muted-foreground mt-2 mb-1 text-xs">
@@ -170,15 +174,9 @@ function EvaluationForm({
         </SelectTrigger>
         <SelectContent>
           {(() => {
-            if (!selectedEvaluationName) return null;
+            if (!selectedEvaluationName || !functionConfig) return null;
 
-            const evaluation_function =
-              config.evaluations[selectedEvaluationName];
-            if (!evaluation_function) return null;
-            const function_config =
-              config.functions[evaluation_function.function_name];
-            if (!function_config) return null;
-            const variant_names = Object.keys(function_config.variants);
+            const variant_names = Object.keys(functionConfig.variants);
 
             return variant_names.map((variant_name) => (
               <SelectItem key={variant_name} value={variant_name}>
@@ -199,6 +197,7 @@ function EvaluationForm({
           type="number"
           id="concurrency_limit"
           name="concurrency_limit"
+          data-testid="concurrency-limit"
           min="1"
           value={concurrencyLimit}
           onChange={(e) => setConcurrencyLimit(e.target.value)}

@@ -354,7 +354,7 @@ impl<'a> XAIRequest<'a> {
             None
         };
 
-        let response_format = XAIResponseFormat::new(&request.json_mode, request.output_schema);
+        let response_format = XAIResponseFormat::new(request.json_mode, request.output_schema);
 
         let messages = prepare_openai_messages(
             request.system.as_deref(),
@@ -397,7 +397,7 @@ enum XAIResponseFormat {
 
 impl XAIResponseFormat {
     fn new(
-        json_mode: &ModelInferenceRequestJsonMode,
+        json_mode: ModelInferenceRequestJsonMode,
         output_schema: Option<&Value>,
     ) -> Option<Self> {
         match json_mode {
@@ -643,6 +643,7 @@ mod tests {
                 index: 0,
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: OpenAIFinishReason::Stop,

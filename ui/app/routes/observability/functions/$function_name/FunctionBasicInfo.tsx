@@ -14,6 +14,14 @@ interface BasicInfoProps {
 export default function BasicInfo({ functionConfig }: BasicInfoProps) {
   return (
     <BasicInfoLayout>
+      {functionConfig.description && (
+        <BasicInfoItem>
+          <BasicInfoItemTitle>Description</BasicInfoItemTitle>
+          <BasicInfoItemContent>
+            {functionConfig.description}
+          </BasicInfoItemContent>
+        </BasicInfoItem>
+      )}
       {/* Fields specific to chat type */}
       {functionConfig.type === "chat" && (
         <>

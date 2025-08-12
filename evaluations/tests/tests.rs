@@ -1254,7 +1254,7 @@ async fn test_run_llm_judge_evaluator_chat() {
                 }],
             }],
         },
-        auxiliary: "".to_string(),
+        auxiliary: String::new(),
         dataset_name: "test_dataset".to_string(),
         episode_id: Some(Uuid::now_v7()),
         id: Uuid::now_v7(),
@@ -1359,7 +1359,7 @@ async fn test_run_llm_judge_evaluator_chat() {
                 }],
             }],
         },
-        auxiliary: "".to_string(),
+        auxiliary: String::new(),
         dataset_name: "test_dataset".to_string(),
         episode_id: Some(Uuid::now_v7()),
         id: Uuid::now_v7(),
@@ -1422,7 +1422,7 @@ async fn test_run_llm_judge_evaluator_json() {
                 }],
             }],
         },
-        auxiliary: "".to_string(),
+        auxiliary: String::new(),
         dataset_name: "test_dataset".to_string(),
         episode_id: Some(Uuid::now_v7()),
         id: Uuid::now_v7(),
@@ -1528,7 +1528,7 @@ async fn test_run_llm_judge_evaluator_json() {
                 }],
             }],
         },
-        auxiliary: "".to_string(),
+        auxiliary: String::new(),
         dataset_name: "test_dataset".to_string(),
         episode_id: Some(Uuid::now_v7()),
         id: Uuid::now_v7(),
@@ -1734,7 +1734,7 @@ async fn run_evaluations_best_of_3() {
                 assert!(model_inference["system"]
                     .as_str()
                     .unwrap()
-                    .starts_with("You are an assistant tasked with re-ranking"))
+                    .starts_with("You are an assistant tasked with re-ranking"));
             }
         }
         assert_eq!(happy_count, 3);
@@ -1922,7 +1922,7 @@ async fn run_evaluations_mixture_of_3() {
                 assert!(model_inference["system"]
                     .as_str()
                     .unwrap()
-                    .starts_with("You have been provided with a set of responses from various"))
+                    .starts_with("You have been provided with a set of responses from various"));
             }
         }
         assert_eq!(happy_count, 3);

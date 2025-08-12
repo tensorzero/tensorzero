@@ -18,13 +18,13 @@ import {
 import type { AdjacentIds } from "./inference";
 import { adjacentIdsSchema } from "./inference";
 import {
-  contentBlockOutputSchema,
+  contentBlockChatOutputSchema,
   CountSchema,
   displayInputToInput,
   inputSchema,
   jsonInferenceOutputSchema,
 } from "./common";
-import { getConfig } from "../config/index.server";
+import { getConfig, getFunctionConfig } from "../config/index.server";
 import { resolveInput } from "../resolve.server";
 import { logger } from "~/utils/logger";
 
@@ -264,10 +264,18 @@ Get name and count for all datasets.
 This function should sum the counts of chat and json inferences for each dataset.
 The groups should be ordered by last_updated in descending order.
 */
-export async function getDatasetCounts(
-  page_size?: number,
-  offset: number = 0,
-): Promise<DatasetCountInfo[]> {
+export async function getDatasetCounts({
+  function_name,
+  page_size,
+  offset,
+}: {
+  function_name?: string;
+  page_size?: number;
+  offset?: number;
+}): Promise<DatasetCountInfo[]> {
+  const functionWhereClause = function_name
+    ? `AND function_name = {function_name:String}`
+    : "";
   const resultSet = await getClickhouseClient().query({
     query: `
       SELECT
@@ -282,6 +290,7 @@ export async function getDatasetCounts(
         FROM ChatInferenceDatapoint
         FINAL
         WHERE staled_at IS NULL
+        ${functionWhereClause}
         GROUP BY dataset_name
         UNION ALL
         SELECT
@@ -291,6 +300,7 @@ export async function getDatasetCounts(
         FROM JsonInferenceDatapoint
         FINAL
         WHERE staled_at IS NULL
+        ${functionWhereClause}
         GROUP BY dataset_name
       )
       GROUP BY dataset_name
@@ -302,6 +312,7 @@ export async function getDatasetCounts(
     query_params: {
       page_size,
       offset,
+      function_name: function_name || null,
     },
   });
   const rows = await resultSet.json<DatasetCountInfo[]>();
@@ -550,7 +561,7 @@ export async function getDatapoint(
 async function parseDatapointRow(row: DatapointRow): Promise<ParsedDatasetRow> {
   const parsedInput = inputSchema.parse(JSON.parse(row.input));
   const config = await getConfig();
-  const functionConfig = config.functions[row.function_name] || null;
+  const functionConfig = await getFunctionConfig(row.function_name, config);
   const resolvedInput = await resolveInput(parsedInput, functionConfig);
   if ("tool_params" in row) {
     // Chat inference row
@@ -558,7 +569,7 @@ async function parseDatapointRow(row: DatapointRow): Promise<ParsedDatasetRow> {
       ...row,
       input: resolvedInput,
       output: row.output
-        ? z.array(contentBlockOutputSchema).parse(JSON.parse(row.output))
+        ? z.array(contentBlockChatOutputSchema).parse(JSON.parse(row.output))
         : undefined,
       tool_params:
         row.tool_params === ""
@@ -692,7 +703,8 @@ export async function countDatapointsForDatasetFunction(
   function_name: string,
 ): Promise<number | null> {
   const config = await getConfig();
-  const function_type = config.functions[function_name]?.type;
+  const functionConfig = await getFunctionConfig(function_name, config);
+  const function_type = functionConfig?.type;
   if (!function_type) {
     return null;
   }

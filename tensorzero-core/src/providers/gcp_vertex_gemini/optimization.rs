@@ -208,7 +208,7 @@ pub fn convert_to_optimizer_status(
                 },
                 extra_headers: None,
                 extra_body: None,
-                timeouts: None,
+                timeouts: TimeoutsConfig::default(),
                 discard_unknown_chunks: false,
             };
             OptimizationJobInfo::Completed {
@@ -278,6 +278,7 @@ mod tests {
             tool_params: None,
             output_schema: None,
             dispreferred_outputs: vec![],
+            tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
         };
         let row = GCPVertexGeminiSupervisedRow::try_from(&inference).unwrap();
 
