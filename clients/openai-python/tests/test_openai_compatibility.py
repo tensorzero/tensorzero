@@ -23,7 +23,7 @@ import asyncio
 import base64
 import json
 import os
-from time import time
+from time import sleep, time
 from uuid import UUID
 
 import pytest
@@ -136,6 +136,7 @@ async def test_async_inference_cache(async_client):
     assert usage.prompt_tokens == 10
     assert usage.completion_tokens == 1
     assert usage.total_tokens == 11
+    sleep(1)
 
     # Test caching
     result = await async_client.chat.completions.create(

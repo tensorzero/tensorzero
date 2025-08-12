@@ -15,8 +15,10 @@ services:
     healthcheck:
       test: wget --spider --tries 1 http://chuser:chpassword@clickhouse-01:8123/ping
       start_period: 30s
-      start_interval: 1s
-      timeout: 1s
+      start_interval: 5s
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   clickhouse-02:
     image: clickhouse/clickhouse-server:latest
@@ -34,8 +36,10 @@ services:
     healthcheck:
       test: wget --spider --tries 1 http://chuser:chpassword@clickhouse-02:8123/ping
       start_period: 30s
-      start_interval: 1s
-      timeout: 1s
+      start_interval: 5s
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   clickhouse-03:
     image: clickhouse/clickhouse-server:latest
@@ -53,8 +57,11 @@ services:
     healthcheck:
       test: wget --spider --tries 1 http://chuser:chpassword@clickhouse-03:8123/ping
       start_period: 30s
-      start_interval: 1s
-      timeout: 1s
+      start_interval: 5s
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
   mock-inference-provider:
     build:
       context: ../../../

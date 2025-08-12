@@ -276,7 +276,7 @@ fn spawn_maybe_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     tokio::spawn(async move {
         if row.data.output.should_write_to_cache() {
             if let Err(e) = clickhouse_client
-                .write(&[row], TableName::ModelInferenceCache)
+                .write_batched(&[row], TableName::ModelInferenceCache)
                 .await
             {
                 tracing::warn!("Failed to write to cache: {e}");
