@@ -1,4 +1,4 @@
-<clickhouse>
+<clickhouse replace="true">
     <users>
         <chuser>
             <password>chpassword</password>

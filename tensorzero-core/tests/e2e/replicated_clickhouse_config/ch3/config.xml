@@ -1,4 +1,4 @@
-<clickhouse>
+<clickhouse replace="true">
     <logger>
         <level>debug</level>
         <log>/var/log/clickhouse-server/clickhouse-server.log</log>
