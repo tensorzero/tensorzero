@@ -13,8 +13,8 @@ jobs:
   clickhouse-tests:
     name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
 
-    # Test tensorzero-8x16 profile to see if smaller profile works
-    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-8x16' || 'ubuntu-latest' }}
+    # Test tensorzero-16x32 with -j 8 parallelism
+    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-16x32' || 'ubuntu-latest' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     strategy:
       matrix:
@@ -92,8 +92,8 @@ jobs:
             done
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
-      - name: Test (Rust) - Test tensorzero-8x16 with -j 1
-        run: cargo test-e2e-no-creds -j 1
+      - name: Test (Rust) - Test parallelism -j 8
+        run: cargo test-e2e-no-creds -j 8
 
       - name: Print docker compose logs (replicated)
         if: always() && matrix.replicated == true
