@@ -6,6 +6,7 @@ on:
   merge_group:
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
+  push:
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
