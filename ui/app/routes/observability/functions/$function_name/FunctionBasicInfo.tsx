@@ -17,7 +17,7 @@ export default function BasicInfo({ functionConfig }: BasicInfoProps) {
       {functionConfig.description && (
         <BasicInfoItem>
           <BasicInfoItemTitle>Description</BasicInfoItemTitle>
-          <BasicInfoItemContent>
+          <BasicInfoItemContent wrap>
             {functionConfig.description}
           </BasicInfoItemContent>
         </BasicInfoItem>
