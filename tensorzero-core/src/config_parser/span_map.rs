@@ -162,3 +162,135 @@ impl SpanMap {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+
+    use toml::{de::DeValue, Spanned};
+
+    use super::*;
+
+    #[test]
+    fn test_resolve_toml_relative_paths() {
+        let table =
+            DeTable::parse(r#"functions.my_function.system_schema = "relative/schema_path.json""#)
+                .unwrap();
+
+        let resolved = resolve_toml_relative_paths(
+            table.into_inner(),
+            &SpanMap::new_single_file(PathBuf::from("my/base/path/fake_config.toml")),
+        )
+        .unwrap();
+        assert_eq!(
+            resolved,
+            toml::from_str(
+                r#"functions.my_function.system_schema = { __tensorzero_remapped_path = "my/base/path/relative/schema_path.json" }"#
+            )
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn test_invalid_resolve_toml_relative_paths() {
+        let table = DeTable::parse("functions.my_function.system_schema = 123").unwrap();
+        let err =
+            resolve_toml_relative_paths(table.into_inner(), &SpanMap::new_empty()).unwrap_err();
+        assert_eq!(
+            *err.get_details(),
+            ErrorDetails::Config {
+                message: "`functions.my_function.system_schema`: Expected a string, found integer"
+                    .to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_merge_empty() {
+        let mut target = DeTable::new();
+        let source = DeTable::new();
+        let span_map = SpanMap::new_empty();
+        let error_path = vec![];
+        merge_tomls(&mut target, &source, &span_map, error_path).unwrap();
+        assert_eq!(target.len(), 0);
+    }
+
+    #[test]
+    fn test_merge_invalid_type() {
+        let mut target = DeTable::new();
+        let mut inner_table = DeTable::new();
+        inner_table.insert(
+            Spanned::new(0..0, Cow::Borrowed("inner_key")),
+            Spanned::new(0..0, DeValue::String(Cow::Borrowed("inner_value"))),
+        );
+        target.insert(
+            Spanned::new(0..0, Cow::Borrowed("outer_table")),
+            Spanned::new(0..0, DeValue::Table(inner_table)),
+        );
+        let mut source = DeTable::new();
+        source.insert(
+            Spanned::new(0..0, Cow::Borrowed("outer_table")),
+            Spanned::new(0..0, DeValue::String(Cow::Borrowed("outer_value"))),
+        );
+        let span_map = SpanMap::new_empty();
+        let error_path = vec![];
+        let err = merge_tomls(&mut target, &source, &span_map, error_path).unwrap_err();
+        assert_eq!(
+            *err.get_details(),
+            ErrorDetails::Config {
+                message: "`outer_table`: Cannot merge `string` from file `<unknown TOML file>` into a table from file `<unknown TOML file>`".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_merge_duplicate_key() {
+        let mut target = DeTable::new();
+        let mut target_inner = DeTable::new();
+        target_inner.insert(
+            Spanned::new(0..1, Cow::Borrowed("inner_key")),
+            Spanned::new(0..1, DeValue::String(Cow::Borrowed("target_value"))),
+        );
+        target.insert(
+            Spanned::new(0..1, Cow::Borrowed("outer_table")),
+            Spanned::new(0..1, DeValue::Table(target_inner)),
+        );
+
+        let mut source = DeTable::new();
+        let mut source_inner = DeTable::new();
+        source_inner.insert(
+            Spanned::new(1..2, Cow::Borrowed("inner_key")),
+            Spanned::new(1..2, DeValue::String(Cow::Borrowed("source_value"))),
+        );
+        source.insert(
+            Spanned::new(1..2, Cow::Borrowed("outer_table")),
+            Spanned::new(1..2, DeValue::Table(source_inner)),
+        );
+        let span_map = SpanMap {
+            range_to_file: vec![
+                (
+                    0..1,
+                    TomlFile {
+                        path: PathBuf::from("target.toml"),
+                        base_path: PathBuf::from("."),
+                    },
+                ),
+                (
+                    1..2,
+                    TomlFile {
+                        path: PathBuf::from("source.toml"),
+                        base_path: PathBuf::from("."),
+                    },
+                ),
+            ],
+        };
+        let error_path = vec![];
+        let err = merge_tomls(&mut target, &source, &span_map, error_path).unwrap_err();
+        assert_eq!(
+            *err.get_details(),
+            ErrorDetails::Config {
+                message: "`outer_table.inner_key`: Found duplicate values in globbed TOML config files `target.toml` and `source.toml`".to_string(),
+            }
+        );
+    }
+}

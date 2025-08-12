@@ -495,7 +495,7 @@ impl MetricConfigLevel {
 // or even be aware of whether or not we have multiple config files. All path access goes through `TomlRelativePath`,
 // which is self-contained (it stores the absolute path that we resolved earlier).
 
-/// A glob pattern together with the config file paths it resolves to
+/// A glob pattern together with the resolved config file paths.
 /// We eagerly resolve the glob pattern so that we can include all of the matched
 /// config file paths in error messages.
 #[derive(Debug)]
