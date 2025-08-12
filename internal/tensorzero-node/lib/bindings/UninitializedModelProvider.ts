@@ -3,7 +3,7 @@ import type { HostedProviderKind } from "./HostedProviderKind";
 import type { TimeoutsConfig } from "./TimeoutsConfig";
 
 export type UninitializedModelProvider = {
-  timeouts: TimeoutsConfig | null;
+  timeouts: TimeoutsConfig;
   /**
    * If `true`, we emit a warning and discard chunks that we don't recognize
    * (on a best-effort, per-provider basis).

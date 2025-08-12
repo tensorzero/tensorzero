@@ -12,12 +12,21 @@ export function dump_optimizer_output(optimizerOutput: OptimizerOutput) {
   }
   const modelName = rest.routing[0];
   const providerConfig = rest.providers[modelName];
+  // drop the timeout config
+  // allow it to be unused
+  if (!providerConfig) {
+    throw new Error(
+      `Provider config not found for model ${modelName} when dumping optimizer output.`,
+    );
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { timeouts, ...restProviderConfig } = providerConfig;
   const fullyQualifiedProviderConfig = {
     models: {
       [modelName]: {
         routing: [modelName],
         providers: {
-          [modelName]: providerConfig,
+          [modelName]: restProviderConfig,
         },
       },
     },
