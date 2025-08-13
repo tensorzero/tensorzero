@@ -11,6 +11,19 @@ export const timeWindowUnitSchema = z.enum([
 ]);
 export type TimeWindowUnit = z.infer<typeof timeWindowUnitSchema>;
 
+function getTimeWindowInMs(timeWindow: TimeWindowUnit): number {
+  switch (timeWindow) {
+    case "day":
+      return 24 * 60 * 60 * 1000; // 1 day in ms
+    case "week":
+      return 7 * 24 * 60 * 60 * 1000; // 1 week in ms
+    case "month":
+      return 30 * 24 * 60 * 60 * 1000; // 1 month (30 days) in ms
+    case "cumulative":
+      return 365 * 24 * 60 * 60 * 1000; // 1 year in ms (for cumulative)
+  }
+}
+
 export async function getVariantPerformances(params: {
   function_name: string;
   function_config: FunctionConfig;
@@ -372,4 +385,62 @@ export async function getUsedVariants(
     .parse(rows)
     .map((row) => row.variant_name);
   return parsedRows;
+}
+
+const variantThroughputSchema = z.object({
+  period_start: z.string().datetime(),
+  variant_name: z.string(),
+  count: z.number().min(0),
+});
+export type VariantThroughput = z.infer<typeof variantThroughputSchema>;
+
+export async function getFunctionThroughputByVariant(
+  functionName: string,
+  timeWindow: TimeWindowUnit,
+  maxPeriods: number,
+): Promise<VariantThroughput[]> {
+  const currentTime = Date.now();
+  const timeWindowMs = getTimeWindowInMs(timeWindow);
+  const minTime = currentTime - (timeWindowMs + 1) * maxPeriods;
+  const minId = getMinimalUUIDv7(minTime);
+  const query = `
+    SELECT
+        formatDateTime(dateTrunc({timeWindow:String}, UUIDv7ToDateTime(uint_to_uuid(i.id_uint))), '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
+        i.variant_name AS variant_name,
+        toUInt32(count()) AS count
+    FROM InferenceById i
+    WHERE i.function_name = {functionName:String}
+    AND i.id_uint >= toUInt128({minId:UUID})
+GROUP BY period_start, variant_name
+ORDER BY period_start DESC, variant_name DESC
+`;
+  const resultSet = await getClickhouseClient().query({
+    query,
+    format: "JSONEachRow",
+    query_params: { functionName, timeWindow, minId },
+  });
+  const rows = await resultSet.json();
+
+  const parsedRows = z.array(variantThroughputSchema).parse(rows);
+  return parsedRows;
+}
+
+function getMinimalUUIDv7(timestamp: Date | number): string {
+  // Convert to milliseconds since Unix epoch
+  const ms = typeof timestamp === "number" ? timestamp : timestamp.getTime();
+
+  // UUIDv7 uses 48-bit timestamp (milliseconds since Unix epoch)
+  const timestampHex = ms.toString(16).padStart(12, "0");
+
+  // Format: xxxxxxxx-xxxx-7xxx-8xxx-xxxxxxxxxxxx
+  // Where x are timestamp bits, 7 is version, 8 sets variant bits
+  const uuid = [
+    timestampHex.slice(0, 8), // 32 bits of timestamp
+    timestampHex.slice(8, 12), // 16 bits of timestamp
+    "7000", // Version 7 + 12 zero bits
+    "8000", // Variant bits (10) + 14 zero bits
+    "000000000000", // 48 zero bits
+  ].join("-");
+
+  return uuid;
 }
