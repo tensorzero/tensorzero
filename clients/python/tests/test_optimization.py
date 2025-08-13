@@ -4,7 +4,7 @@ from typing import List
 import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
-    DICLOptimizationConfig,
+    DiclOptimizationConfig,
     FireworksSFTConfig,
     OpenAISFTConfig,
     OptimizationJobStatus,
@@ -17,7 +17,7 @@ def test_sync_dicl(
     embedded_sync_client: TensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
 ):
-    optimization_config = DICLOptimizationConfig(
+    optimization_config = DiclOptimizationConfig(
         embedding_model="text-embedding-3-small",
         variant_name="test",
         function_name="test",
@@ -85,7 +85,7 @@ async def test_async_dicl(
     embedded_async_client: AsyncTensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
 ):
-    optimization_config = DICLOptimizationConfig(
+    optimization_config = DiclOptimizationConfig(
         embedding_model="text-embedding-3-small",
         variant_name="test",
         function_name="test",

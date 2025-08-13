@@ -141,7 +141,7 @@ class OptimizationJobInfo:
     def estimated_finish(self) -> Optional[int]: ...
 
 @final
-class DICLOptimizationConfig:
+class DiclOptimizationConfig:
     def __init__(
         self,
         *,
@@ -1004,7 +1004,7 @@ __all__ = [
     "ChainOfThoughtConfig",
     "Config",
     "Datapoint",
-    "DICLOptimizationConfig",
+    "DiclOptimizationConfig",
     "DiclConfig",
     "FunctionConfigChat",
     "FunctionConfigJson",
