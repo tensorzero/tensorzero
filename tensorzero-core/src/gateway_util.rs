@@ -46,7 +46,6 @@ pub struct GatewayHandle {
 
 impl Drop for GatewayHandle {
     fn drop(&mut self) {
-        tracing::info!("Shutting down gateway");
         self.cancel_token.cancel();
         let handle = self
             .app_state

@@ -305,24 +305,8 @@ impl StreamWrapper {
 
 /// Constructs a dummy embedded client. We use this so that we can move out of the real 'client'
 /// field of `BaseTensorZeroGateway` when it is dropped.
-fn make_dummy_client(py: Python<'_>) -> PyResult<Client> {
-    let dummy_client = tokio_block_on_without_gil(py, async move {
-        ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_file: None,
-            clickhouse_url: None,
-            timeout: None,
-            verify_credentials: false,
-        })
-        .build()
-        .await
-    });
-    match dummy_client {
-        Ok(client) => Ok(client),
-        Err(e) => Err(tensorzero_core_error(
-            py,
-            &format!("Failed to construct dummy client: {e:?}"),
-        )?),
-    }
+fn make_dummy_client() -> Client {
+    ClientBuilder::build_dummy()
 }
 
 #[pymethods]
@@ -364,7 +348,7 @@ impl BaseTensorZeroGateway {
 
         Ok(Self {
             client: Arc::new(client),
-            dummy_client: Some(make_dummy_client(py)?),
+            dummy_client: Some(make_dummy_client()),
         })
     }
 
@@ -649,7 +633,7 @@ impl TensorZeroGateway {
         };
         let instance = PyClassInitializer::from(BaseTensorZeroGateway {
             client: Arc::new(client),
-            dummy_client: Some(make_dummy_client(cls.py())?),
+            dummy_client: Some(make_dummy_client()),
         })
         .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
@@ -728,7 +712,7 @@ impl TensorZeroGateway {
         // Construct an instance of `TensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
         let instance = PyClassInitializer::from(BaseTensorZeroGateway {
             client: Arc::new(client),
-            dummy_client: Some(make_dummy_client(cls.py())?),
+            dummy_client: Some(make_dummy_client()),
         })
         .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
@@ -1264,7 +1248,7 @@ impl AsyncTensorZeroGateway {
             client_builder = client_builder.with_http_client(http_client);
         }
         let client_fut = client_builder.build();
-        let dummy_client = make_dummy_client(cls.py())?;
+        let dummy_client = make_dummy_client();
         let build_gateway = async move {
             let client = client_fut.await;
             // We need to interact with Python objects here (to build up a Python `AsyncTensorZeroGateway`),
@@ -1364,7 +1348,7 @@ impl AsyncTensorZeroGateway {
             verify_credentials: true,
         })
         .build();
-        let dummy_client = make_dummy_client(cls.py())?;
+        let dummy_client = make_dummy_client();
         let fut = async move {
             let client = client_fut.await;
             // We need to interact with Python objects here (to build up a Python `AsyncTensorZeroGateway`),
