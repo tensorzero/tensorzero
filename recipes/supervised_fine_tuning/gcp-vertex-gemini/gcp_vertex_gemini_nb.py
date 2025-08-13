@@ -12,17 +12,18 @@
 # To get started:
 #
 # - Set the `TENSORZERO_CLICKHOUSE_URL` environment variable. For example: `TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero"`
+# - Set the `GCP_VERTEX_CREDENTIALS_PATH`, `GCP_PROJECT_ID`, `GCP_LOCATION`, and `GCP_BUCKET_NAME` environment variables.
 # - Create local authentication credentials `gcloud auth application-default login`
 # - You may need to [Create a Bucket](https://cloud.google.com/storage/docs/creating-buckets) on GCP, if you do not already have one.
 # - Update the following parameters:
 #
 
 # %%
-CONFIG_PATH = "../../../../examples/data-extraction-ner/config/tensorzero.toml"
+CONFIG_PATH = "../../../examples/data-extraction-ner/config/tensorzero.toml"
 
 FUNCTION_NAME = "extract_entities"
 
-METRIC_NAME = "exact_match"
+METRIC_NAME = "jaccard_similarity"
 
 # The name of the variant to use to grab the templates used for fine-tuning
 TEMPLATE_VARIANT_NAME = "gpt_4o_mini"
@@ -39,21 +40,21 @@ MAX_SAMPLES = 100_000
 # The name of the model to fine-tune (supported models: https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini-supervised-tuning)
 MODEL_NAME = "gemini-2.0-flash-lite-001"
 
-# Google Cloud Variables
-PROJECT_ID = "<your-project-id>"
-LOCATION = "<your-region>"  # e.g. us-central1
-BUCKET_NAME = "<your-bucket-name>"
+# %%
+import os
+import sys
+
+tensorzero_path = os.path.abspath(os.path.join(os.getcwd(), "../../../"))
+if tensorzero_path not in sys.path:
+    sys.path.append(tensorzero_path)
 
 # %%
 import json
-import os
 import tempfile
 import time
 import warnings
 from typing import Any, Dict, List, Optional
 
-import numpy as np
-import pandas as pd
 import toml
 import vertexai
 from google.cloud import storage
@@ -71,12 +72,14 @@ from tensorzero import (
 from tensorzero.util import uuid7
 from vertexai.tuning import sft
 
+from recipes.util import train_val_split
+
 # %% [markdown]
 # Initialize Vertex AI
 #
 
 # %%
-vertexai.init(project=PROJECT_ID, location=LOCATION)
+vertexai.init(project=os.environ["GCP_PROJECT_ID"], location=os.environ["GCP_LOCATION"])
 
 # %% [markdown]
 # Initialize the TensorZero client
@@ -100,6 +103,7 @@ metric_node = FloatMetricFilter(
     value=FLOAT_METRIC_THRESHOLD,
     comparison_operator=comparison_operator,
 )
+# from tensorzero import BooleanMetricFilter
 # metric_node = BooleanMetricFilter(
 #     metric_name=METRIC_NAME,
 #     value=True  # or False
@@ -125,9 +129,19 @@ stored_inferences = tensorzero_client.experimental_list_inferences(
 #
 
 # %%
-rendered_inferences = tensorzero_client.experimental_render_inferences(
+rendered_samples = tensorzero_client.experimental_render_inferences(
     stored_inferences=stored_inferences,
     variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
+)
+
+# %% [markdown]
+# Split the data into training and validation sets for fine-tuning.
+
+# %%
+train_samples, val_samples = train_val_split(
+    rendered_samples,
+    val_size=VAL_FRACTION,
+    last_inference_only=True,
 )
 
 # %% [markdown]
@@ -264,50 +278,15 @@ def inference_to_google(
 
     # 4) merge any consecutive roles and return
     contents = merge_messages(rendered_msgs)
-    result = {"google_messages": {"contents": contents}}
+    result = {"contents": contents}
     if system_instruction:
-        result["google_messages"]["systemInstruction"] = system_instruction
-    # optionally keep track of episode
-    if hasattr(inf, "episode_id"):
-        result["episode_id"] = inf.episode_id
+        result.update({"systemInstruction": system_instruction})
     return result
 
 
-google_payloads = []
-for inf in rendered_inferences:
-    payload = inference_to_google(inf)
-    if payload is not None:
-        google_payloads.append(payload)
-
-df = pd.DataFrame(google_payloads)
-df.head()
-
-# %% [markdown]
-# Split the data into training and validation sets for fine-tuning.
-#
-
 # %%
-# Get unique episode_ids
-unique_episode_ids = df["episode_id"].unique()
-
-# Shuffle the unique episode_ids
-np.random.seed(42)
-np.random.shuffle(unique_episode_ids)
-
-# Calculate the split index for episode_ids
-split_index = int(len(unique_episode_ids) * (1 - VAL_FRACTION))
-
-# Split the episode_ids into training and validation sets
-train_episode_ids = unique_episode_ids[:split_index]
-val_episode_ids = unique_episode_ids[split_index:]
-
-# Create training and validation DataFrames based on episode_ids
-train_df = df[df["episode_id"].isin(train_episode_ids)]
-val_df = df[df["episode_id"].isin(val_episode_ids)]
-
-print(f"Training set size: {len(train_df)}")
-print(f"Validation set size: {len(val_df)}")
-print(f"Actual validation fraction: {len(val_df) / len(df):.2f}")
+train_data = [inference_to_google(sample) for sample in train_samples]
+val_data = [inference_to_google(sample) for sample in val_samples]
 
 
 # %% [markdown]
@@ -317,16 +296,16 @@ print(f"Actual validation fraction: {len(val_df) / len(df):.2f}")
 
 # %%
 def upload_dataset_to_gcp(
-    df: pd.DataFrame, dataset_name: str, gcp_client: storage.Client
+    data: List[Dict[str, Any]], dataset_name: str, gcp_client: storage.Client
 ) -> str:
     with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
         # Write the openai_messages to the temporary file
-        for item in df["google_messages"]:
+        for item in data:
             json.dump(item, f)
             f.write("\n")
         f.flush()
 
-        bucket = gcp_client.bucket(BUCKET_NAME)
+        bucket = gcp_client.bucket(os.environ["GCP_BUCKET_NAME"])
         if not bucket.exists():
             bucket.storage_class = "STANDARD"
             bucket = gcp_client.create_bucket(bucket, location="us")
@@ -343,14 +322,14 @@ def upload_dataset_to_gcp(
         )
 
 
-gcp_client = storage.Client(project=PROJECT_ID)
+gcp_client = storage.Client(project=os.environ["GCP_PROJECT_ID"])
 
 train_file_name = f"train_{uuid7()}.jsonl"
 val_file_name = f"val_{uuid7()}.jsonl"
 
 
-upload_dataset_to_gcp(train_df, train_file_name, gcp_client)
-upload_dataset_to_gcp(val_df, val_file_name, gcp_client)
+upload_dataset_to_gcp(train_data, train_file_name, gcp_client)
+upload_dataset_to_gcp(val_data, val_file_name, gcp_client)
 
 # %% [markdown]
 # Launch the fine-tuning job.
@@ -359,8 +338,8 @@ upload_dataset_to_gcp(val_df, val_file_name, gcp_client)
 # %%
 sft_tuning_job = sft.train(
     source_model=MODEL_NAME,
-    train_dataset=f"gs://{BUCKET_NAME}/{train_file_name}",
-    validation_dataset=f"gs://{BUCKET_NAME}/{val_file_name}",
+    train_dataset=f"gs://{os.environ['GCP_BUCKET_NAME']}/{train_file_name}",
+    validation_dataset=f"gs://{os.environ['GCP_BUCKET_NAME']}/{val_file_name}",
 )
 
 # %% [markdown]
@@ -402,8 +381,8 @@ model_config = {
                 "gcp_vertex_gemini": {
                     "type": "gcp_vertex_gemini",
                     "endpoint_id": fine_tuned_model,
-                    "location": LOCATION,
-                    "project_id": PROJECT_ID,
+                    "location": os.environ["GCP_LOCATION"],
+                    "project_id": os.environ["GCP_PROJECT_ID"],
                 }
             },
         }
