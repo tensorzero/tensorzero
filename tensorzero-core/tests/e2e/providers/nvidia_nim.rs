@@ -116,5 +116,6 @@ async fn get_providers() -> E2ETestProviders {
         shorthand_inference: shorthand_providers.clone(),
         reasoning_inference: reasoning_providers,
         image_inference: image_providers,
+        embeddings: vec![],
     }
 }
