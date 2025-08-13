@@ -252,6 +252,15 @@ impl UninitializedFireworksSFTConfig {
     /// :param max_context_length: The maximum context length to use for the fine-tuning job.
     /// :param lora_rank: The rank of the LoRA matrix to use for the fine-tuning job.
     /// :param batch_size: The batch size to use for the fine-tuning job (tokens).
+    /// :param display_name: The display name for the fine-tuning job.
+    /// :param output_model: The model ID to be assigned to the resulting fine-tuned model. If not specified, the job ID will be used.
+    /// :param warm_start_from: The PEFT addon model in Fireworks format to be fine-tuned from. Only one of 'model' or 'warm_start_from' should be specified.
+    /// :param is_turbo: Whether to run the fine-tuning job in turbo mode.
+    /// :param eval_auto_carveout: Whether to auto-carve the dataset for eval.
+    /// :param nodes: The number of nodes to use for the fine-tuning job.
+    /// :param mtp_enabled: Whether to enable MTP (Multi-Token Prediction).
+    /// :param mtp_num_draft_tokens: The number of draft tokens for MTP.
+    /// :param mtp_freeze_base_model: Whether to freeze the base model for MTP.
     /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::FIREWORKS_API_KEY". See docs for more details.
     /// :param account_id: The account ID to use for the fine-tuning job.
     /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
