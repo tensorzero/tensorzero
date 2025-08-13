@@ -32,7 +32,7 @@ fn drop_stream_in_tokio(stream: &mut Arc<Mutex<InferenceStream>>) {
 /// when dropping it (if it holds the last reference to the `Arc`, which can cause us to
 /// actually drop the underlying `InferenceStream`).
 ///
-/// We do not allow access to the underling `Arc`, to prevent accidentally cloning
+/// We do not allow access to the underlying `Arc`, to prevent accidentally cloning
 /// the `Arc` and dropping it from somewhere else within pyo3 code.
 /// This is not an issue within `tensorzero-core`, since we're always in the Tokio runtime.
 #[derive(Clone)]
