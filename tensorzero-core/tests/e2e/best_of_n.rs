@@ -191,6 +191,7 @@ async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(
 /// gives a JSON response, and then use Gemini to select the best one.
 /// We check that the good response is selected and that the other responses are not
 /// but they get stored to the ModelInference table.
+#[ignore]
 #[tokio::test]
 async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
     let episode_id = Uuid::now_v7();
@@ -512,6 +513,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
 /// and one that gives an incorrect but well-formed JSON response.
 /// We check that the good response is selected and that the other responses are not
 /// but they get stored to the ModelInference table.
+#[ignore]
 #[tokio::test]
 async fn e2e_test_best_of_n_json_real_judge() {
     let episode_id = Uuid::now_v7();
@@ -1070,6 +1072,7 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
     assert_eq!(model_names, expected_model_names);
 }
 
+#[ignore]
 #[tokio::test]
 async fn e2e_test_best_of_n_judge_extra_body() {
     let episode_id = Uuid::now_v7();

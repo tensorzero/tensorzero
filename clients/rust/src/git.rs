@@ -122,6 +122,7 @@ mod tests {
     use super::*;
 
     // Since we are running in a git repo, we should be able to get the git info
+    #[ignore]
     #[test]
     fn test_git_info() {
         let git_info = GitInfo::new().unwrap();

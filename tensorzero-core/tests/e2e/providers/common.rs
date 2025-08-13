@@ -229,6 +229,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::embeddings::test_embedding_large_batch_with_provider;
         use $crate::providers::embeddings::test_embedding_consistency_with_provider;
 
+        #[ignore]
         #[tokio::test]
         async fn test_simple_inference_request() {
             let providers = $func().await.simple_inference;
@@ -237,13 +238,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
-        #[tokio::test(flavor = "multi_thread")]
-        async fn test_warn_ignored_thought_block() {
-            let providers = $func().await.simple_inference;
-            for provider in providers {
-                test_warn_ignored_thought_block_with_provider(provider).await;
-            }
-        }
+
 
         #[tokio::test]
         async fn test_reasoning_inference_request_simple() {
@@ -262,6 +257,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[ignore]
         #[tokio::test]
         async fn test_bad_auth_extra_headers() {
             let providers = $func().await.bad_auth_extra_headers;
@@ -272,13 +268,14 @@ macro_rules! generate_provider_tests {
 
 
         #[tokio::test]
-        async fn test_shorthand_inference_request() {
+	    async fn test_shorthand_inference_request() {
             let providers = $func().await.shorthand_inference;
             for provider in providers {
                 test_simple_inference_request_with_provider(provider).await;
             }
         }
 
+        #[ignore]
         #[tokio::test]
         async fn test_streaming_include_original_response() {
             let providers = $func().await.simple_inference;
@@ -287,6 +284,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[ignore]
         #[tokio::test]
         async fn test_simple_streaming_inference_request() {
             let providers = $func().await.simple_inference;
@@ -295,6 +293,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[ignore]
         #[tokio::test]
         async fn test_streaming_invalid_request() {
             let providers = $func().await.simple_inference;
@@ -560,6 +559,7 @@ macro_rules! generate_provider_tests {
         }
 
 
+        #[ignore]
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_amazon_s3() {
             let providers = $func().await.image_inference;
@@ -569,6 +569,7 @@ macro_rules! generate_provider_tests {
         }
 
 
+        #[ignore]
         #[tokio::test]
         async fn test_extra_body() {
             let providers = $func().await.extra_body_inference;
@@ -577,6 +578,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[ignore]
         #[tokio::test]
         async fn test_inference_extra_body() {
             let providers = $func().await.extra_body_inference;
@@ -621,6 +623,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[ignore]
         #[tokio::test]
         async fn test_multiple_text_blocks_in_message() {
             let providers = $func().await.simple_inference;

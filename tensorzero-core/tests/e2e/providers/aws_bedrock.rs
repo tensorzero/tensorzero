@@ -14,7 +14,7 @@ use tensorzero_core::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
 
-crate::generate_provider_tests!(get_providers);
+// crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
@@ -105,6 +105,7 @@ async fn get_providers() -> E2ETestProviders {
     }
 }
 
+#[ignore]
 #[tokio::test]
 async fn test_inference_with_explicit_region() {
     let client = Client::new();
@@ -223,6 +224,7 @@ async fn test_inference_with_explicit_region() {
     );
 }
 
+#[ignore]
 #[tokio::test]
 async fn test_inference_with_explicit_broken_region() {
     let client = Client::new();

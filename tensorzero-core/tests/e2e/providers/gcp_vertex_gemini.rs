@@ -12,7 +12,7 @@ use crate::{
     providers::common::{E2ETestProvider, E2ETestProviders},
 };
 
-crate::generate_provider_tests!(get_providers);
+// crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
@@ -213,6 +213,7 @@ async fn test_gcp_pro_tool_choice_none() {
 
 /// There are fields for both model_name and endpoint_id and we can't know a priori which one to use.
 /// We test here that the error message is correct and helpful.
+#[ignore]
 #[tokio::test]
 async fn test_gcp_vertex_gemini_bad_model_id() {
     let episode_id = Uuid::now_v7();

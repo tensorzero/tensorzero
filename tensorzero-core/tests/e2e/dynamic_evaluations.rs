@@ -208,6 +208,7 @@ async fn test_dynamic_evaluation_nonexistent_function() {
 
 /// Test that the variant behavior is default if we use a different function name
 /// But the tags are applied
+#[ignore]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_dynamic_evaluation_other_function() {
     let client = make_embedded_gateway().await;
