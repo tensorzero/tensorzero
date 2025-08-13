@@ -203,8 +203,7 @@ impl ToolCallConfig {
             if !tools_available.iter().any(|tool| match tool {
                 ToolConfig::Static(config) => config.name == *tool_name,
                 ToolConfig::Dynamic(config) => config.name == *tool_name,
-                ToolConfig::Implicit(_) => false,
-                ToolConfig::DynamicImplicit(_) => false,
+                ToolConfig::Implicit(_) | ToolConfig::DynamicImplicit(_) => false,
             }) {
                 return Err(ErrorDetails::ToolNotFound {
                     name: tool_name.clone(),

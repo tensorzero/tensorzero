@@ -303,6 +303,7 @@ enum DeepSeekResponseFormat {
 }
 
 impl DeepSeekResponseFormat {
+    #[expect(clippy::match_same_arms)]
     fn new(json_mode: ModelInferenceRequestJsonMode) -> Option<Self> {
         match json_mode {
             ModelInferenceRequestJsonMode::On => Some(DeepSeekResponseFormat::JsonObject),
