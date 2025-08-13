@@ -17,6 +17,7 @@ pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobIn
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
     config_parser::Config,
+    db::DatabaseConnection,
     endpoints::{
         datasets::InsertDatapointParams,
         dynamic_evaluation_run::{

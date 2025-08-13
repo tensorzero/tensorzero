@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use crate::config_parser::BatchWritesConfig;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
+use crate::db::DatabaseConnection;
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails};
 use crate::serde_util::deserialize_u64;

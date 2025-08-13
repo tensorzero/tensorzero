@@ -29,6 +29,8 @@ use crate::stored_inference::StoredInference;
 use query_builder::generate_list_inferences_sql;
 use query_builder::ListInferencesParams;
 
+use super::DatabaseConnection;
+
 #[derive(Debug, Clone)]
 pub enum ClickHouseConnectionInfo {
     Disabled,
@@ -288,54 +290,6 @@ impl ClickHouseConnectionInfo {
             Self::Disabled => false,
             Self::Mock { .. } => false,
             Self::Production { cluster_name, .. } => cluster_name.is_some(),
-        }
-    }
-
-    pub async fn health(&self) -> Result<(), Error> {
-        match self {
-            Self::Disabled => Ok(()),
-            Self::Mock { healthy, .. } => {
-                if *healthy {
-                    Ok(())
-                } else {
-                    Err(ErrorDetails::ClickHouseConnection {
-                        message: "Mock ClickHouse is not healthy".to_string(),
-                    }
-                    .into())
-                }
-            }
-            Self::Production {
-                database_url,
-                client,
-                ..
-            } => {
-                // We need to ping the /ping endpoint to check if ClickHouse is healthy
-                let mut ping_url = Url::parse(database_url.expose_secret()).map_err(|_| {
-                    Error::new(ErrorDetails::Config {
-                        message: "Invalid ClickHouse database URL".to_string(),
-                    })
-                })?;
-                ping_url.set_path("/ping");
-                ping_url.set_query(None);
-
-                let timeout = Duration::from_secs(180);
-
-                match client.get(ping_url).timeout(timeout).send().await {
-                    Ok(response) if response.status().is_success() => Ok(()),
-                    Ok(response) => Err(ErrorDetails::ClickHouseConnection {
-                        message: format!(
-                            "ClickHouse is not healthy (status code {}): {}",
-                            response.status(),
-                            response.text().await.unwrap_or_default()
-                        ),
-                    }
-                    .into()),
-                    Err(e) => Err(ErrorDetails::ClickHouseConnection {
-                        message: format!("ClickHouse is not healthy: {e:?}"),
-                    }
-                    .into()),
-                }
-            }
         }
     }
 
@@ -771,6 +725,56 @@ impl ClickHouseConnectionInfo {
                     format!("{table_engine_name}({engine_args_str})")
                 }
             },
+        }
+    }
+}
+
+impl DatabaseConnection for ClickHouseConnectionInfo {
+    async fn health(&self) -> Result<(), Error> {
+        match self {
+            Self::Disabled => Ok(()),
+            Self::Mock { healthy, .. } => {
+                if *healthy {
+                    Ok(())
+                } else {
+                    Err(ErrorDetails::ClickHouseConnection {
+                        message: "Mock ClickHouse is not healthy".to_string(),
+                    }
+                    .into())
+                }
+            }
+            Self::Production {
+                database_url,
+                client,
+                ..
+            } => {
+                // We need to ping the /ping endpoint to check if ClickHouse is healthy
+                let mut ping_url = Url::parse(database_url.expose_secret()).map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: "Invalid ClickHouse database URL".to_string(),
+                    })
+                })?;
+                ping_url.set_path("/ping");
+                ping_url.set_query(None);
+
+                let timeout = Duration::from_secs(180);
+
+                match client.get(ping_url).timeout(timeout).send().await {
+                    Ok(response) if response.status().is_success() => Ok(()),
+                    Ok(response) => Err(ErrorDetails::ClickHouseConnection {
+                        message: format!(
+                            "ClickHouse is not healthy (status code {}): {}",
+                            response.status(),
+                            response.text().await.unwrap_or_default()
+                        ),
+                    }
+                    .into()),
+                    Err(e) => Err(ErrorDetails::ClickHouseConnection {
+                        message: format!("ClickHouse is not healthy: {e:?}"),
+                    }
+                    .into()),
+                }
+            }
         }
     }
 }
