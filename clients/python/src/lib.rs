@@ -62,12 +62,14 @@ use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, Datapoint,
     DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, LaunchOptimizationParams, ListInferencesParams,
-    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
+    InferenceParams, LaunchOptimizationParams, ListInferencesParams, OptimizationJobHandle,
+    RenderedSample, StoredInference, TensorZeroError, Tool,
 };
-use tokio::sync::Mutex;
 use url::Url;
 
+use crate::gil_helpers::{in_tokio_runtime_no_gil, TokioInferenceStream};
+
+mod gil_helpers;
 mod python_helpers;
 
 #[pymodule]
@@ -135,18 +137,6 @@ impl Drop for LocalHttpGateway {
     fn drop(&mut self) {
         self.close();
     }
-}
-
-/// Runs a function inside the Tokio runtime, with the GIL released.
-/// This is used when we need to drop a TensorZero client (or a type that holds it),
-/// so that we can block on the ClickHouse batcher shutting down, without holding the GIL.
-fn in_tokio_runtime_no_gil<F: FnOnce() + Send>(f: F) {
-    Python::with_gil(|py| {
-        py.allow_threads(|| {
-            let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
-            f();
-        });
-    });
 }
 
 #[pymethods]
@@ -219,27 +209,9 @@ impl Drop for BaseTensorZeroGateway {
     }
 }
 
-/// Helper method to drop an `InferenceStream` inside a Tokio runtime.
-/// An `InferenceStream` holds a reference to a `Client`, and thus may need to block
-/// inside Tokio when it gets dropped
-fn drop_stream_in_tokio(stream: &mut Arc<Mutex<InferenceStream>>) {
-    if let Some(mutex) = Arc::get_mut(stream) {
-        let real_stream = std::mem::replace(mutex, Mutex::new(Box::pin(futures::stream::empty())));
-        in_tokio_runtime_no_gil(|| {
-            drop(real_stream);
-        });
-    }
-}
-
 #[pyclass]
 struct AsyncStreamWrapper {
-    stream: Arc<Mutex<InferenceStream>>,
-}
-
-impl Drop for AsyncStreamWrapper {
-    fn drop(&mut self) {
-        drop_stream_in_tokio(&mut self.stream);
-    }
+    stream: TokioInferenceStream,
 }
 
 #[pymethods]
@@ -275,13 +247,7 @@ impl AsyncStreamWrapper {
 
 #[pyclass]
 struct StreamWrapper {
-    stream: Arc<Mutex<InferenceStream>>,
-}
-
-impl Drop for StreamWrapper {
-    fn drop(&mut self) {
-        drop_stream_in_tokio(&mut self.stream);
-    }
+    stream: TokioInferenceStream,
 }
 
 #[pymethods]
@@ -871,7 +837,7 @@ impl TensorZeroGateway {
         match resp {
             InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
             InferenceOutput::Streaming(stream) => Ok(StreamWrapper {
-                stream: Arc::new(Mutex::new(stream)),
+                stream: TokioInferenceStream::new(stream),
             }
             .into_pyobject(py)?
             .into_any()
@@ -1492,7 +1458,7 @@ impl AsyncTensorZeroGateway {
                 match output {
                     InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
                     InferenceOutput::Streaming(stream) => Ok(AsyncStreamWrapper {
-                        stream: Arc::new(Mutex::new(stream)),
+                        stream: TokioInferenceStream::new(stream),
                     }
                     .into_pyobject(py)?
                     .into_any()
