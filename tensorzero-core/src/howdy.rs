@@ -47,7 +47,7 @@ pub fn setup_howdy(
     clickhouse: ClickHouseConnectionInfo,
     token: CancellationToken,
 ) {
-    if !config.gateway.allow_pseudonymous_usage_analytics
+    if config.gateway.disable_pseudonymous_usage_analytics
         || env::var("TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS").unwrap_or_default() == "1"
     {
         info!("Pseudonymous usage analytics is disabled");

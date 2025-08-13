@@ -370,7 +370,7 @@ mod tests {
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
-            allow_pseudonymous_usage_analytics: false,
+            disable_pseudonymous_usage_analytics: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -430,7 +430,7 @@ mod tests {
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
-            allow_pseudonymous_usage_analytics: false,
+            disable_pseudonymous_usage_analytics: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -458,7 +458,7 @@ mod tests {
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
-            allow_pseudonymous_usage_analytics: false,
+            disable_pseudonymous_usage_analytics: false,
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -488,7 +488,7 @@ mod tests {
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
-            allow_pseudonymous_usage_analytics: false,
+            disable_pseudonymous_usage_analytics: false,
         };
         let config = Config {
             gateway: gateway_config,
