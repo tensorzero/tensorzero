@@ -3070,7 +3070,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert!(finish_reason.is_some());
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
