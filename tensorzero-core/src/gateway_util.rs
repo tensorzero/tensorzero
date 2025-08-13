@@ -132,7 +132,11 @@ impl GatewayHandle {
         http_client: Client,
     ) -> Self {
         let cancel_token = CancellationToken::new();
-        setup_howdy(clickhouse_connection_info.clone(), cancel_token.clone());
+        setup_howdy(
+            &config,
+            clickhouse_connection_info.clone(),
+            cancel_token.clone(),
+        );
         Self {
             app_state: AppStateData {
                 config,
@@ -366,6 +370,7 @@ mod tests {
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
+            allow_pseudonymous_usage_analytics: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -425,6 +430,7 @@ mod tests {
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
+            allow_pseudonymous_usage_analytics: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -452,6 +458,7 @@ mod tests {
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
+            allow_pseudonymous_usage_analytics: false,
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -481,6 +488,7 @@ mod tests {
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
+            allow_pseudonymous_usage_analytics: false,
         };
         let config = Config {
             gateway: gateway_config,

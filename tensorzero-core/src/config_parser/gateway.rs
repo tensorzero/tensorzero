@@ -35,6 +35,8 @@ pub struct UninitializedGatewayConfig {
     /// For now, this is only supported in the standalone gateway, and not in the embedded gateway.
     #[serde(default)]
     pub unstable_error_json: bool,
+    #[serde(default = "default_allow_pseudonymous_usage_analytics")]
+    pub allow_pseudonymous_usage_analytics: bool,
 }
 
 impl UninitializedGatewayConfig {
@@ -68,11 +70,12 @@ impl UninitializedGatewayConfig {
             unstable_error_json: self.unstable_error_json,
             unstable_disable_feedback_target_validation: self
                 .unstable_disable_feedback_target_validation,
+            allow_pseudonymous_usage_analytics: self.allow_pseudonymous_usage_analytics,
         })
     }
 }
 
-#[derive(Default, Debug, Serialize)]
+#[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct GatewayConfig {
@@ -86,6 +89,28 @@ pub struct GatewayConfig {
     pub base_path: Option<String>,
     pub unstable_error_json: bool,
     pub unstable_disable_feedback_target_validation: bool,
+    #[serde(default = "default_allow_pseudonymous_usage_analytics")]
+    pub allow_pseudonymous_usage_analytics: bool,
+}
+
+impl Default for GatewayConfig {
+    fn default() -> Self {
+        Self {
+            bind_address: Default::default(),
+            observability: ObservabilityConfig::default(),
+            debug: Default::default(),
+            template_filesystem_access: Default::default(),
+            export: Default::default(),
+            base_path: Default::default(),
+            unstable_error_json: Default::default(),
+            unstable_disable_feedback_target_validation: Default::default(),
+            allow_pseudonymous_usage_analytics: default_allow_pseudonymous_usage_analytics(),
+        }
+    }
+}
+
+fn default_allow_pseudonymous_usage_analytics() -> bool {
+    true
 }
 
 fn serialize_optional_socket_addr<S>(
