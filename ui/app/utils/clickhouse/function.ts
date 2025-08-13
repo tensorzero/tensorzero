@@ -399,13 +399,11 @@ export async function getFunctionThroughputByVariant(
   timeWindow: TimeWindowUnit,
   maxPeriods: number,
 ): Promise<VariantThroughput[]> {
-  // Calculate time range for data query
-  const currentTime = Date.now();
   const timeWindowMs = getTimeWindowInMs(timeWindow);
-  // Calculate minimum timestamp: go back maxPeriods + 1 time windows to ensure we have enough data
-  const minTime = currentTime - (timeWindowMs + 1) * maxPeriods;
-  // Convert timestamp to minimal UUIDv7 for efficient ClickHouse filtering
-  const minId = getMinimalUUIDv7(minTime);
+  // Calculate the time delta in milliseconds that we want to look back from the most recent inference
+  const timeDeltaMs = (maxPeriods + 1) * timeWindowMs;
+  // Convert time delta to UInt128 representation for UUIDv7 arithmetic
+  const timeDeltaUInt128 = getTimeDeltaAsUInt128(timeDeltaMs);
 
   const query = `
     SELECT
@@ -416,8 +414,12 @@ export async function getFunctionThroughputByVariant(
         toUInt32(count()) AS count
     FROM InferenceById i
     WHERE i.function_name = {functionName:String}
-    -- Use UUIDv7 ordering for efficient time-based filtering
-    AND i.id_uint >= toUInt128({minId:UUID})
+    -- Filter based on the most recent inference minus the time delta
+    AND i.id_uint >= (
+        SELECT max(id_uint) - {timeDeltaUInt128:UInt128}
+        FROM InferenceById
+        WHERE function_name = {functionName:String}
+    )
 GROUP BY period_start, variant_name
 -- Order by most recent periods first, then by variant name
 ORDER BY period_start DESC, variant_name DESC
@@ -426,7 +428,7 @@ ORDER BY period_start DESC, variant_name DESC
   const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
-    query_params: { functionName, timeWindow, minId },
+    query_params: { functionName, timeWindow, timeDeltaUInt128 },
   });
   const rows = await resultSet.json();
 
@@ -434,22 +436,18 @@ ORDER BY period_start DESC, variant_name DESC
   return parsedRows;
 }
 
-function getMinimalUUIDv7(timestamp: Date | number): string {
-  // Convert to milliseconds since Unix epoch
-  const ms = typeof timestamp === "number" ? timestamp : timestamp.getTime();
+function getTimeDeltaAsUInt128(timeDeltaMs: number): string {
+  // In UUIDv7, the timestamp occupies the first 48 bits (6 bytes) of the 128-bit UUID
+  // To convert milliseconds to the equivalent UInt128 difference, we need to shift
+  // the timestamp by 80 bits (10 bytes) to position it in the most significant bits
 
-  // UUIDv7 uses 48-bit timestamp (milliseconds since Unix epoch)
-  const timestampHex = ms.toString(16).padStart(12, "0");
+  // Convert milliseconds to hex and pad to 12 characters (48 bits)
+  const timestampHex = timeDeltaMs.toString(16).padStart(12, "0");
 
-  // Format: xxxxxxxx-xxxx-7xxx-8xxx-xxxxxxxxxxxx
-  // Where x are timestamp bits, 7 is version, 8 sets variant bits
-  const uuid = [
-    timestampHex.slice(0, 8), // 32 bits of timestamp
-    timestampHex.slice(8, 12), // 16 bits of timestamp
-    "7000", // Version 7 + 12 zero bits
-    "8000", // Variant bits (10) + 14 zero bits
-    "000000000000", // 48 zero bits
-  ].join("-");
+  // Create UInt128 by placing timestamp in most significant 48 bits, rest zeros
+  // This results in: tttttttttttt0000000000000000000000 (in hex)
+  const uint128Hex = timestampHex + "0000000000000000000000";
 
-  return uuid;
+  // Convert to decimal string for ClickHouse UInt128 parameter
+  return BigInt("0x" + uint128Hex).toString();
 }
