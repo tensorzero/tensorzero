@@ -148,8 +148,8 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
     let episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
     let episode_id = Uuid::parse_str(episode_id).unwrap();
 
-    // Sleep for 100ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 200ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
@@ -296,8 +296,8 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
     let episode_id =
         Uuid::parse_str(chunk_json.get("episode_id").unwrap().as_str().unwrap()).unwrap();
 
-    // Sleep for 100ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 200ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
@@ -2872,7 +2872,7 @@ async fn test_dummy_only_embedded_gateway_no_config() {
     };
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -2913,7 +2913,7 @@ async fn test_dummy_only_replicated_clickhouse() {
     };
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -3646,7 +3646,7 @@ async fn check_json_cot_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - JsonInference Table
     let clickhouse = get_clickhouse().await;
@@ -3841,8 +3841,8 @@ async fn test_multiple_text_blocks_in_message() {
     let response = response.json::<Value>().await.unwrap();
     let inference_id = response.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Sleep for 100ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Get the ClickHouse inference
     let clickhouse = get_clickhouse().await;
