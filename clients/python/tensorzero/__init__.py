@@ -11,6 +11,7 @@ from .tensorzero import (
     Config,
     Datapoint,
     DiclConfig,
+    DICLOptimizationConfig,
     FireworksSFTConfig,
     FunctionConfigChat,
     FunctionConfigJson,
@@ -89,7 +90,9 @@ RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample inste
 ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
-OptimizationConfig = t.Union[OpenAISFTConfig, FireworksSFTConfig]
+OptimizationConfig = t.Union[
+    OpenAISFTConfig, FireworksSFTConfig, DICLOptimizationConfig
+]
 ChatInferenceOutput = t.List[ContentBlock]
 
 
@@ -108,6 +111,7 @@ __all__ = [
     "Config",
     "ContentBlock",
     "Datapoint",
+    "DICLOptimizationConfig",
     "DynamicEvaluationRunEpisodeResponse",
     "DynamicEvaluationRunResponse",
     "ExtraBody",
