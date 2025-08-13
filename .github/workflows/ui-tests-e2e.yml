@@ -24,7 +24,7 @@ jobs:
     steps:
       - name: Set DNS
         run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
-      - uses: namespacelabs/nscloud-checkout-action@953fed31a6113cc2347ca69c9d823743c65bc84b
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -76,7 +76,7 @@ jobs:
     steps:
       - name: Set DNS
         run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
-      - uses: namespacelabs/nscloud-checkout-action@953fed31a6113cc2347ca69c9d823743c65bc84b
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
