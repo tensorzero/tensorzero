@@ -62,10 +62,9 @@ use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, Datapoint,
     DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, LaunchOptimizationParams, ListInferencesParams,
-    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
+    InferenceParams, LaunchOptimizationParams, ListInferencesParams, OptimizationJobHandle,
+    RenderedSample, StoredInference, TensorZeroError, Tool,
 };
-use tokio::sync::Mutex;
 use url::Url;
 
 use crate::gil_helpers::{in_tokio_runtime_no_gil, TokioInferenceStream};
