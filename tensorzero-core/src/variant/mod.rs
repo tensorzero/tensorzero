@@ -47,6 +47,7 @@ pub mod best_of_n_sampling;
 pub mod chain_of_thought;
 pub mod chat_completion;
 pub mod dicl;
+pub mod dynamic;
 pub mod mixture_of_n;
 
 /// Holds a particular variant implementation, plus additional top-level configuration
@@ -57,6 +58,12 @@ pub mod mixture_of_n;
 pub struct VariantInfo {
     pub inner: VariantConfig,
     pub timeouts: TimeoutsConfig,
+}
+
+impl VariantInfo {
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        self.inner.set_weight(weight);
+    }
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -107,8 +114,8 @@ pub struct ChainOfThoughtConfigPyClass {
 /// This is represented as a tool config in the
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum JsonMode {
     Off,
     On,
@@ -118,15 +125,15 @@ pub enum JsonMode {
 
 /// Configuration that applies to the current inference request.
 #[derive(Clone, Debug)]
-pub struct InferenceConfig<'a, 'request> {
+pub struct InferenceConfig<'request> {
     pub tool_config: Option<&'request ToolCallConfig>,
-    pub templates: &'request TemplateConfig<'a>,
+    pub templates: &'request TemplateConfig<'request>,
     pub dynamic_output_schema: Option<&'request DynamicJSONSchema>,
     pub function_name: &'request str,
-    pub variant_name: Option<&'request str>,
+    pub variant_name: &'request str,
     pub ids: InferenceIds,
-    pub extra_body: UnfilteredInferenceExtraBody,
-    pub extra_headers: UnfilteredInferenceExtraHeaders,
+    pub extra_body: Cow<'request, UnfilteredInferenceExtraBody>,
+    pub extra_headers: Cow<'request, UnfilteredInferenceExtraHeaders>,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
@@ -137,18 +144,18 @@ pub struct InferenceConfig<'a, 'request> {
 /// Maps to the subset of Config that applies to the current inference request.
 #[derive(Clone, Debug)]
 pub struct BatchInferenceConfig<'a> {
-    pub tool_configs: Vec<Option<ToolCallConfig>>,
+    pub tool_configs: &'a Vec<Option<ToolCallConfig>>,
     pub templates: &'a TemplateConfig<'a>,
-    pub dynamic_output_schemas: Vec<Option<DynamicJSONSchema>>,
+    pub dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
     pub function_name: &'a str,
-    pub variant_name: Option<&'a str>,
+    pub variant_name: &'a str,
 }
 impl<'a> BatchInferenceConfig<'a> {
     pub fn inference_configs(
         &'a self,
         episode_ids: &[Uuid],
         inference_ids: &[Uuid],
-    ) -> Vec<InferenceConfig<'a, 'a>> {
+    ) -> Vec<InferenceConfig<'a>> {
         izip!(
             self.tool_configs.iter().map(|x| x.as_ref()),
             self.dynamic_output_schemas.iter().map(|x| x.as_ref()),
@@ -196,7 +203,7 @@ pub trait Variant {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error>;
@@ -206,7 +213,7 @@ pub trait Variant {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error>;
@@ -228,7 +235,7 @@ pub trait Variant {
         input: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_configs: &'a [InferenceConfig<'a, 'a>],
+        inference_configs: &'a [InferenceConfig<'a>],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error>;
@@ -244,11 +251,21 @@ impl VariantConfig {
             VariantConfig::ChainOfThought(params) => params.inner.weight,
         }
     }
+
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        match self {
+            VariantConfig::ChatCompletion(params) => params.weight = weight,
+            VariantConfig::BestOfNSampling(params) => params.weight = weight,
+            VariantConfig::Dicl(params) => params.weight = weight,
+            VariantConfig::MixtureOfN(params) => params.weight = weight,
+            VariantConfig::ChainOfThought(params) => params.inner.weight = weight,
+        }
+    }
 }
 
 impl Variant for VariantInfo {
     #[instrument(
-        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or(""), otel.name="variant_inference", stream=false),
+        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name, otel.name="variant_inference", stream=false),
         skip_all
     )]
     async fn infer<'a: 'request, 'request>(
@@ -256,7 +273,7 @@ impl Variant for VariantInfo {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -333,7 +350,7 @@ impl Variant for VariantInfo {
                 // so that it can be handled by the `match response` block below
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
-                        variant_name: inference_config.variant_name.map(str::to_string),
+                        variant_name: inference_config.variant_name.to_string(),
                         timeout,
                         streaming: false,
                     }))
@@ -344,7 +361,7 @@ impl Variant for VariantInfo {
     }
 
     #[instrument(
-        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or(""), otel.name="variant_inference", stream=true),
+        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name, otel.name="variant_inference", stream=true),
         skip_all
     )]
     async fn infer_stream<'request>(
@@ -352,7 +369,7 @@ impl Variant for VariantInfo {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -429,7 +446,7 @@ impl Variant for VariantInfo {
                 .await
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
-                        variant_name: inference_config.variant_name.map(str::to_string),
+                        variant_name: inference_config.variant_name.to_string(),
                         timeout,
                         streaming: true,
                     }))
@@ -439,13 +456,13 @@ impl Variant for VariantInfo {
         }
     }
 
-    #[instrument(skip_all, fields(variant_name = %inference_configs.first().map(|x| x.variant_name.unwrap_or("")).unwrap_or("")))]
+    #[instrument(skip_all, fields(variant_name = %inference_configs.first().map(|x| x.variant_name).unwrap_or("")))]
     async fn start_batch_inference<'a>(
         &'a self,
         inputs: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_configs: &'a [InferenceConfig<'a, 'a>],
+        inference_configs: &'a [InferenceConfig<'a>],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -554,11 +571,12 @@ impl Variant for VariantInfo {
 }
 
 #[expect(clippy::too_many_arguments)]
+#[expect(clippy::unnecessary_wraps)]
 fn prepare_model_inference_request<'a, 'request>(
     messages: Vec<RequestMessage>,
     system: Option<String>,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'a, 'request>,
+    inference_config: &'request InferenceConfig<'request>,
     stream: bool,
     inference_params: &InferenceParams,
     base_json_mode: Option<JsonMode>,
@@ -652,7 +670,7 @@ struct InferModelRequestArgs<'a, 'request> {
     model_name: Arc<str>,
     model_config: &'a ModelConfig,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'a, 'request>,
+    inference_config: &'request InferenceConfig<'request>,
     clients: &'request InferenceClients<'request>,
     inference_params: InferenceParams,
     retry_config: &'a RetryConfig,
@@ -733,9 +751,8 @@ async fn infer_model_request_stream<'request>(
     Ok((Box::pin(stream), model_used_info))
 }
 
-#[derive(Debug, Deserialize, Copy, Clone, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct RetryConfig {
     pub num_retries: usize,
     pub max_delay_s: f32,
@@ -762,10 +779,10 @@ impl RetryConfig {
 impl<'a> BatchInferenceConfig<'a> {
     pub fn new(
         templates: &'a TemplateConfig,
-        tool_configs: Vec<Option<ToolCallConfig>>,
-        dynamic_output_schemas: Vec<Option<DynamicJSONSchema>>,
+        tool_configs: &'a Vec<Option<ToolCallConfig>>,
+        dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
         function_name: &'a str,
-        variant_name: Option<&'a str>,
+        variant_name: &'a str,
     ) -> Self {
         Self {
             templates,
@@ -864,7 +881,7 @@ mod tests {
             templates: &templates,
             tool_config: Some(&tool_config),
             function_name: "test_function",
-            variant_name: Some("test_variant"),
+            variant_name: "test_variant",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1006,7 +1023,7 @@ mod tests {
             templates: &templates,
             tool_config: Some(&tool_config),
             function_name: "test_function",
-            variant_name: Some("test_variant"),
+            variant_name: "test_variant",
             dynamic_output_schema: Some(&dynamic_output_schema),
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1097,7 +1114,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "test_function",
-            variant_name: Some("test_variant"),
+            variant_name: "test_variant",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1396,7 +1413,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             function_name: "test_function",
-            variant_name: Some("test_variant"),
+            variant_name: "test_variant",
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),

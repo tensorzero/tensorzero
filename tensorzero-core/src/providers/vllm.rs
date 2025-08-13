@@ -17,6 +17,7 @@ use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::Thought;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -407,6 +408,13 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        if let Some(reasoning) = message.reasoning_content {
+            content.push(ContentBlockOutput::Thought(Thought {
+                text: Some(reasoning),
+                signature: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+            }));
+        }
         if let Some(text) = message.content {
             content.push(text.into());
         }
@@ -436,7 +444,7 @@ pub(super) fn prepare_vllm_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
-    for message in request.messages.iter() {
+    for message in &request.messages {
         messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
     }
     if let Some(system_msg) = tensorzero_to_vllm_system_message(request.system.as_deref()) {
@@ -597,6 +605,7 @@ mod tests {
                 index: 0,
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: OpenAIFinishReason::Stop,

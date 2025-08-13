@@ -2,7 +2,7 @@ use rand::prelude::*;
 use std::time::Duration;
 
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 
 use super::{check_table_exists, get_table_engine};
@@ -146,18 +146,26 @@ impl Migration for Migration0020<'_> {
         } else {
             "InferenceById".to_string()
         };
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "ReplacingMergeTree",
+                table_name: &create_table_name,
+                engine_args: &["id_uint"],
+            },
+        );
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let query = format!(
-            r#"
-            CREATE TABLE IF NOT EXISTS {create_table_name}
+            r"
+            CREATE TABLE IF NOT EXISTS {create_table_name}{on_cluster_name}
             (
                 id_uint UInt128,
                 function_name LowCardinality(String),
                 variant_name LowCardinality(String),
                 episode_id UUID, -- must be a UUIDv7
                 function_type Enum8('chat' = 1, 'json' = 2)
-            ) ENGINE = ReplacingMergeTree(id_uint)
+            ) ENGINE = {table_engine_name}
             ORDER BY id_uint;
-        "#
+        "
         );
         let _ = self
             .clickhouse
@@ -189,9 +197,16 @@ impl Migration for Migration0020<'_> {
         } else {
             "InferenceByEpisodeId".to_string()
         };
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "ReplacingMergeTree",
+                table_name: &create_table_name,
+                engine_args: &["id_uint"],
+            },
+        );
         let query = format!(
-            r#"
-            CREATE TABLE IF NOT EXISTS {create_table_name}
+            r"
+            CREATE TABLE IF NOT EXISTS {create_table_name}{on_cluster_name}
             (
                 episode_id_uint UInt128,
                 id_uint UInt128,
@@ -199,9 +214,9 @@ impl Migration for Migration0020<'_> {
                 variant_name LowCardinality(String),
                 function_type Enum8('chat' = 1, 'json' = 2)
             )
-            ENGINE = ReplacingMergeTree(id_uint)
+            ENGINE = {table_engine_name}
             ORDER BY (episode_id_uint, id_uint);
-        "#
+        "
         );
         let _ = self
             .clickhouse
@@ -221,12 +236,14 @@ impl Migration for Migration0020<'_> {
                 .await?;
         }
         // Create the `uint_to_uuid` function
-        let query = r#"CREATE FUNCTION IF NOT EXISTS uint_to_uuid AS (x) -> reinterpretAsUUID(
+        let query = format!(
+            r"CREATE FUNCTION IF NOT EXISTS uint_to_uuid{on_cluster_name} AS (x) -> reinterpretAsUUID(
             concat(
                 substring(reinterpretAsString(x), 9, 8),
                 substring(reinterpretAsString(x), 1, 8)
             )
-        );"#;
+        );",
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -251,8 +268,8 @@ impl Migration for Migration0020<'_> {
         // Create the materialized views for the `InferenceById` table
         // IMPORTANT: The function_type column is now correctly set to 'chat'
         let query = format!(
-            r#"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByIdView
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByIdView{on_cluster_name}
             TO InferenceById
             AS
                 SELECT
@@ -263,7 +280,7 @@ impl Migration for Migration0020<'_> {
                     'chat' AS function_type
                 FROM ChatInference
                 {view_where_clause};
-            "#
+            "
         );
         let _ = self
             .clickhouse
@@ -272,8 +289,8 @@ impl Migration for Migration0020<'_> {
 
         // IMPORTANT: The function_type column is now correctly set to 'json'
         let query = format!(
-            r#"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByIdView
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByIdView{on_cluster_name}
             TO InferenceById
             AS
                 SELECT
@@ -284,7 +301,7 @@ impl Migration for Migration0020<'_> {
                     'json' AS function_type
                 FROM JsonInference
                 {view_where_clause};
-            "#
+            "
         );
         let _ = self
             .clickhouse
@@ -294,8 +311,8 @@ impl Migration for Migration0020<'_> {
         // Create the materialized view for the `InferenceByEpisodeId` table from ChatInference
         // IMPORTANT: The function_type column is now correctly set to 'chat'
         let query = format!(
-            r#"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByEpisodeIdView
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByEpisodeIdView{on_cluster_name}
             TO InferenceByEpisodeId
             AS
                 SELECT
@@ -306,7 +323,7 @@ impl Migration for Migration0020<'_> {
                     'chat' as function_type
                 FROM ChatInference
                 {view_where_clause};
-            "#
+            "
         );
         let _ = self
             .clickhouse
@@ -316,8 +333,8 @@ impl Migration for Migration0020<'_> {
         // Create the materialized view for the `InferenceByEpisodeId` table from JsonInference
         // IMPORTANT: The function_type column is now correctly set to 'json'
         let query = format!(
-            r#"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByEpisodeIdView
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByEpisodeIdView{on_cluster_name}
             TO InferenceByEpisodeId
             AS
                 SELECT
@@ -328,7 +345,7 @@ impl Migration for Migration0020<'_> {
                     'json' as function_type
                 FROM JsonInference
                 {view_where_clause};
-            "#
+            "
         );
         let _ = self
             .clickhouse
@@ -342,7 +359,7 @@ impl Migration for Migration0020<'_> {
             // Insert the data from the original tables into the new tables sequentially
             // First, insert data into InferenceById from ChatInference
             let query = format!(
-                r#"
+                r"
                 INSERT INTO InferenceById
                 SELECT
                     toUInt128(id) as id_uint,
@@ -352,7 +369,7 @@ impl Migration for Migration0020<'_> {
                     'chat' AS function_type
                 FROM ChatInference
                 WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-            "#
+            "
             );
             self.clickhouse
                 .run_query_synchronous_no_params(query.to_string())
@@ -360,7 +377,7 @@ impl Migration for Migration0020<'_> {
 
             // Then, insert data into InferenceById from JsonInference
             let query = format!(
-                r#"
+                r"
                 INSERT INTO InferenceById
                 SELECT
                     toUInt128(id) as id_uint,
@@ -370,7 +387,7 @@ impl Migration for Migration0020<'_> {
                     'json' AS function_type
                 FROM JsonInference
                 WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-            "#
+            "
             );
             self.clickhouse
                 .run_query_synchronous_no_params(query.to_string())
@@ -378,7 +395,7 @@ impl Migration for Migration0020<'_> {
 
             // Next, insert data into InferenceByEpisodeId from ChatInference
             let query = format!(
-                r#"
+                r"
                 INSERT INTO InferenceByEpisodeId
                 SELECT
                     toUInt128(episode_id) as episode_id_uint,
@@ -388,7 +405,7 @@ impl Migration for Migration0020<'_> {
                     'chat' as function_type
                 FROM ChatInference
                 WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-            "#
+            "
             );
             self.clickhouse
                 .run_query_synchronous_no_params(query.to_string())
@@ -396,7 +413,7 @@ impl Migration for Migration0020<'_> {
 
             // Finally, insert data into InferenceByEpisodeId from JsonInference
             let query = format!(
-                r#"
+                r"
                 INSERT INTO InferenceByEpisodeId
                 SELECT
                     toUInt128(episode_id) as episode_id_uint,
@@ -406,7 +423,7 @@ impl Migration for Migration0020<'_> {
                     'json' as function_type
                 FROM JsonInference
                 WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-            "#
+            "
             );
             self.clickhouse
                 .run_query_synchronous_no_params(query.to_string())
@@ -416,17 +433,20 @@ impl Migration for Migration0020<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS ChatInferenceByIdView;
-            DROP VIEW IF EXISTS JsonInferenceByIdView;
-            DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView;
-            DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView;
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            "/* Drop the materialized views */\
+            DROP VIEW IF EXISTS ChatInferenceByIdView{on_cluster_name};
+            DROP VIEW IF EXISTS JsonInferenceByIdView{on_cluster_name};
+            DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView{on_cluster_name};
+            DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView{on_cluster_name};
             /* Drop the function */\
-            DROP FUNCTION IF EXISTS uint_to_uuid;
+            DROP FUNCTION IF EXISTS uint_to_uuid{on_cluster_name};
             /* Drop the tables */\
-            DROP TABLE IF EXISTS InferenceById;
-            DROP TABLE IF EXISTS InferenceByEpisodeId;
+            DROP TABLE IF EXISTS InferenceById{on_cluster_name} SYNC;
+            DROP TABLE IF EXISTS InferenceByEpisodeId{on_cluster_name} SYNC;
             "
+        )
         .to_string()
     }
 

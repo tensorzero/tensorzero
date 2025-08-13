@@ -54,3 +54,26 @@ export async function getConfig() {
   configCache = { data: freshConfig, timestamp: now };
   return freshConfig;
 }
+
+/**
+ * Helper function to get a specific function configuration by name (server-side only)
+ * @param functionName - The name of the function to retrieve
+ * @param config - The config object (optional, will fetch if not provided)
+ * @returns The function configuration object or null if not found
+ */
+export async function getFunctionConfig(functionName: string, config?: Config) {
+  const cfg = config || (await getConfig());
+  // eslint-disable-next-line no-restricted-syntax
+  return cfg.functions[functionName] || null;
+}
+
+/**
+ * Helper function to get all function configurations (server-side only)
+ * @param config - The config object (optional, will fetch if not provided)
+ * @returns The function configuration object or null if not found
+ */
+export async function getAllFunctionConfigs(config?: Config) {
+  const cfg = config || (await getConfig());
+
+  return cfg.functions;
+}

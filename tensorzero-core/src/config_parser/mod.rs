@@ -39,6 +39,7 @@ use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
+use toml::de::DeTable;
 
 pub mod gateway;
 pub mod path;
@@ -56,7 +57,7 @@ tokio::task_local! {
 pub fn skip_credential_validation() -> bool {
     // tokio::task_local doesn't have an 'is_set' method, so we call 'try_with'
     // (which returns an `Err` if the task-local is not set)
-    SKIP_CREDENTIAL_VALIDATION.try_with(|_| ()).is_ok()
+    SKIP_CREDENTIAL_VALIDATION.try_with(|()| ()).is_ok()
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -77,20 +78,18 @@ pub struct Config {
     pub optimizers: HashMap<String, OptimizerInfo>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct NonStreamingTimeouts {
     #[serde(default)]
     /// The total time allowed for the non-streaming request to complete.
     pub total_ms: Option<u64>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct StreamingTimeouts {
     #[serde(default)]
     /// The time allowed for the first token to be produced.
@@ -99,9 +98,8 @@ pub struct StreamingTimeouts {
 
 /// Configures the timeouts for both streaming and non-streaming requests.
 /// This can be attached to various other configs (e.g. variants, models, model providers)
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct TimeoutsConfig {
     #[serde(default)]
@@ -236,7 +234,7 @@ impl ObjectStoreInfo {
                 }
                 if let Some(allow_http) = *allow_http {
                     if allow_http {
-                        tracing::warn!("`[object_storage.allow_http]` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store")
+                        tracing::warn!("`[object_storage.allow_http]` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store");
                     }
                     builder = builder.with_allow_http(allow_http);
                 }
@@ -309,6 +307,42 @@ pub struct ObservabilityConfig {
     pub enabled: Option<bool>,
     #[serde(default)]
     pub async_writes: bool,
+    #[serde(default)]
+    pub batch_writes: BatchWritesConfig,
+    /// If `true`, then we skip checking/applying migrations if the `TensorZeroMigration` table
+    /// contains exactly the migrations that we expect to have run.
+    #[serde(default)]
+    pub skip_completed_migrations: bool,
+}
+
+fn default_flush_interval_ms() -> u64 {
+    100
+}
+
+fn default_max_rows() -> usize {
+    1000
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct BatchWritesConfig {
+    pub enabled: bool,
+    #[serde(default = "default_flush_interval_ms")]
+    pub flush_interval_ms: u64,
+    #[serde(default = "default_max_rows")]
+    pub max_rows: usize,
+}
+
+impl Default for BatchWritesConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            flush_interval_ms: default_flush_interval_ms(),
+            max_rows: default_max_rows(),
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -414,15 +448,6 @@ impl Config {
         config_path: &Path,
         validate_credentials: bool,
     ) -> Result<Config, Error> {
-        let config_table = match UninitializedConfig::read_toml_config(config_path)? {
-            Some(table) => table,
-            None => {
-                return Err(ErrorDetails::Config {
-                    message: format!("Config file not found: {config_path:?}"),
-                }
-                .into())
-            }
-        };
         let base_path = match PathBuf::from(&config_path).parent() {
             Some(base_path) => base_path.to_path_buf(),
             None => {
@@ -432,6 +457,15 @@ impl Config {
                     ),
                 }
                 .into());
+            }
+        };
+        let config_table = match UninitializedConfig::read_toml_config(config_path, &base_path)? {
+            Some(table) => table,
+            None => {
+                return Err(ErrorDetails::Config {
+                    message: format!("Config file not found: {config_path:?}"),
+                }
+                .into())
             }
         };
         let config = if cfg!(feature = "e2e_tests") || !validate_credentials {
@@ -453,7 +487,7 @@ impl Config {
 
     async fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config, Error> {
         if table.is_empty() {
-            tracing::info!("Config file is empty, so only default functions will be available.")
+            tracing::info!("Config file is empty, so only default functions will be available.");
         }
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 
@@ -462,38 +496,38 @@ impl Config {
         let functions = uninitialized_config
             .functions
             .into_iter()
-            .map(|(name, config)| config.load(&name, &base_path).map(|c| (name, Arc::new(c))))
+            .map(|(name, config)| config.load(&name).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
 
         let tools = uninitialized_config
             .tools
             .into_iter()
-            .map(|(name, config)| {
-                config
-                    .load(&base_path, name.clone())
-                    .map(|c| (name, Arc::new(c)))
-            })
+            .map(|(name, config)| config.load(name.clone()).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
 
-        let models = uninitialized_config
-            .models
-            .into_iter()
-            .map(|(name, config)| {
+        let models = try_join_all(uninitialized_config.models.into_iter().map(
+            |(name, config)| async {
                 config
                     .load(&name, &uninitialized_config.provider_types)
+                    .await
                     .map(|c| (name, c))
-            })
-            .collect::<Result<HashMap<_, _>, _>>()?;
+            },
+        ))
+        .await?
+        .into_iter()
+        .collect::<HashMap<_, _>>();
 
-        let embedding_models = uninitialized_config
-            .embedding_models
-            .into_iter()
-            .map(|(name, config)| {
+        let embedding_models = try_join_all(uninitialized_config.embedding_models.into_iter().map(
+            |(name, config)| async {
                 config
                     .load(&uninitialized_config.provider_types)
+                    .await
                     .map(|c| (name, c))
-            })
-            .collect::<Result<HashMap<_, _>, _>>()?;
+            },
+        ))
+        .await?
+        .into_iter()
+        .collect::<HashMap<_, _>>();
 
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
         let optimizers = try_join_all(
@@ -539,7 +573,8 @@ impl Config {
                     .base_path
                     .clone()
                     .as_ref()
-                    .map(path::TomlRelativePath::path)
+                    .map(path::TomlRelativePath::get_real_path)
+                    .transpose()?
                     .unwrap_or(&base_path),
             ),
         )?;
@@ -552,7 +587,7 @@ impl Config {
         let mut evaluations = HashMap::new();
         for (name, evaluation_config) in uninitialized_config.evaluations {
             let (evaluation_config, evaluation_function_configs, evaluation_metric_configs) =
-                evaluation_config.load(&config.functions, &base_path, &name)?;
+                evaluation_config.load(&config.functions, &name)?;
             evaluations.insert(name, Arc::new(EvaluationConfig::Static(evaluation_config)));
             for (evaluation_function_name, evaluation_function_config) in
                 evaluation_function_configs
@@ -568,8 +603,8 @@ impl Config {
                 for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
                         config.templates.add_template(
-                            template.path.path().to_string_lossy().as_ref(),
-                            &template.contents,
+                            template.path.get_template_key(),
+                            template.contents.clone(),
                         )?;
                     }
                 }
@@ -606,6 +641,27 @@ impl Config {
     /// Validate the config
     #[instrument(skip_all)]
     async fn validate(&mut self) -> Result<(), Error> {
+        if self.gateway.observability.batch_writes.enabled
+            && self.gateway.observability.async_writes
+        {
+            return Err(ErrorDetails::Config {
+                message: "Batch writes and async writes cannot be enabled at the same time"
+                    .to_string(),
+            }
+            .into());
+        }
+        if self.gateway.observability.batch_writes.flush_interval_ms == 0 {
+            return Err(ErrorDetails::Config {
+                message: "Batch writes flush interval must be greater than 0".to_string(),
+            }
+            .into());
+        }
+        if self.gateway.observability.batch_writes.max_rows == 0 {
+            return Err(ErrorDetails::Config {
+                message: "Batch writes max rows must be greater than 0".to_string(),
+            }
+            .into());
+        }
         // Validate each function
         for (function_name, function) in &self.functions {
             if function_name.starts_with("tensorzero::") {
@@ -744,7 +800,7 @@ impl Config {
     /// Get all templates from the config
     /// The HashMap returned is a mapping from the path as given in the TOML file
     /// (relative to the directory containing the TOML file) to the file contents.
-    /// The former path is used as the name of the template for retrievaluation by variants later.
+    /// The former path is used as the name of the template for retrieval by variants later.
     pub fn get_templates(&self) -> HashMap<String, String> {
         let mut templates = HashMap::new();
 
@@ -752,10 +808,7 @@ impl Config {
             for variant in function.variants().values() {
                 let variant_template_paths = variant.get_all_template_paths();
                 for path in variant_template_paths {
-                    templates.insert(
-                        path.path.path().to_string_lossy().to_string(),
-                        path.contents.clone(),
-                    );
+                    templates.insert(path.path.get_template_key(), path.contents.clone());
                 }
             }
         }
@@ -832,9 +885,9 @@ impl FunctionsConfigPyClass {
     }
 }
 
-/// A trait for loading configs with a base path
+/// A trait for loading configs
 pub trait LoadableConfig<T> {
-    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<T, Error>;
+    fn load(self) -> Result<T, Error>;
 }
 
 /// This struct is used to deserialize the TOML config file
@@ -879,28 +932,26 @@ pub struct ProviderTypesConfig {
 
 impl UninitializedConfig {
     /// Read a file from the file system and parse it as TOML
-    fn read_toml_config(path: &Path) -> Result<Option<toml::Table>, Error> {
+    fn read_toml_config(path: &Path, base_path: &Path) -> Result<Option<toml::Table>, Error> {
         if !path.exists() {
             return Ok(None);
         }
-        Ok(Some(
-            std::fs::read_to_string(path)
-                .map_err(|_| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!("Failed to read config file: {}", path.to_string_lossy()),
-                    })
-                })?
-                .parse::<toml::Table>()
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Failed to parse config file `{}` as valid TOML: {}",
-                            path.to_string_lossy(),
-                            e
-                        ),
-                    })
-                })?,
-        ))
+        let contents = std::fs::read_to_string(path).map_err(|_| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Failed to read config file: {}", path.to_string_lossy()),
+            })
+        })?;
+        let table = DeTable::parse(&contents).map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Failed to parse config file `{}` as valid TOML: {}",
+                    path.to_string_lossy(),
+                    e
+                ),
+            })
+        })?;
+        let table = path::resolve_toml_relative_paths(table.into_inner(), base_path)?;
+        Ok(Some(table))
     }
 }
 
@@ -957,34 +1008,32 @@ struct UninitializedFunctionConfigJson {
     user_schema: Option<TomlRelativePath>,
     assistant_schema: Option<TomlRelativePath>,
     output_schema: Option<TomlRelativePath>, // schema will default to {} if not specified
+    #[serde(default)]
+    description: Option<String>,
 }
 
 impl UninitializedFunctionConfig {
-    pub fn load<P: AsRef<Path>>(
-        self,
-        function_name: &str,
-        base_path: P,
-    ) -> Result<FunctionConfig, Error> {
+    pub fn load(self, function_name: &str) -> Result<FunctionConfig, Error> {
         match self {
             UninitializedFunctionConfig::Chat(params) => {
                 let system_schema = params
                     .system_schema
-                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
+                    .map(StaticJSONSchema::from_path)
                     .transpose()?;
                 let user_schema = params
                     .user_schema
-                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
+                    .map(StaticJSONSchema::from_path)
                     .transpose()?;
                 let assistant_schema = params
                     .assistant_schema
-                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
+                    .map(StaticJSONSchema::from_path)
                     .transpose()?;
                 let variants = params
                     .variants
                     .into_iter()
-                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, Arc::new(v))))
+                    .map(|(name, variant)| variant.load().map(|v| (name, Arc::new(v))))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
-                for (name, variant) in variants.iter() {
+                for (name, variant) in &variants {
                     if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
                         if chat_config.json_mode.is_some() {
                             return Err(ErrorDetails::Config {
@@ -1010,18 +1059,18 @@ impl UninitializedFunctionConfig {
             UninitializedFunctionConfig::Json(params) => {
                 let system_schema = params
                     .system_schema
-                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
+                    .map(StaticJSONSchema::from_path)
                     .transpose()?;
                 let user_schema = params
                     .user_schema
-                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
+                    .map(StaticJSONSchema::from_path)
                     .transpose()?;
                 let assistant_schema = params
                     .assistant_schema
-                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
+                    .map(StaticJSONSchema::from_path)
                     .transpose()?;
                 let output_schema = match params.output_schema {
-                    Some(path) => StaticJSONSchema::from_path(path, base_path.as_ref())?,
+                    Some(path) => StaticJSONSchema::from_path(path)?,
                     None => StaticJSONSchema::default(),
                 };
                 let implicit_tool_call_config =
@@ -1029,10 +1078,10 @@ impl UninitializedFunctionConfig {
                 let variants = params
                     .variants
                     .into_iter()
-                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, Arc::new(v))))
+                    .map(|(name, variant)| variant.load().map(|v| (name, Arc::new(v))))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
 
-                for (name, variant) in variants.iter() {
+                for (name, variant) in &variants {
                     let mut warn_variant = None;
                     match &variant.inner {
                         VariantConfig::ChatCompletion(chat_config) => {
@@ -1072,14 +1121,15 @@ impl UninitializedFunctionConfig {
                     assistant_schema,
                     output_schema,
                     implicit_tool_call_config,
-                    description: None,
+                    description: params.description,
                 }))
             }
         }
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 // We don't use `#[serde(deny_unknown_fields)]` here - it needs to go on 'UninitializedVariantConfig',
 // since we use `#[serde(flatten)]` on the `inner` field.
@@ -1090,7 +1140,8 @@ pub struct UninitializedVariantInfo {
     pub timeouts: Option<TimeoutsConfig>,
 }
 
-#[derive(Debug, TensorZeroDeserialize)]
+#[derive(Clone, Debug, TensorZeroDeserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
@@ -1107,22 +1158,20 @@ pub enum UninitializedVariantConfig {
 }
 
 impl UninitializedVariantInfo {
-    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<VariantInfo, Error> {
+    pub fn load(self) -> Result<VariantInfo, Error> {
         let inner = match self.inner {
             UninitializedVariantConfig::ChatCompletion(params) => {
-                VariantConfig::ChatCompletion(params.load(base_path)?)
+                VariantConfig::ChatCompletion(params.load()?)
             }
             UninitializedVariantConfig::BestOfNSampling(params) => {
-                VariantConfig::BestOfNSampling(params.load(base_path)?)
+                VariantConfig::BestOfNSampling(params.load()?)
             }
-            UninitializedVariantConfig::Dicl(params) => {
-                VariantConfig::Dicl(params.load(base_path)?)
-            }
+            UninitializedVariantConfig::Dicl(params) => VariantConfig::Dicl(params.load()?),
             UninitializedVariantConfig::MixtureOfN(params) => {
-                VariantConfig::MixtureOfN(params.load(base_path)?)
+                VariantConfig::MixtureOfN(params.load()?)
             }
             UninitializedVariantConfig::ChainOfThought(params) => {
-                VariantConfig::ChainOfThought(params.load(base_path)?)
+                VariantConfig::ChainOfThought(params.load()?)
             }
         };
         Ok(VariantInfo {
@@ -1143,12 +1192,8 @@ pub struct UninitializedToolConfig {
 }
 
 impl UninitializedToolConfig {
-    pub fn load<P: AsRef<Path>>(
-        self,
-        base_path: P,
-        name: String,
-    ) -> Result<StaticToolConfig, Error> {
-        let parameters = StaticJSONSchema::from_path(self.parameters, base_path.as_ref())?;
+    pub fn load(self, name: String) -> Result<StaticToolConfig, Error> {
+        let parameters = StaticJSONSchema::from_path(self.parameters)?;
         Ok(StaticToolConfig {
             name: self.name.unwrap_or(name),
             description: self.description,
@@ -1168,27 +1213,8 @@ pub struct PathWithContents {
 }
 
 impl PathWithContents {
-    pub fn from_path<P: AsRef<Path>>(
-        path: TomlRelativePath,
-        base_path: Option<P>,
-    ) -> Result<Self, Error> {
-        let full_path = if let Some(base_path) = base_path.as_ref() {
-            &base_path.as_ref().join(path.path())
-        } else {
-            path.path()
-        };
-        let contents = std::fs::read_to_string(full_path).map_err(|e| {
-            Error::new(ErrorDetails::Config {
-                message: format!(
-                    "Failed to read file at {}: {}",
-                    full_path.to_string_lossy(),
-                    e
-                ),
-            })
-        })?;
-        Ok(Self {
-            path: path.to_owned(),
-            contents,
-        })
+    pub fn from_path(path: TomlRelativePath) -> Result<Self, Error> {
+        let contents = path.read()?;
+        Ok(Self { path, contents })
     }
 }

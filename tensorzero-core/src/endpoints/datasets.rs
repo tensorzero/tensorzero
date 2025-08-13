@@ -1,3 +1,4 @@
+use crate::clickhouse::TableName;
 use crate::function::FunctionConfigType;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
@@ -69,7 +70,7 @@ async fn query_demonstration(
 ) -> Result<Demonstration, Error> {
     let result = clickhouse
         .run_query_synchronous(
-            r#"
+            r"
         SELECT
           id,
           inference_id,
@@ -79,7 +80,7 @@ async fn query_demonstration(
         WHERE inference_id = {inference_id:String}
         ORDER BY toUInt128(id) DESC
         LIMIT {page_size:UInt32}
-        FORMAT JSONEachRow;"#
+        FORMAT JSONEachRow;"
                 .to_string(),
             &HashMap::from([
                 ("inference_id", inference_id.to_string().as_str()),
@@ -120,7 +121,7 @@ async fn query_inference_for_datapoint(
         FunctionConfigType::Chat => {
             clickhouse
                 .run_query_synchronous(
-                    r#"
+                    r"
                 SELECT * EXCEPT(timestamp),
                 'chat' AS function_type,
                 formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp
@@ -130,7 +131,7 @@ async fn query_inference_for_datapoint(
                     AND episode_id = {episode_id:String}
                     AND id = {inference_id:String}
                 LIMIT 1
-                FORMAT JSONEachRow;"#
+                FORMAT JSONEachRow;"
                         .to_string(),
                     &HashMap::from([
                         ("function_name", function_name),
@@ -144,7 +145,7 @@ async fn query_inference_for_datapoint(
         FunctionConfigType::Json => {
             clickhouse
                 .run_query_synchronous(
-                    r#"
+                    r"
                 SELECT * EXCEPT(timestamp),
                 'json' AS function_type,
                 formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp
@@ -154,7 +155,7 @@ async fn query_inference_for_datapoint(
                 AND episode_id = {episode_id:String}
                 AND id = {inference_id:String}
                 LIMIT 1
-                FORMAT JSONEachRow;"#
+                FORMAT JSONEachRow;"
                         .to_string(),
                     &HashMap::from([
                         ("function_name", function_name),
@@ -618,7 +619,7 @@ pub async fn insert_datapoint(
                     is_custom: true,
                     source_inference_id: None,
                     staled_at: None,
-                })
+                });
             }
             FunctionConfig::Json(json_function_config) => {
                 let json: JsonDatapointInsert = serde_json::from_value(datapoint).map_err(|e| {
@@ -742,7 +743,7 @@ pub async fn delete_datapoint(
 ) -> Result<(), Error> {
     // Since we don't know whether the datapoint is a chat or json datapoint, we just stale both of these.
     // The INSERT INTO SELECT FROM will just not write anything if the datapoint doesn't exist.
-    let json_delete_query = r#"
+    let json_delete_query = r"
     INSERT INTO JsonInferenceDatapoint
     (dataset_name, function_name, id, episode_id, input, output, output_schema,
      tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
@@ -750,8 +751,8 @@ pub async fn delete_datapoint(
            tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
     FROM JsonInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
-"#;
-    let chat_delete_query = r#"
+";
+    let chat_delete_query = r"
     INSERT INTO ChatInferenceDatapoint
     (dataset_name, function_name, id, episode_id, input, output, tool_params,
      tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
@@ -759,7 +760,7 @@ pub async fn delete_datapoint(
            tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
     FROM ChatInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
-"#;
+";
     let datapoint_id = datapoint_id.to_string();
     let json_params = HashMap::from([
         ("datapoint_id", datapoint_id.as_str()),
@@ -820,7 +821,7 @@ pub async fn list_datapoints(
     limit: Option<u32>,
     offset: Option<u32>,
 ) -> Result<Vec<Datapoint>, Error> {
-    let mut query = r#"
+    let mut query = r"
     WITH dataset as (
         SELECT
             'chat' as type,
@@ -840,7 +841,7 @@ pub async fn list_datapoints(
             staled_at
         FROM ChatInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
-        AND staled_at IS NULL"#
+        AND staled_at IS NULL"
         .to_string();
 
     if function_name.is_some() {
@@ -848,7 +849,7 @@ pub async fn list_datapoints(
     }
 
     query.push_str(
-        r#"
+        r"
         UNION ALL
         SELECT
             'json' as type,
@@ -868,7 +869,7 @@ pub async fn list_datapoints(
             staled_at
         FROM JsonInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
-        AND staled_at IS NULL"#,
+        AND staled_at IS NULL",
     );
 
     if function_name.is_some() {
@@ -876,14 +877,14 @@ pub async fn list_datapoints(
     }
 
     query.push_str(
-        r#"
+        r"
     )
     SELECT * FROM dataset
     ORDER BY id DESC
     LIMIT {limit: UInt32}
     OFFSET {offset: UInt32}
     FORMAT JSONEachRow
-    "#,
+    ",
     );
     let limit = limit.unwrap_or(100);
     let offset = offset.unwrap_or(0);
@@ -981,7 +982,7 @@ pub async fn get_datapoint(
     datapoint_id: Uuid,
     clickhouse: &ClickHouseConnectionInfo,
 ) -> Result<Datapoint, Error> {
-    let query = r#"
+    let query = r"
     WITH dataset as (
         SELECT
             'chat' as type,
@@ -1027,7 +1028,7 @@ pub async fn get_datapoint(
     WHERE id = {datapoint_id: UUID}
     LIMIT 1
     FORMAT JSONEachRow
-    "#;
+    ";
     let datapoint_id_str = datapoint_id.to_string();
     let params = HashMap::from([
         ("dataset_name", dataset_name.as_str()),
@@ -1088,10 +1089,10 @@ pub enum DatapointKind {
 }
 
 impl DatapointKind {
-    pub fn table_name(&self) -> &'static str {
+    pub fn table_name(&self) -> TableName {
         match self {
-            DatapointKind::Chat => "ChatInferenceDatapoint",
-            DatapointKind::Json => "JsonInferenceDatapoint",
+            DatapointKind::Chat => TableName::ChatInferenceDatapoint,
+            DatapointKind::Json => TableName::JsonInferenceDatapoint,
         }
     }
 }
@@ -1471,7 +1472,7 @@ async fn put_chat_datapoints(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let query = r#"
+    let query = r"
     INSERT INTO ChatInferenceDatapoint
         (
             dataset_name,
@@ -1501,7 +1502,7 @@ async fn put_chat_datapoints(
             new_data.is_custom,
             new_data.source_inference_id
         FROM new_data
-        "#;
+        ";
 
     let external_data = ExternalDataInfo {
         external_data_name: "new_data".to_string(),
@@ -1532,7 +1533,7 @@ async fn put_json_datapoints(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let query = r#"
+    let query = r"
         INSERT INTO JsonInferenceDatapoint
         (
             dataset_name,
@@ -1562,7 +1563,7 @@ async fn put_json_datapoints(
             new_data.is_custom,
             new_data.source_inference_id
         FROM new_data
-        "#;
+        ";
 
     let external_data = ExternalDataInfo {
         external_data_name: "new_data".to_string(),
@@ -1605,7 +1606,7 @@ pub async fn stale_dataset(
     dataset_name: &str,
 ) -> Result<StaleDatasetResponse, Error> {
     // NOTE: in the two queries below, we don't alias to staled_at because then we won't select any rows.
-    let chat_query = r#"
+    let chat_query = r"
     INSERT INTO ChatInferenceDatapoint
     SELECT
         *
@@ -1616,10 +1617,10 @@ pub async fn stale_dataset(
     FROM ChatInferenceDatapoint FINAL
     WHERE dataset_name = {dataset_name:String}
     AND staled_at IS NULL
-    "#
+    "
     .to_string();
 
-    let json_query = r#"
+    let json_query = r"
     INSERT INTO JsonInferenceDatapoint
     SELECT
         *
@@ -1630,7 +1631,7 @@ pub async fn stale_dataset(
     FROM JsonInferenceDatapoint FINAL
     WHERE dataset_name = {dataset_name:String}
     AND staled_at IS NULL
-    "#
+    "
     .to_string();
     let query_params = HashMap::from([("dataset_name", dataset_name)]);
 

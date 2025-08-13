@@ -1,5 +1,5 @@
 use crate::clickhouse::migration_manager::migration_trait::Migration;
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
@@ -55,13 +55,13 @@ impl Migration for Migration0005<'_> {
 
         for table in tables {
             let query = format!(
-                r#"SELECT EXISTS(
+                r"SELECT EXISTS(
                     SELECT 1
                     FROM system.columns
                     WHERE database = '{database}'
                       AND table = '{table}'
                       AND name = 'tags'
-                )"#
+                )"
             );
             match self.clickhouse.run_query_synchronous_no_params(query).await {
                 Err(e) => {
@@ -93,34 +93,44 @@ impl Migration for Migration0005<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `InferenceTag` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS InferenceTag
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "InferenceTag",
+                engine_args: &[],
+            },
+        );
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let query = format!(
+            r"
+            CREATE TABLE IF NOT EXISTS InferenceTag{on_cluster_name}
             (
                 function_name LowCardinality(String),
                 key String,
                 value String,
                 inference_id UUID, -- must be a UUIDv7
-            ) ENGINE = MergeTree()
+            ) ENGINE = {table_engine_name}
             ORDER BY (function_name, key, value);
-        "#;
+        ",
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `BooleanMetricFeedback` table
-        let query = r#"
+        let query = r"
             ALTER TABLE ChatInference
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `JsonInference` table
-        let query = r#"
+        let query = r"
             ALTER TABLE JsonInference
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -130,8 +140,9 @@ impl Migration for Migration0005<'_> {
         // We do not need to handle the case where there are already tags in the table since we created those columns just now.
         // So, we don't worry about timestamps for cutting over to the materialized views.
         // Create the materialized view for the `InferenceTag` table from ChatInference
-        let query = r#"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceTagView
+        let query = format!(
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceTagView{on_cluster_name}
             TO InferenceTag
             AS
                 SELECT
@@ -141,15 +152,17 @@ impl Migration for Migration0005<'_> {
                     id as inference_id
                 FROM ChatInference
                 ARRAY JOIN mapKeys(tags) as key
-            "#;
+            "
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `InferenceTag` table from JsonInference
-        let query = r#"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceTagView
+        let query = format!(
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceTagView{on_cluster_name}
             TO InferenceTag
             AS
                 SELECT
@@ -159,7 +172,8 @@ impl Migration for Migration0005<'_> {
                     id as inference_id
                 FROM JsonInference
                 ARRAY JOIN mapKeys(tags) as key
-            "#;
+            "
+        );
         let _ = self
             .clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -168,16 +182,18 @@ impl Migration for Migration0005<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS ChatInferenceTagView;
-            DROP VIEW IF EXISTS JsonInferenceTagView;
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(
+            "/* Drop the materialized views */\
+            DROP VIEW IF EXISTS ChatInferenceTagView{on_cluster_name};
+            DROP VIEW IF EXISTS JsonInferenceTagView{on_cluster_name};
             /* Drop the `InferenceTag` table */\
-            DROP TABLE IF EXISTS InferenceTag;
+            DROP TABLE IF EXISTS InferenceTag{on_cluster_name} SYNC;
             /* Drop the `tags` column from the original inference tables */\
             ALTER TABLE ChatInference DROP COLUMN tags;
             ALTER TABLE JsonInference DROP COLUMN tags;
         "
-        .to_string()
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

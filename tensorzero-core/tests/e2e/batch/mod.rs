@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde_json::json;
-use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::clickhouse::{ClickHouseConnectionInfo, TableName};
 use tensorzero_core::config_parser::Config;
 /// End-to-end tests for particular internal functionality in the batch inference endpoint
 /// These are not tests of the public API (those should go in tests/e2e/providers/batch.rs)
@@ -103,7 +103,7 @@ async fn test_get_batch_request() {
     };
     let rows = vec![row];
     clickhouse
-        .write(&rows, "BatchModelInference")
+        .write_batched(&rows, TableName::BatchModelInference)
         .await
         .unwrap();
     // Sleep a bit to ensure the write has propagated
@@ -261,7 +261,7 @@ async fn write_2_batch_model_inference_rows(
     };
     let rows = vec![row1, row2];
     clickhouse
-        .write(&rows, "BatchModelInference")
+        .write_batched(&rows, TableName::BatchModelInference)
         .await
         .unwrap();
     rows
@@ -382,7 +382,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             );
             match &chat_inference_response.content[0] {
                 ContentBlockChatOutput::Text(text_block) => {
-                    assert_eq!(text_block.text, "hello world")
+                    assert_eq!(text_block.text, "hello world");
                 }
                 _ => panic!("Unexpected content block type"),
             }
@@ -397,7 +397,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             assert_eq!(chat_inference_response.inference_id, inference_id2);
             match &chat_inference_response.content[0] {
                 ContentBlockChatOutput::Text(text_block) => {
-                    assert_eq!(text_block.text, "goodbye world")
+                    assert_eq!(text_block.text, "goodbye world");
                 }
                 _ => panic!("Unexpected content block type"),
             }

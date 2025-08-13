@@ -124,7 +124,7 @@ async fn test_config_from_toml_table_valid() {
     assert_eq!(embedding_model.routing, vec!["openai".into()]);
     assert_eq!(embedding_model.providers.len(), 1);
     let provider = embedding_model.providers.get("openai").unwrap();
-    assert!(matches!(provider, EmbeddingProviderConfig::OpenAI(_)));
+    assert!(matches!(provider.inner, EmbeddingProviderConfig::OpenAI(_)));
 
     // Check that the function for the LLM Judge evaluation is added to the functions table
     let function = config
@@ -146,7 +146,8 @@ async fn test_config_from_toml_table_valid() {
                                 path: TomlRelativePath::new_for_tests(
                                     PathBuf::from(
                                         "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
-                                    )
+                                    ),
+                                    Some("Return True if there is NSFW content in this generation.\n\n".to_string())
                                 ),
                                 contents:
                                     "Return True if there is NSFW content in this generation.\n\n"
@@ -365,7 +366,14 @@ async fn test_config_from_toml_table_missing_credentials() {
             table.insert("model".into(), "dummy".into());
             table.insert(
                 "system_template".into(),
-                "fixtures/config/functions/generate_draft/promptA/system_template.minijinja".into(),
+                [(
+                    "__tensorzero_remapped_path".into(),
+                    "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
+                        .into(),
+                )]
+                .into_iter()
+                .collect::<toml::Table>()
+                .into(),
             );
             table
         }),
@@ -630,25 +638,35 @@ async fn test_config_validate_model_routing_entry_not_in_providers() {
 #[tokio::test]
 async fn test_config_system_schema_does_not_exist() {
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_chat"]["system_schema"] =
-        "non_existent_file.json".into();
+    sample_config["functions"]["templates_with_variables_chat"]["system_schema"] = [(
+        "__tensorzero_remapped_path".into(),
+        "non_existent_file.json".into(),
+    )]
+    .into_iter()
+    .collect::<toml::Table>()
+    .into();
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
             result.unwrap_err(),
-            ErrorDetails::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            ErrorDetails::Config {
+                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
             }.into()
         );
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_json"]["system_schema"] =
-        "non_existent_file.json".into();
+    sample_config["functions"]["templates_with_variables_json"]["system_schema"] = [(
+        "__tensorzero_remapped_path".into(),
+        "non_existent_file.json".into(),
+    )]
+    .into_iter()
+    .collect::<toml::Table>()
+    .into();
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
             result.unwrap_err(),
-            ErrorDetails::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            ErrorDetails::Config {
+                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
             }.into()
         );
 }
@@ -657,25 +675,35 @@ async fn test_config_system_schema_does_not_exist() {
 #[tokio::test]
 async fn test_config_user_schema_does_not_exist() {
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_chat"]["user_schema"] =
-        "non_existent_file.json".into();
+    sample_config["functions"]["templates_with_variables_chat"]["user_schema"] = [(
+        "__tensorzero_remapped_path".into(),
+        "non_existent_file.json".into(),
+    )]
+    .into_iter()
+    .collect::<toml::Table>()
+    .into();
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
             result.unwrap_err(),
-            ErrorDetails::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            ErrorDetails::Config {
+                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
             }.into()
         );
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_json"]["user_schema"] =
-        "non_existent_file.json".into();
+    sample_config["functions"]["templates_with_variables_json"]["user_schema"] = [(
+        "__tensorzero_remapped_path".into(),
+        "non_existent_file.json".into(),
+    )]
+    .into_iter()
+    .collect::<toml::Table>()
+    .into();
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
             result.unwrap_err(),
-            ErrorDetails::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            ErrorDetails::Config {
+                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
             }.into()
         );
 }
@@ -684,25 +712,36 @@ async fn test_config_user_schema_does_not_exist() {
 #[tokio::test]
 async fn test_config_assistant_schema_does_not_exist() {
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_chat"]["assistant_schema"] =
-        "non_existent_file.json".into();
+    sample_config["functions"]["templates_with_variables_chat"]["assistant_schema"] = [(
+        "__tensorzero_remapped_path".into(),
+        "non_existent_file.json".into(),
+    )]
+    .into_iter()
+    .collect::<toml::Table>()
+    .into();
+
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
             result.unwrap_err(),
-            ErrorDetails::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            ErrorDetails::Config {
+                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
             }.into()
         );
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_json"]["assistant_schema"] =
-        "non_existent_file.json".into();
+    sample_config["functions"]["templates_with_variables_json"]["assistant_schema"] = [(
+        "__tensorzero_remapped_path".into(),
+        "non_existent_file.json".into(),
+    )]
+    .into_iter()
+    .collect::<toml::Table>()
+    .into();
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(sample_config, base_path).await;
     assert_eq!(
             result.unwrap_err(),
-            ErrorDetails::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            ErrorDetails::Config {
+                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
             }.into()
         );
 }
@@ -882,8 +921,13 @@ async fn test_config_validate_variant_model_not_in_models() {
 #[tokio::test]
 async fn test_config_validate_variant_template_nonexistent() {
     let mut config = get_sample_valid_config();
-    config["functions"]["generate_draft"]["variants"]["openai_promptA"]["system_template"] =
-        "nonexistent_template".into();
+    config["functions"]["generate_draft"]["variants"]["openai_promptA"]["system_template"] = [(
+        "__tensorzero_remapped_path".into(),
+        "nonexistent_template".into(),
+    )]
+    .into_iter()
+    .collect::<toml::Table>()
+    .into();
     let base_path = PathBuf::new();
     let result = Config::load_from_toml(config, base_path).await;
 
@@ -1193,7 +1237,10 @@ async fn test_get_all_templates() {
     // Check if all expected templates are present
     assert_eq!(
         *templates
-            .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja")
+            .get(&format!(
+                "{}/fixtures/config/functions/generate_draft/promptA/system_template.minijinja",
+                env!("CARGO_MANIFEST_DIR")
+            ))
             .unwrap(),
         include_str!(
             "../../fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
@@ -1202,7 +1249,10 @@ async fn test_get_all_templates() {
     );
     assert_eq!(
         *templates
-            .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja")
+            .get(&format!(
+                "{}/fixtures/config/functions/generate_draft/promptA/system_template.minijinja",
+                env!("CARGO_MANIFEST_DIR")
+            ))
             .unwrap(),
         include_str!(
             "../../fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
@@ -1211,7 +1261,10 @@ async fn test_get_all_templates() {
     );
     assert_eq!(
         *templates
-            .get("fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja")
+            .get(&format!(
+                "{}/fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja",
+                env!("CARGO_MANIFEST_DIR")
+            ))
             .unwrap(),
         include_str!(
             "../../fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
@@ -1220,7 +1273,10 @@ async fn test_get_all_templates() {
     );
     assert_eq!(
         *templates
-            .get("fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja")
+            .get(&format!(
+                "{}/fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja",
+                env!("CARGO_MANIFEST_DIR")
+            ))
             .unwrap(),
         include_str!(
             "../../fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
@@ -1228,42 +1284,60 @@ async fn test_get_all_templates() {
         .to_string()
     );
     assert_eq!(
-            *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja")
+            *templates.get(&format!(
+                "{}/fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja",
+                env!("CARGO_MANIFEST_DIR")
+            ))
             .unwrap(),
             include_str!(
                 "../../fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
             ).to_string()
         );
     assert_eq!(
-            *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja")
+            *templates.get(&format!(
+                "{}/fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja",
+                env!("CARGO_MANIFEST_DIR")
+            ))
             .unwrap(),
             include_str!(
                 "../../fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
             ).to_string()
         );
     assert_eq!(
-            *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja")
+            *templates.get(&format!(
+                "{}/fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja",
+                env!("CARGO_MANIFEST_DIR")
+            ))
             .unwrap(),
             include_str!(
                 "../../fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
             ).to_string()
         );
     assert_eq!(
-            *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja")
+            *templates.get(&format!(
+                "{}/fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja",
+                env!("CARGO_MANIFEST_DIR")
+            ))
             .unwrap(),
             include_str!(
                 "../../fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
             ).to_string()
         );
     assert_eq!(
-            *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja")
+            *templates.get(&format!(
+                "{}/fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja",
+                env!("CARGO_MANIFEST_DIR")
+            ))
             .unwrap(),
             include_str!(
                 "../../fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
             ).to_string()
         );
     assert_eq!(
-                    *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja")
+                    *templates.get(&format!(
+                        "{}/fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja",
+                        env!("CARGO_MANIFEST_DIR")
+                    ))
                     .unwrap(),
                     include_str!(
                         "../../fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
@@ -1396,7 +1470,9 @@ thinking = { type = "enabled", budget_tokens = 1024 }
 
 #[tokio::test]
 async fn test_config_load_shorthand_models_only() {
-    let config_str = r#"
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file
+        .write_all(r#"
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                  GENERAL                                   │
         # └────────────────────────────────────────────────────────────────────────────┘
@@ -1418,13 +1494,19 @@ async fn test_config_load_shorthand_models_only() {
         weight = 0.9
         model = "openai::gpt-3.5-turbo"
         system_template = "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-        "#;
+        "#.as_bytes(),
+        )
+        .unwrap();
+
+    let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    let config = UninitializedConfig::read_toml_config(temp_file.path(), &base_path)
+        .unwrap()
+        .unwrap();
     env::set_var("OPENAI_API_KEY", "sk-something");
     env::set_var("ANTHROPIC_API_KEY", "sk-something");
     env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
 
-    let config = toml::from_str(config_str).expect("Failed to parse sample config");
-    let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     Config::load_from_toml(config, base_path.clone())
         .await
         .expect("Failed to load config");
@@ -1440,7 +1522,7 @@ async fn test_empty_config() {
         .unwrap();
     assert!(logs_contain(
         "Config file is empty, so only default functions will be available."
-    ))
+    ));
 }
 
 #[tokio::test]
@@ -1509,7 +1591,12 @@ fn get_sample_valid_config() -> toml::Table {
     env::set_var("ANTHROPIC_API_KEY", "sk-something");
     env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
 
-    toml::from_str(config_str).expect("Failed to parse sample config")
+    let table = DeTable::parse(config_str).expect("Failed to parse sample config");
+
+    // Note - we deliberately use an unusual base_path here (not the immediate parent of the config file)
+    let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path::resolve_toml_relative_paths(table.into_inner(), &base_path)
+        .expect("Failed to resolve paths")
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1840,10 +1927,10 @@ async fn test_config_s3_allow_http_env_var() {
 #[traced_test]
 #[tokio::test]
 async fn test_deprecated_enable_template_filesystem_access() {
-    let config_str = r#"
+    let config_str = r"
         [gateway]
         enable_template_filesystem_access = true
-        "#;
+        ";
     let config_toml = toml::from_str(config_str).expect("Failed to parse sample config");
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let config = Config::load_from_toml(config_toml, base_path.clone())
@@ -1984,7 +2071,10 @@ async fn test_gcp_no_endpoint_and_model() {
 
 #[tokio::test]
 async fn test_config_invalid_template_no_schema() {
-    let config_str = r#"
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file
+        .write_all(
+            r#"
         [functions.no_schema]
         type = "chat"
 
@@ -1992,10 +2082,15 @@ async fn test_config_invalid_template_no_schema() {
         type = "chat_completion"
         model = "dummy::echo_request_messages"
         system_template = "fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-        "#;
+        "#
+            .as_bytes(),
+        )
+        .unwrap();
 
-    let config = toml::from_str(config_str).expect("Failed to parse sample config");
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let config = UninitializedConfig::read_toml_config(temp_file.path(), &base_path)
+        .unwrap()
+        .unwrap();
     let err = Config::load_from_toml(config, base_path.clone())
         .await
         .expect_err("Config should fail to load");

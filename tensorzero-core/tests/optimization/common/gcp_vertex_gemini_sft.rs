@@ -7,6 +7,8 @@ use tensorzero_core::{
     },
 };
 
+// Currently unused in 'mock_tests.rs'
+#[allow(clippy::allow_attributes, dead_code)]
 pub struct GCPVertexGeminiSFTTestCase();
 
 impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {

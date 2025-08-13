@@ -2,7 +2,6 @@
 **/build
 **/node_modules
 README.md
-app/utils/minijinja/pkg/
 **/.env
 **/.envrc
 **/target

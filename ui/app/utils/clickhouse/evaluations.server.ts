@@ -1,5 +1,5 @@
 import { logger } from "~/utils/logger";
-import { getConfig } from "../config/index.server";
+import { getConfig, getFunctionConfig } from "../config/index.server";
 import { resolveInput } from "../resolve.server";
 import { getClickhouseClient } from "./client.server";
 import { CountSchema, inputSchema } from "./common";
@@ -64,7 +64,8 @@ export async function getEvaluationRunInfosForDatapoint(
   function_name: string,
 ): Promise<EvaluationRunInfo[]> {
   const config = await getConfig();
-  const function_type = config.functions[function_name]?.type;
+  const functionConfig = await getFunctionConfig(function_name, config);
+  const function_type = functionConfig?.type;
   if (!function_type) {
     throw new Error(`Function ${function_name} not found in config`);
   }
@@ -107,7 +108,7 @@ async function parseEvaluationResult(
   // Parse the input field
   const parsedInput = inputSchema.parse(JSON.parse(result.input));
   const config = await getConfig();
-  const functionConfig = config.functions[function_name] || null;
+  const functionConfig = await getFunctionConfig(function_name, config);
   const resolvedInput = await resolveInput(parsedInput, functionConfig);
 
   // Parse the outputs
@@ -500,7 +501,7 @@ export async function getEvaluationsForDatapoint(
   if (!function_name) {
     throw new Error(`evaluation ${evaluation_name} not found in config`);
   }
-  const function_config = config.functions[function_name];
+  const function_config = await getFunctionConfig(function_name, config);
   if (!function_config) {
     throw new Error(`Function ${function_name} not found in config`);
   }

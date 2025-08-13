@@ -18,6 +18,13 @@ crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
+    let deepseek_r1_provider = E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "aws-bedrock-deepseek-r1".to_string(),
+        model_name: "deepseek-r1-aws-bedrock".into(),
+        model_provider_name: "aws_bedrock".into(),
+        credentials: HashMap::new(),
+    };
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws-bedrock".to_string(),
@@ -25,6 +32,9 @@ async fn get_providers() -> E2ETestProviders {
         model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     }];
+
+    let mut simple_inference_providers = standard_providers.clone();
+    simple_inference_providers.push(deepseek_r1_provider.clone());
 
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
@@ -75,10 +85,11 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     E2ETestProviders {
-        simple_inference: standard_providers.clone(),
+        simple_inference: simple_inference_providers,
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: vec![],
+        embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: vec![],
         tool_use_inference: standard_providers.clone(),
@@ -203,7 +214,13 @@ async fn test_inference_with_explicit_region() {
     assert!(result.get("ttft_ms").unwrap().is_null());
     let raw_response = result.get("raw_response").unwrap();
     let raw_response_json: Value = serde_json::from_str(raw_response.as_str().unwrap()).unwrap();
-    let _ = raw_response_json.get("debug").unwrap().as_str().unwrap();
+    assert!(
+        !raw_response_json["output"]["message"]["content"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "Unexpected raw response: {raw_response_json}"
+    );
 }
 
 #[tokio::test]

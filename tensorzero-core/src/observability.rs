@@ -37,7 +37,7 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
     );
 
     if let Some(exporter) = override_exporter {
-        provider = provider.with_simple_exporter(exporter)
+        provider = provider.with_simple_exporter(exporter);
     } else {
         provider = provider.with_batch_exporter(
             opentelemetry_otlp::SpanExporter::builder()
@@ -93,9 +93,13 @@ pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
             // We only expose spans that explicitly contain field prefixed with "http." or "otel."
             // For example, `#[instrument(fields(otel.name = "my_otel_name"))]` will be exported
             let filter = filter::filter_fn(|metadata| {
-                metadata.fields().iter().any(|field| {
-                    field.name().starts_with("http.") || field.name().starts_with("otel.")
-                })
+                if metadata.is_event() {
+                    matches!(metadata.level(), &tracing::Level::ERROR)
+                } else {
+                    metadata.fields().iter().any(|field| {
+                        field.name().starts_with("http.") || field.name().starts_with("otel.")
+                    })
+                }
             });
 
             reload_handle

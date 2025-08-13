@@ -1,9 +1,11 @@
+use enum_map::Enum;
 use reqwest::multipart::Form;
 use reqwest::multipart::Part;
 use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use serde::Serialize;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,11 +13,15 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockWriteGuard;
 use url::Url;
 
+mod batching;
 pub mod migration_manager;
 pub mod query_builder;
 #[cfg(any(test, feature = "e2e_tests", feature = "optimization_tests"))]
 pub mod test_helpers;
 
+use crate::clickhouse::batching::BatchSender;
+use crate::clickhouse::batching::BatchWriterHandle;
+use crate::config_parser::BatchWritesConfig;
 use crate::config_parser::Config;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::{Error, ErrorDetails};
@@ -32,8 +38,10 @@ pub enum ClickHouseConnectionInfo {
     },
     Production {
         database_url: SecretString,
+        cluster_name: Option<String>,
         database: String,
         client: Client,
+        batch_sender: Option<Arc<BatchSender>>,
     },
 }
 
@@ -51,6 +59,47 @@ pub fn make_clickhouse_http_client() -> Result<Client, Error> {
         })
 }
 
+/// Defines all of the ClickHouse tables that we write to from Rust
+/// This will be used to implement per-table ClickHouse write batching.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Enum)]
+pub enum TableName {
+    BatchModelInference,
+    BatchRequest,
+    ChatInference,
+    ChatInferenceDatapoint,
+    JsonInference,
+    JsonInferenceDatapoint,
+    ModelInference,
+    ModelInferenceCache,
+    DeploymentID,
+    TensorZeroMigration,
+    BooleanMetricFeedback,
+    FloatMetricFeedback,
+    DemonstrationFeedback,
+    CommentFeedback,
+}
+
+impl TableName {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TableName::BatchModelInference => "BatchModelInference",
+            TableName::BatchRequest => "BatchRequest",
+            TableName::ChatInference => "ChatInference",
+            TableName::ChatInferenceDatapoint => "ChatInferenceDatapoint",
+            TableName::JsonInference => "JsonInference",
+            TableName::JsonInferenceDatapoint => "JsonInferenceDatapoint",
+            TableName::ModelInference => "ModelInference",
+            TableName::ModelInferenceCache => "ModelInferenceCache",
+            TableName::DeploymentID => "DeploymentID",
+            TableName::TensorZeroMigration => "TensorZeroMigration",
+            TableName::BooleanMetricFeedback => "BooleanMetricFeedback",
+            TableName::FloatMetricFeedback => "FloatMetricFeedback",
+            TableName::DemonstrationFeedback => "DemonstrationFeedback",
+            TableName::CommentFeedback => "CommentFeedback",
+        }
+    }
+}
+
 impl ClickHouseConnectionInfo {
     /// Create a new ClickHouse connection info from a database URL.
     /// You should always use this function in production code or generic integration tests that
@@ -61,7 +110,7 @@ impl ClickHouseConnectionInfo {
     /// returns Ok(Production{ ... })
     ///
     /// However, for tests that directly test ClickHouse behavior, you can directly create the struct.
-    pub async fn new(database_url: &str) -> Result<Self, Error> {
+    pub async fn new(database_url: &str, batch_config: BatchWritesConfig) -> Result<Self, Error> {
         // Add a query string for the database using the URL crate
         let mut database_url = Url::parse(database_url).map_err(|_| {
             Error::new(ErrorDetails::Config {
@@ -89,11 +138,38 @@ impl ClickHouseConnectionInfo {
         // Store the original URL as a SecretString
         let database_url = SecretString::from(database_url.to_string());
 
-        let connection_info = Self::Production {
+        // Get the cluster name from the `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` environment variable
+        let cluster_name = match std::env::var("TENSORZERO_CLICKHOUSE_CLUSTER_NAME") {
+            Ok(cluster_name) => {
+                tracing::info!("The gateway is expecting a self-hosted replicated ClickHouse deployment with cluster name `{cluster_name}`. Note: The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` doesn't apply to ClickHouse Cloud or self-managed single-node deployments.");
+                Some(cluster_name)
+            }
+            Err(_) => {
+                tracing::debug!("The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` wasn't provided, so the gateway will assume that ClickHouse is not running a self-hosted replicated cluster. Note: This variable doesn't apply to ClickHouse Cloud or self-managed single-node deployments.");
+                None
+            }
+        };
+
+        let mut connection_info = Self::Production {
             database_url,
+            cluster_name,
             database,
             client: make_clickhouse_http_client()?,
+            batch_sender: None,
         };
+
+        let orig_connection_info = connection_info.clone();
+        match &mut connection_info {
+            Self::Production { batch_sender, .. } => {
+                if batch_config.enabled {
+                    // Create the batch sender using the `ClickHouseConnectionInfo` without the `batch_sender` set
+                    // (since the batcher itself always performs direct writes)
+                    let batcher = BatchSender::new(orig_connection_info, batch_config)?;
+                    *batch_sender = Some(Arc::new(batcher));
+                }
+            }
+            Self::Mock { .. } | Self::Disabled { .. } => {}
+        }
         // If the connection is unhealthy, we won't be able to run / check migrations. So we just fail here.
         connection_info.health().await?;
         Ok(connection_info)
@@ -103,6 +179,15 @@ impl ClickHouseConnectionInfo {
         Self::Mock {
             mock_data: Arc::new(RwLock::new(HashMap::new())),
             healthy,
+        }
+    }
+
+    pub fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
+        match self {
+            Self::Production { batch_sender, .. } => batch_sender
+                .as_ref()
+                .map(|sender| sender.writer_handle.clone()),
+            _ => None,
         }
     }
 
@@ -118,10 +203,48 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn write(
+    /// Writes rows to ClickHouse using our batched write implementation
+    /// (if enabled in the config)
+    /// The provided rows might not yet be sent to ClickHouse when this function completes.
+    pub async fn write_batched(
         &self,
         rows: &[impl Serialize + Send + Sync],
-        table: &str,
+        table: TableName,
+    ) -> Result<(), Error> {
+        match self {
+            Self::Disabled => Ok(()),
+            Self::Mock { mock_data, .. } => {
+                write_mock(
+                    Rows::Unserialized(rows),
+                    table,
+                    &mut mock_data.write().await,
+                )
+                .await
+            }
+            Self::Production {
+                database_url,
+                client,
+                batch_sender,
+                ..
+            } => {
+                write_production(
+                    database_url,
+                    client,
+                    Rows::Unserialized(rows),
+                    table,
+                    batch_sender.as_deref(),
+                )
+                .await
+            }
+        }
+    }
+
+    /// Write rows to ClickHouse without, without using our batched write implementation.
+    /// The provided rows will have been sent to ClickHouse when this function completes.
+    pub async fn write_non_batched<T: Serialize + Send + Sync>(
+        &self,
+        rows: Rows<'_, T>,
+        table: TableName,
     ) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
@@ -132,7 +255,7 @@ impl ClickHouseConnectionInfo {
                 database_url,
                 client,
                 ..
-            } => write_production(database_url, client, rows, table).await,
+            } => write_production(database_url, client, rows, table, None).await,
         }
     }
 
@@ -157,6 +280,14 @@ impl ClickHouseConnectionInfo {
             Self::Production { .. } => {
                 panic!("Production ClickHouse client can't be used for reading data in tests")
             }
+        }
+    }
+
+    pub fn is_cluster_configured(&self) -> bool {
+        match self {
+            Self::Disabled => false,
+            Self::Mock { .. } => false,
+            Self::Production { cluster_name, .. } => cluster_name.is_some(),
         }
     }
 
@@ -217,6 +348,16 @@ impl ClickHouseConnectionInfo {
         query: String,
         parameters: &HashMap<&str, &str>,
     ) -> Result<ClickHouseResponse, Error> {
+        self.run_query_synchronous_with_err_logging(query, parameters, true)
+            .await
+    }
+
+    pub async fn run_query_synchronous_with_err_logging(
+        &self,
+        query: String,
+        parameters: &HashMap<&str, &str>,
+        err_logging: bool,
+    ) -> Result<ClickHouseResponse, Error> {
         match self {
             Self::Disabled => Ok(ClickHouseResponse {
                 response: String::new(),
@@ -257,9 +398,12 @@ impl ClickHouseConnectionInfo {
                     .send()
                     .await
                     .map_err(|e| {
-                        Error::new(ErrorDetails::ClickHouseQuery {
-                            message: DisplayOrDebugGateway::new(e).to_string(),
-                        })
+                        Error::new_with_err_logging(
+                            ErrorDetails::ClickHouseQuery {
+                                message: DisplayOrDebugGateway::new(e).to_string(),
+                            },
+                            err_logging,
+                        )
                     })?;
                 let status = res.status();
 
@@ -268,16 +412,26 @@ impl ClickHouseConnectionInfo {
                     // NOTE: X-Clickhouse-Summary is a ClickHouse-specific header that contains information about the query execution.
                     // It is not formally specified in the ClickHouse documentation so we only warn if it isn't working but won't error here.
                     let summary_str = summary.to_str().map_err(|e| {
-                        Error::new(ErrorDetails::ClickHouseQuery {
-                            message: format!("Failed to parse x-clickhouse-summary header: {e}"),
-                        })
+                        Error::new_with_err_logging(
+                            ErrorDetails::ClickHouseQuery {
+                                message: format!(
+                                    "Failed to parse x-clickhouse-summary header: {e}"
+                                ),
+                            },
+                            err_logging,
+                        )
                     })?;
 
                     serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(
                         |e| {
-                            Error::new(ErrorDetails::ClickHouseQuery {
-                                message: format!("Failed to deserialize x-clickhouse-summary: {e}"),
-                            })
+                            Error::new_with_err_logging(
+                                ErrorDetails::ClickHouseQuery {
+                                    message: format!(
+                                        "Failed to deserialize x-clickhouse-summary: {e}"
+                                    ),
+                                },
+                                err_logging,
+                            )
                         },
                     )?
                 } else {
@@ -289,9 +443,12 @@ impl ClickHouseConnectionInfo {
                 };
 
                 let response_body = res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: DisplayOrDebugGateway::new(e).to_string(),
-                    })
+                    Error::new_with_err_logging(
+                        ErrorDetails::ClickHouseQuery {
+                            message: DisplayOrDebugGateway::new(e).to_string(),
+                        },
+                        err_logging,
+                    )
                 })?;
 
                 match status {
@@ -299,9 +456,12 @@ impl ClickHouseConnectionInfo {
                         response: response_body,
                         metadata,
                     }),
-                    _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
-                        message: response_body,
-                    })),
+                    _ => Err(Error::new_with_err_logging(
+                        ErrorDetails::ClickHouseQuery {
+                            message: response_body,
+                        },
+                        err_logging,
+                    )),
                 }
             }
         }
@@ -405,6 +565,57 @@ impl ClickHouseConnectionInfo {
         }
     }
 
+    pub async fn check_database_exists(&self) -> Result<bool, Error> {
+        match self {
+            Self::Disabled => Ok(true),
+            Self::Mock { .. } => Ok(true),
+            Self::Production {
+                client,
+                database_url,
+                ..
+            } => {
+                let database_url = Url::parse(database_url.expose_secret()).map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: "Invalid ClickHouse database URL".to_string(),
+                    })
+                })?;
+                let mut base_url = database_url.clone();
+                let query_pairs = database_url
+                    .query_pairs()
+                    .filter(|(key, _)| key != "database");
+                base_url
+                    .query_pairs_mut()
+                    .clear()
+                    .extend_pairs(query_pairs)
+                    .append_pair("param_name", self.database())
+                    .finish();
+                let query =
+                    "SELECT COUNT() FROM system.databases WHERE name={name:String}".to_string();
+                let response = client
+                    .post(base_url)
+                    .body(query)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseQuery {
+                            message: e.to_string(),
+                        })
+                    })?;
+                let text = response.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: format!("Failed to fetch response text: {e}"),
+                    })
+                })?;
+                let count: u8 = text.trim().parse().map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: format!("Failed to parse count response as u8: {e}"),
+                    })
+                })?;
+                Ok(count > 0)
+            }
+        }
+    }
+
     pub async fn create_database(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => {}
@@ -420,7 +631,8 @@ impl ClickHouseConnectionInfo {
                         message: "Invalid ClickHouse database URL".to_string(),
                     })
                 })?;
-                let query = format!("CREATE DATABASE IF NOT EXISTS {database}");
+                let on_cluster_name = self.get_on_cluster_name();
+                let query = format!("CREATE DATABASE IF NOT EXISTS {database}{on_cluster_name}");
                 // In order to create the database, we need to remove the database query parameter from the URL
                 // Otherwise, ClickHouse will throw an error
                 let mut base_url = database_url.clone();
@@ -466,8 +678,15 @@ impl ClickHouseConnectionInfo {
         // We decided to add this table after we had already created lots of migrations.
         // We create this table immediately after creating the database, so that
         // we can insert rows into it when running migrations
-        self.run_query_synchronous_no_params(
-            r#"CREATE TABLE IF NOT EXISTS TensorZeroMigration (
+        let on_cluster_name = self.get_on_cluster_name();
+        let table_engine_name =
+            self.get_maybe_replicated_table_engine_name(GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "TensorZeroMigration",
+                engine_args: &[],
+            });
+        let query = format!(
+            r"CREATE TABLE IF NOT EXISTS TensorZeroMigration{on_cluster_name} (
                 migration_id UInt32,
                 migration_name String,
                 gateway_version String,
@@ -476,12 +695,12 @@ impl ClickHouseConnectionInfo {
                 execution_time_ms UInt64,
                 extra_data Nullable(String)
             )
-            ENGINE = MergeTree()
-            PRIMARY KEY (migration_id)"#
-                .to_string(),
-        )
-        .await
-        .map(|_| ())?;
+            ENGINE = {table_engine_name}
+            PRIMARY KEY (migration_id)"
+        );
+        self.run_query_synchronous_no_params(query)
+            .await
+            .map(|_| ())?;
         Ok(())
     }
 
@@ -512,6 +731,78 @@ impl ClickHouseConnectionInfo {
             .collect::<Result<Vec<StoredInference>, Error>>()?;
         Ok(inferences)
     }
+
+    pub fn get_on_cluster_name(&self) -> String {
+        match self {
+            Self::Disabled => String::new(),
+            Self::Mock { .. } => String::new(),
+            Self::Production { cluster_name, .. } => match cluster_name {
+                Some(cluster_name) => format!(" ON CLUSTER {cluster_name} "),
+                None => String::new(),
+            },
+        }
+    }
+
+    pub fn get_maybe_replicated_table_engine_name(
+        &self,
+        args: GetMaybeReplicatedTableEngineNameArgs<'_>,
+    ) -> String {
+        let GetMaybeReplicatedTableEngineNameArgs {
+            table_engine_name,
+            table_name,
+            engine_args,
+        } = args;
+        match self {
+            Self::Disabled => table_engine_name.to_string(),
+            Self::Mock { .. } => table_engine_name.to_string(),
+            Self::Production {
+                cluster_name,
+                database,
+                ..
+            } => match cluster_name {
+                Some(_) => get_replicated_table_engine_name(
+                    table_engine_name,
+                    table_name,
+                    database,
+                    engine_args,
+                ),
+                None => {
+                    let engine_args_str = engine_args.join(", ");
+                    format!("{table_engine_name}({engine_args_str})")
+                }
+            },
+        }
+    }
+}
+
+pub struct GetMaybeReplicatedTableEngineNameArgs<'a> {
+    pub table_engine_name: &'a str,
+    pub table_name: &'a str,
+    pub engine_args: &'a [&'a str],
+}
+
+/// The ClickHouse documentation says that to create a replicated table,
+/// you should use a Replicated* table engine.
+/// The first 2 arguments are the keeper path and the replica name.
+/// The following arguments must be the arguments that the table engine takes.
+/// See https://clickhouse.com/docs/engines/table-engines/mergetree-family/replication for more details.
+///
+/// Since there may be issues with renaming tables, we don't use the database or table name shortcuts in the path.
+/// This method requires that the macros for {{shard}} and {{replica}} are defined in the ClickHouse configuration.
+/// This method should only be called if a cluster name is provided.
+fn get_replicated_table_engine_name(
+    table_engine_name: &str,
+    table_name: &str,
+    database: &str,
+    engine_args: &[&str],
+) -> String {
+    let keeper_path = format!("'/clickhouse/tables/{{shard}}/{database}/{table_name}'");
+    if engine_args.is_empty() {
+        format!("Replicated{table_engine_name}({keeper_path}, '{{replica}}')")
+    } else {
+        let engine_args_str = engine_args.join(", ");
+        format!("Replicated{table_engine_name}({keeper_path}, '{{replica}}', {engine_args_str})")
+    }
 }
 
 /// ClickHouse uses backslashes to escape quotes and all other special sequences in strings.
@@ -520,48 +811,79 @@ impl ClickHouseConnectionInfo {
 /// These may contain single quotes and backslashes, for example, if the user input contains doubly-serialized JSON.
 /// This function will escape single quotes and backslashes in the input string so that the comparison will be accurate.
 pub fn escape_string_for_clickhouse_literal(s: &str) -> String {
+    #![expect(clippy::needless_raw_string_hashes)]
     s.replace(r#"\"#, r#"\\"#).replace(r#"'"#, r#"\'"#)
 }
 
-async fn write_mock(
-    rows: &[impl Serialize + Send + Sync],
-    table: &str,
+async fn write_mock<T: Serialize + Send + Sync>(
+    rows: Rows<'_, T>,
+    table: TableName,
     tables: &mut RwLockWriteGuard<'_, HashMap<String, Vec<serde_json::Value>>>,
 ) -> Result<(), Error> {
-    for row in rows {
-        let row_value = serde_json::to_value(row).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: e.to_string(),
-            })
-        })?;
-        tables.entry(table.to_string()).or_default().push(row_value);
+    for row in rows.as_json()?.iter() {
+        tables
+            .entry(table.as_str().to_string())
+            .or_default()
+            .push(serde_json::Value::String(row.clone()));
     }
     Ok(())
 }
 
-async fn write_production(
+/// A wrapper type used with `write_non_batched`
+pub enum Rows<'a, T: Serialize + Send + Sync> {
+    /// The rows will be serialized to JSON before being sent to ClickHouse
+    Unserialized(&'a [T]),
+    /// The rows are already serialized to JSON, and will be sent to ClickHouse as-is
+    Serialized(&'a [String]),
+}
+
+impl<T: Serialize + Send + Sync> Rows<'_, T> {
+    fn as_json(&self) -> Result<Cow<'_, [String]>, Error> {
+        match self {
+            Rows::Unserialized(rows) => {
+                let json: Result<Vec<String>, _> = rows
+                    .iter()
+                    .map(|row| {
+                        serde_json::to_string(row).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: e.to_string(),
+                            })
+                        })
+                    })
+                    .collect();
+                json.map(Cow::Owned)
+            }
+            Rows::Serialized(rows) => Ok(Cow::Borrowed(rows)),
+        }
+    }
+}
+
+async fn write_production<T: Serialize + Send + Sync>(
     database_url: &SecretString,
     client: &Client,
-    rows: &[impl Serialize + Send + Sync],
-    table: &str,
+    rows: Rows<'_, T>,
+    table: TableName,
+    batch: Option<&BatchSender>,
 ) -> Result<(), Error> {
+    let is_empty = match &rows {
+        Rows::Unserialized(rows) => rows.is_empty(),
+        Rows::Serialized(rows) => rows.is_empty(),
+    };
     // Empty rows is a no-op
-    if rows.is_empty() {
+    if is_empty {
+        return Ok(());
+    }
+    let rows_json = rows.as_json();
+
+    if let Some(batch_sender) = batch {
+        batch_sender
+            .add_to_batch(table, rows_json?.into_owned())
+            .await?;
         return Ok(());
     }
 
-    let rows_json: Result<Vec<String>, _> = rows
-        .iter()
-        .map(|row| {
-            serde_json::to_string(row).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: e.to_string(),
-                })
-            })
-        })
-        .collect();
-
     let rows_json = rows_json?.join("\n");
+    let table = table.as_str();
 
     // We can wait for the async insert since we're spawning a new tokio task to do the insert
     let query = format!(
@@ -617,7 +939,7 @@ fn set_clickhouse_format_settings(database_url: &mut Url) {
         }
     }
 
-    for setting in OVERRIDDEN_SETTINGS.iter() {
+    for setting in &OVERRIDDEN_SETTINGS {
         database_url.query_pairs_mut().append_pair(setting, "0");
     }
     database_url.query_pairs_mut().finish();
@@ -701,6 +1023,7 @@ pub struct ExternalDataInfo {
     pub data: String,      // Must be valid ClickHouse data in the given format
 }
 
+#[derive(Debug)]
 pub struct ClickHouseResponse {
     pub response: String,
     pub metadata: ClickHouseResponseMetadata,
@@ -829,6 +1152,7 @@ mod tests {
     #[test]
     fn test_escape_string_for_clickhouse_comparison() {
         // Test basic escaping of single quotes
+        #![expect(clippy::needless_raw_string_hashes)]
         assert_eq!(
             escape_string_for_clickhouse_literal("test's string"),
             r#"test\'s string"#
@@ -865,6 +1189,76 @@ mod tests {
         assert_eq!(
             escape_string_for_clickhouse_literal(r#"\'\'\'"#),
             r#"\\\'\\\'\\\'"#
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_basic() {
+        let result = get_replicated_table_engine_name("MergeTree", "test_table", "test_db", &[]);
+        assert_eq!(
+            result,
+            "ReplicatedMergeTree('/clickhouse/tables/{shard}/test_db/test_table', '{replica}')"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_with_single_arg() {
+        let result =
+            get_replicated_table_engine_name("MergeTree", "users", "analytics", &["ORDER BY id"]);
+        assert_eq!(
+            result,
+            "ReplicatedMergeTree('/clickhouse/tables/{shard}/analytics/users', '{replica}', ORDER BY id)"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_with_multiple_args() {
+        let result = get_replicated_table_engine_name(
+            "ReplacingMergeTree",
+            "events",
+            "production",
+            &["version_column", "ORDER BY (timestamp, user_id)"],
+        );
+        assert_eq!(
+            result,
+            "ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/production/events', '{replica}', version_column, ORDER BY (timestamp, user_id))"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_with_complex_names() {
+        let result = get_replicated_table_engine_name(
+            "CollapsingMergeTree",
+            "user_activity_log",
+            "metrics_database",
+            &["sign_column"],
+        );
+        assert_eq!(
+            result,
+            "ReplicatedCollapsingMergeTree('/clickhouse/tables/{shard}/metrics_database/user_activity_log', '{replica}', sign_column)"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_empty_args() {
+        let result = get_replicated_table_engine_name("Log", "simple_table", "simple_db", &[]);
+        assert_eq!(
+            result,
+            "ReplicatedLog('/clickhouse/tables/{shard}/simple_db/simple_table', '{replica}')"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_special_characters() {
+        let result = get_replicated_table_engine_name(
+            "MergeTree",
+            "table_with_underscores",
+            "db-with-dashes",
+            &["'primary_key'", "PARTITION BY toYYYYMM(date)"],
+        );
+        assert_eq!(
+            result,
+            "ReplicatedMergeTree('/clickhouse/tables/{shard}/db-with-dashes/table_with_underscores', '{replica}', 'primary_key', PARTITION BY toYYYYMM(date))"
         );
     }
 }

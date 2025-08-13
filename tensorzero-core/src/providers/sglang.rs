@@ -489,7 +489,7 @@ enum SGLangResponseFormat {
 
 impl SGLangResponseFormat {
     fn new(
-        json_mode: &ModelInferenceRequestJsonMode,
+        json_mode: ModelInferenceRequestJsonMode,
         output_schema: Option<&Value>,
     ) -> Result<Option<Self>, Error> {
         match json_mode {
@@ -552,7 +552,7 @@ impl<'a> SGLangRequest<'a> {
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<SGLangRequest<'a>, Error> {
-        let response_format = SGLangResponseFormat::new(&request.json_mode, request.output_schema)?;
+        let response_format = SGLangResponseFormat::new(request.json_mode, request.output_schema)?;
         let stream_options = if request.stream {
             Some(StreamOptions {
                 include_usage: true,
@@ -818,6 +818,7 @@ mod tests {
                 index: 0,
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: OpenAIFinishReason::Stop,

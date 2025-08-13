@@ -114,6 +114,52 @@ func sendRequestTzGateway(t *testing.T, body map[string]interface{}) (map[string
 	return responseBody, nil
 }
 
+func TestTags(t *testing.T) {
+	t.Run("Test tensorzero tags", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hello"),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:       "tensorzero::function_name::basic_test",
+			Messages:    messages,
+			Temperature: openai.Float(0.4),
+		}
+		req.WithExtraFields(map[string]any{
+			"tensorzero::episode_id": episodeID.String(),
+			"tensorzero::tags":       map[string]any{"foo": "bar"},
+		})
+
+		// Send API request
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// If episode_id is passed in the old format,
+		// verify its presence in the response extras and ensure it's a valid UUID,
+		// without checking the exact value.
+		rawEpisodeID, ok := resp.JSON.ExtraFields["episode_id"]
+		require.True(t, ok, "Response does not contain an episode_id")
+		var responseEpisodeID string
+		err = json.Unmarshal([]byte(rawEpisodeID.Raw()), &responseEpisodeID)
+		require.NoError(t, err, "Failed to parse episode_id from response extras")
+		_, err = uuid.Parse(responseEpisodeID)
+		require.NoError(t, err, "Response episode_id is not a valid UUID")
+
+		// Validate response fields
+		assert.Equal(t, `Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.`,
+			resp.Choices[0].Message.Content)
+
+		// Validate Usage
+		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(11), resp.Usage.TotalTokens)
+		assert.Equal(t, "stop", resp.Choices[0].FinishReason)
+	})
+}
+
 // Test basic inference with old model format
 func TestBasicInference(t *testing.T) {
 	t.Run("Basic Inference using Old Model Format and Header", func(t *testing.T) {
@@ -259,6 +305,9 @@ func TestBasicInference(t *testing.T) {
 		require.Equal(t, int64(10), resp.Usage.PromptTokens)
 		require.Equal(t, int64(1), resp.Usage.CompletionTokens)
 		require.Equal(t, int64(11), resp.Usage.TotalTokens)
+
+		// Sleep for 1s
+		time.Sleep(time.Second)
 
 		// Second request (cached)
 		req.WithExtraFields(map[string]any{
