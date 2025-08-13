@@ -328,7 +328,7 @@ pub fn deserialize_optimization_config(
         Ok(UninitializedOptimizerConfig::TogetherSFT(obj.extract()?))
     } else {
         Err(PyValueError::new_err(
-            "Invalid optimization config. Expected OpenAISFTConfig or FireworksSFTConfig",
+            "Invalid optimization config. Expected OpenAISFTConfig, FireworksSFTConfig, or TogetherSFTConfig",
         ))
     }
 }
