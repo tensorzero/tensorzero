@@ -11,7 +11,7 @@ use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tensorzero_core::howdy::setup_howdy;
+use tensorzero_core::clickhouse::migration_manager::manual_run_migrations;
 use tokio::signal;
 use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
@@ -48,6 +48,10 @@ struct Args {
     #[arg(value_enum)]
     #[clap(default_value_t = LogFormat::default())]
     log_format: LogFormat,
+
+    /// Run database migrations manually then exit.
+    #[arg(long)]
+    run_migrations_only: bool,
 
     /// Deprecated: use `--config-file` instead
     tensorzero_toml: Option<PathBuf>,
@@ -89,6 +93,12 @@ async fn main() {
         .expect_pretty("Failed to set up logs");
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
+    if args.run_migrations_only {
+        manual_run_migrations()
+            .await
+            .expect_pretty("Failed to run migrations");
+        return;
+    }
 
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
 
@@ -177,11 +187,10 @@ async fn main() {
         );
     }
 
-    // Initialize AppState
+    // Initialize GatewayHandle
     let gateway_handle = gateway_util::GatewayHandle::new(config.clone())
         .await
         .expect_pretty("Failed to initialize AppState");
-    setup_howdy(gateway_handle.app_state.clickhouse_connection_info.clone());
 
     // Create a new observability_enabled_pretty string for the log message below
     let observability_enabled_pretty = match &gateway_handle.app_state.clickhouse_connection_info {
@@ -216,6 +225,10 @@ async fn main() {
         .route(
             "/openai/v1/chat/completions",
             post(endpoints::openai_compatible::inference_handler),
+        )
+        .route(
+            "/openai/v1/embeddings",
+            post(endpoints::openai_compatible::embeddings_handler),
         )
         .route("/feedback", post(endpoints::feedback::feedback_handler))
         // Everything above this layer has OpenTelemetry tracing enabled
@@ -348,6 +361,15 @@ async fn main() {
 
     // Print whether observability is enabled
     tracing::info!("├ Observability: {observability_enabled_pretty}");
+    if config.gateway.observability.batch_writes.enabled {
+        tracing::info!(
+            "├ Batch Writes: enabled (flush_interval_ms = {}, max_rows = {})",
+            config.gateway.observability.batch_writes.flush_interval_ms,
+            config.gateway.observability.batch_writes.max_rows
+        );
+    } else {
+        tracing::info!("├ Batch Writes: disabled");
+    }
 
     // Print whether OpenTelemetry is enabled
     if config.gateway.export.otlp.traces.enabled {

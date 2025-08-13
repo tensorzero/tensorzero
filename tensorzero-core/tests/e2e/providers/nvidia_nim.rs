@@ -76,11 +76,34 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let reasoning_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "nvidia-nim-reasoning".to_string(),
+        model_name: "meta/llama-3.1-8b-instruct".into(),
+        model_provider_name: "nvidia_nim".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let image_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "nvidia-nim-image".to_string(),
+        model_name: "meta/llama-3.1-8b-instruct".into(),
+        model_provider_name: "nvidia_nim".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let pdf_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "nvidia-nim-pdf".to_string(),
+        model_name: "meta/llama-3.1-8b-instruct".into(),
+        model_provider_name: "nvidia_nim".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
-        reasoning_inference: vec![],
         inference_params_inference: providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: providers.clone(),
@@ -89,9 +112,10 @@ async fn get_providers() -> E2ETestProviders {
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: json_mode_off_providers.clone(),
-        image_inference: vec![],
-        pdf_inference: vec![],
+        pdf_inference: pdf_providers,
         shorthand_inference: shorthand_providers.clone(),
+        reasoning_inference: reasoning_providers,
+        image_inference: image_providers,
         embeddings: vec![],
     }
 }

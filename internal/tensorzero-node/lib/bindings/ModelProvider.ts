@@ -5,7 +5,7 @@ import type { TimeoutsConfig } from "./TimeoutsConfig";
 export type ModelProvider = {
   name: string;
   config: ProviderConfig;
-  timeouts: TimeoutsConfig | null;
+  timeouts: TimeoutsConfig;
   /**
    * See `UninitializedModelProvider.discard_unknown_chunks`.
    */
