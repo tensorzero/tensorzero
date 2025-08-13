@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, ResolvedInput, ResolvedInputMessageContent};
+use crate::optimization::dicl::UninitializedDICLConfig;
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
 use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
 use crate::optimization::UninitializedOptimizerConfig;
@@ -323,9 +324,11 @@ pub fn deserialize_optimization_config(
         Ok(UninitializedOptimizerConfig::OpenAISFT(obj.extract()?))
     } else if obj.is_instance_of::<UninitializedFireworksSFTConfig>() {
         Ok(UninitializedOptimizerConfig::FireworksSFT(obj.extract()?))
+    } else if obj.is_instance_of::<UninitializedDICLConfig>() {
+        Ok(UninitializedOptimizerConfig::Dicl(obj.extract()?))
     } else {
         Err(PyValueError::new_err(
-            "Invalid optimization config. Expected OpenAISFTConfig or FireworksSFTConfig",
+            "Invalid optimization config. Expected OpenAISFTConfig, FireworksSFTConfig, or DICLConfig",
         ))
     }
 }

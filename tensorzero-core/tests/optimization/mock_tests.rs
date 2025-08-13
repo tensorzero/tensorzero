@@ -1,5 +1,8 @@
 mod common;
 
+embedded_workflow_test_case!(dicl, common::dicl::DICLTestCase());
+http_workflow_test_case!(dicl, common::dicl::DICLTestCase());
+
 embedded_workflow_test_case!(fireworks_sft, common::fireworks_sft::FireworksSFTTestCase());
 http_workflow_test_case!(fireworks_sft, common::fireworks_sft::FireworksSFTTestCase());
 
