@@ -119,9 +119,16 @@ SEED = 0
 #
 
 # %%
+import os
+import sys
+
+tensorzero_path = os.path.abspath(os.path.join(os.getcwd(), "../../"))
+if tensorzero_path not in sys.path:
+    sys.path.append(tensorzero_path)
+
+# %%
 import asyncio
 import json
-import os
 from random import shuffle
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -141,6 +148,8 @@ from tensorzero import (
 )
 from tqdm.asyncio import tqdm_asyncio
 from utils.client_calls import candidate_inference, get_instructions, judge_answer
+
+from recipes.util import train_val_split
 
 # %% [markdown]
 # ## Initialize the MIPRO TensorZero Client
@@ -179,7 +188,7 @@ base_function = config.functions[FUNCTION_NAME]
 base_variant = base_function.variants[TEMPLATE_VARIANT_NAME]
 if not isinstance(base_variant, ChatCompletionConfig):
     raise ValueError("Only chat completion variants are supported")
-model_name = base_variant.model_name
+model_name = base_variant.model
 
 # %% [markdown]
 # Query the inferences and demonstration feedback from ClickHouse.
@@ -197,12 +206,20 @@ inferences = await original_client.experimental_list_inferences(
     # comparison_operator=">",
 )
 
-print(inferences)
-
 # %%
 rendered_samples = await original_client.experimental_render_samples(
     stored_samples=inferences,
     variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
+)
+
+# %% [markdown]
+# Split the data into training and validation sets for fine-tuning.
+
+# %%
+train_samples, val_samples = train_val_split(
+    rendered_samples,
+    val_size=EVAL_FRACTION,
+    last_inference_only=True,
 )
 
 # %% [markdown]
@@ -318,32 +335,13 @@ def sample_to_openai_messages(sample: RenderedSample) -> List[Dict[str, Any]]:
 #
 
 # %%
-# Get unique episode_ids
-unique_episode_ids = list(set(sample.episode_id for sample in rendered_samples))
-
-# Shuffle the unique episode_ids
-np.random.seed(42)
-np.random.shuffle(unique_episode_ids)
-
-# Calculate the split index for episode_ids
-split_index = int(len(unique_episode_ids) * (1 - EVAL_FRACTION))
-
-# Split the episode_ids into training and validation sets
-train_episode_ids = unique_episode_ids[:split_index]
-val_episode_ids = unique_episode_ids[split_index:]
-
 # Create training and validation DataFrames based on episode_ids
-train_examples = []
-val_examples = []
-for example in rendered_samples:
-    if example.episode_id in train_episode_ids:
-        train_examples.append((sample_to_openai_messages(example), example))
-    else:
-        val_examples.append((sample_to_openai_messages(example), example))
-
-print(f"Training set size: {len(train_examples)}")
-print(f"Validation set size: {len(val_examples)}")
-print(f"Actual validation fraction: {len(val_examples) / len(rendered_samples):.2f}")
+train_examples = [
+    (sample_to_openai_messages(example), example) for example in train_samples
+]
+val_examples = [
+    (sample_to_openai_messages(example), example) for example in val_samples
+]
 
 # %% [markdown]
 # ## Generate Candidate Instructions
