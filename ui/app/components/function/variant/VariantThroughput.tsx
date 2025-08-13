@@ -16,7 +16,6 @@ import {
   ChartLegend,
   ChartLegendContent,
   ChartTooltip,
-  ChartTooltipContent,
 } from "~/components/ui/chart";
 import { TimeGranularitySelector } from "./TimeGranularitySelector";
 
@@ -80,23 +79,54 @@ export function VariantThroughput({
               />
               <YAxis tickLine={false} tickMargin={10} axisLine={true} />
               <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    labelFormatter={(label) =>
-                      new Date(label).toLocaleDateString()
-                    }
-                    formatter={(value, name) => {
-                      return (
-                        <div className="flex flex-1 items-center justify-between leading-none">
-                          <span className="text-muted-foreground">{name}</span>
-                          <span className="text-foreground font-mono font-medium tabular-nums">
-                            {value.toLocaleString()}
-                          </span>
+                content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null;
+
+                  const total = payload.reduce(
+                    (sum, entry) => sum + (Number(entry.value) || 0),
+                    0,
+                  );
+
+                  return (
+                    <div className="border-border/50 bg-background grid min-w-[8rem] items-start gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl">
+                      <div className="font-medium">
+                        {new Date(label).toLocaleDateString()}
+                      </div>
+                      <div className="grid gap-1.5">
+                        {payload.map((entry) => (
+                          <div
+                            key={entry.dataKey}
+                            className="flex w-full flex-wrap items-center gap-2"
+                          >
+                            <div
+                              className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                              style={{ backgroundColor: entry.color }}
+                            />
+                            <div className="flex flex-1 items-center justify-between leading-none">
+                              <span className="text-muted-foreground">
+                                {entry.name}
+                              </span>
+                              <span className="text-foreground font-mono font-medium tabular-nums">
+                                {Number(entry.value).toLocaleString()}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                        <div className="border-border/50 flex w-full flex-wrap items-center gap-2 border-t pt-1.5">
+                          <div className="h-2.5 w-2.5 shrink-0" />
+                          <div className="flex flex-1 items-center justify-between leading-none">
+                            <span className="text-muted-foreground font-medium">
+                              Total
+                            </span>
+                            <span className="text-foreground font-mono font-medium tabular-nums">
+                              {total.toLocaleString()}
+                            </span>
+                          </div>
                         </div>
-                      );
-                    }}
-                  />
-                }
+                      </div>
+                    </div>
+                  );
+                }}
               />
               <ChartLegend content={<ChartLegendContent />} />
               {variantNames.map((variantName) => (
