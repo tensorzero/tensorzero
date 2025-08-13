@@ -59,6 +59,21 @@ pub struct FireworksFineTuningRequest {
     pub base_model: String,
     pub dataset: String,
     pub evaluation_dataset: Option<String>,
+    pub early_stop: Option<bool>,
+    pub epochs: Option<usize>,
+    pub learning_rate: Option<f64>,
+    pub max_context_length: Option<usize>,
+    pub lora_rank: Option<usize>,
+    pub batch_size: Option<usize>,
+    pub display_name: Option<String>,
+    pub output_model: Option<String>,
+    pub warm_start_from: Option<String>,
+    pub is_turbo: Option<bool>,
+    pub eval_auto_carveout: Option<bool>,
+    pub nodes: Option<usize>,
+    pub mtp_enabled: Option<bool>,
+    pub mtp_num_draft_tokens: Option<usize>,
+    pub mtp_freeze_base_model: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -113,6 +128,21 @@ impl<'a> TryFrom<&'a RenderedSample> for FireworksSupervisedRow<'a> {
 #[cfg_attr(test, ts(export))]
 pub struct FireworksSFTConfig {
     pub model: String,
+    pub early_stop: Option<bool>,
+    pub epochs: Option<usize>,
+    pub learning_rate: Option<f64>,
+    pub max_context_length: Option<usize>,
+    pub lora_rank: Option<usize>,
+    pub batch_size: Option<usize>,
+    pub display_name: Option<String>,
+    pub output_model: Option<String>,
+    pub warm_start_from: Option<String>,
+    pub is_turbo: Option<bool>,
+    pub eval_auto_carveout: Option<bool>,
+    pub nodes: Option<usize>,
+    pub mtp_enabled: Option<bool>,
+    pub mtp_num_draft_tokens: Option<usize>,
+    pub mtp_freeze_base_model: Option<bool>,
     #[serde(skip)]
     pub credentials: FireworksCredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
@@ -127,6 +157,21 @@ pub struct FireworksSFTConfig {
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "FireworksSFTConfig"))]
 pub struct UninitializedFireworksSFTConfig {
     pub model: String,
+    pub early_stop: Option<bool>,
+    pub epochs: Option<usize>,
+    pub learning_rate: Option<f64>,
+    pub max_context_length: Option<usize>,
+    pub lora_rank: Option<usize>,
+    pub batch_size: Option<usize>,
+    pub display_name: Option<String>,
+    pub output_model: Option<String>,
+    pub warm_start_from: Option<String>,
+    pub is_turbo: Option<bool>,
+    pub eval_auto_carveout: Option<bool>,
+    pub nodes: Option<usize>,
+    pub mtp_enabled: Option<bool>,
+    pub mtp_num_draft_tokens: Option<usize>,
+    pub mtp_freeze_base_model: Option<bool>,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credentials: Option<CredentialLocation>,
     pub account_id: String,
@@ -143,10 +188,26 @@ impl std::fmt::Display for UninitializedFireworksSFTConfig {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl UninitializedFireworksSFTConfig {
+    #[expect(clippy::too_many_arguments)]
     #[new]
-    #[pyo3(signature = (*, model, credentials=None, account_id, api_base=None))]
+    #[pyo3(signature = (*, model, early_stop=None, epochs=None, learning_rate=None, max_context_length=None, lora_rank=None, batch_size=None, display_name=None, output_model=None, warm_start_from=None, is_turbo=None, eval_auto_carveout=None, nodes=None, mtp_enabled=None, mtp_num_draft_tokens=None, mtp_freeze_base_model=None, credentials=None, account_id, api_base=None))]
     pub fn new(
         model: String,
+        early_stop: Option<bool>,
+        epochs: Option<usize>,
+        learning_rate: Option<f64>,
+        max_context_length: Option<usize>,
+        lora_rank: Option<usize>,
+        batch_size: Option<usize>,
+        display_name: Option<String>,
+        output_model: Option<String>,
+        warm_start_from: Option<String>,
+        is_turbo: Option<bool>,
+        eval_auto_carveout: Option<bool>,
+        nodes: Option<usize>,
+        mtp_enabled: Option<bool>,
+        mtp_num_draft_tokens: Option<usize>,
+        mtp_freeze_base_model: Option<bool>,
         credentials: Option<String>,
         account_id: String,
         api_base: Option<String>,
@@ -161,6 +222,21 @@ impl UninitializedFireworksSFTConfig {
             .transpose()?;
         Ok(Self {
             model,
+            early_stop,
+            epochs,
+            learning_rate,
+            max_context_length,
+            lora_rank,
+            batch_size,
+            display_name,
+            output_model,
+            warm_start_from,
+            is_turbo,
+            eval_auto_carveout,
+            nodes,
+            mtp_enabled,
+            mtp_num_draft_tokens,
+            mtp_freeze_base_model,
             credentials,
             account_id,
             api_base,
@@ -170,14 +246,35 @@ impl UninitializedFireworksSFTConfig {
     /// Initialize the FireworksSFTConfig. All parameters are optional except for `model` and `account_id`.
     ///
     /// :param model: The model to use for the fine-tuning job.
+    /// :param early_stop: Whether to early stop the fine-tuning job.
+    /// :param epochs: The number of epochs to use for the fine-tuning job.
+    /// :param learning_rate: The learning rate to use for the fine-tuning job.
+    /// :param max_context_length: The maximum context length to use for the fine-tuning job.
+    /// :param lora_rank: The rank of the LoRA matrix to use for the fine-tuning job.
+    /// :param batch_size: The batch size to use for the fine-tuning job (tokens).
     /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::FIREWORKS_API_KEY". See docs for more details.
     /// :param account_id: The account ID to use for the fine-tuning job.
     /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
-    #[expect(unused_variables)]
-    #[pyo3(signature = (*, model, credentials=None, account_id, api_base=None))]
+    #[expect(unused_variables, clippy::too_many_arguments)]
+    #[pyo3(signature = (*, model, early_stop=None, epochs=None, learning_rate=None, max_context_length=None, lora_rank=None, batch_size=None, display_name=None, output_model=None, warm_start_from=None, is_turbo=None, eval_auto_carveout=None, nodes=None, mtp_enabled=None, mtp_num_draft_tokens=None, mtp_freeze_base_model=None, credentials=None, account_id, api_base=None))]
     fn __init__(
         this: Py<Self>,
         model: String,
+        early_stop: Option<bool>,
+        epochs: Option<usize>,
+        learning_rate: Option<f64>,
+        max_context_length: Option<usize>,
+        lora_rank: Option<usize>,
+        batch_size: Option<usize>,
+        display_name: Option<String>,
+        output_model: Option<String>,
+        warm_start_from: Option<String>,
+        is_turbo: Option<bool>,
+        eval_auto_carveout: Option<bool>,
+        nodes: Option<usize>,
+        mtp_enabled: Option<bool>,
+        mtp_num_draft_tokens: Option<usize>,
+        mtp_freeze_base_model: Option<bool>,
         credentials: Option<String>,
         account_id: String,
         api_base: Option<String>,
@@ -190,6 +287,21 @@ impl UninitializedFireworksSFTConfig {
     pub fn load(self) -> Result<FireworksSFTConfig, Error> {
         Ok(FireworksSFTConfig {
             model: self.model,
+            early_stop: self.early_stop,
+            epochs: self.epochs,
+            learning_rate: self.learning_rate,
+            max_context_length: self.max_context_length,
+            lora_rank: self.lora_rank,
+            batch_size: self.batch_size,
+            display_name: self.display_name,
+            output_model: self.output_model,
+            warm_start_from: self.warm_start_from,
+            is_turbo: self.is_turbo,
+            eval_auto_carveout: self.eval_auto_carveout,
+            nodes: self.nodes,
+            mtp_enabled: self.mtp_enabled,
+            mtp_num_draft_tokens: self.mtp_num_draft_tokens,
+            mtp_freeze_base_model: self.mtp_freeze_base_model,
             api_base: self.api_base.unwrap_or_else(|| FIREWORKS_API_BASE.clone()),
             account_id: self.account_id,
             credentials: build_creds_caching_default(
@@ -436,8 +548,23 @@ impl Optimizer for FireworksSFTConfig {
 
         let body = FireworksFineTuningRequest {
             base_model: self.model.clone(),
+            early_stop: self.early_stop,
+            epochs: self.epochs,
+            learning_rate: self.learning_rate,
+            max_context_length: self.max_context_length,
+            lora_rank: self.lora_rank,
+            batch_size: self.batch_size,
             dataset: train_file_id,
             evaluation_dataset: val_file_id,
+            display_name: self.display_name.clone(),
+            output_model: self.output_model.clone(),
+            warm_start_from: self.warm_start_from.clone(),
+            is_turbo: self.is_turbo,
+            eval_auto_carveout: self.eval_auto_carveout,
+            nodes: self.nodes,
+            mtp_enabled: self.mtp_enabled,
+            mtp_num_draft_tokens: self.mtp_num_draft_tokens,
+            mtp_freeze_base_model: self.mtp_freeze_base_model,
         };
 
         let request = client
