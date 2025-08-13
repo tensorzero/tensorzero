@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { CodeEditor } from "~/components/ui/code-editor";
 
 type TemplateType = "system" | "user" | "assistant";
-type TemplateKey = `${TemplateType}_template`;
+type TemplateKey = `${TemplateType}`;
 
 interface VariantEditorProps {
   variantInfo: VariantInfo;
@@ -54,11 +54,11 @@ export function VariantEditor({
     setEditedConfig((prev) => {
       if (!prev) return prev;
 
-      const key: TemplateKey = `${type}_template`;
+      const key: TemplateKey = `${type}`;
       const hadInitially = initialHas.current[type];
       if (hadInitially) {
         // Keep an object even when empty so the editor stays visible/editable.
-        const prevPath = prev[key]?.path || "";
+        const prevPath = prev.templates[key]?.template?.path || "";
         return {
           ...prev,
           [key]: { contents, path: prevPath },
