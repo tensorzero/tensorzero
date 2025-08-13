@@ -2734,7 +2734,7 @@ wheels = [
 ]
 
 [[package]]
-name = "tensorzero-recipes-supervised-fine-tuning-metrics-google-vertex"
+name = "tensorzero-recipes-supervised-fine-tuning-metrics-gcp-vertex-gemini"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [

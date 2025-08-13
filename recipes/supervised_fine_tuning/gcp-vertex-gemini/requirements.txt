@@ -300,7 +300,7 @@ clickhouse-connect==0.8.18 \
     --hash=sha256:fcd291e920223edb3152bc4e7720b2b514b7a48fb18bb0c3346f66b2691add67 \
     --hash=sha256:fefcbb5405f4ec803a016718958e4d8e5a3e548b9d3cc5a8ca6b2b327328ccaf \
     --hash=sha256:ff90c27ea43c11cb8878139068fed719f0141cd19ff344b53044ddc08765b3bc
-    # via tensorzero-recipes-supervised-fine-tuning-metrics-google-vertex
+    # via tensorzero-recipes-supervised-fine-tuning-metrics-gcp-vertex-gemini
 colorama==0.4.6 ; sys_platform == 'win32' \
     --hash=sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44 \
     --hash=sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6
@@ -386,7 +386,7 @@ google-auth==2.40.3 \
 google-cloud-aiplatform==1.108.0 \
     --hash=sha256:2001c3be0d704fe4a1d5adc815172391a0e10a9009e9c3eed721a12d3d431ba6 \
     --hash=sha256:ebff9931f948622ea2d34890b2ca8f8f4915c575814fdc1bcc16bc1b1beb5549
-    # via tensorzero-recipes-supervised-fine-tuning-metrics-google-vertex
+    # via tensorzero-recipes-supervised-fine-tuning-metrics-gcp-vertex-gemini
 google-cloud-bigquery==3.35.1 \
     --hash=sha256:599f26cacf190acfe88000f6cc5f4bc9e6baac7899e4f406ca054f1906f71960 \
     --hash=sha256:6739a6ba63c6d80735ca2b34b1df2090ff473b80c1a62354caa2debe6dbbd961
@@ -562,7 +562,7 @@ ipykernel==6.30.1 \
     --hash=sha256:aa6b9fb93dca949069d8b85b6c79b2518e32ac583ae9c7d37c51d119e18b3fb4
     # via
     #   jupyterlab
-    #   tensorzero-recipes-supervised-fine-tuning-metrics-google-vertex
+    #   tensorzero-recipes-supervised-fine-tuning-metrics-gcp-vertex-gemini
 ipython==8.18.1 ; python_full_version < '3.10' \
     --hash=sha256:ca6f079bb33457c66e233e4580ebfc4128855b4cf6370dddd73842a9563e8a27 \
     --hash=sha256:e8267419d72d81955ec1177f8a29aaa90ac80ad647499201119e2f05e99aa397
@@ -811,7 +811,7 @@ nest-asyncio==1.6.0 \
 notebook==7.4.5 \
     --hash=sha256:351635461aca9dad08cf8946a4216f963e2760cc1bf7b1aaaecb23afc33ec046 \
     --hash=sha256:7c2c4ea245913c3ad8ab3e5d36b34a842c06e524556f5c2e1f5d7d08c986615e
-    # via tensorzero-recipes-supervised-fine-tuning-metrics-google-vertex
+    # via tensorzero-recipes-supervised-fine-tuning-metrics-gcp-vertex-gemini
 notebook-shim==0.2.4 \
     --hash=sha256:411a5be4e9dc882a074ccbcae671eda64cceb068767e9a3419096986560e1cef \
     --hash=sha256:b4b2cfa1b65d98307ca24361f5b30fe785b53c3fd07b7a47e89acb5e6ac638cb
@@ -867,7 +867,7 @@ numpy==2.0.2 ; python_full_version < '3.10' \
     # via
     #   pandas
     #   shapely
-    #   tensorzero-recipes-supervised-fine-tuning-metrics-google-vertex
+    #   tensorzero-recipes-supervised-fine-tuning-metrics-gcp-vertex-gemini
 numpy==2.2.6 ; python_full_version == '3.10.*' \
     --hash=sha256:038613e9fb8c72b0a41f025a7e4c3f0b7a1b5d768ece4796b674c8f3fe13efff \
     --hash=sha256:0678000bb9ac1475cd454c6b8c799206af8107e310843532b04d49649c717a47 \
@@ -927,7 +927,7 @@ numpy==2.2.6 ; python_full_version == '3.10.*' \
     # via
     #   pandas
     #   shapely
-    #   tensorzero-recipes-supervised-fine-tuning-metrics-google-vertex
+    #   tensorzero-recipes-supervised-fine-tuning-metrics-gcp-vertex-gemini
 numpy==2.3.2 ; python_full_version >= '3.11' \
     --hash=sha256:07b62978075b67eee4065b166d000d457c82a1efe726cce608b9db9dd66a73a5 \
     --hash=sha256:087ffc25890d89a43536f75c5fe8770922008758e8eeeef61733957041ed2f9b \
@@ -1006,7 +1006,7 @@ numpy==2.3.2 ; python_full_version >= '3.11' \
     # via
     #   pandas
     #   shapely
-    #   tensorzero-recipes-supervised-fine-tuning-metrics-google-vertex
+    #   tensorzero-recipes-supervised-fine-tuning-metrics-gcp-vertex-gemini
 overrides==7.7.0 \
     --hash=sha256:55158fa3d93b98cc75299b1e67078ad9003ca27945c76162c1c0766d6f91820a \
     --hash=sha256:c7ed9d062f78b8e4c1a7b70bd8796b35ead4d9f510227ef9c5dc7626c60d7e49
@@ -1066,7 +1066,7 @@ pandas==2.3.1 \
     --hash=sha256:fe37e757f462d31a9cd7580236a82f353f5713a80e059a29753cf938c6775d96 \
     --hash=sha256:fe67dc676818c186d5a3d5425250e40f179c2a89145df477dd82945eaea89e97 \
     --hash=sha256:fe7317f578c6a153912bd2292f02e40c1d8f253e93c599e82620c7f69755c74f
-    # via tensorzero-recipes-supervised-fine-tuning-metrics-google-vertex
+    # via tensorzero-recipes-supervised-fine-tuning-metrics-gcp-vertex-gemini
 pandocfilters==1.5.1 \
     --hash=sha256:002b4a555ee4ebc03f8b66307e287fa492e4a77b4ea14d3f934328297bb4939e \
     --hash=sha256:93be382804a9cdb0a7267585f157e5d1731bbe5545a85b268d6f5fe6232de2bc
@@ -1755,7 +1755,7 @@ tensorzero==2025.8.2 \
     --hash=sha256:d7d7b7727a94402f2985b343d34cd7ed4843a10117c28ab9a8fe52550f45d7c4 \
     --hash=sha256:dc32225cc04e2cca5584c330cc12cf46fe092d6533360ec809022c1f6b71000f \
     --hash=sha256:dc50bd4add93013d991d4ee9236a303e1d692e89de4b15f51ce22ca20ac33b13
-    # via tensorzero-recipes-supervised-fine-tuning-metrics-google-vertex
+    # via tensorzero-recipes-supervised-fine-tuning-metrics-gcp-vertex-gemini
 terminado==0.18.1 \
     --hash=sha256:a4468e1b37bb318f8a86514f65814e1afc977cf29b3992a4500d9dd305dcceb0 \
     --hash=sha256:de09f2c4b85de4765f7714688fff57d3e75bad1f909b589fde880460c753fd2e
@@ -1769,7 +1769,7 @@ tinycss2==1.4.0 \
 toml==0.10.2 \
     --hash=sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b \
     --hash=sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f
-    # via tensorzero-recipes-supervised-fine-tuning-metrics-google-vertex
+    # via tensorzero-recipes-supervised-fine-tuning-metrics-gcp-vertex-gemini
 tomli==2.2.1 ; python_full_version < '3.11' \
     --hash=sha256:023aa114dd824ade0100497eb2318602af309e5a55595f76b626d6d9f3b7b0a6 \
     --hash=sha256:02abe224de6ae62c19f090f68da4e27b10af2b93213d36cf44e6e1c5abd19fdd \
