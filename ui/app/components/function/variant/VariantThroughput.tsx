@@ -77,7 +77,20 @@ export function VariantThroughput({
                 axisLine={true}
                 tickFormatter={(value) => new Date(value).toLocaleDateString()}
               />
-              <YAxis tickLine={false} tickMargin={10} axisLine={true} />
+              <YAxis
+                tickLine={false}
+                tickMargin={10}
+                axisLine={true}
+                tickFormatter={(value) => {
+                  const num = Number(value);
+                  if (num >= 1000000) {
+                    return (num / 1000000).toFixed(1) + "M";
+                  } else if (num >= 1000) {
+                    return (num / 1000).toFixed(1) + "K";
+                  }
+                  return num.toString();
+                }}
+              />
               <ChartTooltip
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null;
