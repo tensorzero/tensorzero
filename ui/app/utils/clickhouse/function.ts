@@ -399,21 +399,30 @@ export async function getFunctionThroughputByVariant(
   timeWindow: TimeWindowUnit,
   maxPeriods: number,
 ): Promise<VariantThroughput[]> {
+  // Calculate time range for data query
   const currentTime = Date.now();
   const timeWindowMs = getTimeWindowInMs(timeWindow);
+  // Calculate minimum timestamp: go back maxPeriods + 1 time windows to ensure we have enough data
   const minTime = currentTime - (timeWindowMs + 1) * maxPeriods;
+  // Convert timestamp to minimal UUIDv7 for efficient ClickHouse filtering
   const minId = getMinimalUUIDv7(minTime);
+
   const query = `
     SELECT
+        -- Truncate timestamp to period boundaries (day/week/month) and format as ISO string
         formatDateTime(dateTrunc({timeWindow:String}, UUIDv7ToDateTime(uint_to_uuid(i.id_uint))), '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
         i.variant_name AS variant_name,
+        -- Count inferences per (period, variant) combination
         toUInt32(count()) AS count
     FROM InferenceById i
     WHERE i.function_name = {functionName:String}
+    -- Use UUIDv7 ordering for efficient time-based filtering
     AND i.id_uint >= toUInt128({minId:UUID})
 GROUP BY period_start, variant_name
+-- Order by most recent periods first, then by variant name
 ORDER BY period_start DESC, variant_name DESC
 `;
+
   const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
