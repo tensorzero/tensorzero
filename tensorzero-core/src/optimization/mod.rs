@@ -11,7 +11,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::model::UninitializedModelConfig;
 use crate::optimization::dicl::{
-    DICLOptimizationConfig, DICLOptimizationJobHandle, UninitializedDICLOptimizationConfig,
+    DiclOptimizationConfig, DiclOptimizationJobHandle, UninitializedDiclOptimizationConfig,
 };
 use crate::optimization::fireworks_sft::{
     FireworksSFTConfig, FireworksSFTJobHandle, UninitializedFireworksSFTConfig,
@@ -53,7 +53,7 @@ impl OptimizerInfo {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 enum OptimizerConfig {
-    Dicl(DICLOptimizationConfig),
+    Dicl(DiclOptimizationConfig),
     OpenAISFT(OpenAISFTConfig),
     FireworksSFT(FireworksSFTConfig),
     GCPVertexGeminiSFT(Box<GCPVertexGeminiSFTConfig>),
@@ -67,7 +67,7 @@ enum OptimizerConfig {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OptimizationJobHandle {
     #[serde(rename = "dicl")]
-    Dicl(DICLOptimizationJobHandle),
+    Dicl(DiclOptimizationJobHandle),
     #[serde(rename = "openai_sft")]
     OpenAISFT(OpenAISFTJobHandle),
     #[serde(rename = "fireworks_sft")]
@@ -319,7 +319,7 @@ impl UninitializedOptimizerInfo {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UninitializedOptimizerConfig {
     #[serde(rename = "dicl")]
-    Dicl(UninitializedDICLOptimizationConfig),
+    Dicl(UninitializedDiclOptimizationConfig),
     #[serde(rename = "openai_sft")]
     OpenAISFT(UninitializedOpenAISFTConfig),
     #[serde(rename = "fireworks_sft")]

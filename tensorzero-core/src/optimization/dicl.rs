@@ -19,7 +19,7 @@ use crate::{
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub struct DICLOptimizationConfig {
+pub struct DiclOptimizationConfig {
     pub embedding_model: String,
     pub variant_name: String,
     pub function_name: String,
@@ -33,8 +33,8 @@ pub struct DICLOptimizationConfig {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "DICLOptimizationConfig"))]
-pub struct UninitializedDICLOptimizationConfig {
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "DiclOptimizationConfig"))]
+pub struct UninitializedDiclOptimizationConfig {
     pub embedding_model: String,
     pub variant_name: String,
     pub function_name: String,
@@ -43,7 +43,7 @@ pub struct UninitializedDICLOptimizationConfig {
     pub api_base: Option<Url>,
 }
 
-impl std::fmt::Display for UninitializedDICLOptimizationConfig {
+impl std::fmt::Display for UninitializedDiclOptimizationConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -52,10 +52,10 @@ impl std::fmt::Display for UninitializedDICLOptimizationConfig {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl UninitializedDICLOptimizationConfig {
+impl UninitializedDiclOptimizationConfig {
     // We allow too many arguments since it is a Python constructor
     /// NOTE: This signature currently does not work:
-    /// print(DICLConfig.__init__.__text_signature__)
+    /// print(DiclOptimizationConfig.__init__.__text_signature__)
     /// prints out signature:
     /// ($self, /, *args, **kwargs)
     #[new]
@@ -85,7 +85,7 @@ impl UninitializedDICLOptimizationConfig {
         })
     }
 
-    /// Initialize the DICLConfig. All parameters are optional except for `embedding_model`.
+    /// Initialize the DiclOptimizationConfig. All parameters are optional except for `embedding_model`.
     ///
     /// :param embedding_model: The embedding model to use.
     /// :param variant_name: The name to be used for the DICL variant.
@@ -106,9 +106,9 @@ impl UninitializedDICLOptimizationConfig {
     }
 }
 
-impl UninitializedDICLOptimizationConfig {
-    pub fn load(self) -> Result<DICLOptimizationConfig, Error> {
-        Ok(DICLOptimizationConfig {
+impl UninitializedDiclOptimizationConfig {
+    pub fn load(self) -> Result<DiclOptimizationConfig, Error> {
+        Ok(DiclOptimizationConfig {
             embedding_model: self.embedding_model,
             variant_name: self.variant_name,
             function_name: self.function_name,
@@ -128,7 +128,7 @@ impl UninitializedDICLOptimizationConfig {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-pub struct DICLOptimizationJobHandle {
+pub struct DiclOptimizationJobHandle {
     pub job_id: String,
     /// A url to a human-readable page for the job.
     pub job_url: Url,
@@ -137,15 +137,15 @@ pub struct DICLOptimizationJobHandle {
     pub credential_location: Option<CredentialLocation>,
 }
 
-impl std::fmt::Display for DICLOptimizationJobHandle {
+impl std::fmt::Display for DiclOptimizationJobHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
     }
 }
 
-impl Optimizer for DICLOptimizationConfig {
-    type Handle = DICLOptimizationJobHandle;
+impl Optimizer for DiclOptimizationConfig {
+    type Handle = DiclOptimizationJobHandle;
 
     async fn launch(
         &self,
@@ -164,7 +164,7 @@ impl Optimizer for DICLOptimizationConfig {
     }
 }
 
-impl JobHandle for DICLOptimizationJobHandle {
+impl JobHandle for DiclOptimizationJobHandle {
     async fn poll(
         &self,
         client: &reqwest::Client,
