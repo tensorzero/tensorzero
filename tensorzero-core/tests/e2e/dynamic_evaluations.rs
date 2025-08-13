@@ -11,7 +11,7 @@ use tensorzero::{
     DynamicEvaluationRunParams, FeedbackParams, InferenceOutput, Role,
 };
 use tensorzero_core::{
-    clickhouse::test_helpers::{
+    db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_dynamic_evaluation_run_clickhouse,
         select_dynamic_evaluation_run_episode_clickhouse,
     },

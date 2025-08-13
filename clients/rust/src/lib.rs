@@ -44,7 +44,7 @@ pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 
 pub use tensorzero_core::cache::CacheParamsOptions;
-pub use tensorzero_core::clickhouse::query_builder::{
+pub use tensorzero_core::db::clickhouse::query_builder::{
     BooleanMetricNode, FloatComparisonOperator, FloatMetricNode, InferenceFilterTreeNode,
     InferenceOutputSource, ListInferencesParams, TagComparisonOperator, TagNode,
     TimeComparisonOperator, TimeNode,
