@@ -11,4 +11,5 @@ dependencies = [
     "pandas",
     "tensorzero",
     "toml",
+    "dotenv"
 ]
