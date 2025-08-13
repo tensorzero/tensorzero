@@ -22,10 +22,9 @@ import {
   countInferencesByFunction,
   countEpisodes,
 } from "~/utils/clickhouse/inference.server";
-import { getAllFunctionConfigs } from "~/utils/config/index.server";
+import { getConfig, getAllFunctionConfigs } from "~/utils/config/index.server";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
-import { useConfig } from "~/context/config";
 import type { Route } from "./+types/index";
 import {
   countDynamicEvaluationProjects,
@@ -106,6 +105,7 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
 }
 
 export async function loader() {
+  // Create the promises
   const countsInfoPromise = countInferencesByFunction();
   const numEpisodesPromise = countEpisodes();
   const datasetCountsPromise = getDatasetCounts({});
@@ -113,57 +113,67 @@ export async function loader() {
   const numDynamicEvaluationRunsPromise = countDynamicEvaluationRuns();
   const numDynamicEvaluationRunProjectsPromise =
     countDynamicEvaluationProjects();
+  const configPromise = getConfig();
   const functionConfigsPromise = getAllFunctionConfigs();
 
-  const totalInferencesDescPromise = countsInfoPromise.then((countsInfo) => {
+  // Create derived promises - these will be stable references
+  const totalInferencesDesc = countsInfoPromise.then((countsInfo) => {
     const total = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
     return `${total.toLocaleString()} inferences`;
   });
 
-  const numFunctionsDescPromise = functionConfigsPromise.then(
-    (functionConfigs) => {
-      const numFunctions = Object.keys(functionConfigs).length;
-      return `${numFunctions} functions`;
-    },
-  );
+  const numFunctionsDesc = functionConfigsPromise.then((functionConfigs) => {
+    const numFunctions = Object.keys(functionConfigs).length;
+    return `${numFunctions} functions`;
+  });
 
-  const numVariantsDescPromise = functionConfigsPromise.then(
-    (functionConfigs) => {
-      const numVariants = Object.values(functionConfigs).reduce(
-        (acc, config) => {
-          return acc + (config ? Object.keys(config.variants || {}).length : 0);
-        },
-        0,
-      );
-      return `${numVariants} variants`;
-    },
-  );
+  const numVariantsDesc = functionConfigsPromise.then((functionConfigs) => {
+    const numVariants = Object.values(functionConfigs).reduce(
+      (acc, funcConfig) => {
+        return (
+          acc + (funcConfig ? Object.keys(funcConfig.variants || {}).length : 0)
+        );
+      },
+      0,
+    );
+    return `${numVariants} variants`;
+  });
 
-  const numEpisodesDescPromise = numEpisodesPromise.then(
+  const numEpisodesDesc = numEpisodesPromise.then(
     (numEpisodes) => `${numEpisodes.toLocaleString()} episodes`,
   );
 
-  const numDatasetsDescPromise = datasetCountsPromise.then(
+  const numDatasetsDesc = datasetCountsPromise.then(
     (datasetCounts) => `${datasetCounts.length} datasets`,
   );
 
-  const numEvaluationRunsDescPromise = numEvaluationRunsPromise.then(
+  const numEvaluationRunsDesc = numEvaluationRunsPromise.then(
     (runs) => `evaluations, ${runs} runs`,
   );
 
-  const dynamicEvaluationsDescPromise = Promise.all([
+  // We need to create a special promise for the static evaluations that includes the config count
+  const staticEvaluationsDesc = Promise.all([
+    configPromise,
+    numEvaluationRunsPromise,
+  ]).then(([config, runs]) => {
+    const numEvaluations = Object.keys(config.evaluations || {}).length;
+    return `${numEvaluations} evaluations, ${runs} runs`;
+  });
+
+  const dynamicEvaluationsDesc = Promise.all([
     numDynamicEvaluationRunProjectsPromise,
     numDynamicEvaluationRunsPromise,
   ]).then(([projects, runs]) => `${projects} projects, ${runs} runs`);
 
   return {
-    totalInferencesDesc: totalInferencesDescPromise,
-    numFunctionsDesc: numFunctionsDescPromise,
-    numVariantsDesc: numVariantsDescPromise,
-    numEpisodesDesc: numEpisodesDescPromise,
-    numDatasetsDesc: numDatasetsDescPromise,
-    numEvaluationRunsDesc: numEvaluationRunsDescPromise,
-    dynamicEvaluationsDesc: dynamicEvaluationsDescPromise,
+    totalInferencesDesc,
+    numFunctionsDesc,
+    numVariantsDesc,
+    numEpisodesDesc,
+    numDatasetsDesc,
+    numEvaluationRunsDesc,
+    staticEvaluationsDesc,
+    dynamicEvaluationsDesc,
   };
 }
 
@@ -174,11 +184,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     numVariantsDesc,
     numEpisodesDesc,
     numDatasetsDesc,
-    numEvaluationRunsDesc,
+    staticEvaluationsDesc,
     dynamicEvaluationsDesc,
   } = loaderData;
-  const config = useConfig();
-  const numEvaluations = Object.keys(config.evaluations).length;
 
   return (
     <PageLayout>
@@ -244,9 +252,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 source="/evaluations"
                 icon={GridCheck}
                 title="Static Evaluations"
-                description={numEvaluationRunsDesc.then(
-                  (runs) => `${numEvaluations} ${runs}`,
-                )}
+                description={staticEvaluationsDesc}
               />
               <DirectoryCard
                 source="/dynamic_evaluations"
