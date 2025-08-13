@@ -4,8 +4,19 @@ run-name: Merge Queue Checks for ${{ github.ref }}
 on:
   workflow_dispatch:
   merge_group:
+    types:
+      - checks_requested
+      - destroyed
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
+
+# This cancels old workflow runs when they get removed from the merge queue.
+# See https://github.com/orgs/community/discussions/137976#discussioncomment-14004793
+concurrency: 
+  # github.ref will be the same for the checks_requested and destroyed event.
+  # thus the destroyed event cancels out the checks_requested event
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

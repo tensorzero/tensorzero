@@ -3,8 +3,19 @@ run-name: "General Checks for: ${{ github.event.pull_request.title || github.ref
 
 on:
   merge_group:
+    types:
+      - checks_requested
+      - destroyed
   pull_request:
     branches: ["main"]
+
+# This cancels old workflow runs when they get removed from the merge queue.
+# See https://github.com/orgs/community/discussions/137976#discussioncomment-14004793
+concurrency: 
+  # github.ref will be the same for the checks_requested and destroyed event.
+  # thus the destroyed event cancels out the checks_requested event
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   FORCE_COLOR: 1
