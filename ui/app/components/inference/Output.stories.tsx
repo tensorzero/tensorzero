@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { withRouter } from "storybook-addon-remix-react-router";
 
 const meta = {
-  title: "NewOutput",
+  title: "Output",
   component: Output,
   decorators: [withRouter],
   render: (args) => (
@@ -231,5 +231,19 @@ export const JSONFunctionNotParsedWithoutSchema: Story = {
       raw: JSON.stringify(shortJSONOutputFixture).slice(0, -10), // imagine this JSON got truncated somehow
       parsed: null,
     },
+  },
+};
+
+export const ChatFunctionWithThinking: Story = {
+  args: {
+    output: [
+      {
+        type: "thought",
+        text: "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.",
+        signature: null,
+        _internal_provider_type: null,
+      },
+      { type: "text", text: "Hello, world!" },
+    ],
   },
 };
