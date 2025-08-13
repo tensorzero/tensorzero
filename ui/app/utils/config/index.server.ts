@@ -51,7 +51,7 @@ const defaultFunctionConfig: FunctionConfig = {
   tool_choice: "auto",
   parallel_tool_calls: null,
   description:
-    'This is the config for the default function built into TensorZero. You can call this function by setting model_name="openai::gpt-5", for example. There are no variants configured because they are dynamically determined at runtime based on the model being called.',
+    "This is the default function for TensorZero. This function is used when you call a model directly without specifying a function name. It has no variants preconfigured because they are generated dynamically at inference time based on the model being called.",
 };
 
 export async function getConfig() {
