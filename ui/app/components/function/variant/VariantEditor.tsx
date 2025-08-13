@@ -33,9 +33,9 @@ export function VariantEditor({
 
   // Which templates existed when we opened?
   const initialHas = useRef({
-    system: !!config?.system_template,
-    user: !!config?.user_template,
-    assistant: !!config?.assistant_template,
+    system: !!config?.templates.system?.template,
+    user: !!config?.templates.user?.template,
+    assistant: !!config?.templates.assistant?.template,
   });
 
   if (variantInfo.inner.type !== "chat_completion" || !config) {
@@ -124,7 +124,7 @@ export function VariantEditor({
                 <Label>System Template</Label>
                 {initialHas.current.system ? (
                   <CodeEditor
-                    value={editedConfig?.system_template?.contents ?? ""}
+                    value={editedConfig?.templates.system?.template?.contents ?? ""}
                     allowedLanguages={["jinja2", "text"]}
                     onChange={(value) => updateTemplate("system", value)}
                     className="min-h-[200px]"
@@ -142,7 +142,7 @@ export function VariantEditor({
                 <Label>User Template</Label>
                 {initialHas.current.user ? (
                   <CodeEditor
-                    value={editedConfig?.user_template?.contents ?? ""}
+                    value={editedConfig?.templates.user?.template?.contents ?? ""}
                     allowedLanguages={["jinja2", "text"]}
                     onChange={(value) => updateTemplate("user", value)}
                     className="min-h-[200px]"
@@ -160,7 +160,7 @@ export function VariantEditor({
                 <Label>Assistant Template</Label>
                 {initialHas.current.assistant ? (
                   <CodeEditor
-                    value={editedConfig?.assistant_template?.contents ?? ""}
+                    value={editedConfig?.templates.assistant?.template?.contents ?? ""}
                     allowedLanguages={["jinja2", "text"]}
                     onChange={(value) => updateTemplate("assistant", value)}
                     className="min-h-[200px]"

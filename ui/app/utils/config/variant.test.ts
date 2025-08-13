@@ -9,12 +9,17 @@ describe("create_dump_variant_config", () => {
       weight: 1,
       model: "old-model",
       json_mode: "strict" as const,
-      system_template: {
-        path: "/templates/system.j2",
-        contents: "This content should not appear in output",
+      templates: {
+        system: {
+          template: {
+            path: "/templates/system.j2",
+            contents: "This content should not appear in output",
+          },
+          schema: null,
+        },
+        user: null,
+        assistant: null,
       },
-      user_template: null,
-      assistant_template: null,
       temperature: 0.5,
       top_p: 0.5,
       max_tokens: 100,
@@ -44,17 +49,28 @@ describe("create_dump_variant_config", () => {
       weight: 1,
       model: "old-model",
       json_mode: "strict" as const,
-      system_template: {
-        path: "/templates/system.j2",
-        contents: "This content should not appear in output",
-      },
-      user_template: {
-        path: "/templates/user.j2",
-        contents: "This content should not appear in output",
-      },
-      assistant_template: {
-        path: "/templates/assistant.j2",
-        contents: "This content should not appear in output",
+      templates: {
+        system: {
+          template: {
+            path: "/templates/system.j2",
+            contents: "This content should not appear in output",
+          },
+          schema: null,
+        },
+        user: {
+          template: {
+            path: "/templates/user.j2",
+            contents: "This content should not appear in output",
+          },
+          schema: null,
+        },
+        assistant: {
+          template: {
+            path: "/templates/assistant.j2",
+            contents: "This content should not appear in output",
+          },
+          schema: null,
+        },
       },
       temperature: 0.5,
       top_p: 0.5,

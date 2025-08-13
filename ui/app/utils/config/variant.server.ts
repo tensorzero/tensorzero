@@ -12,17 +12,17 @@ export function create_dump_variant_config(
     weight: 0,
     model: model_name,
     system_template:
-      typeof oldVariant.system_template === "string"
-        ? oldVariant.system_template
-        : oldVariant.system_template?.path,
+      typeof oldVariant.templates.system?.template === "string"
+        ? oldVariant.templates.system?.template
+        : oldVariant.templates.system?.template?.path,
     user_template:
-      typeof oldVariant.user_template === "string"
-        ? oldVariant.user_template
-        : oldVariant.user_template?.path,
+      typeof oldVariant.templates.user?.template === "string"
+        ? oldVariant.templates.user?.template
+        : oldVariant.templates.user?.template?.path,
     assistant_template:
-      typeof oldVariant.assistant_template === "string"
-        ? oldVariant.assistant_template
-        : oldVariant.assistant_template?.path,
+      typeof oldVariant.templates.assistant?.template === "string"
+        ? oldVariant.templates.assistant?.template
+        : oldVariant.templates.assistant?.template?.path,
   };
 
   const fullNewVariantConfig = {
