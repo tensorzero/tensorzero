@@ -1,6 +1,7 @@
 use crate::common::OptimizationTestCase;
 use tensorzero_core::optimization::{
-    dicl::UninitializedDICLConfig, UninitializedOptimizerConfig, UninitializedOptimizerInfo,
+    dicl::UninitializedDICLOptimizationConfig, UninitializedOptimizerConfig,
+    UninitializedOptimizerInfo,
 };
 
 pub struct DICLTestCase();
@@ -16,7 +17,7 @@ impl OptimizationTestCase for DICLTestCase {
 
     fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
         UninitializedOptimizerInfo {
-            inner: UninitializedOptimizerConfig::Dicl(UninitializedDICLConfig {
+            inner: UninitializedOptimizerConfig::Dicl(UninitializedDICLOptimizationConfig {
                 // This is the only model that supports images
                 embedding_model: "text-embedding-3-small".to_string(),
                 variant_name: "test".to_string(),
