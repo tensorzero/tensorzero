@@ -1125,13 +1125,6 @@ mod tests {
         println!("- Model: {}", provider.model_name());
         println!("- API Base: {}", provider.api_base);
 
-        // TODO: Add actual API call test here when your provider interface is ready
-        // Example structure:
-        // let request = ModelInferenceRequest { ... };
-        // let response = provider.infer(request, &http_client, &credentials, &model_provider).await;
-        // assert!(response.is_ok());
-
-        // For now, just verify provider is configured correctly
         assert_eq!(provider.model_name(), "meta/llama-3.1-8b-instruct");
         assert_eq!(provider.api_base.as_str(), "https://integrate.api.nvidia.com/v1/");
     }
@@ -1157,9 +1150,6 @@ mod tests {
 
             assert_eq!(provider.model_name(), model);
 
-            // TODO: Add actual API test calls here
-            // let response = provider.simple_completion("Test").await;
-            // assert!(response.is_ok(), "API call failed for model: {}", model);
         }
     }
 
@@ -1175,11 +1165,6 @@ mod tests {
             None,
             Some(CredentialLocation::Env("NVIDIA_API_KEY".to_string())),
         ).expect("Failed to create provider");
-
-        // TODO: Test actual API call with invalid model
-        // let response = provider.chat_completion(invalid_request).await;
-        // assert!(response.is_err());
-        // Verify error message contains expected information
 
         println!("Provider created for error handling test with invalid model");
     }
@@ -1201,7 +1186,7 @@ mod tests {
 
         assert_eq!(provider.api_base.as_str(), "http://localhost:8000/v1/");
 
-        // TODO: Add actual API test if you have a self-hosted endpoint
+
         println!("Provider configured for custom endpoint test");
     }
 }
