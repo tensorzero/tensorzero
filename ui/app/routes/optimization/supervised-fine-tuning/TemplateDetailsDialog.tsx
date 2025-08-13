@@ -41,7 +41,8 @@ export function TemplateDetailsDialog({
                       <h4 className="leading-none font-medium">
                         System Template
                       </h4>
-                      {chatCompletionVariants[variant]?.templates.system?.template ? (
+                      {chatCompletionVariants[variant]?.templates.system
+                        ?.template ? (
                         <Textarea
                           readOnly
                           value={
@@ -61,7 +62,8 @@ export function TemplateDetailsDialog({
                       <h4 className="leading-none font-medium">
                         User Template
                       </h4>
-                      {chatCompletionVariants[variant]?.templates.user?.template ? (
+                      {chatCompletionVariants[variant]?.templates.user
+                        ?.template ? (
                         <Textarea
                           readOnly
                           value={
@@ -83,7 +85,8 @@ export function TemplateDetailsDialog({
                   <h4 className="leading-none font-medium">
                     Assistant Template
                   </h4>
-                  {chatCompletionVariants[variant]?.templates.assistant?.template ? (
+                  {chatCompletionVariants[variant]?.templates.assistant
+                    ?.template ? (
                     <Textarea
                       readOnly
                       value={

@@ -124,7 +124,9 @@ export function VariantEditor({
                 <Label>System Template</Label>
                 {initialHas.current.system ? (
                   <CodeEditor
-                    value={editedConfig?.templates.system?.template?.contents ?? ""}
+                    value={
+                      editedConfig?.templates.system?.template?.contents ?? ""
+                    }
                     allowedLanguages={["jinja2", "text"]}
                     onChange={(value) => updateTemplate("system", value)}
                     className="min-h-[200px]"
@@ -142,7 +144,9 @@ export function VariantEditor({
                 <Label>User Template</Label>
                 {initialHas.current.user ? (
                   <CodeEditor
-                    value={editedConfig?.templates.user?.template?.contents ?? ""}
+                    value={
+                      editedConfig?.templates.user?.template?.contents ?? ""
+                    }
                     allowedLanguages={["jinja2", "text"]}
                     onChange={(value) => updateTemplate("user", value)}
                     className="min-h-[200px]"
@@ -160,7 +164,10 @@ export function VariantEditor({
                 <Label>Assistant Template</Label>
                 {initialHas.current.assistant ? (
                   <CodeEditor
-                    value={editedConfig?.templates.assistant?.template?.contents ?? ""}
+                    value={
+                      editedConfig?.templates.assistant?.template?.contents ??
+                      ""
+                    }
                     allowedLanguages={["jinja2", "text"]}
                     onChange={(value) => updateTemplate("assistant", value)}
                     className="min-h-[200px]"
