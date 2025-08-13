@@ -68,10 +68,7 @@ impl std::fmt::Display for TogetherSFTJobHandle {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
-#[cfg_attr(
-    feature = "pyo3",
-    pyclass(str, name = "UninitializedTogetherSFTConfig")
-)]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "TogetherSFTConfig"))]
 pub struct UninitializedTogetherSFTConfig {
     pub model: String,
     #[cfg_attr(test, ts(type = "string | null"))]
