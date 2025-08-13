@@ -1,4 +1,5 @@
-import { Link, type RouteHandle } from "react-router";
+import { Link, type RouteHandle, Await } from "react-router";
+import * as React from "react";
 import { Card } from "~/components/ui/card";
 import { PageLayout } from "~/components/layout/PageLayout";
 import {
@@ -39,7 +40,7 @@ interface DirectoryCardProps {
   source: string;
   icon: React.ComponentType<{ className?: string; size?: number }>;
   title: string;
-  description: string;
+  description: string | Promise<string>;
 }
 
 function DirectoryCard({
@@ -62,7 +63,19 @@ function DirectoryCard({
             {title}
           </h3>
           <p className="text-fg-secondary overflow-hidden text-xs text-ellipsis whitespace-nowrap">
-            {description}
+            {typeof description === "string" ? (
+              description
+            ) : (
+              <React.Suspense
+                fallback={
+                  <span className="bg-bg-tertiary inline-block h-3 w-16 animate-pulse rounded"></span>
+                }
+              >
+                <Await resolve={description}>
+                  {(resolvedDescription) => resolvedDescription}
+                </Await>
+              </React.Suspense>
+            )}
           </p>
         </div>
       </Card>
@@ -93,52 +106,76 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
 }
 
 export async function loader() {
-  const [
-    countsInfo,
-    numEpisodes,
-    datasetCounts,
-    numEvaluationRuns,
-    numDynamicEvaluationRuns,
-    numDynamicEvaluationRunProjects,
-    functionConfigs,
-  ] = await Promise.all([
-    countInferencesByFunction(),
-    countEpisodes(),
-    getDatasetCounts({}),
-    countTotalEvaluationRuns(),
-    countDynamicEvaluationRuns(),
-    countDynamicEvaluationProjects(),
-    getAllFunctionConfigs(),
-  ]);
-  const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
-  const numFunctions = Object.keys(functionConfigs).length;
-  const numVariants = Object.values(functionConfigs).reduce((acc, config) => {
-    return acc + (config ? Object.keys(config.variants || {}).length : 0);
-  }, 0);
-  const numDatasets = datasetCounts.length;
+  const countsInfoPromise = countInferencesByFunction();
+  const numEpisodesPromise = countEpisodes();
+  const datasetCountsPromise = getDatasetCounts({});
+  const numEvaluationRunsPromise = countTotalEvaluationRuns();
+  const numDynamicEvaluationRunsPromise = countDynamicEvaluationRuns();
+  const numDynamicEvaluationRunProjectsPromise =
+    countDynamicEvaluationProjects();
+  const functionConfigsPromise = getAllFunctionConfigs();
+
+  const totalInferencesDescPromise = countsInfoPromise.then((countsInfo) => {
+    const total = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
+    return `${total.toLocaleString()} inferences`;
+  });
+
+  const numFunctionsDescPromise = functionConfigsPromise.then(
+    (functionConfigs) => {
+      const numFunctions = Object.keys(functionConfigs).length;
+      return `${numFunctions} functions`;
+    },
+  );
+
+  const numVariantsDescPromise = functionConfigsPromise.then(
+    (functionConfigs) => {
+      const numVariants = Object.values(functionConfigs).reduce(
+        (acc, config) => {
+          return acc + (config ? Object.keys(config.variants || {}).length : 0);
+        },
+        0,
+      );
+      return `${numVariants} variants`;
+    },
+  );
+
+  const numEpisodesDescPromise = numEpisodesPromise.then(
+    (numEpisodes) => `${numEpisodes.toLocaleString()} episodes`,
+  );
+
+  const numDatasetsDescPromise = datasetCountsPromise.then(
+    (datasetCounts) => `${datasetCounts.length} datasets`,
+  );
+
+  const numEvaluationRunsDescPromise = numEvaluationRunsPromise.then(
+    (runs) => `evaluations, ${runs} runs`,
+  );
+
+  const dynamicEvaluationsDescPromise = Promise.all([
+    numDynamicEvaluationRunProjectsPromise,
+    numDynamicEvaluationRunsPromise,
+  ]).then(([projects, runs]) => `${projects} projects, ${runs} runs`);
 
   return {
-    totalInferences,
-    numFunctions,
-    numVariants,
-    numEpisodes,
-    numDatasets,
-    numEvaluationRuns,
-    numDynamicEvaluationRuns,
-    numDynamicEvaluationRunProjects,
+    totalInferencesDesc: totalInferencesDescPromise,
+    numFunctionsDesc: numFunctionsDescPromise,
+    numVariantsDesc: numVariantsDescPromise,
+    numEpisodesDesc: numEpisodesDescPromise,
+    numDatasetsDesc: numDatasetsDescPromise,
+    numEvaluationRunsDesc: numEvaluationRunsDescPromise,
+    dynamicEvaluationsDesc: dynamicEvaluationsDescPromise,
   };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
   const {
-    totalInferences,
-    numFunctions,
-    numVariants,
-    numEpisodes,
-    numDatasets,
-    numEvaluationRuns,
-    numDynamicEvaluationRuns,
-    numDynamicEvaluationRunProjects,
+    totalInferencesDesc,
+    numFunctionsDesc,
+    numVariantsDesc,
+    numEpisodesDesc,
+    numDatasetsDesc,
+    numEvaluationRunsDesc,
+    dynamicEvaluationsDesc,
   } = loaderData;
   const config = useConfig();
   const numEvaluations = Object.keys(config.evaluations).length;
@@ -157,19 +194,19 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 source="/observability/inferences"
                 icon={Inferences}
                 title="Inferences"
-                description={`${totalInferences.toLocaleString()} inferences`}
+                description={totalInferencesDesc}
               />
               <DirectoryCard
                 source="/observability/episodes"
                 icon={Episodes}
                 title="Episodes"
-                description={`${numEpisodes.toLocaleString()} episodes`}
+                description={numEpisodesDesc}
               />
               <DirectoryCard
                 source="/observability/functions"
                 icon={Functions}
                 title="Functions"
-                description={`${numFunctions} functions`}
+                description={numFunctionsDesc}
               />
             </div>
           </div>
@@ -183,7 +220,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 source="/optimization/supervised-fine-tuning"
                 icon={SupervisedFineTuning}
                 title="Supervised Fine-tuning"
-                description={`${numFunctions} functions`}
+                description={numFunctionsDesc}
               />
             </div>
           </div>
@@ -195,25 +232,27 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 source="/playground"
                 icon={Playground}
                 title="Playground"
-                description={`${numVariants} variants`}
+                description={numVariantsDesc}
               />
               <DirectoryCard
                 source="/datasets"
                 icon={Dataset}
                 title="Datasets"
-                description={`${numDatasets} datasets`}
+                description={numDatasetsDesc}
               />
               <DirectoryCard
                 source="/evaluations"
                 icon={GridCheck}
                 title="Static Evaluations"
-                description={`${numEvaluations} evaluations, ${numEvaluationRuns} runs`}
+                description={numEvaluationRunsDesc.then(
+                  (runs) => `${numEvaluations} ${runs}`,
+                )}
               />
               <DirectoryCard
                 source="/dynamic_evaluations"
                 icon={SequenceChecks}
                 title="Dynamic Evaluations"
-                description={`${numDynamicEvaluationRunProjects} projects, ${numDynamicEvaluationRuns} runs`}
+                description={dynamicEvaluationsDesc}
               />
             </div>
           </div>
