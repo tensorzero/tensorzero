@@ -58,10 +58,14 @@ export function VariantEditor({
       const hadInitially = initialHas.current[type];
       if (hadInitially) {
         // Keep an object even when empty so the editor stays visible/editable.
-        const prevPath = prev.templates[key]?.template?.path || "";
+        const prevTemplate = prev.templates[key];
+        const templates = {
+          ...prev.templates,
+          [key]: { ...prevTemplate, template: { contents, path: prevTemplate?.template.path } },
+        };
         return {
           ...prev,
-          [key]: { contents, path: prevPath },
+          templates,
         };
       } else {
         // Don't allow adding a new template if it's not initially present.
