@@ -1,10 +1,10 @@
 //! OpenAI-compatible API endpoint implementation.
-//! 
+//!
 //! This module provides compatibility with the OpenAI Chat Completions API format,
 //! translating between OpenAI's request/response format and our internal types.
 //! It implements request handling, parameter conversion, and response formatting
 //! to match OpenAI's API specification.
-//! 
+//!
 //! We convert the request into our internal types, call `endpoints::inference::inference` to perform the actual inference,
 //! and then convert the response into the OpenAI-compatible format.
 
@@ -23,7 +23,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio_stream::StreamExt;
 use url::Url;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::cache::CacheParamsOptions;
@@ -54,16 +53,6 @@ use super::inference::{
 use crate::embeddings::EmbeddingEncodingFormat;
 
 /// A handler for the OpenAI-compatible inference endpoint
-#[utoipa::path(
-    post,
-    path = "/openai/v1/chat/completions",
-    request_body = OpenAICompatibleParams,
-    responses(
-        (status = 200, description = "Success", body = OpenAICompatibleResponse),
-        (status = 400, description = "Bad request"),
-        (status = 500, description = "Internal server error")
-    )
-)]
 #[debug_handler(state = AppStateData)]
 pub async fn inference_handler(
     State(AppStateData {
@@ -139,7 +128,7 @@ pub async fn inference_handler(
     }
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct OpenAICompatibleEmbeddingParams {
     input: EmbeddingInput,
     model: String,
@@ -161,7 +150,7 @@ impl From<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
         }
     }
 }
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
 #[serde(tag = "object", rename_all = "lowercase")]
 pub enum OpenAIEmbeddingResponse {
     List {
@@ -171,13 +160,13 @@ pub enum OpenAIEmbeddingResponse {
     },
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
 #[serde(tag = "object", rename_all = "lowercase")]
 pub enum OpenAIEmbedding {
     Embedding { embedding: Embedding, index: usize },
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
 pub struct OpenAIEmbeddingUsage {
     prompt_tokens: u32,
     total_tokens: u32,
@@ -204,16 +193,6 @@ impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
     }
 }
 
-#[utoipa::path(
-    post,
-    path = "/openai/v1/embeddings",
-    request_body = OpenAICompatibleEmbeddingParams,
-    responses(
-        (status = 200, description = "Success", body = OpenAIEmbeddingResponse),
-        (status = 400, description = "Bad request"),
-        (status = 500, description = "Internal server error")
-    )
-)]
 pub async fn embeddings_handler(
     State(AppStateData {
         config,
@@ -227,19 +206,19 @@ pub async fn embeddings_handler(
     Ok(Json(response.into()))
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OpenAICompatibleFunctionCall {
     pub name: String,
     pub arguments: String,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OpenAICompatibleToolCallDelta {
     pub name: String,
     pub arguments: String,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OpenAICompatibleToolCall {
     /// The ID of the tool call.
     pub id: String,
@@ -249,7 +228,7 @@ pub struct OpenAICompatibleToolCall {
     pub function: OpenAICompatibleFunctionCall,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OpenAICompatibleToolCallChunk {
     /// The ID of the tool call.
     pub id: Option<String>,
@@ -261,32 +240,32 @@ pub struct OpenAICompatibleToolCallChunk {
     pub function: OpenAICompatibleToolCallDelta,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, ToSchema)]
-pub struct OpenAICompatibleSystemMessage {
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct OpenAICompatibleSystemMessage {
     content: Value,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, ToSchema)]
-pub struct OpenAICompatibleUserMessage {
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct OpenAICompatibleUserMessage {
     content: Value,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, ToSchema)]
-pub struct OpenAICompatibleAssistantMessage {
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct OpenAICompatibleAssistantMessage {
     content: Option<Value>,
     tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, ToSchema)]
-pub struct OpenAICompatibleToolMessage {
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct OpenAICompatibleToolMessage {
     content: Option<Value>,
     tool_call_id: String,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "role")]
 #[serde(rename_all = "lowercase")]
-pub enum OpenAICompatibleMessage {
+enum OpenAICompatibleMessage {
     #[serde(alias = "developer")]
     System(OpenAICompatibleSystemMessage),
     User(OpenAICompatibleUserMessage),
@@ -294,24 +273,24 @@ pub enum OpenAICompatibleMessage {
     Tool(OpenAICompatibleToolMessage),
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-pub enum OpenAICompatibleResponseFormat {
+enum OpenAICompatibleResponseFormat {
     Text,
     JsonSchema { json_schema: JsonSchemaInfoOption },
     JsonObject,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(untagged)]
-pub enum JsonSchemaInfoOption {
+enum JsonSchemaInfoOption {
     JsonSchema(JsonSchemaInfo),
     DeprecatedJsonSchema(Value),
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, ToSchema)]
-pub struct JsonSchemaInfo {
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct JsonSchemaInfo {
     name: String,
     description: Option<String>,
     schema: Option<Value>,
@@ -319,10 +298,10 @@ pub struct JsonSchemaInfo {
     strict: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", content = "function")]
 #[serde(rename_all = "snake_case")]
-pub enum OpenAICompatibleTool {
+enum OpenAICompatibleTool {
     Function {
         description: Option<String>,
         name: String,
@@ -332,14 +311,14 @@ pub enum OpenAICompatibleTool {
     },
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, ToSchema)]
-pub struct FunctionName {
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct FunctionName {
     name: String,
 }
 
 /// Specifies a tool the model should use. Use to force the model to call a specific function.
-#[derive(Clone, Debug, Deserialize, PartialEq, ToSchema)]
-pub struct OpenAICompatibleNamedToolChoice {
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct OpenAICompatibleNamedToolChoice {
     /// The type of the tool. Currently, only `function` is supported.
     r#type: String,
     function: FunctionName,
@@ -350,11 +329,11 @@ pub struct OpenAICompatibleNamedToolChoice {
 /// `auto` means the model can pick between generating a message or calling one or more tools.
 /// `required` means the model must call one or more tools.
 /// Specifying a particular tool via `{"type": "function", "function": {"name": "my_function"}}` forces the model to call that tool.
-/// 
+///
 /// `none` is the default when no tools are present. `auto` is the default if tools are present.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
-pub enum ChatCompletionToolChoiceOption {
+enum ChatCompletionToolChoiceOption {
     #[default]
     None,
     Auto,
@@ -363,13 +342,13 @@ pub enum ChatCompletionToolChoiceOption {
     Named(OpenAICompatibleNamedToolChoice),
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, ToSchema)]
-pub struct OpenAICompatibleStreamOptions {
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+struct OpenAICompatibleStreamOptions {
     #[serde(default)]
     include_usage: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct OpenAICompatibleParams {
     messages: Vec<OpenAICompatibleMessage>,
     model: String,
@@ -411,30 +390,30 @@ pub struct OpenAICompatibleParams {
     unknown_fields: HashMap<String, Value>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
-pub struct OpenAICompatibleUsage {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct OpenAICompatibleUsage {
     prompt_tokens: u32,
     completion_tokens: u32,
     total_tokens: u32,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
-pub struct OpenAICompatibleResponseMessage {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct OpenAICompatibleResponseMessage {
     content: Option<String>,
     tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
     role: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
-pub struct OpenAICompatibleChoice {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct OpenAICompatibleChoice {
     index: u32,
     finish_reason: OpenAICompatibleFinishReason,
     message: OpenAICompatibleResponseMessage,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum OpenAICompatibleFinishReason {
+enum OpenAICompatibleFinishReason {
     Stop,
     Length,
     ContentFilter,
@@ -455,8 +434,8 @@ impl From<FinishReason> for OpenAICompatibleFinishReason {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
-pub struct OpenAICompatibleResponse {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct OpenAICompatibleResponse {
     id: String,
     episode_id: String,
     choices: Vec<OpenAICompatibleChoice>,
@@ -525,18 +504,18 @@ impl Params {
             .map(|h| {
                 tracing::warn!("Deprecation Warning: Please use the `tensorzero::episode_id` field instead of the `episode_id` header. The header will be removed in a future release.");
                 h.to_str()
-                    .map_err(|_|
+                    .map_err(|_| {
                         Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                             message: "episode_id header is not valid UTF-8".to_string(),
                         })
-                    )
+                    })
                     .and_then(|s| {
-                        Uuid::parse_str(s).map_err(|_|
+                        Uuid::parse_str(s).map_err(|_| {
                             Error::new(ErrorDetails::InvalidTensorzeroUuid {
                                 kind: "Episode".to_string(),
                                 message: "episode_id header is not a valid UUID".to_string(),
                             })
-                        )
+                        })
                     })
             })
             .transpose()?;
@@ -580,11 +559,11 @@ impl Params {
             .map(|h| {
                 tracing::warn!("Deprecation Warning: Please use the `tensorzero::variant_name` field instead of the `variant_name` header. The header will be removed in a future release.");
                 h.to_str()
-                    .map_err(|_|
+                    .map_err(|_| {
                         Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                             message: "variant_name header is not valid UTF-8".to_string(),
                         })
-                    )
+                    })
                     .map(str::to_string)
             })
             .transpose()?;
@@ -593,17 +572,17 @@ impl Params {
             .map(|h| {
                 tracing::warn!("Deprecation Warning: Please use the `tensorzero::dryrun` field instead of the `dryrun` header. The header will be removed in a future release.");
                 h.to_str()
-                    .map_err(|_|
+                    .map_err(|_| {
                         Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                             message: "dryrun header is not valid UTF-8".to_string(),
                         })
-                    )
+                    })
                     .and_then(|s| {
-                        s.parse::<bool>().map_err(|_|
+                        s.parse::<bool>().map_err(|_| {
                             Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                                 message: "dryrun header is not a valid boolean".to_string(),
                             })
-                        )
+                        })
                     })
             })
             .transpose()?;
@@ -772,9 +751,9 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
     }
 }
 
-#[derive(Deserialize, Debug, ToSchema)]
+#[derive(Deserialize, Debug)]
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
-pub enum OpenAICompatibleContentBlock {
+enum OpenAICompatibleContentBlock {
     Text(TextContent),
     ImageUrl {
         image_url: OpenAICompatibleImageUrl,
@@ -788,26 +767,26 @@ pub enum OpenAICompatibleContentBlock {
     },
 }
 
-#[derive(Deserialize, Debug, ToSchema)]
+#[derive(Deserialize, Debug)]
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
-pub struct OpenAICompatibleImageUrl {
+struct OpenAICompatibleImageUrl {
     url: Url,
 }
 
-#[derive(Deserialize, Debug, ToSchema)]
-pub struct OpenAICompatibleFile {
+#[derive(Deserialize, Debug)]
+struct OpenAICompatibleFile {
     file_data: String,
     filename: String,
     // OpenAI supports file_id with their files API
     // We do not so we require these two fields
 }
 
-#[derive(Debug, ToSchema)]
+#[derive(Debug)]
 // Two mutually exclusive modes - the standard OpenAI text, and our special TensorZero mode
 pub enum TextContent {
     /// A normal openai text content block: `{"type": "text", "text": "Some content"}`. The `type` key comes from the parent `OpenAICompatibleContentBlock`
     Text { text: String },
-    /// A special TensorZero mode: `{"type": "text", "tensorzero::arguments": {"custom_key": "custom_val"}}`. 
+    /// A special TensorZero mode: `{"type": "text", "tensorzero::arguments": {"custom_key": "custom_val"}}`.
     TensorZeroArguments {
         tensorzero_arguments: Map<String, Value>,
     },
@@ -856,11 +835,11 @@ fn parse_base64_image_data_url(url: &str) -> Result<(MediaType, &str), Error> {
             message: "Image data URL must contain a base64-encoded data part".to_string(),
         }));
     };
-    let image_type: MediaType = mime_type.parse().map_err(|_|
+    let image_type: MediaType = mime_type.parse().map_err(|_| {
         Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
             message: format!("Unknown content type `{mime_type}`"),
         })
-    )?;
+    })?;
     Ok((image_type, data))
 }
 
@@ -1080,7 +1059,7 @@ impl From<Usage> for OpenAICompatibleUsage {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OpenAICompatibleResponseChunk {
     id: String,
     episode_id: String,
@@ -1093,20 +1072,19 @@ pub struct OpenAICompatibleResponseChunk {
     usage: Option<OpenAICompatibleUsage>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OpenAICompatibleChoiceChunk {
     index: u32,
     finish_reason: Option<OpenAICompatibleFinishReason>,
-    logprobs: Option<()>, // This is always set to None for now
+    logprobs: Option<()>,
     delta: OpenAICompatibleDelta,
 }
 
 fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
-    // if it’s None → skip, or if the Vec is empty → skip
     v.as_ref().is_none_or(Vec::is_empty)
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OpenAICompatibleDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
@@ -1139,7 +1117,6 @@ fn convert_inference_response_chunk_to_openai_compatible(
                 model: format!("{response_model_prefix}{}", c.variant_name),
                 system_fingerprint: String::new(),
                 object: "chat.completion.chunk".to_string(),
-                // We emit a single chunk containing 'usage' at the end of the stream
                 usage: None,
             }
         }
@@ -1160,7 +1137,6 @@ fn convert_inference_response_chunk_to_openai_compatible(
             model: format!("{response_model_prefix}{}", c.variant_name),
             system_fingerprint: String::new(),
             object: "chat.completion.chunk".to_string(),
-            // We emit a single chunk containing 'usage' at the end of the stream
             usage: None,
         },
     };
@@ -1195,8 +1171,6 @@ fn process_chat_content_chunk(
                 });
             }
             ContentBlockChunk::Thought(_thought) => {
-                // OpenAI compatible endpoint does not support thought blocks
-                // Users of this endpoint will need to check observability to see them
                 tracing::warn!(
                     "Ignoring 'thought' content block chunk when constructing OpenAI-compatible response"
                 );
@@ -1225,8 +1199,6 @@ fn prepare_serialized_openai_compatible_events(
         let mut episode_id = None;
         let mut variant_name = None;
         while let Some(chunk) = stream.next().await {
-            // NOTE - in the future, we may want to end the stream early if we get an error
-            // For now, we just ignore the error and try to get more chunks
             let Ok(chunk) = chunk else {
                 continue;
             };
@@ -1254,7 +1226,6 @@ fn prepare_serialized_openai_compatible_events(
                     })
                 })?;
                 if is_first_chunk {
-                    // OpenAI includes "assistant" role in the first chunk but not in the subsequent chunks
                     chunk_json["choices"][0]["delta"]["role"] = Value::String("assistant".to_string());
                     is_first_chunk = false;
                 }
@@ -1405,7 +1376,6 @@ mod tests {
                 text: "Hello, world!".to_string(),
             })
         );
-        // Now try a system message and a user message
         let messages = vec![
             OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
                 content: Value::String("You are a helpful assistant".to_string()),
@@ -1421,7 +1391,6 @@ mod tests {
             input.system,
             Some(Value::String("You are a helpful assistant".to_string()))
         );
-        // Now try some messages with structured content
         let messages = vec![
             OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
                 content: Value::String("You are a helpful assistant".to_string()),
@@ -1442,7 +1411,6 @@ mod tests {
             }
         );
 
-        // Try 2 system messages
         let messages = vec![
             OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
                 content: Value::String("You are a helpful assistant 1.".to_string()),
@@ -1458,7 +1426,6 @@ mod tests {
         );
         assert_eq!(input.messages.len(), 0);
 
-        // Try an assistant message with structured content
         let messages = vec![OpenAICompatibleMessage::Assistant(
             OpenAICompatibleAssistantMessage {
                 content: Some(json!([
@@ -1486,7 +1453,6 @@ mod tests {
             })
         );
 
-        // Try an assistant message with text and tool calls
         let messages = vec![OpenAICompatibleMessage::Assistant(
             OpenAICompatibleAssistantMessage {
                 content: Some(Value::String("Hello, world!".to_string())),
@@ -1549,14 +1515,12 @@ mod tests {
 
     #[test]
     fn test_convert_openai_message_content() {
-        // text content
         let content = "Hello, world!".to_string();
         let value = convert_openai_message_content(Value::String(content.clone())).unwrap();
         assert_eq!(
             value,
             vec![InputMessageContent::Text(TextKind::Text { text: content })]
         );
-        // tensorzero::raw_text
         let content = json!([
             {
                 "type": "tensorzero::raw_text",
@@ -1570,7 +1534,6 @@ mod tests {
                 value: "This is raw text".to_string()
             }]
         );
-        // tensorzero::arguments
         let content = json!([
             {
                 "country": "Japan",
@@ -1825,7 +1788,6 @@ mod tests {
     fn test_cache_options() {
         let headers = HeaderMap::new();
 
-        // Test default cache options (should be write-only)
         let params = Params::try_from_openai(
             headers.clone(),
             OpenAICompatibleParams {
@@ -1863,7 +1825,6 @@ mod tests {
         .unwrap();
         assert_eq!(params.cache_options, CacheParamsOptions::default());
 
-        // Test explicit cache options
         let params = Params::try_from_openai(
             headers.clone(),
             OpenAICompatibleParams {
@@ -1910,7 +1871,6 @@ mod tests {
             }
         );
 
-        // Test interaction with dryrun
         let params = Params::try_from_openai(
             headers.clone(),
             OpenAICompatibleParams {
@@ -1957,7 +1917,6 @@ mod tests {
             }
         );
 
-        // Test write-only with dryrun (should become Off)
         let params = Params::try_from_openai(
             headers,
             OpenAICompatibleParams {
