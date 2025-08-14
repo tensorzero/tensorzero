@@ -22,7 +22,7 @@ on:
 
 jobs:
   ui-tests-e2e:
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: ${{ inputs.regen_cache && 'namespace-profile-tensorzero-8x16' || 'ubuntu-latest' }}
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
     # For now, it just runs in the merge queue and on prs from the main repo
@@ -48,17 +48,11 @@ jobs:
       - name: Setup Playwright
         run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
 
-      - name: Cache `s3-fixtures`
-        uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
-        with:
-          path: |
-            ./ui/fixtures/s3-fixtures
-
       # When we're regenerating the model inference cache, don't download the container images
       # The images will get built by `regenerate-model-inference-cache.sh`
       - name: Download container images
         if: inputs.regen_cache == false
-        uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
         with:
           pattern: build-*-container
           merge-multiple: true
@@ -110,7 +104,7 @@ jobs:
 
       - name: Upload new model inference cache
         if: inputs.regen_cache == true
-        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: model-inference-cache
           path: |
