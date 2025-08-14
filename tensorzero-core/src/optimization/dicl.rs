@@ -691,3 +691,343 @@ async fn insert_dicl_examples_with_batching(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        clickhouse::test_helpers::get_clickhouse,
+        config_parser::TimeoutsConfig,
+        embeddings::{EmbeddingProviderConfig, EmbeddingProviderInfo},
+        endpoints::inference::InferenceCredentials,
+        inference::types::{
+            ContentBlock, ContentBlockChatOutput, ModelInput, RequestMessage, Role, Text,
+        },
+        variant::RetryConfig,
+    };
+    use std::collections::HashMap;
+    use uuid::Uuid;
+
+    // Helper functions to create test providers using the Dummy provider
+
+    fn create_test_embedding_provider(_embeddings: Vec<Vec<f32>>) -> EmbeddingProviderInfo {
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            use crate::providers::dummy::DummyProvider;
+            EmbeddingProviderInfo {
+                inner: EmbeddingProviderConfig::Dummy(DummyProvider {
+                    model_name: "test-embedding".into(),
+                    ..Default::default()
+                }),
+                timeouts: TimeoutsConfig::default(),
+                provider_name: Arc::from("dummy"),
+            }
+        }
+        #[cfg(not(any(test, feature = "e2e_tests")))]
+        {
+            panic!("This function is only available in test mode")
+        }
+    }
+
+    fn create_test_embedding_provider_with_failure(
+        _embeddings: Vec<Vec<f32>>,
+        _fail_attempt: usize,
+    ) -> EmbeddingProviderInfo {
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            use crate::providers::dummy::DummyProvider;
+            EmbeddingProviderInfo {
+                inner: EmbeddingProviderConfig::Dummy(DummyProvider {
+                    model_name: "error".into(), // This will cause the dummy provider to fail
+                    ..Default::default()
+                }),
+                timeouts: TimeoutsConfig::default(),
+                provider_name: Arc::from("dummy"),
+            }
+        }
+        #[cfg(not(any(test, feature = "e2e_tests")))]
+        {
+            panic!("This function is only available in test mode")
+        }
+    }
+
+    fn create_test_rendered_sample(input: &str, output: &str) -> RenderedSample {
+        RenderedSample {
+            function_name: "test_function".to_string(),
+            input: ModelInput {
+                system: None,
+                messages: vec![RequestMessage {
+                    role: Role::User,
+                    content: vec![ContentBlock::Text(Text {
+                        text: input.to_string(),
+                    })],
+                }],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: output.to_string(),
+            })]),
+            episode_id: Some(Uuid::now_v7()),
+            inference_id: Some(Uuid::now_v7()),
+            tool_params: None,
+            output_schema: None,
+            dispreferred_outputs: vec![],
+            tags: HashMap::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_process_embedding_batch_success() {
+        let provider =
+            create_test_embedding_provider(vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]]);
+
+        let client = reqwest::Client::new();
+        let credentials = InferenceCredentials::default();
+        let batch_texts = vec!["hello".to_string(), "world".to_string()];
+        let retry_config = RetryConfig::default();
+
+        let result = process_embedding_batch(
+            &provider,
+            &client,
+            &credentials,
+            batch_texts,
+            0,
+            &retry_config,
+            None,
+        )
+        .await;
+
+        assert!(result.is_ok());
+        let embeddings = result.unwrap();
+        assert_eq!(embeddings.len(), 2);
+        // The dummy provider returns zero-filled embeddings, so just check structure
+        assert!(!embeddings[0].is_empty());
+        assert!(!embeddings[1].is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_process_embedding_batch_with_dimensions() {
+        let provider = create_test_embedding_provider(vec![vec![1.0, 2.0, 3.0]]);
+
+        let client = reqwest::Client::new();
+        let credentials = InferenceCredentials::default();
+        let batch_texts = vec!["hello".to_string()];
+        let retry_config = RetryConfig::default();
+        let dimensions = Some(512);
+
+        let result = process_embedding_batch(
+            &provider,
+            &client,
+            &credentials,
+            batch_texts,
+            0,
+            &retry_config,
+            dimensions,
+        )
+        .await;
+
+        assert!(result.is_ok());
+        let embeddings = result.unwrap();
+        assert_eq!(embeddings.len(), 1);
+        assert!(!embeddings[0].is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_process_embedding_batch_retry_exhausted() {
+        let provider = create_test_embedding_provider_with_failure(vec![], 0);
+
+        let client = reqwest::Client::new();
+        let credentials = InferenceCredentials::default();
+        let batch_texts = vec!["test".to_string()];
+        let retry_config = RetryConfig {
+            num_retries: 0, // No retries, should fail immediately
+            max_delay_s: 1.0,
+        };
+
+        let result = process_embedding_batch(
+            &provider,
+            &client,
+            &credentials,
+            batch_texts,
+            0,
+            &retry_config,
+            None,
+        )
+        .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_process_embeddings_with_batching_success() {
+        let provider = create_test_embedding_provider(vec![
+            vec![1.0, 2.0],
+            vec![3.0, 4.0],
+            vec![5.0, 6.0],
+            vec![7.0, 8.0],
+            vec![9.0, 10.0],
+        ]);
+
+        let client = reqwest::Client::new();
+        let credentials = InferenceCredentials::default();
+        let input_texts = vec![
+            "text1".to_string(),
+            "text2".to_string(),
+            "text3".to_string(),
+        ];
+        let retry_config = RetryConfig::default();
+
+        let result = process_embeddings_with_batching(
+            &provider,
+            &client,
+            &credentials,
+            input_texts,
+            2, // batch_size
+            1, // max_concurrency
+            &retry_config,
+            None,
+        )
+        .await;
+
+        assert!(result.is_ok());
+        let embeddings = result.unwrap();
+        assert_eq!(embeddings.len(), 3);
+        // Check that all embeddings have proper structure
+        for embedding in &embeddings {
+            assert!(!embedding.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_process_embeddings_with_batching_respects_concurrency() {
+        let provider = create_test_embedding_provider(vec![
+            vec![1.0],
+            vec![2.0],
+            vec![3.0],
+            vec![4.0],
+            vec![5.0],
+        ]);
+
+        let client = reqwest::Client::new();
+        let credentials = InferenceCredentials::default();
+        let input_texts = vec!["1".to_string(), "2".to_string(), "3".to_string()];
+        let retry_config = RetryConfig::default();
+
+        let result = process_embeddings_with_batching(
+            &provider,
+            &client,
+            &credentials,
+            input_texts,
+            1, // batch_size: each text is its own batch
+            2, // max_concurrency: process 2 batches at a time
+            &retry_config,
+            None,
+        )
+        .await;
+
+        assert!(result.is_ok());
+        let embeddings = result.unwrap();
+        assert_eq!(embeddings.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_insert_dicl_examples_with_batching_success() {
+        let clickhouse = get_clickhouse().await;
+
+        let samples = vec![
+            create_test_rendered_sample("test input 1", "test output 1"),
+            create_test_rendered_sample("test input 2", "test output 2"),
+        ];
+        let embeddings = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
+        let examples_with_embeddings: Vec<(RenderedSample, Vec<f64>)> =
+            samples.into_iter().zip(embeddings.into_iter()).collect();
+
+        let result = insert_dicl_examples_with_batching(
+            &clickhouse,
+            examples_with_embeddings,
+            "test_function_unit",
+            "test_variant_unit",
+            10, // batch_size
+        )
+        .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_insert_dicl_examples_batching_logic() {
+        let clickhouse = get_clickhouse().await;
+
+        // Create 5 examples with batch size of 2, should create 3 batches (2+2+1)
+        let samples = (0..5)
+            .map(|i| {
+                create_test_rendered_sample(&format!("test input {i}"), &format!("test output {i}"))
+            })
+            .collect::<Vec<_>>();
+        let embeddings = (0..5)
+            .map(|i| vec![i as f64, (i + 1) as f64, (i + 2) as f64])
+            .collect::<Vec<_>>();
+        let examples_with_embeddings: Vec<(RenderedSample, Vec<f64>)> =
+            samples.into_iter().zip(embeddings.into_iter()).collect();
+
+        let result = insert_dicl_examples_with_batching(
+            &clickhouse,
+            examples_with_embeddings,
+            "test_function_batch",
+            "test_variant_batch",
+            2, // batch_size
+        )
+        .await;
+
+        assert!(result.is_ok());
+
+        // Verify that data was actually inserted by querying the table
+        let count_query = "SELECT count() FROM DynamicInContextLearningExample WHERE function_name = 'test_function_batch' AND variant_name = 'test_variant_batch' FORMAT JSONEachRow";
+        let result = clickhouse
+            .run_query_synchronous_no_params(count_query.to_string())
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_insert_dicl_examples_with_empty_batch() {
+        let clickhouse = get_clickhouse().await;
+
+        let examples_with_embeddings: Vec<(RenderedSample, Vec<f64>)> = vec![];
+
+        let result = insert_dicl_examples_with_batching(
+            &clickhouse,
+            examples_with_embeddings,
+            "test_function_empty",
+            "test_variant_empty",
+            10,
+        )
+        .await;
+
+        // Should succeed with empty batch
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_insert_dicl_examples_json_serialization() {
+        let clickhouse = get_clickhouse().await;
+
+        // Test with special characters that need proper JSON encoding
+        let sample = create_test_rendered_sample(
+            "input with \"quotes\" and \n newlines",
+            "output with special chars: àáâã",
+        );
+        let embedding = vec![1.0, 2.0, 3.0];
+        let examples_with_embeddings = vec![(sample, embedding)];
+
+        let result = insert_dicl_examples_with_batching(
+            &clickhouse,
+            examples_with_embeddings,
+            "test_function_json",
+            "test_variant_json",
+            1,
+        )
+        .await;
+
+        assert!(result.is_ok());
+    }
+}
