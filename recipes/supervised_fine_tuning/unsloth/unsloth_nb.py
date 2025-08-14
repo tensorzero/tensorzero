@@ -104,6 +104,13 @@ LORA_BIAS = "none"  # Whether to add bias in LoRA adapters (rarely needed)
 
 # %%
 import os
+import sys
+
+tensorzero_path = os.path.abspath(os.path.join(os.getcwd(), "../../../"))
+if tensorzero_path not in sys.path:
+    sys.path.append(tensorzero_path)
+
+# %%
 import subprocess
 import tempfile
 from typing import Any, Dict
@@ -119,7 +126,8 @@ from transformers import TrainingArguments
 from trl import SFTTrainer
 from unsloth import FastLanguageModel, is_bfloat16_supported
 from unsloth.chat_templates import get_chat_template
-from utils import tensorzero_rendered_samples_to_conversations, train_val_split
+
+from recipes.util import tensorzero_rendered_samples_to_conversations, train_val_split
 
 # %% [markdown]
 # Load and render the stored inferences
