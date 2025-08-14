@@ -127,6 +127,7 @@ pub async fn launch_optimization_workflow(
             train_examples,
             val_examples,
             &InferenceCredentials::default(),
+            clickhouse_connection_info,
         )
         .await
 }
@@ -156,12 +157,14 @@ pub async fn launch_optimization(
         optimization_config: optimizer_config,
     } = params;
     let optimizer = optimizer_config.load().await?;
+    let disabled_clickhouse = ClickHouseConnectionInfo::Disabled;
     optimizer
         .launch(
             http_client,
             train_examples,
             val_examples,
             &InferenceCredentials::default(),
+            &disabled_clickhouse,
         )
         .await
 }

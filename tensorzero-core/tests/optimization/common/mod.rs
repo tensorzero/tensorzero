@@ -4,12 +4,14 @@ use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
+use tracing_subscriber::{self, EnvFilter};
+
 use tensorzero::{
     Client, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
 };
 use tensorzero_core::{
     cache::CacheOptions,
-    clickhouse::test_helpers::CLICKHOUSE_URL,
+    clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL},
     clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
     config_parser::ProviderTypesConfig,
     endpoints::inference::InferenceClients,
@@ -45,6 +47,11 @@ pub trait OptimizationTestCase {
 
 #[allow(clippy::allow_attributes, dead_code)]
 pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
+    // Initialize tracing subscriber to capture progress logs
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
     let optimizer_info = test_case
         .get_optimizer_info(use_mock_inference_provider())
         .load()
@@ -54,8 +61,15 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let test_examples = get_examples(test_case, 10);
     let val_examples = Some(get_examples(test_case, 10));
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
+    let clickhouse = get_clickhouse().await;
     let job_handle = optimizer_info
-        .launch(&client, test_examples, val_examples, &credentials)
+        .launch(
+            &client,
+            test_examples,
+            val_examples,
+            &credentials,
+            &clickhouse,
+        )
         .await
         .unwrap();
     let mut status;

@@ -8,10 +8,10 @@ use url::Url;
 
 use crate::{
     clickhouse::ClickHouseConnectionInfo,
-    config_parser::{BatchWritesConfig, ProviderTypesConfig},
+    config_parser::ProviderTypesConfig,
     embeddings::{
-        EmbeddingEncodingFormat, EmbeddingInput, EmbeddingProvider, EmbeddingRequest,
-        UninitializedEmbeddingProviderConfig,
+        EmbeddingEncodingFormat, EmbeddingInput, EmbeddingProvider, EmbeddingProviderInfo,
+        EmbeddingRequest, UninitializedEmbeddingProviderConfig,
     },
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -23,7 +23,9 @@ use crate::{
     stored_inference::RenderedSample,
     variant::RetryConfig,
 };
+use futures::future::try_join_all;
 use std::sync::Arc;
+use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
 fn default_batch_size() -> usize {
@@ -50,7 +52,7 @@ pub struct DiclOptimizationConfig {
     pub embedding_model: String,
     pub variant_name: String,
     pub function_name: String,
-    pub clickhouse_url: String,
+    pub dimensions: Option<u32>,
     pub batch_size: usize,
     pub max_concurrency: usize,
     pub retries: RetryConfig,
@@ -72,7 +74,7 @@ pub struct UninitializedDiclOptimizationConfig {
     pub embedding_model: String,
     pub variant_name: String,
     pub function_name: String,
-    pub clickhouse_url: String,
+    pub dimensions: Option<u32>,
     #[serde(default = "default_batch_size")]
     pub batch_size: usize,
     #[serde(default = "default_max_concurrency")]
@@ -95,7 +97,7 @@ impl Default for UninitializedDiclOptimizationConfig {
             embedding_model: String::new(),
             variant_name: String::new(),
             function_name: String::new(),
-            clickhouse_url: String::new(),
+            dimensions: None,
             batch_size: default_batch_size(),
             max_concurrency: default_max_concurrency(),
             retries: RetryConfig::default(),
@@ -123,14 +125,14 @@ impl UninitializedDiclOptimizationConfig {
     /// prints out signature:
     /// ($self, /, *args, **kwargs)
     #[new]
-    #[pyo3(signature = (*, provider, embedding_model, variant_name, function_name, clickhouse_url, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None, api_base=None))]
+    #[pyo3(signature = (*, provider, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None, api_base=None))]
     #[expect(clippy::too_many_arguments)]
     pub fn new(
         provider: String,
         embedding_model: String,
         variant_name: String,
         function_name: String,
-        clickhouse_url: String,
+        dimensions: Option<u32>,
         batch_size: Option<usize>,
         max_concurrency: Option<usize>,
         k: Option<usize>,
@@ -152,7 +154,7 @@ impl UninitializedDiclOptimizationConfig {
             embedding_model,
             variant_name,
             function_name,
-            clickhouse_url,
+            dimensions,
             batch_size: batch_size.unwrap_or_else(default_batch_size),
             max_concurrency: max_concurrency.unwrap_or_else(default_max_concurrency),
             retries: RetryConfig::default(),
@@ -169,7 +171,7 @@ impl UninitializedDiclOptimizationConfig {
     /// :param embedding_model: The embedding model to use.
     /// :param variant_name: The name to be used for the DICL variant.
     /// :param function_name: The name of the function to optimize.
-    /// :param clickhouse_url: The URL of the ClickHouse database to use for storing the DICL examples.
+    /// :param dimensions: The dimensions of the embeddings. If None, uses the model's default.
     /// :param batch_size: The batch size to use for getting embeddings.
     /// :param max_concurrency: The maximum concurrency to use for getting embeddings.
     /// :param k: The number of nearest neighbors to use for the DICL variant.
@@ -177,14 +179,14 @@ impl UninitializedDiclOptimizationConfig {
     /// :param credentials: The credentials to use for embedding. This should be a string like "env::OPENAI_API_KEY". See docs for more details.
     /// :param api_base: The base URL to use for embedding. This is primarily used for testing.
     #[expect(unused_variables, clippy::too_many_arguments)]
-    #[pyo3(signature = (*, provider, embedding_model, variant_name, function_name, clickhouse_url, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None, api_base=None))]
+    #[pyo3(signature = (*, provider, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None, api_base=None))]
     fn __init__(
         this: Py<Self>,
         provider: String,
         embedding_model: String,
         variant_name: String,
         function_name: String,
-        clickhouse_url: String,
+        dimensions: Option<u32>,
         batch_size: Option<usize>,
         max_concurrency: Option<usize>,
         k: Option<usize>,
@@ -203,7 +205,7 @@ impl UninitializedDiclOptimizationConfig {
             embedding_model: self.embedding_model,
             variant_name: self.variant_name,
             function_name: self.function_name,
-            clickhouse_url: self.clickhouse_url,
+            dimensions: self.dimensions,
             batch_size: self.batch_size,
             max_concurrency: self.max_concurrency,
             retries: self.retries,
@@ -254,10 +256,22 @@ impl Optimizer for DiclOptimizationConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
+        clickhouse_connection_info: &ClickHouseConnectionInfo,
     ) -> Result<Self::Handle, Error> {
         // Warn if val_examples is provided (not used in DICL)
         if val_examples.is_some() {
             tracing::warn!("val_examples provided for DICL optimization but will be ignored");
+        }
+
+        // Check if ClickHouse is available (required for DICL)
+        if matches!(
+            clickhouse_connection_info,
+            ClickHouseConnectionInfo::Disabled
+        ) {
+            return Err(Error::new(ErrorDetails::AppState {
+                message: "DICL optimization requires ClickHouse to be enabled to store examples"
+                    .to_string(),
+            }));
         }
 
         // Check if we have examples to process
@@ -266,6 +280,13 @@ impl Optimizer for DiclOptimizationConfig {
                 message: "No training examples provided for DICL optimization".to_string(),
             }));
         }
+
+        tracing::info!(
+            "🚀 Starting DICL optimization for function '{}' variant '{}' with {} examples",
+            self.function_name,
+            self.variant_name,
+            train_examples.len()
+        );
 
         // Convert RenderedSample inputs to strings for embedding (only messages, not system)
         let input_texts: Vec<String> = train_examples
@@ -277,7 +298,6 @@ impl Optimizer for DiclOptimizationConfig {
             .collect();
 
         // Initialize the embedding provider
-        // Using OpenAI provider with the specified embedding model
         let provider_config_str = format!(
             r#"
             type = "{}"
@@ -305,60 +325,39 @@ impl Optimizer for DiclOptimizationConfig {
                 )
                 .await?;
 
-        // Get embeddings for all examples in batch
-        let embedding_request = EmbeddingRequest {
-            input: EmbeddingInput::Batch(input_texts.clone()),
-            dimensions: None,
-            encoding_format: EmbeddingEncodingFormat::Float,
-        };
+        // Process embeddings with batching and concurrency control
+        let all_embeddings = process_embeddings_with_batching(
+            &provider_config,
+            client,
+            credentials,
+            input_texts,
+            self.batch_size,
+            self.max_concurrency,
+            &self.retries,
+            self.dimensions,
+        )
+        .await?;
 
-        let embeddings_response = provider_config
-            .embed(&embedding_request, client, credentials)
-            .await?;
+        // Combine examples with their embeddings
+        let examples_with_embeddings: Vec<(RenderedSample, Vec<f64>)> = train_examples
+            .into_iter()
+            .zip(all_embeddings.into_iter())
+            .collect();
 
-        // Prepare data for insertion into ClickHouse
-        let mut rows = Vec::new();
-        for (i, sample) in train_examples.iter().enumerate() {
-            let output = sample
-                .output
-                .as_ref()
-                .and_then(|outputs| outputs.first())
-                .map(|output| serde_json::to_string(output).unwrap_or_default())
-                .unwrap_or_default();
+        let num_examples = examples_with_embeddings.len();
 
-            let row = json!({
-                "id": Uuid::now_v7(),
-                "function_name": self.function_name,
-                "variant_name": self.variant_name,
-                "namespace": "", // Empty namespace for now
-                "input": input_texts[i],
-                "output": output,
-                "embedding": embeddings_response.embeddings[i],
-            });
-            rows.push(serde_json::to_string(&row).map_err(|e| {
-                Error::new(ErrorDetails::Inference {
-                    message: format!("Failed to serialize DICL example: {e}"),
-                })
-            })?);
-        }
+        tracing::info!("🔄 Phase transition: Embedding → ClickHouse storage");
 
-        // Insert into ClickHouse
-        // Note: In a real implementation, we'd need access to the ClickHouse connection
-        // from the app state. For now, we'll return a success indicating the job is complete.
-        let clickhouse =
-            &ClickHouseConnectionInfo::new(&self.clickhouse_url, BatchWritesConfig::default())
-                .await?;
-
-        // Join all rows with newlines for JSONEachRow format
-        let query = format!(
-            "INSERT INTO DynamicInContextLearningExample\n\
-            SETTINGS async_insert=1, wait_for_async_insert=1\n\
-            FORMAT JSONEachRow\n\
-            {}",
-            rows.join("\n")
-        );
-
-        clickhouse.run_query_synchronous_no_params(query).await?;
+        // Use the provided ClickHouse connection
+        let clickhouse = clickhouse_connection_info;
+        insert_dicl_examples_with_batching(
+            clickhouse,
+            examples_with_embeddings,
+            &self.function_name,
+            &self.variant_name,
+            self.batch_size,
+        )
+        .await?;
 
         // Create a job handle indicating immediate success
         let job_handle = DiclOptimizationJobHandle {
@@ -379,12 +378,21 @@ impl Optimizer for DiclOptimizationConfig {
             model: self.model.clone(),
         };
 
-        // TODO: Actually insert the rows into ClickHouse when we have access to the connection
         tracing::info!(
-            "DICL optimization prepared {} examples for function '{}' variant '{}'",
-            rows.len(),
+            "🎉 DICL optimization completed successfully!\n\
+            📈 Summary:\n\
+            ├─ Function: '{}'\n\
+            ├─ Variant: '{}'\n\
+            ├─ Examples processed: {}\n\
+            ├─ Embeddings generated: {}\n\
+            ├─ Batch size: {}\n\
+            └─ Max concurrency: {}",
             self.function_name,
-            self.variant_name
+            self.variant_name,
+            num_examples,
+            num_examples, // Same as examples since each example gets one embedding
+            self.batch_size,
+            self.max_concurrency
         );
 
         Ok(job_handle)
@@ -425,4 +433,237 @@ impl JobHandle for DiclOptimizationJobHandle {
             ))),
         })
     }
+}
+
+/// Processes a batch of input texts to get embeddings with retry logic
+async fn process_embedding_batch(
+    provider_config: &EmbeddingProviderInfo,
+    client: &reqwest::Client,
+    credentials: &InferenceCredentials,
+    batch_texts: Vec<String>,
+    batch_index: usize,
+    retry_config: &RetryConfig,
+    dimensions: Option<u32>,
+) -> Result<Vec<Vec<f64>>, Error> {
+    let max_retries = retry_config.num_retries;
+    let mut retries = 0;
+
+    loop {
+        let embedding_request = EmbeddingRequest {
+            input: EmbeddingInput::Batch(batch_texts.clone()),
+            dimensions,
+            encoding_format: EmbeddingEncodingFormat::Float,
+        };
+
+        match provider_config
+            .embed(&embedding_request, client, credentials)
+            .await
+        {
+            Ok(response) => {
+                tracing::debug!("Successfully processed embedding batch {}", batch_index);
+                // Convert embeddings from Vec<Embedding> to Vec<Vec<f64>>
+                let embeddings: Result<Vec<Vec<f64>>, Error> = response
+                    .embeddings
+                    .into_iter()
+                    .map(|embedding| match embedding {
+                        crate::embeddings::Embedding::Float(vec_f32) => {
+                            Ok(vec_f32.into_iter().map(|f| f as f64).collect())
+                        }
+                        crate::embeddings::Embedding::Base64(_) => {
+                            Err(Error::new(ErrorDetails::Inference {
+                                message: "Base64 embeddings not supported for DICL optimization"
+                                    .to_string(),
+                            }))
+                        }
+                    })
+                    .collect();
+                return embeddings;
+            }
+            Err(e) if retries < max_retries => {
+                retries += 1;
+                let delay_secs = (retries as f32).min(retry_config.max_delay_s);
+                tracing::warn!(
+                    "Embedding batch {} failed (attempt {}/{}): {}. Retrying in {:.1}s...",
+                    batch_index,
+                    retries,
+                    max_retries + 1,
+                    e,
+                    delay_secs
+                );
+                sleep(Duration::from_secs_f32(delay_secs)).await;
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Embedding batch {} failed after {} attempts: {}",
+                    batch_index,
+                    max_retries + 1,
+                    e
+                );
+                return Err(e);
+            }
+        }
+    }
+}
+
+/// Processes all embedding batches with concurrency control
+#[expect(clippy::too_many_arguments)]
+async fn process_embeddings_with_batching(
+    provider_config: &EmbeddingProviderInfo,
+    client: &reqwest::Client,
+    credentials: &InferenceCredentials,
+    input_texts: Vec<String>,
+    batch_size: usize,
+    max_concurrency: usize,
+    retry_config: &RetryConfig,
+    dimensions: Option<u32>,
+) -> Result<Vec<Vec<f64>>, Error> {
+    let batches: Vec<Vec<String>> = input_texts
+        .chunks(batch_size)
+        .map(<[String]>::to_vec)
+        .collect();
+
+    tracing::info!(
+        "🔢 Starting embedding processing: {} input texts → {} batches (size: {}, max concurrent: {})",
+        input_texts.len(),
+        batches.len(),
+        batch_size,
+        max_concurrency
+    );
+
+    // Process batches with controlled concurrency
+    let mut all_embeddings = Vec::new();
+    let total_batches = batches.len();
+    let mut processed_batches = 0;
+
+    for batch_chunk in batches.chunks(max_concurrency) {
+        let batch_futures: Vec<_> = batch_chunk
+            .iter()
+            .enumerate()
+            .map(|(i, batch)| {
+                let batch_index = processed_batches + i;
+                process_embedding_batch(
+                    provider_config,
+                    client,
+                    credentials,
+                    batch.clone(),
+                    batch_index,
+                    retry_config,
+                    dimensions,
+                )
+            })
+            .collect();
+
+        let batch_results = try_join_all(batch_futures).await?;
+        for batch_embeddings in batch_results {
+            all_embeddings.extend(batch_embeddings);
+        }
+
+        processed_batches += batch_chunk.len();
+        let progress_pct = (processed_batches as f64 / total_batches as f64 * 100.0).round() as u32;
+        tracing::info!(
+            "📊 Embedding progress: {}/{} batches completed ({}%) - {} embeddings generated",
+            processed_batches,
+            total_batches,
+            progress_pct,
+            all_embeddings.len()
+        );
+    }
+
+    tracing::info!(
+        "✅ Embedding processing complete: {} embeddings generated from {} input texts",
+        all_embeddings.len(),
+        input_texts.len()
+    );
+
+    Ok(all_embeddings)
+}
+
+/// Inserts DICL examples into ClickHouse using batching with ExternalDataInfo pattern
+async fn insert_dicl_examples_with_batching(
+    clickhouse: &ClickHouseConnectionInfo,
+    examples: Vec<(RenderedSample, Vec<f64>)>,
+    function_name: &str,
+    variant_name: &str,
+    batch_size: usize,
+) -> Result<(), Error> {
+    let total_examples = examples.len();
+    let total_batches = total_examples.div_ceil(batch_size);
+
+    tracing::info!(
+        "💾 Starting ClickHouse insertion: {} examples → {} batches (size: {})",
+        total_examples,
+        total_batches,
+        batch_size
+    );
+
+    let mut inserted_examples = 0;
+
+    // Process all examples in batches
+    for (batch_index, batch) in examples.chunks(batch_size).enumerate() {
+        let serialized_rows: Result<Vec<String>, Error> = batch
+            .iter()
+            .map(|(sample, embedding)| {
+                let output = sample
+                    .output
+                    .as_ref()
+                    .and_then(|outputs| outputs.first())
+                    .map(|output| serde_json::to_string(output).unwrap_or_default())
+                    .unwrap_or_default();
+
+                let input_text = serde_json::to_string(&sample.input.messages)
+                    .unwrap_or_else(|_| format!("{:?}", sample.input.messages));
+
+                let row = json!({
+                    "id": Uuid::now_v7(),
+                    "function_name": function_name,
+                    "variant_name": variant_name,
+                    "namespace": "",
+                    "input": input_text,
+                    "output": output,
+                    "embedding": embedding,
+                });
+
+                serde_json::to_string(&row).map_err(|e| {
+                    Error::new(ErrorDetails::Inference {
+                        message: format!("Failed to serialize DICL example: {e}"),
+                    })
+                })
+            })
+            .collect();
+
+        let rows = serialized_rows?;
+
+        // Use the simpler synchronous approach for now (TODO: optimize with ExternalDataInfo later)
+        let query = format!(
+            "INSERT INTO DynamicInContextLearningExample\n\
+            SETTINGS async_insert=1, wait_for_async_insert=1\n\
+            FORMAT JSONEachRow\n\
+            {}",
+            rows.join("\n")
+        );
+
+        clickhouse.run_query_synchronous_no_params(query).await?;
+
+        inserted_examples += batch.len();
+        let progress_pct =
+            (inserted_examples as f64 / total_examples as f64 * 100.0).round() as u32;
+
+        tracing::info!(
+            "📊 ClickHouse insertion progress: {}/{} batches completed ({}%) - {}/{} examples inserted",
+            batch_index + 1,
+            total_batches,
+            progress_pct,
+            inserted_examples,
+            total_examples
+        );
+    }
+
+    tracing::info!(
+        "✅ ClickHouse insertion complete: {} examples successfully stored for function '{}' variant '{}'",
+        inserted_examples,
+        function_name,
+        variant_name
+    );
+
+    Ok(())
 }

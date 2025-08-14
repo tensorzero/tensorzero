@@ -7,6 +7,7 @@ use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::model::UninitializedModelConfig;
@@ -260,6 +261,7 @@ pub trait Optimizer {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
+        clickhouse_connection_info: &ClickHouseConnectionInfo,
     ) -> Result<Self::Handle, Error>;
 }
 
@@ -271,26 +273,57 @@ impl Optimizer for OptimizerInfo {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
+        clickhouse_connection_info: &ClickHouseConnectionInfo,
     ) -> Result<Self::Handle, Error> {
         match &self.inner {
             OptimizerConfig::Dicl(config) => config
-                .launch(client, train_examples, val_examples, credentials)
+                .launch(
+                    client,
+                    train_examples,
+                    val_examples,
+                    credentials,
+                    clickhouse_connection_info,
+                )
                 .await
                 .map(OptimizationJobHandle::Dicl),
             OptimizerConfig::OpenAISFT(config) => config
-                .launch(client, train_examples, val_examples, credentials)
+                .launch(
+                    client,
+                    train_examples,
+                    val_examples,
+                    credentials,
+                    clickhouse_connection_info,
+                )
                 .await
                 .map(OptimizationJobHandle::OpenAISFT),
             OptimizerConfig::FireworksSFT(config) => config
-                .launch(client, train_examples, val_examples, credentials)
+                .launch(
+                    client,
+                    train_examples,
+                    val_examples,
+                    credentials,
+                    clickhouse_connection_info,
+                )
                 .await
                 .map(OptimizationJobHandle::FireworksSFT),
             OptimizerConfig::GCPVertexGeminiSFT(config) => config
-                .launch(client, train_examples, val_examples, credentials)
+                .launch(
+                    client,
+                    train_examples,
+                    val_examples,
+                    credentials,
+                    clickhouse_connection_info,
+                )
                 .await
                 .map(OptimizationJobHandle::GCPVertexGeminiSFT),
             OptimizerConfig::TogetherSFT(config) => config
-                .launch(client, train_examples, val_examples, credentials)
+                .launch(
+                    client,
+                    train_examples,
+                    val_examples,
+                    credentials,
+                    clickhouse_connection_info,
+                )
                 .await
                 .map(OptimizationJobHandle::TogetherSFT),
         }
