@@ -184,18 +184,16 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
     }
     tracing::debug!("All migrations have not yet been applied, running migrations");
     let database_exists = clickhouse.check_database_exists().await?;
-    if !database_exists {
-        if clickhouse.is_cluster_configured() && !manual_run {
-            let database = clickhouse.database();
-            let run_migrations_command = get_run_migrations_command();
-            return Err(ErrorDetails::ClickHouseConfiguration {
+    if !database_exists && clickhouse.is_cluster_configured() && !manual_run {
+        let database = clickhouse.database();
+        let run_migrations_command = get_run_migrations_command();
+        return Err(ErrorDetails::ClickHouseConfiguration {
                 message: format!("Database {database} does not exist. We do not automatically run migrations to create and set it up when replication is configured. Please run `{run_migrations_command}`."),
             }.into());
-        } else {
-            // This is a no-op if the database already exists
-            clickhouse.create_database().await?;
-        }
     }
+
+    // This ensures that both the database and the `TensorZeroMigration` table exist
+    clickhouse.create_database().await?;
 
     // Check if the ClickHouse instance is configured correctly for replication.
     check_replication_settings(clickhouse).await?;

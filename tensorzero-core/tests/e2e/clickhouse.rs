@@ -14,10 +14,11 @@ use tensorzero_core::db::clickhouse::migration_manager::{
     RunMigrationArgs, RunMigrationManagerArgs,
 };
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_core::error::Error;
+use tensorzero_core::error::{Error, ErrorDetails};
 use tokio::runtime::Handle;
 use tokio::time::sleep;
 use tracing_test::traced_test;
+use url::Url;
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0000::Migration0000;
@@ -40,7 +41,7 @@ use tensorzero_core::db::clickhouse::{
 };
 
 pub struct DeleteDbOnDrop {
-    database: String,
+    pub database: String,
     client: ClickHouseConnectionInfo,
     allow_db_missing: bool,
 }
@@ -1106,6 +1107,81 @@ async fn test_migration_0013_data_no_table() {
     .unwrap_err();
     assert!(err.to_string()
         .contains("Data already exists in the ChatInference or JsonInference tables and InferenceById or InferenceByEpisodeId is missing. Please contact TensorZero team"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[traced_test]
+async fn test_run_migrations_existing_db() {
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+
+    // Manually create the database without doing through 'clickhouse.create_database()'
+    // (to simulate a user running 'CREATE DATABASE' manually from the ClickHouse CLI)
+    // This will not create the 'TensorZeroMigration' table
+    let ClickHouseConnectionInfo::Production {
+        database_url,
+        database,
+        client,
+        ..
+    } = &clickhouse
+    else {
+        panic!("ClickHouse is not a production instance");
+    };
+
+    let database_url = Url::parse(database_url.expose_secret())
+        .map_err(|_| {
+            Error::new(ErrorDetails::Config {
+                message: "Invalid ClickHouse database URL".to_string(),
+            })
+        })
+        .unwrap();
+    let on_cluster_name = clickhouse.get_on_cluster_name();
+    let query = format!("CREATE DATABASE IF NOT EXISTS {database}{on_cluster_name}");
+    // In order to create the database, we need to remove the database query parameter from the URL
+    // Otherwise, ClickHouse will throw an error
+    let mut base_url = database_url.clone();
+    let query_pairs = database_url
+        .query_pairs()
+        .filter(|(key, _)| key != "database");
+    base_url
+        .query_pairs_mut()
+        .clear()
+        .extend_pairs(query_pairs)
+        .finish();
+
+    client
+        .post(base_url)
+        .body(query)
+        .send()
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseQuery {
+                message: e.to_string(),
+            })
+        })
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // Check that we can run migrations when an empty db already exists
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        manual_run: true,
+        skip_completed_migrations: true,
+    })
+    .await
+    .unwrap();
+    assert!(!logs_contain("Database not found, assuming clean start"));
+    assert!(!logs_contain("All migrations have already been applied"));
+
+    // Run again, and we should skip all migrations
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        manual_run: true,
+        skip_completed_migrations: true,
+    })
+    .await
+    .unwrap();
+    assert!(logs_contain("All migrations have already been applied"));
 }
 
 #[tokio::test(flavor = "multi_thread")]
