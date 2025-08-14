@@ -21,18 +21,41 @@ use crate::{
         default_api_key_location, OpenAICredentials, DEFAULT_CREDENTIALS, PROVIDER_TYPE,
     },
     stored_inference::RenderedSample,
+    variant::RetryConfig,
 };
 use std::sync::Arc;
 use uuid::Uuid;
+
+fn default_batch_size() -> usize {
+    128
+}
+
+fn default_max_concurrency() -> usize {
+    10
+}
+
+fn default_k() -> usize {
+    10
+}
+
+fn default_model() -> String {
+    "openai::gpt-4o-mini-2024-07-18".to_string()
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct DiclOptimizationConfig {
+    pub provider: String,
     pub embedding_model: String,
     pub variant_name: String,
     pub function_name: String,
     pub clickhouse_url: String,
+    pub batch_size: usize,
+    pub max_concurrency: usize,
+    pub retries: RetryConfig,
+    pub k: usize,
+    pub model: String,
     #[serde(skip)]
     pub credentials: OpenAICredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
@@ -41,17 +64,47 @@ pub struct DiclOptimizationConfig {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "DiclOptimizationConfig"))]
 pub struct UninitializedDiclOptimizationConfig {
+    pub provider: String,
     pub embedding_model: String,
     pub variant_name: String,
     pub function_name: String,
     pub clickhouse_url: String,
+    #[serde(default = "default_batch_size")]
+    pub batch_size: usize,
+    #[serde(default = "default_max_concurrency")]
+    pub max_concurrency: usize,
+    #[serde(default)]
+    pub retries: RetryConfig,
+    #[serde(default = "default_k")]
+    pub k: usize,
+    #[serde(default = "default_model")]
+    pub model: String,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credentials: Option<CredentialLocation>,
     pub api_base: Option<Url>,
+}
+
+impl Default for UninitializedDiclOptimizationConfig {
+    fn default() -> Self {
+        Self {
+            provider: String::new(),
+            embedding_model: String::new(),
+            variant_name: String::new(),
+            function_name: String::new(),
+            clickhouse_url: String::new(),
+            batch_size: default_batch_size(),
+            max_concurrency: default_max_concurrency(),
+            retries: RetryConfig::default(),
+            k: default_k(),
+            model: default_model(),
+            credentials: None,
+            api_base: None,
+        }
+    }
 }
 
 impl std::fmt::Display for UninitializedDiclOptimizationConfig {
@@ -70,12 +123,18 @@ impl UninitializedDiclOptimizationConfig {
     /// prints out signature:
     /// ($self, /, *args, **kwargs)
     #[new]
-    #[pyo3(signature = (*, embedding_model, variant_name, function_name, clickhouse_url, credentials=None, api_base=None))]
+    #[pyo3(signature = (*, provider, embedding_model, variant_name, function_name, clickhouse_url, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None, api_base=None))]
+    #[expect(clippy::too_many_arguments)]
     pub fn new(
+        provider: String,
         embedding_model: String,
         variant_name: String,
         function_name: String,
         clickhouse_url: String,
+        batch_size: Option<usize>,
+        max_concurrency: Option<usize>,
+        k: Option<usize>,
+        model: Option<String>,
         credentials: Option<String>,
         api_base: Option<String>,
     ) -> PyResult<Self> {
@@ -89,10 +148,16 @@ impl UninitializedDiclOptimizationConfig {
             })
             .transpose()?;
         Ok(Self {
+            provider,
             embedding_model,
             variant_name,
             function_name,
             clickhouse_url,
+            batch_size: batch_size.unwrap_or_else(default_batch_size),
+            max_concurrency: max_concurrency.unwrap_or_else(default_max_concurrency),
+            retries: RetryConfig::default(),
+            k: k.unwrap_or_else(default_k),
+            model: model.unwrap_or_else(default_model),
             credentials,
             api_base,
         })
@@ -100,20 +165,30 @@ impl UninitializedDiclOptimizationConfig {
 
     /// Initialize the DiclOptimizationConfig. All parameters are optional except for `embedding_model`.
     ///
+    /// :param provider: The provider of the embedding model.
     /// :param embedding_model: The embedding model to use.
     /// :param variant_name: The name to be used for the DICL variant.
     /// :param function_name: The name of the function to optimize.
     /// :param clickhouse_url: The URL of the ClickHouse database to use for storing the DICL examples.
-    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::OPENAI_API_KEY". See docs for more details.
-    /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
-    #[expect(unused_variables)]
-    #[pyo3(signature = (*, embedding_model, variant_name, function_name, clickhouse_url, credentials=None, api_base=None))]
+    /// :param batch_size: The batch size to use for getting embeddings.
+    /// :param max_concurrency: The maximum concurrency to use for getting embeddings.
+    /// :param k: The number of nearest neighbors to use for the DICL variant.
+    /// :param model: The model to use for the DICL variant.
+    /// :param credentials: The credentials to use for embedding. This should be a string like "env::OPENAI_API_KEY". See docs for more details.
+    /// :param api_base: The base URL to use for embedding. This is primarily used for testing.
+    #[expect(unused_variables, clippy::too_many_arguments)]
+    #[pyo3(signature = (*, provider, embedding_model, variant_name, function_name, clickhouse_url, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None, api_base=None))]
     fn __init__(
         this: Py<Self>,
+        provider: String,
         embedding_model: String,
         variant_name: String,
         function_name: String,
         clickhouse_url: String,
+        batch_size: Option<usize>,
+        max_concurrency: Option<usize>,
+        k: Option<usize>,
+        model: Option<String>,
         credentials: Option<String>,
         api_base: Option<String>,
     ) -> Py<Self> {
@@ -124,10 +199,16 @@ impl UninitializedDiclOptimizationConfig {
 impl UninitializedDiclOptimizationConfig {
     pub fn load(self) -> Result<DiclOptimizationConfig, Error> {
         Ok(DiclOptimizationConfig {
+            provider: self.provider,
             embedding_model: self.embedding_model,
             variant_name: self.variant_name,
             function_name: self.function_name,
             clickhouse_url: self.clickhouse_url,
+            batch_size: self.batch_size,
+            max_concurrency: self.max_concurrency,
+            retries: self.retries,
+            k: self.k,
+            model: self.model,
             api_base: self.api_base,
             credentials: build_creds_caching_default(
                 self.credentials.clone(),
@@ -151,6 +232,10 @@ pub struct DiclOptimizationJobHandle {
     pub job_api_url: Url,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocation>,
+    // Store the configuration needed to create the variant
+    pub embedding_model: String,
+    pub k: usize,
+    pub model: String,
 }
 
 impl std::fmt::Display for DiclOptimizationJobHandle {
@@ -182,11 +267,12 @@ impl Optimizer for DiclOptimizationConfig {
             }));
         }
 
-        // Convert RenderedSample inputs to strings for embedding
+        // Convert RenderedSample inputs to strings for embedding (only messages, not system)
         let input_texts: Vec<String> = train_examples
             .iter()
             .map(|sample| {
-                serde_json::to_string(&sample.input).unwrap_or_else(|_| sample.input.to_string())
+                serde_json::to_string(&sample.input.messages)
+                    .unwrap_or_else(|_| format!("{:?}", sample.input.messages))
             })
             .collect();
 
@@ -194,10 +280,10 @@ impl Optimizer for DiclOptimizationConfig {
         // Using OpenAI provider with the specified embedding model
         let provider_config_str = format!(
             r#"
-            type = "openai"
+            type = "{}"
             model_name = "{}"
             "#,
-            self.embedding_model
+            self.provider, self.embedding_model
         );
 
         if let Some(_api_base) = &self.api_base {
@@ -288,6 +374,9 @@ impl Optimizer for DiclOptimizationConfig {
                 })
             })?,
             credential_location: self.credential_location.clone(),
+            embedding_model: self.embedding_model.clone(),
+            k: self.k,
+            model: self.model.clone(),
         };
 
         // TODO: Actually insert the rows into ClickHouse when we have access to the connection
@@ -311,18 +400,29 @@ impl JobHandle for DiclOptimizationJobHandle {
         // DICL optimization is synchronous, so it's always complete once launched
         let _ = (client, credentials);
 
-        // DICL doesn't produce a new model or variant, it just updates the examples table
-        // For now, return a successful completion without output
-        // TODO: Consider adding a new OptimizerOutput variant for DICL
-        // DICL optimization is synchronous, so we need to store the variant info in the handle
-        // For now, return an empty model since we don't have access to the original config
-        // TODO: Store variant config in the job handle or pass it through another way
+        // DICL produces a variant configuration that references the stored examples
+        // Return a DICL variant with the configuration from the optimization job
         Ok(OptimizationJobInfo::Completed {
-            output: OptimizerOutput::Model(crate::model::UninitializedModelConfig {
-                routing: vec![],
-                providers: std::collections::HashMap::new(),
-                timeouts: crate::config_parser::TimeoutsConfig::default(),
-            }),
+            output: OptimizerOutput::Variant(Box::new(crate::variant::VariantConfig::Dicl(
+                crate::variant::dicl::DiclConfig {
+                    weight: None,
+                    embedding_model: Arc::from(self.embedding_model.as_str()),
+                    k: self.k as u32,
+                    model: Arc::from(self.model.as_str()),
+                    system_instructions: String::new(),
+                    temperature: None,
+                    top_p: None,
+                    stop_sequences: None,
+                    presence_penalty: None,
+                    frequency_penalty: None,
+                    max_tokens: None,
+                    seed: None,
+                    json_mode: None,
+                    extra_body: None,
+                    extra_headers: None,
+                    retries: crate::variant::RetryConfig::default(),
+                },
+            ))),
         })
     }
 }

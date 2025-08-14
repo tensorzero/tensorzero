@@ -76,58 +76,71 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .await;
     }
     assert!(matches!(status, OptimizationJobInfo::Completed { .. }));
-    let OptimizationJobInfo::Completed {
-        output: OptimizerOutput::Model(model_config),
-    } = status
-    else {
-        panic!("Expected model config");
+    let OptimizationJobInfo::Completed { output } = status else {
+        panic!("Expected completed status");
     };
-    let model_config = model_config
-        .load("test-fine-tuned-model", &ProviderTypesConfig::default())
-        .await
-        .unwrap();
-    let system = "You are a helpful assistant named Dr. M.M. Patel.".to_string();
-    let messages = vec![RequestMessage {
-        role: Role::User,
-        content: vec![ContentBlock::Text(Text {
-            text: "What is the capital of France?".to_string(),
-        })],
-    }];
-    let request = ModelInferenceRequest {
-        system: Some(system),
-        messages,
-        inference_id: Uuid::now_v7(),
-        tool_config: None,
-        temperature: None,
-        top_p: None,
-        max_tokens: None,
-        presence_penalty: None,
-        frequency_penalty: None,
-        seed: None,
-        stop_sequences: None,
-        stream: false,
-        json_mode: JsonMode::Off.into(),
-        function_type: FunctionType::Chat,
-        output_schema: None,
-        extra_body: Default::default(),
-        extra_headers: Default::default(),
-        extra_cache_key: None,
+
+    // Handle both Model and Variant outputs
+    match output {
+        OptimizerOutput::Model(model_config) => {
+            let model_config = model_config
+                .load("test-fine-tuned-model", &ProviderTypesConfig::default())
+                .await
+                .unwrap();
+            // Test the model configuration
+            println!("Model configuration loaded successfully: {model_config:?}");
+
+            // Test inference with the fine-tuned model
+            let system = "You are a helpful assistant named Dr. M.M. Patel.".to_string();
+            let messages = vec![RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text(Text {
+                    text: "What is the capital of France?".to_string(),
+                })],
+            }];
+            let request = ModelInferenceRequest {
+                system: Some(system),
+                messages,
+                inference_id: Uuid::now_v7(),
+                tool_config: None,
+                temperature: None,
+                top_p: None,
+                max_tokens: None,
+                presence_penalty: None,
+                frequency_penalty: None,
+                seed: None,
+                stop_sequences: None,
+                stream: false,
+                json_mode: JsonMode::Off.into(),
+                function_type: FunctionType::Chat,
+                output_schema: None,
+                extra_body: Default::default(),
+                extra_headers: Default::default(),
+                extra_cache_key: None,
+            };
+            let clients = InferenceClients {
+                http_client: &client,
+                clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+                credentials: &HashMap::new(),
+                cache_options: &CacheOptions::default(),
+            };
+            // We didn't produce a real model, so there's nothing to test
+            if use_mock_inference_provider() {
+                return;
+            }
+            let response = model_config
+                .infer(&request, &clients, "test")
+                .await
+                .unwrap();
+            println!("Response: {response:?}");
+        }
+        OptimizerOutput::Variant(variant_config) => {
+            // Test the variant configuration
+            println!("Variant configuration created successfully: {variant_config:?}");
+            // For DICL variants, we don't need to test inference like we do for models
+            // since DICL variants work by retrieving examples at inference time
+        }
     };
-    let clients = InferenceClients {
-        http_client: &client,
-        clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
-        credentials: &HashMap::new(),
-        cache_options: &CacheOptions::default(),
-    };
-    // We didn't produce a real model, so there's nothing to test
-    if use_mock_inference_provider() {
-        return;
-    }
-    let response = model_config
-        .infer(&request, &clients, "test")
-        .await
-        .unwrap();
-    println!("Response: {response:?}");
 }
 
 /// Runs launch_optimization_workflow and then polls for the workflow using the Rust client

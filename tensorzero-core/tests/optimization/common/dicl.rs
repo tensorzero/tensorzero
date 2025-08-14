@@ -19,16 +19,17 @@ impl OptimizationTestCase for DiclTestCase {
         UninitializedOptimizerInfo {
             inner: UninitializedOptimizerConfig::Dicl(UninitializedDiclOptimizationConfig {
                 // This is the only model that supports images
+                provider: "openai".to_string(),
                 embedding_model: "text-embedding-3-small".to_string(),
                 variant_name: "test".to_string(),
                 function_name: "test".to_string(),
                 clickhouse_url: "http://chuser:chpassword@localhost:8123/tensorzero".to_string(),
-                credentials: None,
                 api_base: if use_mock_inference_provider {
                     Some("http://localhost:3030/openai/".parse().unwrap())
                 } else {
                     None
                 },
+                ..Default::default()
             }),
         }
     }
