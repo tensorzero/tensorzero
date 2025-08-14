@@ -1157,9 +1157,9 @@ pub struct PrepareOpenAIMessagesArgs<'a> {
     pub provider_type: &'a str,
 }
 
-pub fn prepare_openai_messages<'a>(
-    args: PrepareOpenAIMessagesArgs<'a>,
-) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
+pub fn prepare_openai_messages(
+    args: PrepareOpenAIMessagesArgs<'_>,
+) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
     let mut openai_messages = Vec::with_capacity(args.messages.len());
     for message in args.messages {
         openai_messages.extend(tensorzero_to_openai_messages(message, args.provider_type)?);
