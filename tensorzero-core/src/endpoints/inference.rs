@@ -536,11 +536,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     )]
                     .into_iter()
                     .collect(),
-                    schemas: SchemaData {
-                        system: None,
-                        user: None,
-                        assistant: None,
-                    },
+                    schemas: SchemaData::default(),
                     tools: vec![],
                     tool_choice: ToolChoice::Auto,
                     parallel_tool_calls: None,
