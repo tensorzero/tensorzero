@@ -145,9 +145,18 @@ class DiclOptimizationConfig:
     def __init__(
         self,
         *,
+        provider: str,
         embedding_model: str,
         variant_name: str,
         function_name: str,
+        dimensions: Optional[int],
+        batch_size: Optional[int],
+        max_concurrency: Optional[int],
+        retries: Optional[Dict[str, Any]],
+        k: Optional[int],
+        model: Optional[str],
+        credentials: Optional[str] = None,
+        api_base: Optional[str] = None,
     ) -> None: ...
 
 @final
