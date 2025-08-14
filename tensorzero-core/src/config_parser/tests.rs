@@ -2232,9 +2232,11 @@ async fn test_glob_relative_path() {
     };
     assert_eq!(
         variant
-            .user_template
+            .templates
+            .user
             .as_ref()
             .unwrap()
+            .template
             .path
             .get_template_key(),
         format!(
@@ -2243,15 +2245,17 @@ async fn test_glob_relative_path() {
         )
     );
     assert_eq!(
-        variant.system_template.as_ref().unwrap().contents,
+        variant.templates.system.as_ref().unwrap().template.contents,
         "Hello, world!"
     );
 
     assert_eq!(
         variant
-            .system_template
+            .templates
+            .system
             .as_ref()
             .unwrap()
+            .template
             .path
             .get_template_key(),
         format!(
@@ -2261,7 +2265,7 @@ async fn test_glob_relative_path() {
     );
 
     assert_eq!(
-        variant.user_template.as_ref().unwrap().contents,
+        variant.templates.user.as_ref().unwrap().template.contents,
         "My second template"
     );
 }

@@ -2340,7 +2340,7 @@ mod tests {
                 user: None,
                 assistant: None,
             },
-            output_schema: StaticJSONSchema::from_value(output_schema_value).unwrap(),
+            output_schema: StaticJSONSchema::from_value(output_schema_value.clone()).unwrap(),
             implicit_tool_call_config: ToolCallConfig {
                 tools_available: vec![],
                 tool_choice: ToolChoice::Auto,

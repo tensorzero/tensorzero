@@ -779,7 +779,7 @@ mod tests {
     fn test_prepare_system_message() {
         let templates = get_test_template_config();
 
-        let system_schema = StaticJSONSchema::from_value(&serde_json::json!({
+        let system_schema = StaticJSONSchema::from_value(serde_json::json!({
             "type": "object",
             "properties": {
                 "assistant_name": {

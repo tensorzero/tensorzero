@@ -292,7 +292,7 @@ pub(crate) mod tests {
     }
 
     pub fn test_system_template_schema() -> StaticJSONSchema {
-        StaticJSONSchema::from_value(&json!({
+        StaticJSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "assistant_name": {
@@ -305,7 +305,7 @@ pub(crate) mod tests {
     }
 
     pub fn test_user_template_schema() -> StaticJSONSchema {
-        StaticJSONSchema::from_value(&json!({
+        StaticJSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "name": {
@@ -321,7 +321,7 @@ pub(crate) mod tests {
     }
 
     pub fn test_assistant_template_schema() -> StaticJSONSchema {
-        StaticJSONSchema::from_value(&json!({
+        StaticJSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "reason": {
