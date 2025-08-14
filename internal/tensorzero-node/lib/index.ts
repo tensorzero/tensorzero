@@ -7,6 +7,8 @@ import {
   Config,
   ClientInferenceParams,
   InferenceResponse,
+  TimeWindow,
+  ModelUsageTimePoint,
 } from "./bindings";
 import type { TensorZeroClient as NativeTensorZeroClientType } from "../index";
 
@@ -79,6 +81,13 @@ export class TensorZeroClient {
     const staleDatasetString =
       await this.nativeClient.staleDataset(datasetName);
     return JSON.parse(staleDatasetString) as StaleDatasetResponse;
+  }
+
+  async getModelUsageTimeseries(
+    timeWindow: TimeWindow,
+    maxPeriods: number,
+  ): Promise<ModelUsageTimePoint> {
+    await this.nativeClient.getModelUsageTimeseries(timeWindow, maxPeriods);
   }
 }
 

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
 
@@ -23,7 +23,9 @@ pub trait SelectQueries {
     ) -> Result<Vec<ModelUsageTimePoint>, Error>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
 pub enum TimeWindow {
     Hour,
     Day,
@@ -32,7 +34,8 @@ pub enum TimeWindow {
     Cumulative,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, ts_rs::TS, Deserialize, PartialEq)]
+#[ts(export)]
 pub struct ModelUsageTimePoint {
     pub period_start: DateTime<Utc>,
     pub model_name: String,
