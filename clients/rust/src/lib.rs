@@ -8,6 +8,7 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
+use tensorzero_core::db::HealthCheckable;
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
@@ -17,7 +18,6 @@ pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobIn
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
     config_parser::Config,
-    db::DatabaseConnection,
     endpoints::{
         datasets::InsertDatapointParams,
         dynamic_evaluation_run::{
