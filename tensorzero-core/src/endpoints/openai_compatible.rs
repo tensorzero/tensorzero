@@ -107,7 +107,7 @@ pub async fn inference_handler(
         .into()),
     }?;
 
-    let response = inference(config, &http_client, clickhouse_connection_info, params).await?;
+    let response = inference(config, &http_client, clickhouse_connection_info, params, ()).await?;
 
     match response {
         InferenceOutput::NonStreaming(response) => {

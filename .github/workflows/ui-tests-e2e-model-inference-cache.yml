@@ -93,6 +93,8 @@ jobs:
       - name: Regenerate model inference cache
         working-directory: ui
         if: inputs.regen_cache == true
+        env:
+          TENSORZERO_CI: 1
         run: |
           echo "FIREWORKS_ACCOUNT_ID=${{ secrets.FIREWORKS_ACCOUNT_ID }}" >> fixtures/.env-gateway
           echo "FIREWORKS_API_KEY=${{ secrets.FIREWORKS_API_KEY }}" >> fixtures/.env-gateway
@@ -105,7 +107,6 @@ jobs:
           # server, and inserts our regenerated fixtures from scratch
           docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml down
           docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml rm -f
-
 
       - name: Upload new model inference cache
         if: inputs.regen_cache == true

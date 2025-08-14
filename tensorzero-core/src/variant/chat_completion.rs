@@ -1065,7 +1065,7 @@ mod tests {
             }),
             ..Default::default()
         };
-        let schema_any = StaticJSONSchema::from_value(&json!({ "type": "object" })).unwrap();
+        let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             system_schema: Some(schema_any.clone()),
@@ -1510,8 +1510,8 @@ mod tests {
             "additionalProperties": false
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
-        let schema_any = StaticJSONSchema::from_value(&json!({ "type": "object" })).unwrap();
+        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
+        let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             assistant_schema: Some(schema_any.clone()),
@@ -1663,8 +1663,8 @@ mod tests {
         let implicit_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
         let hardcoded_output_schema =
-            StaticJSONSchema::from_value(&hardcoded_output_schema).unwrap();
-        let schema_any = StaticJSONSchema::from_value(&json!({ "type": "object" })).unwrap();
+            StaticJSONSchema::from_value(hardcoded_output_schema).unwrap();
+        let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             assistant_schema: Some(schema_any.clone()),
@@ -1775,8 +1775,8 @@ mod tests {
         let implicit_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
         let hardcoded_output_schema =
-            StaticJSONSchema::from_value(&hardcoded_output_schema).unwrap();
-        let schema_any = StaticJSONSchema::from_value(&json!({ "type": "object" })).unwrap();
+            StaticJSONSchema::from_value(hardcoded_output_schema).unwrap();
+        let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             assistant_schema: Some(schema_any.clone()),
@@ -1897,7 +1897,7 @@ mod tests {
             },
         };
         let templates = Box::leak(Box::new(get_test_template_config()));
-        let schema_any = StaticJSONSchema::from_value(&json!({ "type": "object" })).unwrap();
+        let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let function_config = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             system_schema: Some(schema_any.clone()),
@@ -2250,7 +2250,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: StaticJSONSchema::from_value(&output_schema_value).unwrap(),
+            output_schema: StaticJSONSchema::from_value(output_schema_value.clone()).unwrap(),
             implicit_tool_call_config: ToolCallConfig {
                 tools_available: vec![],
                 tool_choice: ToolChoice::Auto,

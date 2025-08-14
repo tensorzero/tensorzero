@@ -208,7 +208,7 @@ pub fn convert_to_optimizer_status(
                 },
                 extra_headers: None,
                 extra_body: None,
-                timeouts: None,
+                timeouts: TimeoutsConfig::default(),
                 discard_unknown_chunks: false,
             };
             OptimizationJobInfo::Completed {

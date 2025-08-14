@@ -436,3 +436,7 @@ json_mode = "strict"
 type = "s3_compatible"
 bucket_name = "tensorzero-e2e-test-images"
 region = "us-east-1"
+
+[gateway.observability.batch_writes]
+enabled = true
+flush_interval_ms = 80

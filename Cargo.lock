@@ -1541,6 +1541,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "enum-map"
+version = "2.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6866f3bfdf8207509a033af1a75a7b08abda06bbaaeae6669323fd5a097df2e9"
+dependencies = [
+ "enum-map-derive",
+]
+
+[[package]]
+name = "enum-map-derive"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f282cfdfe92516eb26c2af8589c274c7c17681f5ecc03c18255fe741c6aa64eb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "equator"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1588,7 +1608,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.8.1"
+version = "2025.8.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1822,7 +1842,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.8.1"
+version = "2025.8.2"
 dependencies = [
  "axum",
  "clap",
@@ -1833,6 +1853,7 @@ dependencies = [
  "tensorzero",
  "tensorzero-core",
  "tokio",
+ "tokio-util",
  "tower-http",
  "tracing",
  "tracing-opentelemetry-instrumentation-sdk",
@@ -4604,9 +4625,9 @@ checksum = "c1e9a774a6c28142ac54bb25d25562e6bcf957493a184f15ad4eebccb23e410a"
 
 [[package]]
 name = "slab"
-version = "0.4.10"
+version = "0.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04dc19736151f35336d325007ac991178d504a119863a2fcb3758cdb5e52c50d"
+checksum = "7a2ae44ef20feb57a68b23d846850f861394c2e02dc425a50098ae8c90267589"
 
 [[package]]
 name = "smallvec"
@@ -4800,6 +4821,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "tracing-test",
@@ -4810,7 +4832,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2025.8.1"
+version = "2025.8.2"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -4831,9 +4853,11 @@ dependencies = [
  "chrono",
  "clap",
  "derive_builder",
+ "enum-map",
  "eventsource-stream",
  "futures",
  "futures-core",
+ "glob",
  "google-cloud-auth",
  "hex",
  "http 1.3.1",
@@ -4875,6 +4899,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "toml 0.9.5",
  "tower-http",
  "tower-layer",
@@ -4905,7 +4930,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2025.8.1"
+version = "2025.8.2"
 dependencies = [
  "napi",
  "napi-build",
@@ -4918,7 +4943,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.8.1"
+version = "2025.8.2"
 dependencies = [
  "futures",
  "pyo3",

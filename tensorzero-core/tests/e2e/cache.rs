@@ -325,6 +325,18 @@ async fn test_cache_stream_write_and_read() {
 #[traced_test]
 #[tokio::test]
 pub async fn test_dont_cache_invalid_tool_call() {
+    let is_batched_writes = match std::env::var("TENSORZERO_CLICKHOUSE_BATCH_WRITES") {
+        Ok(value) => value == "true",
+        Err(_) => false,
+    };
+    if is_batched_writes {
+        // Skip test if batched writes are enabled
+        // The message is logged from the batch writer tokio task, which may run
+        // a different thread when the multi-threaded tokio runtime is used (and fail to be captured)
+        // We cannot use the single-threaded tokio runtime here, since we need to call 'block_in_place'
+        // from GatewayHandle
+        return;
+    }
     let client = make_embedded_gateway().await;
     let randomness = Uuid::now_v7();
     let params = ClientInferenceParams {
