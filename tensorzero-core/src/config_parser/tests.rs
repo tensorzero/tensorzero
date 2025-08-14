@@ -566,7 +566,7 @@ async fn test_config_from_toml_table_json_function_no_output_schema() {
         _ => panic!("Expected a JSON function"),
     };
     assert_eq!(output_schema, &StaticJSONSchema::default());
-    assert_eq!(output_schema.value, &serde_json::json!({}));
+    assert_eq!(output_schema.value, serde_json::json!({}));
 }
 
 /// Ensure that the config parsing fails when there are extra variables for variants

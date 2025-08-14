@@ -372,7 +372,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
     let output_schema = match (datapoint.output_schema(), function_config) {
         // If the datapoint has an output schema, use it only in the case where it is not the same as the output schema of the function
         (Some(output_schema), FunctionConfig::Json(json_function_config)) => {
-            if output_schema == json_function_config.output_schema.value {
+            if output_schema == &json_function_config.output_schema.value {
                 debug!("Output schema matches function schema, using function default");
                 None
             } else {
