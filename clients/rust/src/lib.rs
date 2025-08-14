@@ -8,12 +8,15 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
+pub use tensorzero_core::db::DatabaseConnection;
 use tensorzero_core::db::HealthCheckable;
+pub use tensorzero_core::db::{ModelUsageTimePoint, TimeWindow};
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
+pub use tensorzero_core::gateway_util::setup_clickhouse_without_config;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{

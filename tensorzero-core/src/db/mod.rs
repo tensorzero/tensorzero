@@ -1,5 +1,4 @@
-use std::future::Future;
-
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
@@ -7,18 +6,21 @@ use crate::error::Error;
 
 pub mod clickhouse;
 
-pub trait DatabaseConnection: SelectQueries + HealthCheckable {}
+#[async_trait]
+pub trait DatabaseConnection: SelectQueries + HealthCheckable + Send + Sync {}
 
+#[async_trait]
 pub trait HealthCheckable {
-    fn health(&self) -> impl Future<Output = Result<(), Error>>;
+    async fn health(&self) -> Result<(), Error>;
 }
 
+#[async_trait]
 pub trait SelectQueries {
-    fn get_model_usage_timeseries(
+    async fn get_model_usage_timeseries(
         &self,
         time_window: TimeWindow,
         max_periods: u32,
-    ) -> impl Future<Output = Result<Vec<ModelUsageTimePoint>, Error>>;
+    ) -> Result<Vec<ModelUsageTimePoint>, Error>;
 }
 
 #[derive(Debug)]
@@ -39,4 +41,4 @@ pub struct ModelUsageTimePoint {
     pub count: u64,
 }
 
-impl<T: SelectQueries + HealthCheckable> DatabaseConnection for T {}
+impl<T: SelectQueries + HealthCheckable + Send + Sync> DatabaseConnection for T {}

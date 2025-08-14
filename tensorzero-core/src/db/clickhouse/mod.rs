@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use enum_map::Enum;
 use reqwest::multipart::Form;
 use reqwest::multipart::Part;
@@ -730,6 +731,7 @@ impl ClickHouseConnectionInfo {
     }
 }
 
+#[async_trait]
 impl HealthCheckable for ClickHouseConnectionInfo {
     async fn health(&self) -> Result<(), Error> {
         match self {

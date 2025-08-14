@@ -1,3 +1,5 @@
+use async_trait::async_trait;
+
 use crate::{
     db::{ModelUsageTimePoint, SelectQueries, TimeWindow},
     error::{Error, ErrorDetails},
@@ -5,6 +7,7 @@ use crate::{
 
 use super::ClickHouseConnectionInfo;
 
+#[async_trait]
 impl SelectQueries for ClickHouseConnectionInfo {
     async fn get_model_usage_timeseries(
         &self,
