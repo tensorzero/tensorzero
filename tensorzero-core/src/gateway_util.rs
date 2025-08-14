@@ -94,13 +94,13 @@ pub type AppState = axum::extract::State<AppStateData>;
 
 impl GatewayHandle {
     pub async fn new(config: Arc<Config>) -> Result<Self, Error> {
-        let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
-            .ok()
-            .or_else(|| {
-                std::env::var("CLICKHOUSE_URL").ok().inspect(|_| {
-                    tracing::warn!("Deprecation Warning: The environment variable \"CLICKHOUSE_URL\" has been renamed to \"TENSORZERO_CLICKHOUSE_URL\" and will be removed in a future version. Please update your environment to use \"TENSORZERO_CLICKHOUSE_URL\" instead.");
-                })
-            });
+        let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
+        if clickhouse_url.is_none()
+            && std::env::var("CLICKHOUSE_URL").is_ok()
+            && config.gateway.observability.enabled.is_none()
+        {
+            return Err(ErrorDetails::ClickHouseConfiguration { message: "`CLICKHOUSE_URL` is deprecated and no longer accepted. Please set `TENSORZERO_CLICKHOUSE_URL`".to_string() }.into());
+        }
         Self::new_with_clickhouse(config, clickhouse_url).await
     }
 

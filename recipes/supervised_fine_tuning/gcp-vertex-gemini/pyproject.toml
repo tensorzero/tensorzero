@@ -1,16 +1,15 @@
 [project]
-name = "tensorzero-recipes-dpo-openai"
+name = "tensorzero-recipes-supervised-fine-tuning-metrics-gcp-vertex-gemini"
 version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "clickhouse-connect",
+    "google-cloud-aiplatform",
     "ipykernel",
-    "tensorzero",
-    "minijinja",
     "notebook",
     "numpy",
-    "openai",
     "pandas",
+    "tensorzero",
     "toml",
 ]
