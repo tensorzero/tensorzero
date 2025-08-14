@@ -105,12 +105,6 @@ def mixed_rendered_samples(
                         {"type": "text", "value": "bar"},
                     ],
                 },
-                {
-                    "role": "assistant",
-                    "content": [
-                        {"type": "text", "value": "Hello world"},
-                    ],
-                },
             ],
         },
         output=[Text(text="Hello world")],
@@ -122,7 +116,11 @@ def mixed_rendered_samples(
                 Tool(
                     name="test",
                     description="test",
-                    parameters={"foo": "bar"},
+                    parameters={
+                        "type": "object",
+                        "properties": {"foo": {"type": "string", "description": "bar"}},
+                        "required": ["foo"],
+                    },
                     strict=False,
                 )
             ],

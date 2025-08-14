@@ -3,14 +3,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::error::{Error, ErrorDetails};
 use serde::{Deserialize, Serialize};
 use toml::{
     de::{DeTable, DeValue},
     Spanned, Table,
 };
-
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
-use crate::error::{Error, ErrorDetails};
 
 /// Wrapper type to enforce proper handling of toml-relative paths.
 /// When we add support for config globbing, we'll require deserializing

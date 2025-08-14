@@ -1066,6 +1066,19 @@ impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
     }
 }
 
+impl From<ToolCall> for OpenAIRequestToolCall<'static> {
+    fn from(tool_call: ToolCall) -> Self {
+        OpenAIRequestToolCall {
+            id: Cow::Owned(tool_call.id),
+            r#type: OpenAIToolType::Function,
+            function: OpenAIRequestFunctionCall {
+                name: Cow::Owned(tool_call.name),
+                arguments: Cow::Owned(tool_call.arguments),
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OpenAIAssistantRequestMessage<'a> {
     #[serde(
@@ -1087,6 +1100,7 @@ pub struct OpenAIToolRequestMessage<'a> {
 #[serde(tag = "role")]
 #[serde(rename_all = "lowercase")]
 pub enum OpenAIRequestMessage<'a> {
+    Developer(OpenAISystemRequestMessage<'a>),
     System(OpenAISystemRequestMessage<'a>),
     User(OpenAIUserRequestMessage<'a>),
     Assistant(OpenAIAssistantRequestMessage<'a>),
@@ -1097,6 +1111,7 @@ impl OpenAIRequestMessage<'_> {
     pub fn no_content(&self) -> bool {
         match self {
             OpenAIRequestMessage::System(_) => false,
+            OpenAIRequestMessage::Developer(_) => false,
             OpenAIRequestMessage::User(OpenAIUserRequestMessage { content }) => content.is_empty(),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                 content,
@@ -1108,6 +1123,7 @@ impl OpenAIRequestMessage<'_> {
     pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
         match self {
             OpenAIRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
+            OpenAIRequestMessage::Developer(msg) => msg.content.to_lowercase().contains(value),
             OpenAIRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
                 OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => false,
@@ -1133,21 +1149,57 @@ impl OpenAIRequestMessage<'_> {
     }
 }
 
-pub fn prepare_openai_messages<'a>(
-    system: Option<&'a str>,
-    messages: &'a [RequestMessage],
-    json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
-    provider_type: &str,
-) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
-    let mut openai_messages = Vec::with_capacity(messages.len());
-    for message in messages {
-        openai_messages.extend(tensorzero_to_openai_messages(message, provider_type)?);
+pub struct PrepareOpenAIMessagesArgs<'a> {
+    pub system: Option<&'a str>,
+    pub developer: Option<&'a str>,
+    pub messages: &'a [RequestMessage],
+    pub json_mode: Option<&'a ModelInferenceRequestJsonMode>,
+    pub provider_type: &'a str,
+}
+
+pub fn prepare_openai_messages(
+    args: PrepareOpenAIMessagesArgs<'_>,
+) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
+    let mut openai_messages = Vec::with_capacity(args.messages.len());
+    for message in args.messages {
+        openai_messages.extend(tensorzero_to_openai_messages(message, args.provider_type)?);
     }
-    if let Some(system_msg) =
-        tensorzero_to_openai_system_message(system, json_mode, &openai_messages)
-    {
-        openai_messages.insert(0, system_msg);
+
+    match (args.system, args.developer) {
+        // Error if both system and developer are defined
+        (Some(_), Some(_)) => {
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "Cannot specify both system and developer messages".to_string(),
+            }));
+        }
+        // If developer is provided, use developer logic
+        (_, Some(developer)) => {
+            if let Some(developer_msg) = tensorzero_to_openai_developer_message(
+                Some(developer),
+                args.json_mode,
+                &openai_messages,
+            ) {
+                openai_messages.insert(0, developer_msg);
+            }
+        }
+        // If only system is provided, use system logic
+        (Some(system), None) => {
+            if let Some(system_msg) =
+                tensorzero_to_openai_system_message(Some(system), args.json_mode, &openai_messages)
+            {
+                openai_messages.insert(0, system_msg);
+            }
+        }
+        // If neither is provided, use system logic for backwards compatibility (handles JSON mode)
+        (None, None) => {
+            if let Some(system_msg) =
+                tensorzero_to_openai_system_message(None, args.json_mode, &openai_messages)
+            {
+                openai_messages.insert(0, system_msg);
+            }
+        }
     }
+
     Ok(openai_messages)
 }
 
@@ -1218,6 +1270,50 @@ pub(super) fn tensorzero_to_openai_system_message<'a>(
                     content: Cow::Owned("Respond using JSON.".to_string()),
                 }))
             }
+            _ => None,
+        },
+    }
+}
+
+/// TODO: This is a temporary function to support the OpenAI RFT API.
+pub(super) fn tensorzero_to_openai_developer_message<'a>(
+    system: Option<&'a str>,
+    json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
+    messages: &[OpenAIRequestMessage<'a>],
+) -> Option<OpenAIRequestMessage<'a>> {
+    match system {
+        Some(system) => {
+            match json_mode {
+                Some(ModelInferenceRequestJsonMode::On) => {
+                    if messages
+                        .iter()
+                        .any(|msg| msg.content_contains_case_insensitive("json"))
+                        || system.to_lowercase().contains("json")
+                    {
+                        OpenAIRequestMessage::Developer(OpenAISystemRequestMessage {
+                            content: Cow::Borrowed(system),
+                        })
+                    } else {
+                        let formatted_instructions = format!("Respond using JSON.\n\n{system}");
+                        OpenAIRequestMessage::Developer(OpenAISystemRequestMessage {
+                            content: Cow::Owned(formatted_instructions),
+                        })
+                    }
+                }
+
+                // If JSON mode is either off or strict, we don't need to do anything special
+                _ => OpenAIRequestMessage::Developer(OpenAISystemRequestMessage {
+                    content: Cow::Borrowed(system),
+                }),
+            }
+            .into()
+        }
+        None => match json_mode {
+            Some(ModelInferenceRequestJsonMode::On) => Some(OpenAIRequestMessage::Developer(
+                OpenAISystemRequestMessage {
+                    content: Cow::Owned("Respond using JSON.".to_string()),
+                },
+            )),
             _ => None,
         },
     }
@@ -1686,12 +1782,13 @@ impl<'a> OpenAIRequest<'a> {
         } else {
             None
         };
-        let mut messages = prepare_openai_messages(
-            request.system.as_deref(),
-            &request.messages,
-            Some(&request.json_mode),
-            PROVIDER_TYPE,
-        )?;
+        let mut messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
+            system: request.system.as_deref(),
+            developer: None,
+            messages: &request.messages,
+            json_mode: Some(&request.json_mode),
+            provider_type: PROVIDER_TYPE,
+        })?;
 
         let (tools, tool_choice, mut parallel_tool_calls) = prepare_openai_tools(request);
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
