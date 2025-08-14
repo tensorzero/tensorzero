@@ -8,6 +8,7 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
+use tensorzero_core::config_parser::ConfigFileGlob;
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
@@ -178,7 +179,12 @@ pub enum ClientBuilderError {
     #[error("Failed to configure ClickHouse: {0}")]
     Clickhouse(TensorZeroError),
     #[error("Failed to parse config: {0}")]
-    ConfigParsing(TensorZeroError),
+    ConfigParsingPreGlob(TensorZeroError),
+    #[error("Failed to parse config: {error}. Config file glob `{glob}` resolved to the following files:\n{paths}", glob = glob.glob,paths = glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"))]
+    ConfigParsing {
+        error: TensorZeroError,
+        glob: ConfigFileGlob,
+    },
     #[error("Failed to build HTTP client: {0}")]
     HTTPClientBuild(TensorZeroError),
     #[error("Failed to get gateway version: {0}")]
@@ -263,16 +269,23 @@ impl ClientBuilder {
                 verify_credentials,
             } => {
                 let config = if let Some(config_file) = config_file {
+                    let glob = ConfigFileGlob::new(config_file.to_string_lossy().to_string())
+                        .map_err(|e| {
+                            ClientBuilderError::ConfigParsingPreGlob(TensorZeroError::Other {
+                                source: e.into(),
+                            })
+                        })?;
                     Arc::new(
                         Config::load_from_path_optional_verify_credentials(
-                            config_file,
+                            &glob,
                             *verify_credentials,
                         )
                         .await
                         .map_err(|e| {
-                            ClientBuilderError::ConfigParsing(TensorZeroError::Other {
-                                source: e.into(),
-                            })
+                            ClientBuilderError::ConfigParsing {
+                                error: TensorZeroError::Other { source: e.into() },
+                                glob,
+                            }
                         })?,
                     )
                 } else {
@@ -1241,9 +1254,13 @@ async fn with_embedded_timeout<R, F: Future<Output = Result<R, TensorZeroError>>
 /// and returns a `TensorZeroError` instead of a `ConfigError`.
 /// This function does NOT verify credentials.
 pub async fn get_config_no_verify_credentials(path: PathBuf) -> Result<Config, TensorZeroError> {
-    Config::load_from_path_optional_verify_credentials(&path, false)
-        .await
-        .map_err(|e| TensorZeroError::Other { source: e.into() })
+    Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new(path.to_string_lossy().to_string())
+            .map_err(|e| TensorZeroError::Other { source: e.into() })?,
+        false,
+    )
+    .await
+    .map_err(|e| TensorZeroError::Other { source: e.into() })
 }
 
 /// Compares two TensorZero version strings, returning `None`
