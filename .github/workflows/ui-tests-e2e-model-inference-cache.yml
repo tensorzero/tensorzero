@@ -93,6 +93,8 @@ jobs:
       - name: Regenerate model inference cache
         working-directory: ui
         if: inputs.regen_cache == true
+        env:
+          TENSORZERO_CI: 1
         run: |
           echo "FIREWORKS_ACCOUNT_ID=${{ secrets.FIREWORKS_ACCOUNT_ID }}" >> fixtures/.env-gateway
           echo "FIREWORKS_API_KEY=${{ secrets.FIREWORKS_API_KEY }}" >> fixtures/.env-gateway
