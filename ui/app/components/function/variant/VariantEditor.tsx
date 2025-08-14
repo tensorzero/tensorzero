@@ -61,7 +61,10 @@ export function VariantEditor({
         const prevTemplate = prev.templates[key];
         const templates = {
           ...prev.templates,
-          [key]: { ...prevTemplate, template: { contents, path: prevTemplate?.template.path } },
+          [key]: {
+            ...prevTemplate,
+            template: { contents, path: prevTemplate?.template.path },
+          },
         };
         return {
           ...prev,
