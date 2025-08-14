@@ -204,6 +204,7 @@ impl Variant for DiclConfig {
             clients,
             inference_params,
             self.retries,
+            inference_config.dynamic_routing,
         )
         .await?;
 

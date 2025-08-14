@@ -871,6 +871,7 @@ pub async fn write_completed_batch_inference<'a>(
             extra_body: Cow::Borrowed(&extra_body),
             extra_headers: Cow::Borrowed(&extra_headers),
             extra_cache_key: None,
+            dynamic_routing: None, // Not supported in batch inference yet
         };
         let inference_result = function
             .prepare_response(

@@ -81,6 +81,8 @@ pub struct Params {
     // the tags to add to the inference
     #[serde(default)]
     pub tags: HashMap<String, String>,
+    // dynamic routing override: specify provider order at runtime
+    pub dynamic_routing: Option<Vec<String>>,
     // dynamic information about tool calling. Don't directly include `dynamic_tool_params` in `Params`.
     #[serde(flatten)]
     pub dynamic_tool_params: DynamicToolParams,
@@ -340,6 +342,7 @@ pub async fn inference<T: Send + 'static>(
                 inference_id,
                 episode_id,
             },
+            dynamic_routing: params.dynamic_routing.as_deref(),
             extra_cache_key: None,
             extra_body: Cow::Borrowed(&params.extra_body),
             extra_headers: Cow::Borrowed(&params.extra_headers),

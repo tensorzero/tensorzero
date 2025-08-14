@@ -577,6 +577,159 @@ impl ModelConfig {
             provider_errors,
         }))
     }
+
+    /// Validates that dynamic routing is valid for this model config
+    pub fn validate_dynamic_routing(&self, dynamic_routing: &[String]) -> Result<(), Error> {
+        // Validate that all providers in dynamic_routing exist in the original config
+        for provider_name in dynamic_routing {
+            if !self.providers.contains_key(provider_name.as_str()) {
+                return Err(Error::new(ErrorDetails::ProviderNotFound {
+                    provider_name: provider_name.clone(),
+                }));
+            }
+        }
+        Ok(())
+    }
+
+    /// Performs inference with dynamic routing override
+    #[tracing::instrument(skip_all, fields(model_name = model_name, otel.name = "model_inference", stream = false))]
+    pub async fn infer_with_dynamic_routing<'request>(
+        &self,
+        request: &'request ModelInferenceRequest<'request>,
+        clients: &'request InferenceClients<'request>,
+        model_name: &'request str,
+        dynamic_routing: &[String],
+    ) -> Result<ModelInferenceResponse, Error> {
+        self.validate_dynamic_routing(dynamic_routing)?;
+        
+        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        let run_all_models = async {
+            for provider_name in dynamic_routing {
+                let provider = self.providers.get(provider_name.as_str()).ok_or_else(|| {
+                    Error::new(ErrorDetails::ProviderNotFound {
+                        provider_name: provider_name.clone(),
+                    })
+                })?;
+                let request = Self::filter_content_blocks(request, model_name, provider);
+                let model_provider_request = ModelProviderRequest {
+                    request: &request,
+                    model_name,
+                    provider_name,
+                };
+
+                let response_fut =
+                    self.non_streaming_provider_request(model_provider_request, provider, clients);
+                let response = if let Some(timeout) = provider.non_streaming_total_timeout() {
+                    tokio::time::timeout(timeout, response_fut)
+                        .await
+                        .unwrap_or_else(|_: Elapsed| {
+                            Err(Error::new(ErrorDetails::ModelProviderTimeout {
+                                provider_name: provider_name.clone(),
+                                timeout,
+                                streaming: false,
+                            }))
+                        })
+                } else {
+                    response_fut.await
+                };
+
+                match response {
+                    Ok(response) => return Ok(response),
+                    Err(error) => {
+                        provider_errors.insert(provider_name.clone(), error);
+                    }
+                }
+            }
+            Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+                provider_errors,
+            }))
+        };
+
+        if self.timeouts.non_streaming.total_ms.is_some() {
+            let timeout = Duration::from_millis(self.timeouts.non_streaming.total_ms.expect("checked above"));
+            tokio::time::timeout(timeout, run_all_models)
+                .await
+                .unwrap_or_else(|_: Elapsed| {
+                    Err(Error::new(ErrorDetails::ModelTimeout {
+                        model_name: model_name.to_string(),
+                        timeout,
+                        streaming: false,
+                    }))
+                })
+        } else {
+            run_all_models.await
+        }
+    }
+
+    /// Performs streaming inference with dynamic routing override
+    #[tracing::instrument(skip_all, fields(model_name = model_name, otel.name = "model_inference", stream = true))]
+    pub async fn infer_stream_with_dynamic_routing<'request>(
+        &self,
+        request: &'request ModelInferenceRequest<'request>,
+        clients: &'request InferenceClients<'request>,
+        model_name: &'request str,
+        dynamic_routing: &[String],
+    ) -> Result<StreamResponseAndMessages, Error> {
+        self.validate_dynamic_routing(dynamic_routing)?;
+        
+        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        let run_all_models = async {
+            for provider_name in dynamic_routing {
+                let provider = self.providers.get(provider_name.as_str()).ok_or_else(|| {
+                    Error::new(ErrorDetails::ProviderNotFound {
+                        provider_name: provider_name.clone(),
+                    })
+                })?;
+                let request = Self::filter_content_blocks(request, model_name, provider);
+                let model_provider_request = ModelProviderRequest {
+                    request: &request,
+                    model_name,
+                    provider_name,
+                };
+
+                let response_fut =
+                    self.streaming_provider_request(model_provider_request, provider, clients);
+                let response = if let Some(timeout) = provider.streaming_ttft_timeout() {
+                    tokio::time::timeout(timeout, response_fut)
+                        .await
+                        .unwrap_or_else(|_: Elapsed| {
+                            Err(Error::new(ErrorDetails::ModelProviderTimeout {
+                                provider_name: provider_name.clone(),
+                                timeout,
+                                streaming: true,
+                            }))
+                        })
+                } else {
+                    response_fut.await
+                };
+
+                match response {
+                    Ok(response) => return Ok(response),
+                    Err(error) => {
+                        provider_errors.insert(provider_name.clone(), error);
+                    }
+                }
+            }
+            Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+                provider_errors,
+            }))
+        };
+
+        if self.timeouts.streaming.ttft_ms.is_some() {
+            let timeout = Duration::from_millis(self.timeouts.streaming.ttft_ms.expect("checked above"));
+            tokio::time::timeout(timeout, run_all_models)
+                .await
+                .unwrap_or_else(|_: Elapsed| {
+                    Err(Error::new(ErrorDetails::ModelTimeout {
+                        model_name: model_name.to_string(),
+                        timeout,
+                        streaming: true,
+                    }))
+                })
+        } else {
+            run_all_models.await
+        }
+    }
 }
 
 async fn stream_with_cache_write(

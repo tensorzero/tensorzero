@@ -643,6 +643,7 @@ async fn inner_fuse_candidates_stream<'a, 'request>(
         clients,
         params,
         fuser.inner.retries,
+        inference_config.dynamic_routing,
     )
     .await
 }

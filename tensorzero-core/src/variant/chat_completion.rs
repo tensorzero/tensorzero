@@ -448,6 +448,7 @@ impl Variant for ChatCompletionConfig {
             clients,
             inference_params,
             self.retries,
+            inference_config.dynamic_routing,
         )
         .await
     }

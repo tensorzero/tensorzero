@@ -139,6 +139,8 @@ pub struct InferenceConfig<'request> {
     /// to have different cache keys.
     /// This field should only ever be forwarded to `ModelInferenceRequest`
     pub extra_cache_key: Option<String>,
+    /// Dynamic routing override for model providers
+    pub dynamic_routing: Option<&'request [String]>,
 }
 
 /// Maps to the subset of Config that applies to the current inference request.
@@ -177,6 +179,7 @@ impl<'a> BatchInferenceConfig<'a> {
                 extra_body: Default::default(),
                 extra_headers: Default::default(),
                 extra_cache_key: None,
+                dynamic_routing: None, // Not supported in batch inference yet
             },
         )
         .collect()
@@ -681,13 +684,24 @@ struct InferModelRequestArgs<'a, 'request> {
 async fn infer_model_request(
     args: InferModelRequestArgs<'_, '_>,
 ) -> Result<InferenceResult, Error> {
-    let model_inference_response = (|| async {
-        args.model_config
-            .infer(&args.request, args.clients, &args.model_name)
-            .await
-    })
-    .retry(args.retry_config.get_backoff())
-    .await?;
+    // Use dynamic routing if provided, otherwise use the original model config
+    let model_inference_response = if let Some(dynamic_routing) = args.inference_config.dynamic_routing {
+        (|| async {
+            args.model_config
+                .infer_with_dynamic_routing(&args.request, args.clients, &args.model_name, dynamic_routing)
+                .await
+        })
+        .retry(args.retry_config.get_backoff())
+        .await?
+    } else {
+        (|| async {
+            args.model_config
+                .infer(&args.request, args.clients, &args.model_name)
+                .await
+        })
+        .retry(args.retry_config.get_backoff())
+        .await?
+    };
 
     let original_response = model_inference_response.raw_response.clone();
     let model_inference_result =
@@ -716,7 +730,9 @@ async fn infer_model_request_stream<'request>(
     clients: &'request InferenceClients<'request>,
     inference_params: InferenceParams,
     retry_config: RetryConfig,
+    dynamic_routing: Option<&[String]>,
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
+    // Use dynamic routing if provided, otherwise use the original model config
     let StreamResponseAndMessages {
         response:
             StreamResponse {
@@ -726,13 +742,23 @@ async fn infer_model_request_stream<'request>(
                 cached,
             },
         messages: input_messages,
-    } = (|| async {
-        model_config
-            .infer_stream(&request, clients, &model_name)
-            .await
-    })
-    .retry(retry_config.get_backoff())
-    .await?;
+    } = if let Some(dynamic_routing) = dynamic_routing {
+        (|| async {
+            model_config
+                .infer_stream_with_dynamic_routing(&request, clients, &model_name, dynamic_routing)
+                .await
+        })
+        .retry(retry_config.get_backoff())
+        .await?
+    } else {
+        (|| async {
+            model_config
+                .infer_stream(&request, clients, &model_name)
+                .await
+        })
+        .retry(retry_config.get_backoff())
+        .await?
+    };
     let system = request.system.clone();
     let model_used_info = ModelUsedInfo {
         model_name,
@@ -1642,6 +1668,7 @@ mod tests {
             &clients,
             inference_params.clone(),
             retry_config,
+            None, // No dynamic routing for test
         )
         .await;
 
@@ -1805,6 +1832,7 @@ mod tests {
             &clients,
             inference_params.clone(),
             retry_config,
+            None, // No dynamic routing for test
         )
         .await;
 

@@ -467,6 +467,7 @@ impl BaseTensorZeroGateway {
         extra_body: Option<&Bound<'_, PyList>>,
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: bool,
+        dynamic_routing: Option<Vec<String>>,
     ) -> PyResult<ClientInferenceParams> {
         let episode_id = episode_id
             .map(|id| python_uuid_to_uuid("episode_id", id))
@@ -555,6 +556,7 @@ impl BaseTensorZeroGateway {
             extra_body,
             extra_headers,
             internal_dynamic_variant_config: None,
+            dynamic_routing,
         })
     }
 }
@@ -747,7 +749,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, dynamic_routing=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -780,6 +782,8 @@ impl TensorZeroGateway {
     /// :param extra_body: If set, injects extra fields into the provider request body.
     /// :param extra_headers: If set, injects extra fields into the provider request headers.
     /// :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
+    /// :param dynamic_routing: If set, overrides the model's routing configuration with the specified provider order.
+    ///                          Example: ["openai", "bedrock"] will try OpenAI first, then fall back to Bedrock.
     /// :return: If stream is false, returns an InferenceResponse.
     ///          If stream is true, returns a geerator that yields InferenceChunks as they come in.
     fn inference(
@@ -805,6 +809,7 @@ impl TensorZeroGateway {
         extra_body: Option<&Bound<'_, PyList>>,
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
+        dynamic_routing: Option<Vec<String>>,
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
         let fut = client.inference(BaseTensorZeroGateway::prepare_inference_params(
@@ -829,6 +834,7 @@ impl TensorZeroGateway {
             extra_body,
             extra_headers,
             include_original_response.unwrap_or(false),
+            dynamic_routing,
         )?);
 
         // We're in the synchronous `TensorZeroGateway` class, so we need to block on the Rust future,
