@@ -34,6 +34,9 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      - name: Cleanup disk space
+        run: ./ci/free-disk-space.sh
+
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -47,9 +50,6 @@ jobs:
 
       - name: Setup Playwright
         run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
-
-      - name: Cleanup disk space
-        run: ./ci/free-disk-space.sh
 
       # When we're regenerating the model inference cache, don't download the container images
       # The images will get built by `regenerate-model-inference-cache.sh`
