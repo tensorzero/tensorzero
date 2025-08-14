@@ -30,6 +30,9 @@ jobs:
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Cleanup disk space
+        run: ./ci/free-disk-space.sh
+
       - name: Build `tensorzero-node`
         working-directory: internal/tensorzero-node
         run: pnpm build
