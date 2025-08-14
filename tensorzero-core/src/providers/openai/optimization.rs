@@ -7,7 +7,7 @@ use std::{borrow::Cow, collections::HashMap};
 
 use super::{
     prepare_openai_messages, tensorzero_to_openai_assistant_message, OpenAIFileID,
-    OpenAIRequestMessage, OpenAISFTTool,
+    OpenAIRequestMessage, OpenAISFTTool, PrepareOpenAIMessagesArgs,
 };
 use crate::{
     config_parser::TimeoutsConfig,
@@ -311,13 +311,13 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAISupervisedRow<'a> {
             ),
             None => (false, vec![]),
         };
-        let mut messages = prepare_openai_messages(
-            inference.input.system.as_deref(),
-            None,
-            &inference.input.messages,
-            None,
-            PROVIDER_TYPE,
-        )?;
+        let mut messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
+            system: inference.input.system.as_deref(),
+            developer: None,
+            messages: &inference.input.messages,
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+        })?;
         let Some(output) = &inference.output else {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
                 message: "No output in inference".to_string(),
@@ -373,13 +373,13 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAIReinforcementRow<'a> {
             ),
             None => (false, vec![]),
         };
-        let messages = prepare_openai_messages(
-            None,
-            inference.input.system.as_deref(),
-            &inference.input.messages,
-            None,
-            PROVIDER_TYPE,
-        )?;
+        let messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
+            system: None,
+            developer: inference.input.system.as_deref(),
+            messages: &inference.input.messages,
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+        })?;
         let Some(output) = &inference.output else {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
                 message: "No output in inference".to_string(),

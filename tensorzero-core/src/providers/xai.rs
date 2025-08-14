@@ -27,7 +27,7 @@ use crate::providers::helpers::{
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
     stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
-    OpenAIToolChoice, StreamOptions,
+    OpenAIToolChoice, PrepareOpenAIMessagesArgs, StreamOptions,
 };
 use crate::inference::TensorZeroEventError;
 
@@ -356,13 +356,13 @@ impl<'a> XAIRequest<'a> {
 
         let response_format = XAIResponseFormat::new(request.json_mode, request.output_schema);
 
-        let messages = prepare_openai_messages(
-            request.system.as_deref(),
-            None,
-            &request.messages,
-            Some(&request.json_mode),
-            PROVIDER_TYPE,
-        )?;
+        let messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
+            system: request.system.as_deref(),
+            developer: None,
+            messages: &request.messages,
+            json_mode: Some(&request.json_mode),
+            provider_type: PROVIDER_TYPE,
+        })?;
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         Ok(XAIRequest {

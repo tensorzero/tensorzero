@@ -1149,38 +1149,43 @@ impl OpenAIRequestMessage<'_> {
     }
 }
 
+pub struct PrepareOpenAIMessagesArgs<'a> {
+    pub system: Option<&'a str>,
+    pub developer: Option<&'a str>,
+    pub messages: &'a [RequestMessage],
+    pub json_mode: Option<&'a ModelInferenceRequestJsonMode>,
+    pub provider_type: &'a str,
+}
+
 pub fn prepare_openai_messages<'a>(
-    system: Option<&'a str>,
-    developer: Option<&'a str>,
-    messages: &'a [RequestMessage],
-    json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
-    provider_type: &str,
+    args: PrepareOpenAIMessagesArgs<'a>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
-    // Throw an error if both system and developer are defined
-    if system.is_some() && developer.is_some() {
-        return Err(Error::new(ErrorDetails::InternalError {
-            message: "Cannot specify both system and developer messages".to_string(),
-        }));
+    let mut openai_messages = Vec::with_capacity(args.messages.len());
+    for message in args.messages {
+        openai_messages.extend(tensorzero_to_openai_messages(message, args.provider_type)?);
     }
 
-    let mut openai_messages = Vec::with_capacity(messages.len());
-    for message in messages {
-        openai_messages.extend(tensorzero_to_openai_messages(message, provider_type)?);
-    }
-
-    match (system, developer) {
+    match (args.system, args.developer) {
+        // Error if both system and developer are defined
+        (Some(_), Some(_)) => {
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "Cannot specify both system and developer messages".to_string(),
+            }));
+        }
         // If developer is provided, use developer logic
         (_, Some(developer)) => {
-            if let Some(developer_msg) =
-                tensorzero_to_openai_developer_message(Some(developer), json_mode, &openai_messages)
-            {
+            if let Some(developer_msg) = tensorzero_to_openai_developer_message(
+                Some(developer),
+                args.json_mode,
+                &openai_messages,
+            ) {
                 openai_messages.insert(0, developer_msg);
             }
         }
         // If only system is provided, use system logic
         (Some(system), None) => {
             if let Some(system_msg) =
-                tensorzero_to_openai_system_message(Some(system), json_mode, &openai_messages)
+                tensorzero_to_openai_system_message(Some(system), args.json_mode, &openai_messages)
             {
                 openai_messages.insert(0, system_msg);
             }
@@ -1188,7 +1193,7 @@ pub fn prepare_openai_messages<'a>(
         // If neither is provided, use system logic for backwards compatibility (handles JSON mode)
         (None, None) => {
             if let Some(system_msg) =
-                tensorzero_to_openai_system_message(None, json_mode, &openai_messages)
+                tensorzero_to_openai_system_message(None, args.json_mode, &openai_messages)
             {
                 openai_messages.insert(0, system_msg);
             }
@@ -1777,13 +1782,13 @@ impl<'a> OpenAIRequest<'a> {
         } else {
             None
         };
-        let mut messages = prepare_openai_messages(
-            request.system.as_deref(),
-            None,
-            &request.messages,
-            Some(&request.json_mode),
-            PROVIDER_TYPE,
-        )?;
+        let mut messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
+            system: request.system.as_deref(),
+            developer: None,
+            messages: &request.messages,
+            json_mode: Some(&request.json_mode),
+            provider_type: PROVIDER_TYPE,
+        })?;
 
         let (tools, tool_choice, mut parallel_tool_calls) = prepare_openai_tools(request);
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {

@@ -1,5 +1,7 @@
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 #[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
+#[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -11,7 +13,6 @@ use url::Url;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
-    inference::types::pyo3_helpers::deserialize_from_pyobj,
     model::{build_creds_caching_default, CredentialLocation},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::openai::{

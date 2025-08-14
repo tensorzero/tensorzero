@@ -23,7 +23,7 @@ use url::Url;
 
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
-    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, PrepareOpenAIMessagesArgs,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -328,13 +328,13 @@ impl<'a> HyperbolicRequest<'a> {
             ..
         } = request;
 
-        let messages = prepare_openai_messages(
-            request.system.as_deref(),
-            None,
-            &request.messages,
-            Some(&request.json_mode),
-            PROVIDER_TYPE,
-        )?;
+        let messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
+            system: request.system.as_deref(),
+            developer: None,
+            messages: &request.messages,
+            json_mode: Some(&request.json_mode),
+            provider_type: PROVIDER_TYPE,
+        })?;
         Ok(HyperbolicRequest {
             messages,
             model,
