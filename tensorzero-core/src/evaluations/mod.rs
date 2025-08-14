@@ -384,7 +384,7 @@ impl UninitializedEvaluatorConfig {
                             message: format!("Failed to parse LLM judge output schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
                         })
                     })?;
-                let output_schema = StaticJSONSchema::from_value(&output_schema_value)?;
+                let output_schema = StaticJSONSchema::from_value(output_schema_value)?;
                 let implicit_tool_call_config =
                     create_implicit_tool_call_config(output_schema.clone());
                 let variants = variants
@@ -395,7 +395,7 @@ impl UninitializedEvaluatorConfig {
                     variants,
                     system_schema: None,
                     user_schema: user_schema_value
-                        .map(|v| StaticJSONSchema::from_value(&v))
+                        .map(StaticJSONSchema::from_value)
                         .transpose()?,
                     assistant_schema: None,
                     output_schema,
@@ -1612,6 +1612,6 @@ mod tests {
             },
             "required": ["result"]
         });
-        StaticJSONSchema::from_value(&schema_value).unwrap()
+        StaticJSONSchema::from_value(schema_value).unwrap()
     }
 }

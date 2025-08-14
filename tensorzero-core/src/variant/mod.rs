@@ -632,7 +632,7 @@ where
             };
             let output_schema = match inference_config.dynamic_output_schema {
                 Some(schema) => Some(&schema.value),
-                None => Some(json_config.output_schema.value),
+                None => Some(&json_config.output_schema.value),
             };
             ModelInferenceRequest {
                 messages,
@@ -967,7 +967,7 @@ mod tests {
             },
             "required": ["answer"],
         });
-        let output_schema = StaticJSONSchema::from_value(&output_schema_value).unwrap();
+        let output_schema = StaticJSONSchema::from_value(output_schema_value.clone()).unwrap();
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema_value);
 
         let function_config_json = FunctionConfig::Json(FunctionConfigJson {
@@ -1237,7 +1237,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: StaticJSONSchema::from_value(&json!({
+            output_schema: StaticJSONSchema::from_value(json!({
                 "type": "object",
                 "properties": {
                     "answer": { "type": "string" }

@@ -9,13 +9,13 @@ use mimalloc::MiMalloc;
 use std::fmt::Display;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::signal;
 use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
 
-use tensorzero_core::config_parser::Config;
+use tensorzero_core::config_parser::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_migrations;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::endpoints;
@@ -30,7 +30,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
-    /// Use the `tensorzero.toml` config file at the specified path. Incompatible with `--default-config`
+    /// Use all of the config files matching the specified glob pattern. Incompatible with `--default-config`
     #[arg(long)]
     config_file: Option<PathBuf>,
 
@@ -130,16 +130,25 @@ async fn main() {
         tracing::warn!("Running the gateway without any config-related arguments is deprecated. Use `--default-config` to start the gateway with the default config.");
     }
 
-    let config = if let Some(path) = &config_path {
-        Arc::new(
-            Config::load_and_verify_from_path(Path::new(&path))
-                .await
-                .ok() // Don't print the error here, since it was already printed when it was constructed
-                .expect_pretty("Failed to load config"),
+    let (config, glob) = if let Some(path) = &config_path {
+        let glob =
+            ConfigFileGlob::new_from_path(path).expect_pretty("Failed to process config file glob");
+        (
+            Arc::new(
+                Config::load_and_verify_from_path(&glob)
+                    .await
+                    .ok() // Don't print the error here, since it was already printed when it was constructed
+                    .expect_pretty(&format!(
+                        "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
+                        glob.glob,
+                        glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
+                    )),
+            ),
+            Some(glob),
         )
     } else {
         tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
-        Arc::new(Config::default())
+        (Arc::new(Config::default()), None)
     };
 
     if config.gateway.debug {
@@ -353,8 +362,11 @@ async fn main() {
     }
 
     // Print the configuration being used
-    if let Some(path) = &config_path {
-        tracing::info!("├ Configuration: {}", path.to_string_lossy());
+    if let Some(glob) = &glob {
+        tracing::info!("├ Configuration: glob `{}` resolved to:", glob.glob);
+        for path in &glob.paths {
+            tracing::info!("│  ├ {}", path.to_string_lossy());
+        }
     } else {
         tracing::info!("├ Configuration: default");
     }
