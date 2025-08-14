@@ -11,6 +11,7 @@ use url::Url;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
+    inference::types::pyo3_helpers::deserialize_from_pyobj,
     model::{build_creds_caching_default, CredentialLocation},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::openai::{
@@ -114,12 +115,7 @@ impl UninitializedOpenAIRFTConfig {
             grader
         } else {
             // Otherwise, try to deserialize from a Python dict
-            let json_str = py.import("json")?.getattr("dumps")?.call1((grader,))?;
-            let json_string: String = json_str.extract()?;
-
-            serde_json::from_str(&json_string).map_err(|e| {
-                PyErr::new::<PyValueError, _>(format!("Failed to deserialize grader: {e}"))
-            })?
+            deserialize_from_pyobj(py, grader)?
         };
 
         // Deserialize the response_format from Python dict to Rust OpenAIRFTResponseFormat
@@ -129,16 +125,7 @@ impl UninitializedOpenAIRFTConfig {
                 Some(response_format)
             } else {
                 // Otherwise, try to deserialize from a Python dict
-                let json_str = py.import("json")?.getattr("dumps")?.call1((rf,))?;
-                let json_string: String = json_str.extract()?;
-
-                let response_format: OpenAIRFTResponseFormat = serde_json::from_str(&json_string)
-                    .map_err(|e| {
-                    PyErr::new::<PyValueError, _>(format!(
-                        "Failed to deserialize response_format: {e}"
-                    ))
-                })?;
-                Some(response_format)
+                Some(deserialize_from_pyobj(py, rf)?)
             }
         } else {
             None
