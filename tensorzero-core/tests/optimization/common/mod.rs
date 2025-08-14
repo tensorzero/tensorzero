@@ -96,7 +96,9 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
 
     // Handle both Model and Variant outputs
     match output {
-        OptimizerOutput::Model(model_config) => {
+        OptimizerOutput::Model {
+            model: model_config,
+        } => {
             let model_config = model_config
                 .load("test-fine-tuned-model", &ProviderTypesConfig::default())
                 .await
@@ -148,7 +150,9 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 .unwrap();
             println!("Response: {response:?}");
         }
-        OptimizerOutput::Variant(variant_config) => {
+        OptimizerOutput::Variant {
+            variant: variant_config,
+        } => {
             // Test the variant configuration
             println!("Variant configuration created successfully: {variant_config:?}");
             // For DICL variants, we don't need to test inference like we do for models

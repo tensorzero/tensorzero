@@ -21,7 +21,7 @@ use crate::{
         default_api_key_location, OpenAICredentials, DEFAULT_CREDENTIALS, PROVIDER_TYPE,
     },
     stored_inference::RenderedSample,
-    variant::RetryConfig,
+    variant::{dicl::DiclConfig, RetryConfig, VariantConfig},
 };
 use futures::future::try_join_all;
 use std::sync::Arc;
@@ -276,9 +276,41 @@ impl Optimizer for DiclOptimizationConfig {
 
         // Check if we have examples to process
         if train_examples.is_empty() {
-            return Err(Error::new(ErrorDetails::AppState {
-                message: "No training examples provided for DICL optimization".to_string(),
-            }));
+            tracing::warn!(
+                "⚠️  No training examples provided for DICL optimization - creating empty variant"
+            );
+
+            // Create a job handle indicating immediate success with empty processing
+            let job_handle = DiclOptimizationJobHandle {
+                job_id: Uuid::now_v7().to_string(),
+                job_url: Url::parse("https://tensorzero.com/dicl").map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Failed to parse job URL: {e}"),
+                    })
+                })?,
+                job_api_url: Url::parse("https://api.tensorzero.com/dicl").map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Failed to parse job API URL: {e}"),
+                    })
+                })?,
+                credential_location: self.credential_location.clone(),
+                embedding_model: self.embedding_model.clone(),
+                k: self.k,
+                model: self.model.clone(),
+            };
+
+            tracing::info!(
+                "🎉 DICL optimization completed (no examples)!\n\
+                📈 Summary:\n\
+                ├─ Function: '{}'\n\
+                ├─ Variant: '{}'\n\
+                ├─ Examples processed: 0\n\
+                └─ Status: Empty variant created",
+                self.function_name,
+                self.variant_name
+            );
+
+            return Ok(job_handle);
         }
 
         tracing::info!(
@@ -411,8 +443,8 @@ impl JobHandle for DiclOptimizationJobHandle {
         // DICL produces a variant configuration that references the stored examples
         // Return a DICL variant with the configuration from the optimization job
         Ok(OptimizationJobInfo::Completed {
-            output: OptimizerOutput::Variant(Box::new(crate::variant::VariantConfig::Dicl(
-                crate::variant::dicl::DiclConfig {
+            output: OptimizerOutput::Variant {
+                variant: Box::new(VariantConfig::Dicl(DiclConfig {
                     weight: None,
                     embedding_model: Arc::from(self.embedding_model.as_str()),
                     k: self.k as u32,
@@ -428,9 +460,9 @@ impl JobHandle for DiclOptimizationJobHandle {
                     json_mode: None,
                     extra_body: None,
                     extra_headers: None,
-                    retries: crate::variant::RetryConfig::default(),
-                },
-            ))),
+                    retries: RetryConfig::default(),
+                })),
+            },
         })
     }
 }

@@ -142,8 +142,8 @@ impl JobHandle for OptimizationJobHandle {
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OptimizerOutput {
-    Variant(Box<VariantConfig>),
-    Model(UninitializedModelConfig),
+    Variant { variant: Box<VariantConfig> },
+    Model { model: UninitializedModelConfig },
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
