@@ -17,6 +17,9 @@ jobs:
 
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      - name: Cleanup disk space
+        run: ./ci/free-disk-space.sh
+
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Setup Node
@@ -29,9 +32,6 @@ jobs:
 
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Cleanup disk space
-        run: ./ci/free-disk-space.sh
 
       - name: Build `tensorzero-node`
         working-directory: internal/tensorzero-node
