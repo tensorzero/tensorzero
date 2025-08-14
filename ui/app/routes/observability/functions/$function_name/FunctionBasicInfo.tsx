@@ -17,8 +17,10 @@ export default function BasicInfo({ functionConfig }: BasicInfoProps) {
       {functionConfig.description && (
         <BasicInfoItem>
           <BasicInfoItemTitle>Description</BasicInfoItemTitle>
-          <BasicInfoItemContent>
-            {functionConfig.description}
+          <BasicInfoItemContent wrap>
+            <span className="text-sm md:px-2">
+              {functionConfig.description}
+            </span>
           </BasicInfoItemContent>
         </BasicInfoItem>
       )}
