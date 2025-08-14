@@ -2,22 +2,21 @@
 import type { OpenAIModelGraderInput } from "./OpenAIModelGraderInput";
 import type { OpenAISimilarityMetric } from "./OpenAISimilarityMetric";
 import type { OpenAIStringCheckOp } from "./OpenAIStringCheckOp";
-import type { TomlRelativePath } from "./TomlRelativePath";
 
 export type OpenAIGrader =
   | {
       type: "string_check";
       name: string;
       operation: OpenAIStringCheckOp;
-      input: TomlRelativePath;
-      reference: TomlRelativePath;
+      input: string;
+      reference: string;
     }
   | {
       type: "text_similarity";
       name: string;
       evaluation_metric: OpenAISimilarityMetric;
-      input: TomlRelativePath;
-      reference: TomlRelativePath;
+      input: string;
+      reference: string;
     }
   | {
       type: "score_model";
@@ -34,12 +33,7 @@ export type OpenAIGrader =
       passing_labels: Array<string>;
       input: Array<OpenAIModelGraderInput>;
     }
-  | {
-      type: "python";
-      name: string;
-      source: TomlRelativePath;
-      image_tag: string | null;
-    }
+  | { type: "python"; name: string; source: string; image_tag: string | null }
   | {
       type: "multi";
       calculate_output: string;

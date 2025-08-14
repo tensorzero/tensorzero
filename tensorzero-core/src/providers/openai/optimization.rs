@@ -10,7 +10,7 @@ use super::{
     OpenAIRequestMessage, OpenAISFTTool,
 };
 use crate::{
-    config_parser::{path::TomlRelativePath, TimeoutsConfig},
+    config_parser::TimeoutsConfig,
     endpoints::openai_compatible::JsonSchemaInfo,
     error::{Error, ErrorDetails},
     inference::types::{ContentBlock, ContentBlockChatOutput},
@@ -112,14 +112,14 @@ pub enum OpenAIGrader {
     StringCheck {
         name: String,
         operation: OpenAIStringCheckOp,
-        input: TomlRelativePath,
-        reference: TomlRelativePath,
+        input: String,
+        reference: String,
     },
     TextSimilarity {
         name: String,
         evaluation_metric: OpenAISimilarityMetric,
-        input: TomlRelativePath,
-        reference: TomlRelativePath,
+        input: String,
+        reference: String,
     },
     ScoreModel {
         name: String,
@@ -137,7 +137,7 @@ pub enum OpenAIGrader {
     },
     Python {
         name: String,
-        source: TomlRelativePath,  // The source code of the python script.
+        source: String,            // The source code of the python script.
         image_tag: Option<String>, // Docker image for isolation
     },
     Multi {
@@ -222,7 +222,7 @@ impl std::fmt::Display for OpenAISimilarityMetric {
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIModelGraderInputMessage"))]
 pub struct OpenAIModelGraderInput {
     pub role: OpenAIRFTRole,
-    pub content: TomlRelativePath,
+    pub content: String,
 }
 
 impl std::fmt::Display for OpenAIModelGraderInput {

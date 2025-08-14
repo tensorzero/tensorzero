@@ -117,15 +117,7 @@ impl UninitializedOpenAIRFTConfig {
             let json_str = py.import("json")?.getattr("dumps")?.call1((grader,))?;
             let json_string: String = json_str.extract()?;
 
-            // Parse the JSON and transform string templates into TomlRelativePath objects
-            let mut json_value: serde_json::Value =
-                serde_json::from_str(&json_string).map_err(|e| {
-                    PyErr::new::<PyValueError, _>(format!("Failed to parse grader JSON: {e}"))
-                })?;
-
-            transform_strings_to_toml_paths(&mut json_value);
-
-            serde_json::from_value(json_value).map_err(|e| {
+            serde_json::from_str(&json_string).map_err(|e| {
                 PyErr::new::<PyValueError, _>(format!("Failed to deserialize grader: {e}"))
             })?
         };
@@ -349,15 +341,12 @@ impl Optimizer for OpenAIRFTConfig {
             self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
             None,
         )?;
-        // First serialize to JSON with TomlRelativePath objects
-        let mut body_json = serde_json::to_value(&body).map_err(|e| {
+        // Serialize the request body to JSON
+        let body_json = serde_json::to_value(&body).map_err(|e| {
             Error::new(ErrorDetails::InternalError {
                 message: format!("Failed to serialize request body: {e}"),
             })
         })?;
-
-        // Transform TomlRelativePath objects to template strings for OpenAI API
-        extract_template_strings_from_json(&mut body_json)?;
 
         let mut request = client.post(url);
         if let Some(api_key) = api_key {
@@ -491,94 +480,4 @@ fn get_fine_tuning_url(base_url: &Url, job_id: Option<&str>) -> Result<Url, Erro
             message: e.to_string(),
         })
     })
-}
-
-/// Recursively transforms JSON by converting string values in specific fields to TomlRelativePath objects.
-/// This is needed when deserializing grader configurations from Python dictionaries.
-#[cfg(feature = "pyo3")]
-fn transform_strings_to_toml_paths(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Object(obj) => {
-            // Check if this is a grader object that needs path transformations
-            if let Some(serde_json::Value::String(grader_type)) = obj.get("type").cloned() {
-                // For string_check and text_similarity graders, transform input and reference fields
-                if grader_type == "string_check" || grader_type == "text_similarity" {
-                    for field in ["input", "reference"] {
-                        if let Some(serde_json::Value::String(template)) = obj.get(field).cloned() {
-                            // Create a TomlRelativePath with the template as data
-                            let toml_path = serde_json::json!({
-                                "__tensorzero_remapped_path": format!("python_grader_{}", field),
-                                "__data": template
-                            });
-                            obj.insert(field.to_string(), toml_path);
-                        }
-                    }
-                }
-                // For score_model and label_model graders, transform content in input array
-                if grader_type == "score_model" || grader_type == "label_model" {
-                    if let Some(serde_json::Value::Array(input_array)) = obj.get_mut("input") {
-                        for item in input_array {
-                            if let serde_json::Value::Object(msg) = item {
-                                if let Some(serde_json::Value::String(content)) =
-                                    msg.get("content").cloned()
-                                {
-                                    // Always transform content strings to TomlRelativePath
-                                    let toml_path = serde_json::json!({
-                                        "__tensorzero_remapped_path": "python_grader_input",
-                                        "__data": content
-                                    });
-                                    msg.insert("content".to_string(), toml_path);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Recursively process nested objects (e.g., for multi grader)
-            for val in obj.values_mut() {
-                transform_strings_to_toml_paths(val);
-            }
-        }
-        serde_json::Value::Array(arr) => {
-            // Recursively process all values in the array
-            for val in arr.iter_mut() {
-                transform_strings_to_toml_paths(val);
-            }
-        }
-        _ => {
-            // Primitive values don't need transformation
-        }
-    }
-}
-
-/// Recursively transforms JSON by replacing TomlRelativePath objects with their template strings.
-/// This is needed because OpenAI API expects plain strings, not TomlRelativePath objects.
-fn extract_template_strings_from_json(value: &mut serde_json::Value) -> Result<(), Error> {
-    match value {
-        serde_json::Value::Object(obj) => {
-            // Check if this object is a TomlRelativePath (has __tensorzero_remapped_path and __data)
-            if let (Some(serde_json::Value::String(_path)), Some(serde_json::Value::String(data))) =
-                (obj.get("__tensorzero_remapped_path"), obj.get("__data"))
-            {
-                // Replace the entire object with just the template string
-                *value = serde_json::Value::String(data.clone());
-            } else {
-                // Recursively process all values in the object
-                for val in obj.values_mut() {
-                    extract_template_strings_from_json(val)?;
-                }
-            }
-        }
-        serde_json::Value::Array(arr) => {
-            // Recursively process all values in the array
-            for val in arr.iter_mut() {
-                extract_template_strings_from_json(val)?;
-            }
-        }
-        _ => {
-            // Primitive values don't need transformation
-        }
-    }
-    Ok(())
 }

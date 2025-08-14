@@ -1,6 +1,5 @@
 use crate::common::OptimizationTestCase;
 use std::collections::HashMap;
-use tensorzero_core::config_parser::path::TomlRelativePath;
 use tensorzero_core::optimization::{
     openai_rft::UninitializedOpenAIRFTConfig, UninitializedOptimizerConfig,
     UninitializedOptimizerInfo,
@@ -34,14 +33,8 @@ impl OptimizationTestCase for OpenAIRFTTestCase {
                             Box::new(OpenAIGrader::StringCheck {
                                 name: "string_check_grader".to_string(),
                                 operation: OpenAIStringCheckOp::Eq,
-                                input: TomlRelativePath::new_fake_path(
-                                    "input".to_string(),
-                                    "{{sample.output_text}}".to_string(),
-                                ),
-                                reference: TomlRelativePath::new_fake_path(
-                                    "reference".to_string(),
-                                    "{{item.reference_text}}".to_string(),
-                                ),
+                                input: "{{sample.output_text}}".to_string(),
+                                reference: "{{item.reference_text}}".to_string(),
                             }),
                         );
                         map.insert(
@@ -52,17 +45,11 @@ impl OptimizationTestCase for OpenAIRFTTestCase {
                                 input: vec![
                                     OpenAIModelGraderInput {
                                         role: OpenAIRFTRole::Developer,
-                                        content: TomlRelativePath::new_fake_path(
-                                            "developer_msg".to_string(),
-                                            "You are an expert grader. Score the following response on a scale of 0 to 1.".to_string(),
-                                        ),
+                                        content: "You are an expert grader. Score the following response on a scale of 0 to 1.".to_string(),
                                     },
                                     OpenAIModelGraderInput {
                                         role: OpenAIRFTRole::User,
-                                        content: TomlRelativePath::new_fake_path(
-                                            "user_msg".to_string(),
-                                            "Reference Text:\n{{item.reference_text}}\n\nResponse Text:\n{{sample.output_text}}\n\nReference Tool Calls:\n{{item.reference_tools}}\n\nResponse Tool Calls:\n{{sample.output_tools}}".to_string(),
-                                        ),
+                                        content: "Reference Text:\n{{item.reference_text}}\n\nResponse Text:\n{{sample.output_text}}\n\nReference Tool Calls:\n{{item.reference_tools}}\n\nResponse Tool Calls:\n{{sample.output_tools}}".to_string(),
                                     },
                                 ],
                                 range: Some([0.0, 1.0]),

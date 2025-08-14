@@ -105,12 +105,6 @@ def mixed_rendered_samples(
                         {"type": "text", "value": "bar"},
                     ],
                 },
-                {
-                    "role": "assistant",
-                    "content": [
-                        {"type": "text", "value": "Hello world"},
-                    ],
-                },
             ],
         },
         output=[Text(text="Hello world")],

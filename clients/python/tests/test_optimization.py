@@ -56,7 +56,7 @@ def test_sync_openai_rft(
     )
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
         train_samples=mixed_rendered_samples,
-        val_samples=None,
+        val_samples=mixed_rendered_samples,
         optimization_config=optimization_config,
     )
     while True:
@@ -157,7 +157,7 @@ async def test_async_openai_rft(
     optimization_job_handle = (
         await embedded_async_client.experimental_launch_optimization(
             train_samples=mixed_rendered_samples,
-            val_samples=None,
+            val_samples=mixed_rendered_samples,
             optimization_config=optimization_config,
         )
     )
