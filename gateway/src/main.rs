@@ -11,13 +11,13 @@ use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tensorzero_core::clickhouse::migration_manager::manual_run_migrations;
 use tokio::signal;
 use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
 
-use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::config_parser::Config;
+use tensorzero_core::db::clickhouse::migration_manager::manual_run_migrations;
+use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::endpoints;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error;

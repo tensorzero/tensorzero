@@ -13,9 +13,9 @@ use tokio::sync::oneshot::Sender;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-use crate::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
-use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
+use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;

@@ -17,6 +17,7 @@ pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobIn
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
     config_parser::Config,
+    db::DatabaseConnection,
     endpoints::{
         datasets::InsertDatapointParams,
         dynamic_evaluation_run::{
@@ -44,7 +45,7 @@ pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 
 pub use tensorzero_core::cache::CacheParamsOptions;
-pub use tensorzero_core::clickhouse::query_builder::{
+pub use tensorzero_core::db::clickhouse::query_builder::{
     BooleanMetricNode, FloatComparisonOperator, FloatMetricNode, InferenceFilterTreeNode,
     InferenceOutputSource, ListInferencesParams, TagComparisonOperator, TagNode,
     TimeComparisonOperator, TimeNode,

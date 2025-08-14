@@ -26,8 +26,8 @@ use python_helpers::{
 };
 use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
 use tensorzero_core::{
-    clickhouse::{query_builder::OrderBy, ClickhouseFormat},
     config_parser::{ConfigPyClass, FunctionsConfigPyClass},
+    db::clickhouse::{query_builder::OrderBy, ClickhouseFormat},
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
         pyo3_helpers::{

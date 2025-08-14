@@ -663,7 +663,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::cache::{CacheEnabledMode, CacheOptions};
-    use crate::clickhouse::ClickHouseConnectionInfo;
+    use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{
         ChatCompletionInferenceParams, InferenceCredentials, InferenceIds,

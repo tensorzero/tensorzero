@@ -31,7 +31,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 
 lazy_static! {
     /// The URL to send usage data to.
