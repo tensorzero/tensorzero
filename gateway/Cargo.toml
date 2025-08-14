@@ -21,6 +21,8 @@ serde = { workspace = true }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true }
 tower-http = { workspace = true }
 tokio-util = "0.7.15"
+utoipa = { version = "4.2.0", features = ["axum_extras", "yaml"] }
+utoipa-swagger-ui = { version = "7.0.0", features = ["axum"] }
 
 [lints]
 workspace = true
@@ -33,3 +35,8 @@ default = []
 reqwest.workspace = true
 tempfile = "3.20.0"
 tensorzero = { path = "../clients/rust"}
+serde_json = { workspace = true }
+
+[[test]]
+name = "openai_spec_validation"
+path = "tests/openai_spec_validation.rs"
