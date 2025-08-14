@@ -321,7 +321,7 @@ impl UninitializedEvaluatorConfig {
                     LLMJudgeInputFormat::Messages => None,
                 };
                 let user_schema = user_schema_value
-                    .map(|v| StaticJSONSchema::from_value(v))
+                    .map(StaticJSONSchema::from_value)
                     .transpose()?;
                 let output_schema_str = match params.output_type {
                     LLMJudgeOutputType::Float => LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT,
