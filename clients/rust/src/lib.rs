@@ -902,9 +902,13 @@ impl Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 // TODO: do we want this?
                 Ok(with_embedded_timeout(*timeout, async {
-                    launch_optimization(&gateway.handle.app_state.http_client, params)
-                        .await
-                        .map_err(err_to_http)
+                    launch_optimization(
+                        &gateway.handle.app_state.http_client,
+                        params,
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
                 .await?)
             }

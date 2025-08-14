@@ -149,6 +149,7 @@ pub struct LaunchOptimizationParams {
 pub async fn launch_optimization(
     http_client: &reqwest::Client,
     params: LaunchOptimizationParams,
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
     // For the TODO above: will need to pass config in here
 ) -> Result<OptimizationJobHandle, Error> {
     let LaunchOptimizationParams {
@@ -157,14 +158,13 @@ pub async fn launch_optimization(
         optimization_config: optimizer_config,
     } = params;
     let optimizer = optimizer_config.load().await?;
-    let disabled_clickhouse = ClickHouseConnectionInfo::Disabled;
     optimizer
         .launch(
             http_client,
             train_examples,
             val_examples,
             &InferenceCredentials::default(),
-            &disabled_clickhouse,
+            clickhouse_connection_info,
         )
         .await
 }
