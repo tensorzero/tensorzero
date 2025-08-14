@@ -62,12 +62,14 @@ use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, Datapoint,
     DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, LaunchOptimizationParams, ListInferencesParams,
-    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
+    InferenceParams, LaunchOptimizationParams, ListInferencesParams, OptimizationJobHandle,
+    RenderedSample, StoredInference, TensorZeroError, Tool,
 };
-use tokio::sync::Mutex;
 use url::Url;
 
+use crate::gil_helpers::{in_tokio_runtime_no_gil, TokioInferenceStream};
+
+mod gil_helpers;
 mod python_helpers;
 
 #[pymodule]
@@ -135,18 +137,6 @@ impl Drop for LocalHttpGateway {
     fn drop(&mut self) {
         self.close();
     }
-}
-
-/// Runs a function inside the Tokio runtime, with the GIL released.
-/// This is used when we need to drop a TensorZero client (or a type that holds it),
-/// so that we can block on the ClickHouse batcher shutting down, without holding the GIL.
-fn in_tokio_runtime_no_gil<F: FnOnce() + Send>(f: F) {
-    Python::with_gil(|py| {
-        py.allow_threads(|| {
-            let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
-            f();
-        });
-    });
 }
 
 #[pymethods]
@@ -219,27 +209,9 @@ impl Drop for BaseTensorZeroGateway {
     }
 }
 
-/// Helper method to drop an `InferenceStream` inside a Tokio runtime.
-/// An `InferenceStream` holds a reference to a `Client`, and thus may need to block
-/// inside Tokio when it gets dropped
-fn drop_stream_in_tokio(stream: &mut Arc<Mutex<InferenceStream>>) {
-    if let Some(mutex) = Arc::get_mut(stream) {
-        let real_stream = std::mem::replace(mutex, Mutex::new(Box::pin(futures::stream::empty())));
-        in_tokio_runtime_no_gil(|| {
-            drop(real_stream);
-        });
-    }
-}
-
 #[pyclass]
 struct AsyncStreamWrapper {
-    stream: Arc<Mutex<InferenceStream>>,
-}
-
-impl Drop for AsyncStreamWrapper {
-    fn drop(&mut self) {
-        drop_stream_in_tokio(&mut self.stream);
-    }
+    stream: TokioInferenceStream,
 }
 
 #[pymethods]
@@ -275,13 +247,7 @@ impl AsyncStreamWrapper {
 
 #[pyclass]
 struct StreamWrapper {
-    stream: Arc<Mutex<InferenceStream>>,
-}
-
-impl Drop for StreamWrapper {
-    fn drop(&mut self) {
-        drop_stream_in_tokio(&mut self.stream);
-    }
+    stream: TokioInferenceStream,
 }
 
 #[pymethods]
@@ -305,24 +271,8 @@ impl StreamWrapper {
 
 /// Constructs a dummy embedded client. We use this so that we can move out of the real 'client'
 /// field of `BaseTensorZeroGateway` when it is dropped.
-fn make_dummy_client(py: Python<'_>) -> PyResult<Client> {
-    let dummy_client = tokio_block_on_without_gil(py, async move {
-        ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_file: None,
-            clickhouse_url: None,
-            timeout: None,
-            verify_credentials: false,
-        })
-        .build()
-        .await
-    });
-    match dummy_client {
-        Ok(client) => Ok(client),
-        Err(e) => Err(tensorzero_core_error(
-            py,
-            &format!("Failed to construct dummy client: {e:?}"),
-        )?),
-    }
+fn make_dummy_client() -> Client {
+    ClientBuilder::build_dummy()
 }
 
 #[pymethods]
@@ -364,7 +314,7 @@ impl BaseTensorZeroGateway {
 
         Ok(Self {
             client: Arc::new(client),
-            dummy_client: Some(make_dummy_client(py)?),
+            dummy_client: Some(make_dummy_client()),
         })
     }
 
@@ -649,7 +599,7 @@ impl TensorZeroGateway {
         };
         let instance = PyClassInitializer::from(BaseTensorZeroGateway {
             client: Arc::new(client),
-            dummy_client: Some(make_dummy_client(cls.py())?),
+            dummy_client: Some(make_dummy_client()),
         })
         .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
@@ -728,7 +678,7 @@ impl TensorZeroGateway {
         // Construct an instance of `TensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
         let instance = PyClassInitializer::from(BaseTensorZeroGateway {
             client: Arc::new(client),
-            dummy_client: Some(make_dummy_client(cls.py())?),
+            dummy_client: Some(make_dummy_client()),
         })
         .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
@@ -871,7 +821,7 @@ impl TensorZeroGateway {
         match resp {
             InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
             InferenceOutput::Streaming(stream) => Ok(StreamWrapper {
-                stream: Arc::new(Mutex::new(stream)),
+                stream: TokioInferenceStream::new(stream),
             }
             .into_pyobject(py)?
             .into_any()
@@ -1264,7 +1214,7 @@ impl AsyncTensorZeroGateway {
             client_builder = client_builder.with_http_client(http_client);
         }
         let client_fut = client_builder.build();
-        let dummy_client = make_dummy_client(cls.py())?;
+        let dummy_client = make_dummy_client();
         let build_gateway = async move {
             let client = client_fut.await;
             // We need to interact with Python objects here (to build up a Python `AsyncTensorZeroGateway`),
@@ -1364,7 +1314,7 @@ impl AsyncTensorZeroGateway {
             verify_credentials: true,
         })
         .build();
-        let dummy_client = make_dummy_client(cls.py())?;
+        let dummy_client = make_dummy_client();
         let fut = async move {
             let client = client_fut.await;
             // We need to interact with Python objects here (to build up a Python `AsyncTensorZeroGateway`),
@@ -1492,7 +1442,7 @@ impl AsyncTensorZeroGateway {
                 match output {
                     InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
                     InferenceOutput::Streaming(stream) => Ok(AsyncStreamWrapper {
-                        stream: Arc::new(Mutex::new(stream)),
+                        stream: TokioInferenceStream::new(stream),
                     }
                     .into_pyobject(py)?
                     .into_any()

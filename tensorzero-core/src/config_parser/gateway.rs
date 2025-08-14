@@ -35,6 +35,8 @@ pub struct UninitializedGatewayConfig {
     /// For now, this is only supported in the standalone gateway, and not in the embedded gateway.
     #[serde(default)]
     pub unstable_error_json: bool,
+    #[serde(default)]
+    pub disable_pseudonymous_usage_analytics: bool,
 }
 
 impl UninitializedGatewayConfig {
@@ -68,11 +70,12 @@ impl UninitializedGatewayConfig {
             unstable_error_json: self.unstable_error_json,
             unstable_disable_feedback_target_validation: self
                 .unstable_disable_feedback_target_validation,
+            disable_pseudonymous_usage_analytics: self.disable_pseudonymous_usage_analytics,
         })
     }
 }
 
-#[derive(Default, Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct GatewayConfig {
@@ -86,6 +89,8 @@ pub struct GatewayConfig {
     pub base_path: Option<String>,
     pub unstable_error_json: bool,
     pub unstable_disable_feedback_target_validation: bool,
+    #[serde(default)]
+    pub disable_pseudonymous_usage_analytics: bool,
 }
 
 fn serialize_optional_socket_addr<S>(
