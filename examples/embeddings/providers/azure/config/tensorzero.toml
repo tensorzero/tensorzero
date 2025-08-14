@@ -1,0 +1,37 @@
+# TensorZero Configuration for Azure OpenAI Embeddings Example
+# 
+# This example demonstrates how to use Azure OpenAI embeddings through TensorZero
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                              EMBEDDING MODELS                              │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[embedding_models.text-embedding-3-small]
+routing = ["azure"]
+
+[embedding_models.text-embedding-3-small.providers.azure]
+type = "azure"
+# Replace with your Azure OpenAI endpoint
+endpoint = "https://your-resource-name.openai.azure.com/"
+# Replace with your deployment name for text-embedding-3-small
+deployment_id = "text-embedding-3-small"
+
+[embedding_models.text-embedding-3-large]
+routing = ["azure"]
+
+[embedding_models.text-embedding-3-large.providers.azure]
+type = "azure"
+# Replace with your Azure OpenAI endpoint
+endpoint = "https://your-resource-name.openai.azure.com/"
+# Replace with your deployment name for text-embedding-3-large
+deployment_id = "text-embedding-3-large"
+
+[embedding_models.text-embedding-ada-002]
+routing = ["azure"]
+
+[embedding_models.text-embedding-ada-002.providers.azure]
+type = "azure"
+# Replace with your Azure OpenAI endpoint
+endpoint = "https://your-resource-name.openai.azure.com/"
+# Replace with your deployment name for text-embedding-ada-002
+deployment_id = "text-embedding-ada-002"
