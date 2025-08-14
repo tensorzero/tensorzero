@@ -4,6 +4,7 @@ mod best_of_n;
 mod cache;
 mod clickhouse;
 mod common;
+mod config;
 mod datasets;
 mod dicl;
 mod dynamic_evaluations;

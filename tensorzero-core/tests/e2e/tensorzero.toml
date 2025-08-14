@@ -10,6 +10,7 @@
 bind_address = "0.0.0.0:3000"
 debug = true
 template_filesystem_access.enabled = true
+template_filesystem_access.base_path = "."
 export.otlp.traces.enabled = true
 unstable_error_json = true
 observability.skip_completed_migrations = true
