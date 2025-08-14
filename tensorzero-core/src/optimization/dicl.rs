@@ -7,7 +7,7 @@ use serde_json::json;
 use url::Url;
 
 use crate::{
-    clickhouse::ClickHouseConnectionInfo,
+    clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     config_parser::ProviderTypesConfig,
     embeddings::{
         EmbeddingEncodingFormat, EmbeddingInput, EmbeddingProvider, EmbeddingProviderInfo,
@@ -578,7 +578,7 @@ async fn process_embeddings_with_batching(
     Ok(all_embeddings)
 }
 
-/// Inserts DICL examples into ClickHouse using batching with ExternalDataInfo pattern
+/// Inserts DICL examples into ClickHouse using ExternalDataInfo pattern
 async fn insert_dicl_examples_with_batching(
     clickhouse: &ClickHouseConnectionInfo,
     examples: Vec<(RenderedSample, Vec<f64>)>,
@@ -598,7 +598,7 @@ async fn insert_dicl_examples_with_batching(
 
     let mut inserted_examples = 0;
 
-    // Process all examples in batches
+    // Process all examples in batches using ExternalDataInfo
     for (batch_index, batch) in examples.chunks(batch_size).enumerate() {
         let serialized_rows: Result<Vec<String>, Error> = batch
             .iter()
@@ -633,28 +633,52 @@ async fn insert_dicl_examples_with_batching(
 
         let rows = serialized_rows?;
 
-        // Use the simpler synchronous approach for now (TODO: optimize with ExternalDataInfo later)
-        let query = format!(
-            "INSERT INTO DynamicInContextLearningExample\n\
-            SETTINGS async_insert=1, wait_for_async_insert=1\n\
-            FORMAT JSONEachRow\n\
-            {}",
-            rows.join("\n")
-        );
+        // Use ExternalDataInfo for efficient bulk insertion
+        let query = r"
+        INSERT INTO DynamicInContextLearningExample
+            (
+                id,
+                function_name,
+                variant_name,
+                namespace,
+                input,
+                output,
+                embedding
+            )
+            SELECT
+                new_data.id,
+                new_data.function_name,
+                new_data.variant_name,
+                new_data.namespace,
+                new_data.input,
+                new_data.output,
+                new_data.embedding
+            FROM new_data
+        ";
 
-        clickhouse.run_query_synchronous_no_params(query).await?;
+        let external_data = ExternalDataInfo {
+            external_data_name: "new_data".to_string(),
+            structure: "id UUID, function_name LowCardinality(String), variant_name LowCardinality(String), namespace String, input String, output String, embedding Array(Float32)".to_string(),
+            format: "JSONEachRow".to_string(),
+            data: rows.join("\n"),
+        };
+
+        let result = clickhouse
+            .run_query_with_external_data(external_data, query.to_string())
+            .await?;
 
         inserted_examples += batch.len();
         let progress_pct =
             (inserted_examples as f64 / total_examples as f64 * 100.0).round() as u32;
 
         tracing::info!(
-            "📊 ClickHouse insertion progress: {}/{} batches completed ({}%) - {}/{} examples inserted",
+            "📊 ClickHouse insertion progress: {}/{} batches completed ({}%) - {}/{} examples inserted (wrote {} rows)",
             batch_index + 1,
             total_batches,
             progress_pct,
             inserted_examples,
-            total_examples
+            total_examples,
+            result.metadata.written_rows
         );
     }
 
