@@ -1192,7 +1192,7 @@ mod tests {
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
-            output_schema: StaticJSONSchema::from_value(&json!({})).unwrap(),
+            output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
         });

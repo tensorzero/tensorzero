@@ -18,8 +18,10 @@ use tracing::instrument;
 
 use crate::config_parser::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config_parser::path::TomlRelativePath;
+use crate::config_parser::span_map::SpanMap;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
@@ -39,10 +41,10 @@ use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
-use toml::de::DeTable;
 
 pub mod gateway;
 pub mod path;
+mod span_map;
 #[cfg(test)]
 mod tests;
 
@@ -439,41 +441,132 @@ impl MetricConfigLevel {
     }
 }
 
+// Config file globbing:
+// TensorZero supports loading from multiple config files (matching a unix-style glob pattern)
+// This poses a number of challenges, mainly related to resolving paths specified inside config files
+// (e.g. `user_template`) relative to the containing config file.
+// The overall loading process is:
+// 1. We call `ConfigFileGlob::new_from_path` to resolve the glob pattern into a list of paths,
+//    This validates that we have at least one config file to load.
+// 2. We build of a `SpanMap` from the glob using `SpanMap::from_glob`. This is responsible for
+//    actually parsing each individual config file, and then merging the resulting `DeTable`s
+//    into a single `DeTable`. Unfortunately, we cannot simple concatenate the files as parse
+//    them as a single larger file, due to the possibility of files like this:
+//    ```toml
+//    [my_section]
+//    my_section_key = "my_section_value"
+//    ```
+//
+//    ```toml
+//    top.level.path = "top_level_value"
+//    ```
+//
+//    If we concatenated and parsed these files, we would incorrectly include `top.level.path`
+//    underneath the `[my_section]`. Toml doesn't have a way of returning to the 'root' context,
+//    so we're forced to manually parse each file, and then merge them ourselves in memory.
+//
+//    Each individually parsed `DeTable` tracks byte ranges (via `Spanned`) into the original
+//    source string. To allow us to identify the original file by looking at `Spanned`
+//    instances in the merge table, we insert extra whitespace into each file before individually
+//    parsing that file. This ensures that all of our `Spanned` ranges are disjoint, allowing us
+//    to map a `Spanned` back to the original TOML file.
+//
+// 3. We 'remap' our `DeTable using `resolve_toml_relative_paths`.
+//    This allows us to deserialize types like `UninitializedChatCompletionConfig`
+//    which store paths (e.g. `user_template`) relative to the containing config file.
+//
+//    Unfortunately, we cannot directly write `Spanned` types inside of these nested
+//    structs. Due to a serde issue, using attributes like `#[serde(transparent)]`
+//    or `#[serde(flatten)]` will cause Serde to deserialize into its own internal type,
+//    and then deserialize the inner type with a different deserializer (not the original one).
+//    The same problem shows up when constructing error messages - while our custom
+//    `TensorZeroDeserialize` attempts to improve the situation, it's best-effort, and
+//    we don't rely on it for correctness.
+//
+//    Instead, we 'remap' paths by walking the merged `DeTable`, and replacing entries
+//    at known paths with their fully qualified paths (using the `SpanMap` to obtain
+//    the base path for each entry). Each value is changed to a nested map that can be
+//    deserialized into a `TomlRelativePath`. If we forget to remap any parts of the config
+//    in `resolve_toml_relative_paths`, then deserializing the `TomlRelativePath` will fail
+//    (rather than succeed with an incorrect path).
+//
+// At this point, we have a `DeTable` that can be successfully deserialized into an `UninitializedConfig`.
+// From this point onward, none of the config-handling code needs to interact with globs, remapped config files,
+// or even be aware of whether or not we have multiple config files. All path access goes through `TomlRelativePath`,
+// which is self-contained (it stores the absolute path that we resolved earlier).
+
+/// A glob pattern together with the resolved config file paths.
+/// We eagerly resolve the glob pattern so that we can include all of the matched
+/// config file paths in error messages.
+#[derive(Debug)]
+#[expect(clippy::manual_non_exhaustive)]
+pub struct ConfigFileGlob {
+    pub glob: String,
+    pub paths: Vec<PathBuf>,
+    _private: (),
+}
+
+impl ConfigFileGlob {
+    /// Interprets a path as a glob pattern
+    pub fn new_from_path(path: &Path) -> Result<Self, Error> {
+        Self::new(path.display().to_string())
+    }
+
+    pub fn new(glob: String) -> Result<Self, Error> {
+        let mut glob_paths = glob::glob(&glob)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Glob {
+                    glob: glob.to_string(),
+                    message: e.to_string(),
+                })
+            })?
+            .map(|path_res| {
+                path_res.map_err(|e| {
+                    Error::new(ErrorDetails::Glob {
+                        glob: glob.to_string(),
+                        message: format!("Error processing globbed path: `{e}`"),
+                    })
+                })
+            })
+            .collect::<Result<Vec<PathBuf>, Error>>()?;
+        if glob_paths.is_empty() {
+            return Err(Error::new(ErrorDetails::Glob {
+                glob: glob.to_string(),
+                message: "No files matched the glob pattern. Ensure that the path exists, and contains at least one file.".to_string(),
+            }));
+        }
+        // Sort the paths to avoid depending on the filesystem iteration order
+        // when we merge configs. This should only affect the precise error message we display,
+        // not whether or not the config parses successfully (or the final `Config`
+        // that we resolve)
+        glob_paths.sort_by_key(|path| path.display().to_string());
+        Ok(Self {
+            glob,
+            paths: glob_paths,
+            _private: (),
+        })
+    }
+}
+
 impl Config {
-    pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config, Error> {
-        Self::load_from_path_optional_verify_credentials(config_path, true).await
+    pub async fn load_and_verify_from_path(config_glob: &ConfigFileGlob) -> Result<Config, Error> {
+        Self::load_from_path_optional_verify_credentials(config_glob, true).await
     }
 
     pub async fn load_from_path_optional_verify_credentials(
-        config_path: &Path,
+        config_glob: &ConfigFileGlob,
         validate_credentials: bool,
     ) -> Result<Config, Error> {
-        let base_path = match PathBuf::from(&config_path).parent() {
-            Some(base_path) => base_path.to_path_buf(),
-            None => {
-                return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Failed to get parent directory of config file: {config_path:?}"
-                    ),
-                }
-                .into());
-            }
-        };
-        let config_table = match UninitializedConfig::read_toml_config(config_path, &base_path)? {
-            Some(table) => table,
-            None => {
-                return Err(ErrorDetails::Config {
-                    message: format!("Config file not found: {config_path:?}"),
-                }
-                .into())
-            }
-        };
+        let globbed_config = UninitializedConfig::read_toml_config(config_glob)?;
         let config = if cfg!(feature = "e2e_tests") || !validate_credentials {
             SKIP_CREDENTIAL_VALIDATION
-                .scope((), Self::load_from_toml(config_table, base_path))
+                .scope(
+                    (),
+                    Self::load_from_toml(globbed_config.table, &globbed_config.span_map),
+                )
                 .await?
         } else {
-            Self::load_from_toml(config_table, base_path).await?
+            Self::load_from_toml(globbed_config.table, &globbed_config.span_map).await?
         };
 
         if validate_credentials {
@@ -485,7 +578,7 @@ impl Config {
         Ok(config)
     }
 
-    async fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config, Error> {
+    async fn load_from_toml(table: toml::Table, span_map: &SpanMap) -> Result<Config, Error> {
         if table.is_empty() {
             tracing::info!("Config file is empty, so only default functions will be available.");
         }
@@ -564,20 +657,40 @@ impl Config {
 
         // Initialize the templates
         let template_paths = config.get_templates();
-        config.templates.initialize(
-            template_paths,
-            config.gateway.template_filesystem_access.enabled.then_some(
-                config
-                    .gateway
-                    .template_filesystem_access
-                    .base_path
-                    .clone()
-                    .as_ref()
-                    .map(path::TomlRelativePath::get_real_path)
-                    .transpose()?
-                    .unwrap_or(&base_path),
-            ),
-        )?;
+        let template_fs_base_path = if config.gateway.template_filesystem_access.enabled {
+            if let Some(base_path) = &config.gateway.template_filesystem_access.base_path {
+                Some(base_path.get_real_path().map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Failed to get real path for base path: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                    })
+                })?.to_owned())
+            } else if let Some(single_file) = span_map.get_single_file() {
+                tracing::warn!("Deprecation warning: `[gateway.template_filesystem_access.base_path]` is not set, using config file base path. Please specify `[gateway.template_filesystem_access.base_path]`");
+                Some(
+                    single_file
+                        .parent()
+                        .ok_or_else(|| {
+                            Error::new(ErrorDetails::Config {
+                                message: format!(
+                                    "Failed to determine base path for config file `{}`",
+                                    single_file.to_string_lossy()
+                                ),
+                            })
+                        })?
+                        .to_owned(),
+                )
+            } else {
+                return Err(ErrorDetails::Config {
+                    message: "`[gateway.template_filesystem_access]` is enabled, but `[gateway.template_filesystem_access.base_path]` is not set.".to_string()
+                }
+                .into());
+            }
+        } else {
+            None
+        };
+        config
+            .templates
+            .initialize(template_paths, template_fs_base_path.as_deref())?;
 
         // Validate the config
         config.validate().await?;
@@ -928,28 +1041,18 @@ pub struct ProviderTypesConfig {
     pub gcp_vertex_gemini: Option<GCPProviderTypeConfig>,
 }
 
+/// The result of parsing all of the globbed config files,
+/// and merging them into a single `toml::Table`
+struct UninitializedGlobbedConfig {
+    table: toml::Table,
+    span_map: SpanMap,
+}
+
 impl UninitializedConfig {
-    /// Read a file from the file system and parse it as TOML
-    fn read_toml_config(path: &Path, base_path: &Path) -> Result<Option<toml::Table>, Error> {
-        if !path.exists() {
-            return Ok(None);
-        }
-        let contents = std::fs::read_to_string(path).map_err(|_| {
-            Error::new(ErrorDetails::Config {
-                message: format!("Failed to read config file: {}", path.to_string_lossy()),
-            })
-        })?;
-        let table = DeTable::parse(&contents).map_err(|e| {
-            Error::new(ErrorDetails::Config {
-                message: format!(
-                    "Failed to parse config file `{}` as valid TOML: {}",
-                    path.to_string_lossy(),
-                    e
-                ),
-            })
-        })?;
-        let table = path::resolve_toml_relative_paths(table.into_inner(), base_path)?;
-        Ok(Some(table))
+    /// Read all of the globbed config files from disk, and merge them into a single `UninitializedGlobbedConfig`
+    fn read_toml_config(glob: &ConfigFileGlob) -> Result<UninitializedGlobbedConfig, Error> {
+        let (span_map, table) = SpanMap::from_glob(glob)?;
+        Ok(UninitializedGlobbedConfig { table, span_map })
     }
 }
 

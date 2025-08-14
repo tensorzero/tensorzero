@@ -2688,7 +2688,7 @@ mod tests {
             "required": ["name", "age"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -2954,7 +2954,7 @@ mod tests {
             "required": ["name", "age"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -3052,7 +3052,7 @@ mod tests {
             "required": ["name"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&static_output_schema);
-        let output_schema = StaticJSONSchema::from_value(&static_output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(static_output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),

@@ -608,7 +608,7 @@ pub async fn validate_parse_demonstration(
         }
         (FunctionConfig::Json(_), DynamicDemonstrationInfo::Json(output_schema)) => {
             // For json functions, the value should be a valid json object.
-            StaticJSONSchema::from_value(&output_schema)?
+            StaticJSONSchema::from_value(output_schema)?
                 .validate(value)
                 .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
@@ -1215,7 +1215,7 @@ mod tests {
         let weather_tool_config_static = StaticToolConfig {
             name: "get_temperature".to_string(),
             description: "Get the current temperature in a given location".to_string(),
-            parameters: StaticJSONSchema::from_value(&json!({
+            parameters: StaticJSONSchema::from_value(json!({
                 "type": "object",
                 "properties": {
                     "location": {"type": "string"},
@@ -1361,7 +1361,7 @@ mod tests {
         let function_config = Box::leak(Box::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
-            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(output_schema.clone()).unwrap(),
             implicit_tool_call_config,
             description: None,
         })));

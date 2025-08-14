@@ -63,7 +63,7 @@ impl Variant for ChainOfThoughtConfig {
         };
         let original_output_schema = match inference_config.dynamic_output_schema {
             Some(schema) => &schema.value,
-            None => json_config.output_schema.value,
+            None => &json_config.output_schema.value,
         };
         let augmented_output_schema = prepare_thinking_output_schema(original_output_schema);
         let augmented_inference_config = InferenceConfig {

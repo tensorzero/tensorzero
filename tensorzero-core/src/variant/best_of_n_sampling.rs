@@ -93,7 +93,7 @@ impl UninitializedBestOfNSamplingConfig {
 lazy_static! {
     static ref EVALUATOR_OUTPUT_SCHEMA: StaticJSONSchema = {
         #[expect(clippy::expect_used)]
-        StaticJSONSchema::from_value(&json!({
+        StaticJSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "thinking": { "type": "string" },
@@ -714,7 +714,7 @@ impl BestOfNEvaluatorConfig {
                 stream: false,
                 json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
-                output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
+                output_schema: Some(&EVALUATOR_OUTPUT_SCHEMA.value),
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),

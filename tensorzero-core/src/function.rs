@@ -98,7 +98,7 @@ impl FunctionConfigChatPyClass {
     fn get_system_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
         self.inner
             .system_schema()
-            .map(|s| serialize_to_dict(py, s.value))
+            .map(|s| serialize_to_dict(py, &s.value))
             .transpose()?
             .into_py_any(py)
     }
@@ -106,7 +106,7 @@ impl FunctionConfigChatPyClass {
     fn get_user_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
         self.inner
             .user_schema()
-            .map(|s| serialize_to_dict(py, s.value))
+            .map(|s| serialize_to_dict(py, &s.value))
             .transpose()?
             .into_py_any(py)
     }
@@ -115,7 +115,7 @@ impl FunctionConfigChatPyClass {
     fn get_assistant_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
         self.inner
             .assistant_schema()
-            .map(|s| serialize_to_dict(py, s.value))
+            .map(|s| serialize_to_dict(py, &s.value))
             .transpose()?
             .into_py_any(py)
     }
@@ -140,7 +140,7 @@ impl FunctionConfigJsonPyClass {
     fn get_system_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
         self.inner
             .system_schema()
-            .map(|s| serialize_to_dict(py, s.value))
+            .map(|s| serialize_to_dict(py, &s.value))
             .transpose()?
             .into_py_any(py)
     }
@@ -149,7 +149,7 @@ impl FunctionConfigJsonPyClass {
     fn get_user_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
         self.inner
             .user_schema()
-            .map(|s| serialize_to_dict(py, s.value))
+            .map(|s| serialize_to_dict(py, &s.value))
             .transpose()?
             .into_py_any(py)
     }
@@ -158,7 +158,7 @@ impl FunctionConfigJsonPyClass {
     fn get_assistant_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
         self.inner
             .assistant_schema()
-            .map(|s| serialize_to_dict(py, s.value))
+            .map(|s| serialize_to_dict(py, &s.value))
             .transpose()?
             .into_py_any(py)
     }
@@ -170,7 +170,7 @@ impl FunctionConfigJsonPyClass {
                 "FunctionConfig is not a JSON function: {IMPOSSIBLE_ERROR_MESSAGE}"
             )));
         };
-        serialize_to_dict(py, params.output_schema.value)
+        serialize_to_dict(py, &params.output_schema.value)
     }
 }
 
@@ -1205,7 +1205,7 @@ mod tests {
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
-            output_schema: StaticJSONSchema::from_value(&json!({})).unwrap(),
+            output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config,
             description: None,
         };
@@ -1279,7 +1279,7 @@ mod tests {
                 system: Some(system_schema),
                 ..Default::default()
             },
-            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
         };
@@ -1343,7 +1343,7 @@ mod tests {
                 user: Some(user_schema),
                 ..Default::default()
             },
-            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
         };
@@ -1408,7 +1408,7 @@ mod tests {
                 assistant: Some(assistant_schema),
                 ..Default::default()
             },
-            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
         };
@@ -1478,7 +1478,7 @@ mod tests {
                 user: Some(user_schema),
                 assistant: Some(assistant_schema),
             },
-            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
         };
@@ -1677,7 +1677,7 @@ mod tests {
         );
 
         // Test for JSON function with description
-        let output_schema = StaticJSONSchema::from_value(&json!({})).unwrap();
+        let output_schema = StaticJSONSchema::from_value(json!({})).unwrap();
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&json!({}));
         let json_config = FunctionConfigJson {
             variants: HashMap::new(),
@@ -1726,7 +1726,7 @@ mod tests {
           "additionalProperties": false
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -2290,7 +2290,7 @@ mod tests {
         // Test with an empty output schema
         let output_schema = json!({});
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
