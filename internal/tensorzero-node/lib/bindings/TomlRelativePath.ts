@@ -5,7 +5,6 @@
  * When we add support for config globbing, we'll require deserializing
  * all paths (e.g. `system_schema`) as `TomlRelativePath`s, which will
  * track the original `.toml` file in order to perform correct relative path resolution.
- * TODO: Add a pyclass attribute to the TomlRelativePath struct
  */
 export type TomlRelativePath = {
   __tensorzero_remapped_path: string;
