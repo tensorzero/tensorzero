@@ -443,12 +443,14 @@ impl Variant for ChatCompletionConfig {
         infer_model_request_stream(
             request,
             self.model.clone(),
-            &model_config,
-            function,
             clients,
-            inference_params,
-            self.retries,
-            inference_config.dynamic_routing,
+            super::StreamInferenceConfig {
+                model_config: &model_config,
+                function,
+                inference_params,
+                retry_config: self.retries,
+                dynamic_routing: inference_config.dynamic_routing,
+            },
         )
         .await
     }
@@ -1176,6 +1178,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let models = ModelTable::default();
         let inference_models = InferenceModels {
@@ -1231,6 +1234,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let result = chat_completion_config
             .infer(
@@ -1283,6 +1287,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let err = chat_completion_config
             .infer(
@@ -1367,6 +1372,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let result = chat_completion_config
             .infer(
@@ -1446,6 +1452,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let result = chat_completion_config
             .infer(
@@ -1535,6 +1542,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let inference_params = InferenceParams::default();
         let result = chat_completion_config
@@ -1597,6 +1605,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".into(),
@@ -1710,6 +1719,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".into(),
@@ -1811,6 +1821,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".into(),
@@ -1996,6 +2007,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let result = chat_completion_config
             .infer_stream(
@@ -2061,6 +2073,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let (mut stream, models_used) = chat_completion_config
             .infer_stream(
@@ -2164,6 +2177,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let model_request = chat_completion_config
             .prepare_request(
@@ -2272,6 +2286,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let mut inference_params = InferenceParams::default();
         let model_request = chat_completion_config
@@ -2352,6 +2367,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let model_request = chat_completion_config
             .prepare_request(

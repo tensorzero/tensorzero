@@ -685,23 +685,29 @@ async fn infer_model_request(
     args: InferModelRequestArgs<'_, '_>,
 ) -> Result<InferenceResult, Error> {
     // Use dynamic routing if provided, otherwise use the original model config
-    let model_inference_response = if let Some(dynamic_routing) = args.inference_config.dynamic_routing {
-        (|| async {
-            args.model_config
-                .infer_with_dynamic_routing(&args.request, args.clients, &args.model_name, dynamic_routing)
-                .await
-        })
-        .retry(args.retry_config.get_backoff())
-        .await?
-    } else {
-        (|| async {
-            args.model_config
-                .infer(&args.request, args.clients, &args.model_name)
-                .await
-        })
-        .retry(args.retry_config.get_backoff())
-        .await?
-    };
+    let model_inference_response =
+        if let Some(dynamic_routing) = args.inference_config.dynamic_routing {
+            (|| async {
+                args.model_config
+                    .infer_with_dynamic_routing(
+                        &args.request,
+                        args.clients,
+                        &args.model_name,
+                        dynamic_routing,
+                    )
+                    .await
+            })
+            .retry(args.retry_config.get_backoff())
+            .await?
+        } else {
+            (|| async {
+                args.model_config
+                    .infer(&args.request, args.clients, &args.model_name)
+                    .await
+            })
+            .retry(args.retry_config.get_backoff())
+            .await?
+        };
 
     let original_response = model_inference_response.raw_response.clone();
     let model_inference_result =
@@ -721,16 +727,20 @@ async fn infer_model_request(
         .await
 }
 
+pub struct StreamInferenceConfig<'a> {
+    pub model_config: &'a ModelConfig,
+    pub function: &'a FunctionConfig,
+    pub inference_params: InferenceParams,
+    pub retry_config: RetryConfig,
+    pub dynamic_routing: Option<&'a [String]>,
+}
+
 #[instrument(fields(model_name = %model_name), skip_all)]
 async fn infer_model_request_stream<'request>(
     request: ModelInferenceRequest<'request>,
     model_name: Arc<str>,
-    model_config: &ModelConfig,
-    function: &FunctionConfig,
     clients: &'request InferenceClients<'request>,
-    inference_params: InferenceParams,
-    retry_config: RetryConfig,
-    dynamic_routing: Option<&[String]>,
+    config: StreamInferenceConfig<'request>,
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
     // Use dynamic routing if provided, otherwise use the original model config
     let StreamResponseAndMessages {
@@ -742,21 +752,23 @@ async fn infer_model_request_stream<'request>(
                 cached,
             },
         messages: input_messages,
-    } = if let Some(dynamic_routing) = dynamic_routing {
+    } = if let Some(dynamic_routing) = config.dynamic_routing {
         (|| async {
-            model_config
+            config
+                .model_config
                 .infer_stream_with_dynamic_routing(&request, clients, &model_name, dynamic_routing)
                 .await
         })
-        .retry(retry_config.get_backoff())
+        .retry(config.retry_config.get_backoff())
         .await?
     } else {
         (|| async {
-            model_config
+            config
+                .model_config
                 .infer_stream(&request, clients, &model_name)
                 .await
         })
-        .retry(retry_config.get_backoff())
+        .retry(config.retry_config.get_backoff())
         .await?
     };
     let system = request.system.clone();
@@ -765,13 +777,13 @@ async fn infer_model_request_stream<'request>(
         model_provider_name,
         raw_request,
         raw_response: None,
-        inference_params,
+        inference_params: config.inference_params,
         previous_model_inference_results: vec![],
         system,
         input_messages,
         cached,
     };
-    let config_type = function.config_type();
+    let config_type = config.function.config_type();
     let stream =
         stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, config_type)));
     Ok((Box::pin(stream), model_used_info))
@@ -916,6 +928,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
 
         // Define common inference parameters
@@ -1054,6 +1067,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let json_mode = JsonMode::ImplicitTool;
 
@@ -1149,6 +1163,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
 
         // Test case 1: Successful inference with ChatCompletionConfig and FunctionConfigChat
@@ -1448,6 +1463,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
 
         let model_name = "dummy_chat_model";
@@ -1663,12 +1679,14 @@ mod tests {
         let result = infer_model_request_stream(
             request,
             "good_model".into(),
-            model_config,
-            &function_config,
             &clients,
-            inference_params.clone(),
-            retry_config,
-            None, // No dynamic routing for test
+            StreamInferenceConfig {
+                model_config,
+                function: &function_config,
+                inference_params: inference_params.clone(),
+                retry_config,
+                dynamic_routing: None, // No dynamic routing for test
+            },
         )
         .await;
 
@@ -1827,12 +1845,14 @@ mod tests {
         let result = infer_model_request_stream(
             model_request,
             model_name.into(),
-            model_config,
-            function_config_chat,
             &clients,
-            inference_params.clone(),
-            retry_config,
-            None, // No dynamic routing for test
+            StreamInferenceConfig {
+                model_config,
+                function: function_config_chat,
+                inference_params: inference_params.clone(),
+                retry_config,
+                dynamic_routing: None, // No dynamic routing for test
+            },
         )
         .await;
 

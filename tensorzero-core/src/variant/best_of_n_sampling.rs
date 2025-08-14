@@ -1290,6 +1290,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
 
         let selected = best_of_n_variant

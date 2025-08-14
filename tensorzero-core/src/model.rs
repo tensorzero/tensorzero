@@ -601,7 +601,7 @@ impl ModelConfig {
         dynamic_routing: &[String],
     ) -> Result<ModelInferenceResponse, Error> {
         self.validate_dynamic_routing(dynamic_routing)?;
-        
+
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         let run_all_models = async {
             for provider_name in dynamic_routing {
@@ -645,8 +645,8 @@ impl ModelConfig {
             }))
         };
 
-        if self.timeouts.non_streaming.total_ms.is_some() {
-            let timeout = Duration::from_millis(self.timeouts.non_streaming.total_ms.expect("checked above"));
+        if let Some(timeout_ms) = self.timeouts.non_streaming.total_ms {
+            let timeout = Duration::from_millis(timeout_ms);
             tokio::time::timeout(timeout, run_all_models)
                 .await
                 .unwrap_or_else(|_: Elapsed| {
@@ -671,7 +671,7 @@ impl ModelConfig {
         dynamic_routing: &[String],
     ) -> Result<StreamResponseAndMessages, Error> {
         self.validate_dynamic_routing(dynamic_routing)?;
-        
+
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         let run_all_models = async {
             for provider_name in dynamic_routing {
@@ -715,8 +715,8 @@ impl ModelConfig {
             }))
         };
 
-        if self.timeouts.streaming.ttft_ms.is_some() {
-            let timeout = Duration::from_millis(self.timeouts.streaming.ttft_ms.expect("checked above"));
+        if let Some(timeout_ms) = self.timeouts.streaming.ttft_ms {
+            let timeout = Duration::from_millis(timeout_ms);
             tokio::time::timeout(timeout, run_all_models)
                 .await
                 .unwrap_or_else(|_: Elapsed| {

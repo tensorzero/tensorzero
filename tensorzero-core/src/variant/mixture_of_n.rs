@@ -638,12 +638,14 @@ async fn inner_fuse_candidates_stream<'a, 'request>(
     infer_model_request_stream(
         inference_request,
         fuser.inner.model.clone(),
-        &model_config,
-        function,
         clients,
-        params,
-        fuser.inner.retries,
-        inference_config.dynamic_routing,
+        super::StreamInferenceConfig {
+            model_config: &model_config,
+            function,
+            inference_params: params,
+            retry_config: fuser.inner.retries,
+            dynamic_routing: inference_config.dynamic_routing,
+        },
     )
     .await
 }
@@ -1330,6 +1332,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
 
         let InferenceOrStreamResult::NonStream(fused) = mixture_of_n_variant

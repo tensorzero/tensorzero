@@ -381,6 +381,7 @@ impl BaseTensorZeroGateway {
             extra_body,
             extra_headers,
             include_original_response.unwrap_or(false),
+            None, // dynamic_routing
         )?;
         serialize_to_dict(this.py(), params)
     }
@@ -1452,6 +1453,7 @@ impl AsyncTensorZeroGateway {
             extra_body,
             extra_headers,
             include_original_response.unwrap_or(false),
+            None, // dynamic_routing
         )?;
         let client = this.as_super().client.clone();
         // See `AsyncStreamWrapper::__anext__` for more details about `future_into_py`
