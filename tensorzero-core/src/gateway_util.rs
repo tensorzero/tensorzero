@@ -1,6 +1,5 @@
 use std::future::IntoFuture;
 use std::net::SocketAddr;
-use std::path::Path;
 use std::sync::Arc;
 
 use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
@@ -15,7 +14,7 @@ use tracing::instrument;
 
 use crate::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::Config;
+use crate::config_parser::{Config, ConfigFileGlob};
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
@@ -308,7 +307,7 @@ pub async fn start_openai_compatible_gateway(
     })?;
 
     let config = if let Some(config_file) = config_file {
-        Arc::new(Config::load_and_verify_from_path(Path::new(&config_file)).await?)
+        Arc::new(Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?)
     } else {
         Arc::new(Config::default())
     };
