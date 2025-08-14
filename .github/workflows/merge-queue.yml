@@ -182,7 +182,7 @@ jobs:
       - name: "Python: PyO3 Client: pytest"
         working-directory: clients/python
         run: |
-          bash ./test.sh
+          bash ./test.sh --verbose
 
       - name: "Python: OpenAI Client: Install dependencies"
         working-directory: clients/openai-python
@@ -193,7 +193,7 @@ jobs:
       - name: "Python: OpenAI Client: pytest"
         working-directory: clients/openai-python
         run: |
-          uv run pytest
+          uv run pytest --verbose
 
       - name: "Node.js: OpenAI Client: test"
         working-directory: clients/openai-node
