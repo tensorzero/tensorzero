@@ -8,4 +8,7 @@ export type DiclOptimizationJobHandle = {
   job_url: string;
   job_api_url: string;
   credential_location: string | null;
+  embedding_model: string;
+  k: number;
+  model: string;
 };
