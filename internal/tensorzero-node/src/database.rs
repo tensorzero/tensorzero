@@ -30,10 +30,27 @@ impl DatabaseClient {
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
     }
+
+    #[napi]
+    pub async fn get_model_latency_quantiles(&self, params: String) -> Result<String, napi::Error> {
+        let GetModelLatencyQuantilesParams { time_window } =
+            serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let result = self
+            .0
+            .get_model_latency_quantiles(time_window)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
 }
 
 #[derive(Deserialize)]
 struct GetModelUsageTimeseriesParams {
     time_window: TimeWindow,
     max_periods: u32,
+}
+
+#[derive(Deserialize)]
+struct GetModelLatencyQuantilesParams {
+    time_window: TimeWindow,
 }

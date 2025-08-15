@@ -14,6 +14,7 @@ import type {
 } from "../index";
 import { TimeWindow } from "./bindings/TimeWindow";
 import { ModelUsageTimePoint } from "./bindings/ModelUsageTimePoint";
+import { ModelLatencyDatapoint } from "./bindings/ModelLatencyDatapoint";
 
 // Re-export types from bindings
 export * from "./bindings";
@@ -133,5 +134,16 @@ export class DatabaseClient {
     const modelUsageTimeseriesString =
       await this.nativeDatabaseClient.getModelUsageTimeseries(params);
     return JSON.parse(modelUsageTimeseriesString) as ModelUsageTimePoint[];
+  }
+
+  async getModelLatencyQuantiles(
+    timeWindow: TimeWindow,
+  ): Promise<ModelLatencyDatapoint[]> {
+    const params = safeStringify({
+      time_window: timeWindow,
+    });
+    const modelLatencyQuantilesString =
+      await this.nativeDatabaseClient.getModelLatencyQuantiles(params);
+    return JSON.parse(modelLatencyQuantilesString) as ModelLatencyDatapoint[];
   }
 }
