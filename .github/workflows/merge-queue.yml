@@ -282,6 +282,11 @@ jobs:
       - name: Run inference for production deployment tests
         run: examples/production-deployment/run.sh
 
+      - name: Print Docker compose logs
+        if: always()
+        run: |
+          docker compose -f examples/production-deployment/docker-compose.yml logs -t
+
       - name: Take down docker compose for production deployment tests
         run: |
           docker compose -f examples/production-deployment/docker-compose.yml down
