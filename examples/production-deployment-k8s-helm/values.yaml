@@ -120,6 +120,9 @@ persistence:
   storageClass: ""
   mountPath: /app/storage
 
+globalLabels: {}
+# my.domain/owner: my-team
+
 # TensorZero Configuration
 configMap:
   data:

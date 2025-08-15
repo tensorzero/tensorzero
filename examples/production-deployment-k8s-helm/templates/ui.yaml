@@ -6,6 +6,9 @@ metadata:
   labels:
     {{- include "tensorzero.labels" . | nindent 4 }}
     app.kubernetes.io/component: ui
+    {{- with .Values.globalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   replicas: {{ .Values.ui.replicaCount | default 1 }}
   selector:
@@ -61,4 +64,4 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-{{- end }} 
+{{- end }}

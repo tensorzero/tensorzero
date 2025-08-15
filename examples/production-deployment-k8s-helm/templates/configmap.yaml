@@ -4,7 +4,10 @@ metadata:
   name: {{ include "tensorzero.fullname" . }}
   labels:
     {{- include "tensorzero.labels" . | nindent 4 }}
+    {{- with .Values.globalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 data:
   {{- range $key, $value := .Values.configMap.data }}
   {{ $key }}: {{ $value | quote }}
-  {{- end }} 
+  {{- end }}
