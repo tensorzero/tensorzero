@@ -152,6 +152,7 @@ export function DatasetBuilderForm() {
             addDemonstrations={false}
             feedbackCount={counts.feedbackCount}
             curatedInferenceCount={counts.curatedInferenceCount}
+            isLoading={counts.isLoading}
           />
           <OutputSourceSelector control={form.control} />
         </div>
