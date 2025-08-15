@@ -35,6 +35,7 @@ const CHART_COLORS = [
 
 export type ModelUsageMetric = "inferences" | "input_tokens" | "output_tokens";
 
+// TODO: before merging, add total tokens as an option here
 const METRIC_TYPE_CONFIG = {
   inferences: {
     label: "Inferences",

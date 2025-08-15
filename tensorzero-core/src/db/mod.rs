@@ -21,6 +21,11 @@ pub trait SelectQueries {
         time_window: TimeWindow,
         max_periods: u32,
     ) -> Result<Vec<ModelUsageTimePoint>, Error>;
+
+    async fn get_model_latency_quantiles(
+        &self,
+        time_window: TimeWindow,
+    ) -> Result<Vec<ModelLatencyTimePoint>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
