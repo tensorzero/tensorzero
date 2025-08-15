@@ -33,3 +33,9 @@ default = []
 reqwest.workspace = true
 tempfile = "3.20.0"
 tensorzero = { path = "../clients/rust"}
+serde_json = { workspace = true }
+jsonschema = "0.18"
+
+[[test]]
+name = "openai_api_validation"
+path = "tests/openai_api_validation.rs"
