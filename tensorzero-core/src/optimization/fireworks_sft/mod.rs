@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
 
-use crate::config_parser::TimeoutsConfig;
+use crate::config_parser::{Config, TimeoutsConfig};
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::model::UninitializedModelConfig;
 use crate::model::UninitializedModelProvider;
@@ -402,6 +402,7 @@ impl Optimizer for FireworksSFTConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _config: &Config,
     ) -> Result<Self::Handle, Error> {
         let train_rows: Vec<FireworksSupervisedRow<'_>> = train_examples
             .iter()

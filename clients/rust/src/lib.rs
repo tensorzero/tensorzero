@@ -929,6 +929,7 @@ impl Client {
                         &gateway.handle.app_state.http_client,
                         params,
                         &gateway.handle.app_state.clickhouse_connection_info,
+                        gateway.handle.app_state.config.clone(),
                     )
                     .await
                     .map_err(err_to_http)

@@ -13,7 +13,7 @@ use tensorzero_core::{
     cache::CacheOptions,
     clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL},
     clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
-    config_parser::ProviderTypesConfig,
+    config_parser::{Config, ConfigFileGlob, ProviderTypesConfig},
     endpoints::inference::InferenceClients,
     inference::types::{
         resolved_input::FileWithPath,
@@ -62,6 +62,15 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let val_examples = Some(get_examples(test_case, 10));
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
     let clickhouse = get_clickhouse().await;
+    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    config_path.push("tests/e2e/tensorzero.toml");
+    let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
+    let config = Config::load_from_path_optional_verify_credentials(
+        &config_glob,
+        false, // don't validate credentials in tests
+    )
+    .await
+    .unwrap();
     let job_handle = optimizer_info
         .launch(
             &client,
@@ -69,6 +78,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             val_examples,
             &credentials,
             &clickhouse,
+            &config,
         )
         .await
         .unwrap();

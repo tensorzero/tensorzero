@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     clickhouse::ClickHouseConnectionInfo,
+    config_parser::Config,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model::CredentialLocation,
@@ -240,6 +241,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _config: &Config,
     ) -> Result<Self::Handle, Error> {
         // TODO(#2642): improve error handling here so we know what index of example failed
         let train_rows: Vec<GCPVertexGeminiSupervisedRow> = train_examples

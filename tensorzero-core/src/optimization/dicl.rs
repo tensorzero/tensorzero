@@ -8,7 +8,7 @@ use url::Url;
 
 use crate::{
     clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
-    config_parser::ProviderTypesConfig,
+    config_parser::{Config, ProviderTypesConfig},
     embeddings::{
         EmbeddingEncodingFormat, EmbeddingInput, EmbeddingProvider, EmbeddingProviderInfo,
         EmbeddingRequest, UninitializedEmbeddingProviderConfig,
@@ -253,6 +253,7 @@ impl Optimizer for DiclOptimizationConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _config: &Config,
     ) -> Result<Self::Handle, Error> {
         // Warn if val_examples is provided (not used in DICL)
         if val_examples.is_some() {
