@@ -228,13 +228,8 @@ impl UninitializedDiclOptimizationConfig {
 #[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct DiclOptimizationJobHandle {
-    pub job_id: String,
-    /// A url to a human-readable page for the job.
+    // TODO: Remove job_url. Currently causes error in UI if not provided because DICL is being loaded as a fine tuning option.
     pub job_url: Url,
-    pub job_api_url: Url,
-    #[cfg_attr(test, ts(type = "string | null"))]
-    pub credential_location: Option<CredentialLocation>,
-    // Store the configuration needed to create the variant
     pub embedding_model: String,
     pub k: usize,
     pub model: String,
@@ -282,18 +277,11 @@ impl Optimizer for DiclOptimizationConfig {
 
             // Create a job handle indicating immediate success with empty processing
             let job_handle = DiclOptimizationJobHandle {
-                job_id: Uuid::now_v7().to_string(),
                 job_url: Url::parse("https://tensorzero.com/dicl").map_err(|e| {
                     Error::new(ErrorDetails::Config {
                         message: format!("Failed to parse job URL: {e}"),
                     })
-                })?,
-                job_api_url: Url::parse("https://api.tensorzero.com/dicl").map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!("Failed to parse job API URL: {e}"),
-                    })
-                })?,
-                credential_location: self.credential_location.clone(),
+                })?, // TODO: Remove job_url once UI error is addressed
                 embedding_model: self.embedding_model.clone(),
                 k: self.k,
                 model: self.model.clone(),
@@ -393,18 +381,11 @@ impl Optimizer for DiclOptimizationConfig {
 
         // Create a job handle indicating immediate success
         let job_handle = DiclOptimizationJobHandle {
-            job_id: Uuid::now_v7().to_string(),
             job_url: Url::parse("https://tensorzero.com/dicl").map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!("Failed to parse job URL: {e}"),
                 })
-            })?,
-            job_api_url: Url::parse("https://api.tensorzero.com/dicl").map_err(|e| {
-                Error::new(ErrorDetails::Config {
-                    message: format!("Failed to parse job API URL: {e}"),
-                })
-            })?,
-            credential_location: self.credential_location.clone(),
+            })?, // TODO: Remove job_url once UI issue is resolved.
             embedding_model: self.embedding_model.clone(),
             k: self.k,
             model: self.model.clone(),
