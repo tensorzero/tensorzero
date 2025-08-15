@@ -48,6 +48,11 @@ After running the notebook with the `baseline` variant, you can fine-tune a mode
 2. Go to `Supervised Finetuning`.
 3. Start a fine-tuning job using `demonstration` as the metric.
 
+> [!TIP]
+>
+> Most models don't support multi-modal fine-tuning.
+> We recommend using `gpt-4o-2024-08-06` for this example.
+
 After completion, create a new variant in your `config/tensorzero.toml` file.
 It should look like this:
 
