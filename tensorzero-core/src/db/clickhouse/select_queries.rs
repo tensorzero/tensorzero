@@ -1,7 +1,8 @@
+use crate::db::clickhouse::migration_manager::migrations::migration_0035::quantiles_sql_args;
 use async_trait::async_trait;
 
 use crate::{
-    db::{ModelUsageTimePoint, SelectQueries, TimeWindow},
+    db::{ModelLatencyDatapoint, ModelUsageTimePoint, SelectQueries, TimeWindow},
     error::{Error, ErrorDetails},
 };
 
@@ -58,7 +59,60 @@ impl SelectQueries for ClickHouseConnectionInfo {
         let response = self.run_query_synchronous_no_params(query).await?;
 
         // Deserialize the results into ModelUsageTimePoint
-        // This part depends on how your query API returns data
+        response
+            .response
+            .trim()
+            .lines()
+            .map(|row| {
+                serde_json::from_str(row).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: e.to_string(),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    async fn get_model_latency_quantiles(
+        &self,
+        time_window: TimeWindow,
+    ) -> Result<Vec<ModelLatencyDatapoint>, Error> {
+        let time_filter = match time_window {
+            TimeWindow::Hour => {
+                "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 HOUR"
+                    .to_string()
+            }
+            TimeWindow::Day => {
+                "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 DAY"
+                    .to_string()
+            }
+            TimeWindow::Week => {
+                "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 WEEK"
+                    .to_string()
+            }
+            TimeWindow::Month => {
+                "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 MONTH"
+                    .to_string()
+            }
+            TimeWindow::Cumulative => "1 = 1".to_string(),
+        };
+        let qs = quantiles_sql_args();
+        let query = format!(
+            r"
+            SELECT
+                model_name,
+                quantilesTDigestMerge({qs})(response_time_ms_quantiles) AS response_time_quantiles,
+                quantilesTDigestMerge({qs})(ttft_quantiles) AS ttft_quantiles,
+                countMerge(count) as count
+            FROM ModelProviderStatistics
+            WHERE {time_filter}
+            GROUP BY model_name
+            ORDER BY model_name
+            FORMAT JSONEachRow
+            ",
+        );
+        let response = self.run_query_synchronous_no_params(query).await?;
+        // Deserialize the results into ModelLatencyDatapoint
         response
             .response
             .trim()

@@ -25,7 +25,7 @@ pub trait SelectQueries {
     async fn get_model_latency_quantiles(
         &self,
         time_window: TimeWindow,
-    ) -> Result<Vec<ModelLatencyTimePoint>, Error>;
+    ) -> Result<Vec<ModelLatencyDatapoint>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -50,6 +50,16 @@ pub struct ModelUsageTimePoint {
     pub output_tokens: Option<u64>,
     #[serde(deserialize_with = "deserialize_option_u64")]
     pub count: Option<u64>,
+}
+
+#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+#[ts(export)]
+pub struct ModelLatencyDatapoint {
+    pub model_name: String,
+    // should be an array of quantiles_len u64
+    pub response_time_ms_quantiles: Vec<u64>,
+    pub ttft_ms_quantiles: Vec<u64>,
+    pub count: u64,
 }
 
 impl<T: SelectQueries + HealthCheckable + Send + Sync> DatabaseConnection for T {}

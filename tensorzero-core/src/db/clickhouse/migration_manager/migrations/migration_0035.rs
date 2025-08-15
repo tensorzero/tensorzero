@@ -27,7 +27,7 @@ pub const fn quantiles_len() -> usize {
 
 /// Join quantiles into a comma-separated list suitable for ClickHouse,
 /// e.g. "0.001, 0.005, 0.01, ..., 0.999".
-fn quantiles_sql_args() -> String {
+pub fn quantiles_sql_args() -> String {
     // Default `to_string()` prints a compact decimal form (no scientific notation for these values).
     QUANTILES
         .iter()

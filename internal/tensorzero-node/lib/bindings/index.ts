@@ -88,6 +88,7 @@ export * from "./MistralProvider";
 export * from "./MixtureOfNConfig";
 export * from "./ModelConfig";
 export * from "./ModelInput";
+export * from "./ModelLatencyDatapoint";
 export * from "./ModelProvider";
 export * from "./ModelUsageTimePoint";
 export * from "./NonStreamingTimeouts";

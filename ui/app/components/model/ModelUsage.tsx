@@ -33,9 +33,12 @@ const CHART_COLORS = [
   "hsl(var(--chart-5))",
 ] as const;
 
-export type ModelUsageMetric = "inferences" | "input_tokens" | "output_tokens";
+export type ModelUsageMetric =
+  | "inferences"
+  | "input_tokens"
+  | "output_tokens"
+  | "total_tokens";
 
-// TODO: before merging, add total tokens as an option here
 const METRIC_TYPE_CONFIG = {
   inferences: {
     label: "Inferences",
@@ -50,6 +53,11 @@ const METRIC_TYPE_CONFIG = {
   output_tokens: {
     label: "Output Tokens",
     description: "Output token usage",
+    formatter: (value: number) => `${formatDetailedNumber(value)} tokens`,
+  },
+  total_tokens: {
+    label: "Total Tokens",
+    description: "Total token usage (input + output)",
     formatter: (value: number) => `${formatDetailedNumber(value)} tokens`,
   },
 } as const;
@@ -73,6 +81,7 @@ function MetricSelector({
         <SelectItem value="inferences">Inferences</SelectItem>
         <SelectItem value="input_tokens">Input Tokens</SelectItem>
         <SelectItem value="output_tokens">Output Tokens</SelectItem>
+        <SelectItem value="total_tokens">Total Tokens</SelectItem>
       </SelectContent>
     </Select>
   );
@@ -292,6 +301,9 @@ export function transformModelUsageData(
         row[modelName] = modelData?.input_tokens ?? 0;
       } else if (selectedMetric === "output_tokens") {
         row[modelName] = modelData?.output_tokens ?? 0;
+      } else if (selectedMetric === "total_tokens") {
+        row[modelName] =
+          (modelData?.input_tokens ?? 0) + (modelData?.output_tokens ?? 0);
       }
       // Keep all data for tooltip
       row[`${modelName}_count`] = modelData?.count ?? 0;
