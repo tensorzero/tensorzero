@@ -30,7 +30,7 @@ import InputSnippet from "~/components/inference/InputSnippet";
 import { Output } from "~/components/inference/Output";
 import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
-import { safeParseInt } from "~/utils/common";
+import { safeParseInt, symmetricDifference } from "~/utils/common";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import type { InferenceResponse } from "tensorzero-node";
 import { EditButton } from "~/components/utils/EditButton";
@@ -77,40 +77,46 @@ function getDisplayVariantName(variant: PlaygroundVariantInfo) {
   }
 }
 
-/**
- * We will skip revalidation on navigation in the case where:
- * - The previous route was the same as the current route
- * - The previous route shared the same functionName, datasetName, limit, and offset
- */
 export function shouldRevalidate(arg: ShouldRevalidateFunctionArgs) {
   const { currentUrl, nextUrl } = arg;
   // First check that the base route is the same
   if (currentUrl.pathname !== nextUrl.pathname) {
     return true;
   }
-  // Then check that the search params are the same
-  const currentSearchParams = new URLSearchParams(currentUrl.search);
-  const nextSearchParams = new URLSearchParams(nextUrl.search);
-  const currentFunctionName = currentSearchParams.get("functionName");
-  const nextFunctionName = nextSearchParams.get("functionName");
-  const currentDatasetName = currentSearchParams.get("datasetName");
-  const nextDatasetName = nextSearchParams.get("datasetName");
-  const currentLimit = safeParseInt(
-    currentSearchParams.get("limit"),
-    DEFAULT_LIMIT,
-  );
-  const nextLimit = safeParseInt(nextSearchParams.get("limit"), DEFAULT_LIMIT);
-  const currentOffset = safeParseInt(currentSearchParams.get("offset"), 0);
-  const nextOffset = safeParseInt(nextSearchParams.get("offset"), 0);
-  if (
-    currentFunctionName === nextFunctionName &&
-    currentDatasetName === nextDatasetName &&
-    currentLimit === nextLimit &&
-    currentOffset === nextOffset
-  ) {
-    return false;
+
+  // Copy search params for comparison
+  const currentSearchParams = new URLSearchParams(currentUrl.searchParams);
+  const nextSearchParams = new URLSearchParams(nextUrl.searchParams);
+
+  // Remove variants from comparison since we want to skip revalidation if only
+  // the variants changed
+  currentSearchParams.delete("variants");
+  nextSearchParams.delete("variants");
+
+  // Then manually compare the remaining search params and revalidate if
+  // anything else changed
+  if (currentSearchParams.size !== nextSearchParams.size) {
+    // number of search params has changed; revalidate
+    return true;
   }
-  return true;
+
+  const currentKeys = new Set(currentSearchParams.keys());
+  const nextKeys = new Set(nextSearchParams.keys());
+  if (symmetricDifference(currentKeys, nextKeys).size > 0) {
+    // search param keys have changed; revalidate
+    return true;
+  }
+
+  for (const [key, value] of currentSearchParams.entries()) {
+    const nextValue = nextSearchParams.get(key);
+    if (nextValue !== value) {
+      // search param values have changed; revalidate
+      return true;
+    }
+  }
+
+  // No other changes detected; skip revalidation
+  return false;
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
