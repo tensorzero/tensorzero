@@ -335,9 +335,13 @@ struct OpenAIFineTuningMessage {
     tool_calls: Option<Vec<Value>>,
 }
 
-async fn embeddings_handler(Json(params): Json<serde_json::Value>) -> Json<serde_json::Value> {
+async fn embeddings_handler(
+    Json(params): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, Error> {
     let input = &params["input"];
-    let model = params["model"].as_str().unwrap_or("text-embedding-3-small");
+    let model = params["model"]
+        .as_str()
+        .ok_or_else(|| Error::new("Missing 'model' field".to_string(), StatusCode::BAD_REQUEST))?;
 
     // Create mock embeddings - return 1536-dimensional zero vectors for each input
     let embeddings = if let Some(input_array) = input.as_array() {
@@ -360,7 +364,7 @@ async fn embeddings_handler(Json(params): Json<serde_json::Value>) -> Json<serde
         })]
     };
 
-    Json(json!({
+    Ok(Json(json!({
         "object": "list",
         "data": embeddings,
         "model": model,
@@ -368,7 +372,7 @@ async fn embeddings_handler(Json(params): Json<serde_json::Value>) -> Json<serde
             "prompt_tokens": 10,
             "total_tokens": 10
         }
-    }))
+    })))
 }
 
 async fn completions_handler(Json(params): Json<serde_json::Value>) -> Response<Body> {
