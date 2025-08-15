@@ -104,7 +104,7 @@ const DatapointPlaygroundOutput = memo(
       </div>
     );
   },
-  // TODO: Remove custom comparison and making props stable instead
+  // TODO: Remove custom comparison and make props stable instead
   (prevProps, nextProps) => {
     return (
       prevProps.datapoint.id === nextProps.datapoint.id &&
