@@ -8,7 +8,7 @@ pub struct DiclTestCase();
 
 impl OptimizationTestCase for DiclTestCase {
     fn supports_image_data(&self) -> bool {
-        true
+        false
     }
 
     fn supports_tool_calls(&self) -> bool {
