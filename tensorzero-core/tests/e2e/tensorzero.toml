@@ -397,17 +397,17 @@ api_base = "https://tensorzero--vllm-inference-qwen-vllm-inference.modal.run/v1/
 ## Llama
 
 [models."llama-scout-llama"]
-routing = ["llama"]
+routing = ["llama_api"]
 
-[models."llama-scout-llama".providers.llama]
-type = "llama"
+[models."llama-scout-llama".providers.llama_api]
+type = "llama_api"
 model_name = "Llama-4-Scout-17B-16E-Instruct-FP8"
 
 [models."llama-scout-llama-dynamic"]
-routing = ["llama"]
+routing = ["llama_api"]
 
-[models."llama-scout-llama-dynamic".providers.llama]
-type = "llama"
+[models."llama-scout-llama-dynamic".providers.llama_api]
+type = "llama_api"
 model_name = "Llama-4-Scout-17B-16E-Instruct-FP8"
 api_key_location = "dynamic::llama_api_key"
 
@@ -1220,33 +1220,33 @@ extra_headers = [
 
 ## Llama
 
-[functions.basic_test.variants.llama]
+[functions.basic_test.variants.llama_api]
 type = "chat_completion"
 model = "llama-scout-llama"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
-[functions.basic_test.variants.llama-shorthand]
+[functions.basic_test.variants.llama_api-shorthand]
 type = "chat_completion"
 model = "llama-scout-llama"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
-[functions.basic_test.variants.llama-extra-body]
+[functions.basic_test.variants.llama_api-extra-body]
 type = "chat_completion"
 model = "llama-scout-llama"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
-[functions.basic_test.variants.llama-extra-headers]
+[functions.basic_test.variants.llama_api-extra-headers]
 type = "chat_completion"
 model = "llama-scout-llama"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [{ name = "Authorization", value = "Bearer: invalid_openai_auth" }]
 
-[functions.basic_test.variants.llama-dynamic]
+[functions.basic_test.variants.llama_api-dynamic]
 type = "chat_completion"
 model = "llama-scout-llama-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -2018,7 +2018,7 @@ json_mode = "strict"
 
 ## Llama
 
-[functions.dynamic_json.variants.llama]
+[functions.dynamic_json.variants.llama_api]
 type = "chat_completion"
 model = "llama-scout-llama"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
@@ -2026,7 +2026,7 @@ user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_templa
 json_mode = "on"
 max_tokens = 100
 
-[functions.dynamic_json.variants.llama-strict]
+[functions.dynamic_json.variants.llama_api-strict]
 type = "chat_completion"
 model = "llama-scout-llama"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
@@ -2034,7 +2034,7 @@ user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_templa
 max_tokens = 100
 json_mode = "strict"
 
-[functions.dynamic_json.variants.llama-implicit]
+[functions.dynamic_json.variants.llama_api-implicit]
 type = "chat_completion"
 model = "llama-scout-llama"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
@@ -2042,7 +2042,7 @@ user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_templa
 json_mode = "implicit_tool"
 max_tokens = 100
 
-[functions.json_success.variants.llama]
+[functions.json_success.variants.llama_api]
 type = "chat_completion"
 model = "llama-scout-llama"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
@@ -2050,7 +2050,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "on"
 max_tokens = 100
 
-[functions.json_success.variants.llama-strict]
+[functions.json_success.variants.llama_api-strict]
 type = "chat_completion"
 model = "llama-scout-llama"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
@@ -3103,7 +3103,7 @@ model = "mixtral-groq"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 500
 
-[functions.weather_helper.variants.llama]
+[functions.weather_helper.variants.llama_api]
 type = "chat_completion"
 model = "llama-scout-llama"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
@@ -3208,7 +3208,7 @@ weight = 1
 model = "qwen2.5-0.5b-instruct-vllm"
 system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 
-[functions.weather_helper_parallel.variants.llama]
+[functions.weather_helper_parallel.variants.llama_api]
 type = "chat_completion"
 weight = 1
 model = "llama-scout-llama"

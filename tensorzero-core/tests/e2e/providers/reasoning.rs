@@ -254,7 +254,7 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     provider: E2ETestProvider,
 ) {
     // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama" {
+    if provider.model_provider_name == "llama_api" {
         return;
     }
     use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -741,7 +741,7 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
     provider: E2ETestProvider,
 ) {
     // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama" {
+    if provider.model_provider_name == "llama_api" {
         return;
     }
     // OpenAI O1 doesn't support streaming responses

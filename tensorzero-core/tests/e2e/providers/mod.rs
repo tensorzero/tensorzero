@@ -15,7 +15,7 @@ mod google_ai_studio_gemini;
 mod groq;
 mod helpers;
 mod hyperbolic;
-mod llama;
+mod llama_api;
 mod mistral;
 mod openai;
 mod openrouter;

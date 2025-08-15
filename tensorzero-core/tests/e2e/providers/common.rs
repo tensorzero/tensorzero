@@ -1356,7 +1356,7 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
                 println!("Provider returned error in streaming mode: {}", error_msg);
                 
                 // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
-                if provider.model_provider_name == "llama" && status == StatusCode::BAD_GATEWAY {
+                if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY {
                     println!("Llama provider returned 502 Bad Gateway in streaming mode - this may indicate unsupported functionality");
                     (Uuid::now_v7(), true)
                 } else {
@@ -1422,7 +1422,7 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
                 println!("Provider returned error: {}", error_msg);
                 
                 // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
-                if provider.model_provider_name == "llama" && status == StatusCode::BAD_GATEWAY {
+                if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY {
                     println!("Llama provider returned 502 Bad Gateway - this may indicate unsupported functionality");
                     // Return a dummy UUID since we can't proceed with the test
                     (Uuid::now_v7(), true)
@@ -1609,7 +1609,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 println!("Provider returned error in streaming mode: {}", error_msg);
                 
                 // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
-                if provider.model_provider_name == "llama" && status == StatusCode::BAD_GATEWAY {
+                if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY {
                     println!("Llama provider returned 502 Bad Gateway in streaming mode - this may indicate unsupported functionality");
                     (Uuid::now_v7(), true)
                 } else {
@@ -1675,7 +1675,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 println!("Provider returned error: {}", error_msg);
                 
                 // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
-                if provider.model_provider_name == "llama" && status == StatusCode::BAD_GATEWAY {
+                if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY {
                     println!("Llama provider returned 502 Bad Gateway - this may indicate unsupported functionality");
                     // Return a dummy UUID since we can't proceed with the test
                     (Uuid::now_v7(), true)
@@ -1908,7 +1908,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                 "Unexpected error: {res}"
             );
         }
-        "llama" => {
+        "llama_api" => {
             assert!(
                 res["error"].as_str().unwrap().contains("401 Unauthorized") 
                 || res["error"].as_str().unwrap().contains("Authentication Error")
@@ -1977,7 +1977,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
     // Llama .com endpoint doesn't support thought blocks at all
     if provider.model_name == "claude-3-haiku-20240307-aws-bedrock"
         || provider.model_name == "deepseek-r1-aws-bedrock"
-        || provider.model_provider_name == "llama"
+        || provider.model_provider_name == "llama_api"
     {
         return;
     }
@@ -3033,7 +3033,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
         return;
     }
     // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama" {
+    if provider.model_provider_name == "llama_api" {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -3059,7 +3059,7 @@ pub async fn test_streaming_include_original_response_with_provider(provider: E2
         return;
     }
     // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama" {
+    if provider.model_provider_name == "llama_api" {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -3200,7 +3200,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 
     // NB: Azure doesn't support input/output tokens during streaming
     // Llama .com endpoint doesn't support streaming properly
-    if provider.variant_name.contains("azure") || provider.model_provider_name == "llama" || check_cache {
+    if provider.variant_name.contains("azure") || provider.model_provider_name == "llama_api" || check_cache {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -3421,7 +3421,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
             println!("Provider returned error: {}", error_msg);
             
             // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
-            if provider.model_provider_name == "llama" && response_status == StatusCode::BAD_GATEWAY {
+            if provider.model_provider_name == "llama_api" && response_status == StatusCode::BAD_GATEWAY {
                 println!("Llama provider returned 502 Bad Gateway - this may indicate unsupported functionality");
                 return;
             }
@@ -3629,7 +3629,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         return;
     }
     // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama" {
+    if provider.model_provider_name == "llama_api" {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -3678,7 +3678,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
             println!("Provider returned error in streaming mode: {}", error_msg);
             
             // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
-            if provider.model_provider_name == "llama" && status == StatusCode::BAD_GATEWAY {
+            if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY {
                 println!("Llama provider returned 502 Bad Gateway in streaming mode - this may indicate unsupported functionality");
                 return;
             }
@@ -4208,7 +4208,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         return;
     }
     // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama" {
+    if provider.model_provider_name == "llama_api" {
         return;
     }
 
@@ -4827,7 +4827,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
         return;
     }
     // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama" {
+    if provider.model_provider_name == "llama_api" {
         return;
     }
 
@@ -5127,7 +5127,7 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     if provider.model_provider_name == "azure"
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "sglang"
-        || provider.model_provider_name == "llama"
+        || provider.model_provider_name == "llama_api"
         || provider.model_provider_name == "groq"
     {
         return;
@@ -5419,7 +5419,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     if provider.model_provider_name == "azure"
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "sglang"
-        || provider.model_provider_name == "llama"
+        || provider.model_provider_name == "llama_api"
         || provider.model_provider_name == "groq"
     {
         return;
@@ -6039,7 +6039,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         return;
     }
     // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama" {
+    if provider.model_provider_name == "llama_api" {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -6677,7 +6677,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         return;
     }
     // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama" {
+    if provider.model_provider_name == "llama_api" {
         return;
     }
 
@@ -7347,7 +7347,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         return;
     }
     // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama" {
+    if provider.model_provider_name == "llama_api" {
         return;
     }
 
@@ -7969,7 +7969,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         return;
     }
     // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama" {
+    if provider.model_provider_name == "llama_api" {
         return;
     }
 
@@ -8365,7 +8365,7 @@ pub async fn test_stop_sequences_inference_request_with_provider(
                 "azure",
                 "groq",
                 "hyperbolic",
-                "llama",
+                "llama_api",
             ];
             if MISSING_STOP_SEQUENCE_PROVIDERS.contains(&provider.model_provider_name.as_str())
                 || provider.model_name == "gemma-3-1b-aws-sagemaker-openai"
@@ -8378,7 +8378,7 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             // TGI and Llama (.com endpoint) give us a finish_reason of StopSequence, but still include the stop sequence in the response
             if !(provider.model_provider_name == "tgi"
                 || provider.model_name == "gemma-3-1b-aws-sagemaker-tgi"
-                || provider.model_provider_name == "llama")
+                || provider.model_provider_name == "llama_api")
             {
                 let json = serde_json::to_string(&response).unwrap();
                 assert!(
@@ -8449,7 +8449,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         Ok(response) => response,
         Err(e) => {
             // Handle Llama provider errors gracefully
-            if provider.model_provider_name == "llama" {
+            if provider.model_provider_name == "llama_api" {
                 let error_msg = format!("{:?}", e);
                 if error_msg.contains("No API key provided") {
                     println!("Llama provider failed with 'No API key provided' - this is expected without proper credentials");
@@ -8717,7 +8717,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     client: &tensorzero::Client,
 ) {
     // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama" {
+    if provider.model_provider_name == "llama_api" {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -8768,7 +8768,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         Ok(stream) => stream,
         Err(e) => {
             // Handle Llama provider errors gracefully
-            if provider.model_provider_name == "llama" {
+            if provider.model_provider_name == "llama_api" {
                 let error_msg = format!("{:?}", e);
                 if error_msg.contains("No API key provided") {
                     println!("Llama provider failed with 'No API key provided' - this is expected without proper credentials");
@@ -9464,7 +9464,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
         return;
     }
     // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama" {
+    if provider.model_provider_name == "llama_api" {
         return;
     }
 
@@ -10198,7 +10198,7 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
             println!("Provider returned error: {}", error_msg);
             
             // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
-            if provider.model_provider_name == "llama" && status == StatusCode::BAD_GATEWAY {
+            if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY {
                 println!("Llama provider returned 502 Bad Gateway - this may indicate unsupported functionality");
                 return;
             }
@@ -10425,7 +10425,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         return;
     }
     // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama" {
+    if provider.model_provider_name == "llama_api" {
         return;
     }
 
@@ -11418,7 +11418,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
     payload["stream"] = json!(true);
 
     // Skip the second request for llama due to streaming incompatibilities
-    if provider.model_provider_name == "llama" {
+    if provider.model_provider_name == "llama_api" {
         return;
     }
 

@@ -37,12 +37,12 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "Llama";
-pub const PROVIDER_TYPE: &str = "llama";
+pub const PROVIDER_TYPE: &str = "llama_api";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub struct LlamaProvider {
+pub struct LlamaAPIProvider {
     model_name: String,
     #[serde(skip)]
     credentials: LlamaCredentials,
@@ -50,7 +50,7 @@ pub struct LlamaProvider {
 
 static DEFAULT_CREDENTIALS: OnceLock<LlamaCredentials> = OnceLock::new();
 
-impl LlamaProvider {
+impl LlamaAPIProvider {
     pub fn new(
         model_name: String,
         api_key_location: Option<CredentialLocation>,
@@ -61,7 +61,7 @@ impl LlamaProvider {
             PROVIDER_TYPE,
             &DEFAULT_CREDENTIALS,
         )?;
-        Ok(LlamaProvider {
+        Ok(LlamaAPIProvider {
             model_name,
             credentials,
         })
@@ -116,7 +116,7 @@ impl LlamaCredentials {
     }
 }
 
-impl InferenceProvider for LlamaProvider {
+impl InferenceProvider for LlamaAPIProvider {
     async fn infer<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,
