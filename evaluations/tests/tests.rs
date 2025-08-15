@@ -351,7 +351,7 @@ async fn run_exact_match_evaluation_chat() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
-    sleep(Duration::from_millis(200)).await;
+    sleep(Duration::from_millis(1000)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
