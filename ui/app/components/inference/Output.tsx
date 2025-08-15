@@ -276,7 +276,7 @@ function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
   );
 }
 
-// ContentBlocksOutput component for handling ContentBlockOutput[]
+// ContentBlocksOutput component for handling ContentBlockChatOutput[]
 interface ContentBlocksOutputProps {
   blocks: ContentBlockChatOutput[];
   isEditing?: boolean;
