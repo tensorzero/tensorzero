@@ -12,6 +12,7 @@ import type { DisplayInput } from "~/utils/clickhouse/common";
 import type { Datapoint, FunctionConfig } from "tensorzero-node";
 import { useQuery } from "@tanstack/react-query";
 import { isErrorLike } from "~/utils/common";
+import { memo } from "react";
 
 interface DatapointPlaygroundOutputProps {
   datapoint: Datapoint;
@@ -20,7 +21,8 @@ interface DatapointPlaygroundOutputProps {
   functionName: string;
   functionConfig: FunctionConfig;
 }
-function DatapointPlaygroundOutput({
+
+const DatapointPlaygroundOutput = memo(function DatapointPlaygroundOutput({
   datapoint,
   variant,
   input,
@@ -95,7 +97,7 @@ function DatapointPlaygroundOutput({
       <Output output={output} maxHeight={480} />
     </div>
   );
-}
+});
 
 export default DatapointPlaygroundOutput;
 
