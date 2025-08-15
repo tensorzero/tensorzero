@@ -198,6 +198,7 @@ jobs:
 
       - name: "Python: OpenAI Client: pytest"
         working-directory: clients/openai-python
+        timeout-minutes: 5
         run: |
           uv run pytest --verbose
 
