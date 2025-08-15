@@ -7,18 +7,24 @@ import {
   Config,
   ClientInferenceParams,
   InferenceResponse,
-  TimeWindow,
-  ModelUsageTimePoint,
 } from "./bindings";
-import type { TensorZeroClient as NativeTensorZeroClientType } from "../index";
+import type {
+  TensorZeroClient as NativeTensorZeroClientType,
+  DatabaseClient as NativeDatabaseClientType,
+} from "../index";
+import { TimeWindow } from "./bindings/TimeWindow";
+import { ModelUsageTimePoint } from "./bindings/ModelUsageTimePoint";
 
 // Re-export types from bindings
 export * from "./bindings";
 
 // Use createRequire to load CommonJS module
 const require = createRequire(import.meta.url);
-const { TensorZeroClient: NativeTensorZeroClient, getConfig: nativeGetConfig } =
-  require("../index.cjs") as typeof import("../index");
+const {
+  TensorZeroClient: NativeTensorZeroClient,
+  getConfig: nativeGetConfig,
+  DatabaseClient: NativeDatabaseClient,
+} = require("../index.cjs") as typeof import("../index");
 
 // Wrapper class for type safety and convenience
 // since the interface is string in string out
@@ -82,13 +88,6 @@ export class TensorZeroClient {
       await this.nativeClient.staleDataset(datasetName);
     return JSON.parse(staleDatasetString) as StaleDatasetResponse;
   }
-
-  async getModelUsageTimeseries(
-    timeWindow: TimeWindow,
-    maxPeriods: number,
-  ): Promise<ModelUsageTimePoint> {
-    await this.nativeClient.getModelUsageTimeseries(timeWindow, maxPeriods);
-  }
 }
 
 export default TensorZeroClient;
@@ -105,5 +104,31 @@ function safeStringify(obj: unknown) {
     );
   } catch {
     return "null";
+  }
+}
+
+/// Wrapper class for type safety and convenience
+/// around the native DatabaseClient
+export class DatabaseClient {
+  private nativeDatabaseClient: NativeDatabaseClientType;
+
+  constructor(client: NativeDatabaseClientType) {
+    this.nativeDatabaseClient = client;
+  }
+
+  static async fromClickhouseUrl(url: string): Promise<DatabaseClient> {
+    return new DatabaseClient(
+      await NativeDatabaseClient.fromClickhouseUrl(url),
+    );
+  }
+
+  async getModelUsageTimeseries(
+    timeWindow: TimeWindow,
+    maxPeriods: number,
+  ): Promise<ModelUsageTimePoint[]> {
+    const params = safeStringify({ timeWindow, maxPeriods });
+    const modelUsageTimeseriesString =
+      await this.nativeDatabaseClient.getModelUsageTimeseries(params);
+    return JSON.parse(modelUsageTimeseriesString) as ModelUsageTimePoint[];
   }
 }

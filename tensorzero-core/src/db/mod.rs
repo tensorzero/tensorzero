@@ -34,7 +34,7 @@ pub enum TimeWindow {
     Cumulative,
 }
 
-#[derive(Debug, ts_rs::TS, Deserialize, PartialEq)]
+#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
 pub struct ModelUsageTimePoint {
     pub period_start: DateTime<Utc>,

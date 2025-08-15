@@ -19,19 +19,19 @@ impl SelectQueries for ClickHouseConnectionInfo {
         let (time_grouping, time_filter) = match time_window {
             TimeWindow::Hour => (
                 "toStartOfHour(minute)",
-                format!("minute >= now() - INTERVAL {max_periods} HOUR"),
+                format!("minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL {max_periods} HOUR"),
             ),
             TimeWindow::Day => (
                 "toStartOfDay(minute)",
-                format!("minute >= now() - INTERVAL {max_periods} DAY"),
+                format!("minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL {max_periods} DAY"),
             ),
             TimeWindow::Week => (
                 "toStartOfWeek(minute)",
-                format!("minute >= now() - INTERVAL {max_periods} WEEK"),
+                format!("minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL {max_periods} WEEK"),
             ),
             TimeWindow::Month => (
                 "toStartOfMonth(minute)",
-                format!("minute >= now() - INTERVAL {max_periods} MONTH"),
+                format!("minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL {max_periods} MONTH"),
             ),
             TimeWindow::Cumulative => (
                 "toDateTime('1970-01-01 00:00:00')",
