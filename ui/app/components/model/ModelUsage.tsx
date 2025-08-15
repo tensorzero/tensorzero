@@ -1,6 +1,7 @@
 import type { TimeWindow, ModelUsageTimePoint } from "tensorzero-node";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { formatChartNumber, formatDetailedNumber } from "~/utils/chart";
+import { useState } from "react";
 
 import {
   Card,
@@ -32,6 +33,50 @@ const CHART_COLORS = [
   "hsl(var(--chart-5))",
 ] as const;
 
+export type ModelUsageMetric = "inferences" | "input_tokens" | "output_tokens";
+
+const METRIC_TYPE_CONFIG = {
+  inferences: {
+    label: "Inferences",
+    description: "Number of inference requests",
+    formatter: (value: number) => `${formatDetailedNumber(value)} requests`,
+  },
+  input_tokens: {
+    label: "Input Tokens",
+    description: "Input token usage",
+    formatter: (value: number) => `${formatDetailedNumber(value)} tokens`,
+  },
+  output_tokens: {
+    label: "Output Tokens",
+    description: "Output token usage",
+    formatter: (value: number) => `${formatDetailedNumber(value)} tokens`,
+  },
+} as const;
+
+function MetricSelector({
+  selectedMetric,
+  onMetricChange,
+}: {
+  selectedMetric: ModelUsageMetric;
+  onMetricChange: (metric: ModelUsageMetric) => void;
+}) {
+  return (
+    <Select
+      value={selectedMetric}
+      onValueChange={(value: ModelUsageMetric) => onMetricChange(value)}
+    >
+      <SelectTrigger>
+        <SelectValue placeholder="Choose metric" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="inferences">Inferences</SelectItem>
+        <SelectItem value="input_tokens">Input Tokens</SelectItem>
+        <SelectItem value="output_tokens">Output Tokens</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
 export function ModelUsage({
   modelUsageData,
   timeGranularity,
@@ -41,7 +86,12 @@ export function ModelUsage({
   timeGranularity: TimeWindow;
   onTimeGranularityChange: (timeGranularity: TimeWindow) => void;
 }) {
-  const { data, modelNames } = transformModelUsageData(modelUsageData);
+  const [selectedMetric, setSelectedMetric] =
+    useState<ModelUsageMetric>("inferences");
+  const { data, modelNames } = transformModelUsageData(
+    modelUsageData,
+    selectedMetric,
+  );
 
   const chartConfig: Record<string, { label: string; color: string }> =
     modelNames.reduce(
@@ -62,10 +112,14 @@ export function ModelUsage({
           <div>
             <CardTitle>Model Usage Over Time</CardTitle>
             <CardDescription>
-              Showing request counts and token usage by model
+              {METRIC_TYPE_CONFIG[selectedMetric].description} by model
             </CardDescription>
           </div>
-          <div className="flex flex-col justify-center">
+          <div className="flex flex-col justify-center gap-2">
+            <MetricSelector
+              selectedMetric={selectedMetric}
+              onMetricChange={setSelectedMetric}
+            />
             <Select
               value={timeGranularity}
               onValueChange={onTimeGranularityChange}
@@ -107,6 +161,7 @@ export function ModelUsage({
                       new Date(label).toLocaleDateString()
                     }
                     formatter={(value, name, entry) => {
+                      const count = entry.payload[`${name}_count`];
                       const inputTokens = entry.payload[`${name}_input_tokens`];
                       const outputTokens =
                         entry.payload[`${name}_output_tokens`];
@@ -117,11 +172,20 @@ export function ModelUsage({
                           <span className="text-muted-foreground">{name}</span>
                           <div className="grid text-right">
                             <span className="text-foreground font-mono font-medium tabular-nums">
-                              {formatDetailedNumber(value as number)} requests
+                              {METRIC_TYPE_CONFIG[selectedMetric].formatter(
+                                value as number,
+                              )}
                             </span>
-                            <span className="text-muted-foreground text-[10px]">
-                              {formatDetailedNumber(totalTokens)} tokens
-                            </span>
+                            {selectedMetric === "inferences" && (
+                              <span className="text-muted-foreground text-[10px]">
+                                {formatDetailedNumber(totalTokens)} tokens
+                              </span>
+                            )}
+                            {selectedMetric !== "inferences" && (
+                              <span className="text-muted-foreground text-[10px]">
+                                {formatDetailedNumber(count)} requests
+                              </span>
+                            )}
                           </div>
                         </div>
                       );
@@ -167,6 +231,7 @@ type UsageDataGroupedByDate = {
 
 export function transformModelUsageData(
   modelUsageData: ModelUsageTimePoint[],
+  selectedMetric: ModelUsageMetric,
 ): {
   data: ModelUsageData[];
   modelNames: string[];
@@ -219,7 +284,16 @@ export function transformModelUsageData(
     const row: ModelUsageData = { date: entry.date };
     modelNames.forEach((modelName) => {
       const modelData = entry.models[modelName];
-      row[modelName] = modelData?.count ?? 0;
+      // Set the main value based on selected metric
+      if (selectedMetric === "inferences") {
+        row[modelName] = modelData?.count ?? 0;
+      } else if (selectedMetric === "input_tokens") {
+        row[modelName] = modelData?.input_tokens ?? 0;
+      } else if (selectedMetric === "output_tokens") {
+        row[modelName] = modelData?.output_tokens ?? 0;
+      }
+      // Keep all data for tooltip
+      row[`${modelName}_count`] = modelData?.count ?? 0;
       row[`${modelName}_input_tokens`] = modelData?.input_tokens ?? 0;
       row[`${modelName}_output_tokens`] = modelData?.output_tokens ?? 0;
     });
