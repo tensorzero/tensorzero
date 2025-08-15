@@ -25,6 +25,7 @@ use crate::{
 };
 use futures::future::try_join_all;
 use std::sync::Arc;
+use tokio::sync::Semaphore;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
@@ -541,44 +542,52 @@ async fn process_embeddings_with_batching(
         max_concurrency
     );
 
-    // Process batches with controlled concurrency
-    let mut all_embeddings = Vec::new();
+    // Process batches with controlled concurrency using a semaphore
     let total_batches = batches.len();
-    let mut processed_batches = 0;
+    let semaphore = Arc::new(Semaphore::new(max_concurrency));
 
-    for batch_chunk in batches.chunks(max_concurrency) {
-        let batch_futures: Vec<_> = batch_chunk
-            .iter()
-            .enumerate()
-            .map(|(i, batch)| {
-                let batch_index = processed_batches + i;
-                process_embedding_batch(
+    let batch_futures: Vec<_> = batches
+        .into_iter()
+        .enumerate()
+        .map(|(batch_index, batch)| {
+            let semaphore = Arc::clone(&semaphore);
+
+            async move {
+                let _permit = semaphore.acquire().await.map_err(|e| {
+                    Error::new(ErrorDetails::Inference {
+                        message: format!("Failed to acquire semaphore permit: {e}"),
+                    })
+                })?;
+
+                let result = process_embedding_batch(
                     provider_config,
                     client,
                     credentials,
-                    batch.clone(),
+                    batch,
                     batch_index,
                     retry_config,
                     dimensions,
                 )
-            })
-            .collect();
+                .await;
 
-        let batch_results = try_join_all(batch_futures).await?;
-        for batch_embeddings in batch_results {
-            all_embeddings.extend(batch_embeddings);
-        }
+                if batch_index > 0 && batch_index % 10 == 0 {
+                    let progress_pct =
+                        (batch_index as f64 / total_batches as f64 * 100.0).round() as u32;
+                    tracing::info!(
+                        "📊 Embedding progress: {}/{} batches completed ({}%)",
+                        batch_index,
+                        total_batches,
+                        progress_pct
+                    );
+                }
 
-        processed_batches += batch_chunk.len();
-        let progress_pct = (processed_batches as f64 / total_batches as f64 * 100.0).round() as u32;
-        tracing::info!(
-            "📊 Embedding progress: {}/{} batches completed ({}%) - {} embeddings generated",
-            processed_batches,
-            total_batches,
-            progress_pct,
-            all_embeddings.len()
-        );
-    }
+                result
+            }
+        })
+        .collect();
+
+    let batch_results = try_join_all(batch_futures).await?;
+    let all_embeddings: Vec<Vec<f64>> = batch_results.into_iter().flatten().collect();
 
     tracing::info!(
         "✅ Embedding processing complete: {} embeddings generated from {} input texts",
