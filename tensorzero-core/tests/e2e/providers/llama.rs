@@ -47,7 +47,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: true,
         variant_name: "llama-dynamic".to_string(),
-        model_name: "llama-scout-llama".into(),
+        model_name: "llama-scout-llama-dynamic".into(),
         model_provider_name: "llama".into(),
         credentials: credentials.clone(),
     }];

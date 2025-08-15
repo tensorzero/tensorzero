@@ -2042,6 +2042,22 @@ user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_templa
 json_mode = "implicit_tool"
 max_tokens = 100
 
+[functions.json_success.variants.llama]
+type = "chat_completion"
+model = "llama-scout-llama"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
+[functions.json_success.variants.llama-strict]
+type = "chat_completion"
+model = "llama-scout-llama"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "strict"
+max_tokens = 100
+
 [functions.json_success.variants.mistral]
 type = "chat_completion"
 model = "open-mistral-nemo-2407"
@@ -3190,6 +3206,12 @@ system_template = "../../fixtures/config/functions/weather_helper_parallel/promp
 type = "chat_completion"
 weight = 1
 model = "qwen2.5-0.5b-instruct-vllm"
+system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+
+[functions.weather_helper_parallel.variants.llama]
+type = "chat_completion"
+weight = 1
+model = "llama-scout-llama"
 system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 
 

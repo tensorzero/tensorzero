@@ -124,7 +124,7 @@ impl InferenceProvider for LlamaProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_url = "https://api.llama.ai/v1/chat/completions".to_string();
+        let request_url = "https://api.llama.com/v1/chat/completions".to_string();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
 
@@ -235,7 +235,7 @@ impl InferenceProvider for LlamaProvider {
                     ),
                 })
             })?;
-        let request_url = "https://api.llama.ai/v1/chat/completions".to_string();
+        let request_url = "https://api.llama.com/v1/chat/completions".to_string();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_builder = http_client.post(request_url);
@@ -307,8 +307,10 @@ pub fn stream_llama(
     start_time: Instant,
 ) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
+    
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
+        
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -329,7 +331,7 @@ pub fn stream_llama(
                         }
                         
                         // Log the raw message for debugging
-                        if message.data.contains("error") || message.data.contains("Stream ended") {
+                        if message.data.contains("error") || message.data.contains("Bad request") || message.data.contains("400") || message.data.contains("502") {
                             eprintln!("DEBUG: Received message: {}", message.data);
                         }
                         
@@ -337,13 +339,23 @@ pub fn stream_llama(
                         // Try to parse as new streaming format first, then fall back to old format
                         let data: Result<ProviderInferenceResponseChunk, Error> = {
                             // Check if this is an error message from the API
-                            if message.data.contains("error") || message.data.contains("Stream ended") {
+                            if message.data.contains("error") || message.data.contains("Bad request") || message.data.contains("400") || message.data.contains("502") {
                                 Err(Error::new(ErrorDetails::InferenceServer {
                                     message: format!("Llama API error: {}", message.data),
                                     raw_request: None,
                                     raw_response: Some(message.data.clone()),
                                     provider_type: provider_type.clone(),
                                 }))
+                            } else if message.data.contains("Stream ended") {
+                                // For .com endpoint, "Stream ended" is a normal termination message
+                                // Create a finish chunk to indicate stream completion
+                                Ok(ProviderInferenceResponseChunk::new(
+                                    vec![], // No content
+                                    None,   // No usage info
+                                    message.data.clone(),
+                                    latency,
+                                    Some(FinishReason::Stop),
+                                ))
                             } else {
                                 // First try the new streaming format
                                 if let Ok(streaming_response) = serde_json::from_str::<LlamaStreamingResponse>(&message.data) {
@@ -363,14 +375,19 @@ pub fn stream_llama(
                             }
                         };
                         
-                        // Only yield if we have content or a finish reason
+                        // Handle the result
                         match &data {
-                            Ok(chunk) if !chunk.content.is_empty() || chunk.finish_reason.is_some() => {
-                                yield data;
-                            }
-                            Ok(_) => {
-                                // Skip empty chunks but continue processing
-                                continue;
+                            Ok(chunk) => {
+                                // Always yield chunks with finish reasons (including "Stream ended")
+                                if chunk.finish_reason.is_some() {
+                                    yield data;
+                                } else if !chunk.content.is_empty() {
+                                    // Yield chunks with content
+                                    yield data;
+                                } else {
+                                    // Skip empty chunks but continue processing
+                                    continue;
+                                }
                             }
                             Err(_) => {
                                 // Yield errors so they can be handled
@@ -1049,13 +1066,44 @@ impl<'a> LlamaRequest<'a> {
             }
         }
 
+        // Validate parameters for llama.com API
+        let validated_top_p = if let Some(top_p) = request.top_p {
+            if top_p < 0.0 || top_p > 1.0 {
+                return Err(Error::new(ErrorDetails::InferenceClient {
+                    status_code: None,
+                    message: format!("Invalid 'top_p': must be a float between 0.0 and 1.0, got {}", top_p),
+                    raw_request: None,
+                    raw_response: None,
+                    provider_type: "llama".to_string(),
+                }));
+            }
+            Some(top_p)
+        } else {
+            None
+        };
+
+        let validated_temperature = if let Some(temp) = request.temperature {
+            if temp < 0.0 || temp > 2.0 {
+                return Err(Error::new(ErrorDetails::InferenceClient {
+                    status_code: None,
+                    message: format!("Invalid 'temperature': must be a float between 0.0 and 2.0, got {}", temp),
+                    raw_request: None,
+                    raw_response: None,
+                    provider_type: "llama".to_string(),
+                }));
+            }
+            Some(temp)
+        } else {
+            None
+        };
+
         Ok(LlamaRequest {
             messages,
             model,
-            temperature: request.temperature,
+            temperature: validated_temperature,
             max_completion_tokens: request.max_tokens,
             seed: request.seed,
-            top_p: request.top_p,
+            top_p: validated_top_p,
             presence_penalty: request.presence_penalty,
             frequency_penalty: request.frequency_penalty,
             stream: request.stream,
