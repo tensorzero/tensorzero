@@ -140,7 +140,7 @@ async fn test_config_from_toml_table_valid() {
                     assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
                     assert_eq!(chat_config.weight, Some(1.0));
                     assert_eq!(
-                            *chat_config.system_template.as_ref().unwrap(),
+                            chat_config.templates.system.as_ref().unwrap().template,
                             PathWithContents {
                                 // We don't use a real path for programmatically generated templates
                                 // Instead we use this handle and then the same in minijinja
@@ -2232,9 +2232,11 @@ async fn test_glob_relative_path() {
     };
     assert_eq!(
         variant
-            .user_template
+            .templates
+            .user
             .as_ref()
             .unwrap()
+            .template
             .path
             .get_template_key(),
         format!(
@@ -2243,15 +2245,17 @@ async fn test_glob_relative_path() {
         )
     );
     assert_eq!(
-        variant.system_template.as_ref().unwrap().contents,
+        variant.templates.system.as_ref().unwrap().template.contents,
         "Hello, world!"
     );
 
     assert_eq!(
         variant
-            .system_template
+            .templates
+            .system
             .as_ref()
             .unwrap()
+            .template
             .path
             .get_template_key(),
         format!(
@@ -2261,7 +2265,7 @@ async fn test_glob_relative_path() {
     );
 
     assert_eq!(
-        variant.user_template.as_ref().unwrap().contents,
+        variant.templates.user.as_ref().unwrap().template.contents,
         "My second template"
     );
 }
