@@ -41,6 +41,7 @@ def test_sync_fireworks_sft(
         model="gpt-4o-mini",
         api_base="http://localhost:3030/fireworks/",
         account_id="test",
+        epochs=1,
     )
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
         train_samples=mixed_rendered_samples,
@@ -88,6 +89,7 @@ async def test_async_fireworks_sft(
         model="gpt-4o-mini",
         api_base="http://localhost:3030/fireworks/",
         account_id="test",
+        epochs=1,
     )
     optimization_job_handle = (
         await embedded_async_client.experimental_launch_optimization(
