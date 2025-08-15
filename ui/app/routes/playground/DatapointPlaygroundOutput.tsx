@@ -22,82 +22,98 @@ interface DatapointPlaygroundOutputProps {
   functionConfig: FunctionConfig;
 }
 
-const DatapointPlaygroundOutput = memo(function DatapointPlaygroundOutput({
-  datapoint,
-  variant,
-  input,
-  functionName,
-  functionConfig,
-}: DatapointPlaygroundOutputProps) {
-  const query = useQuery({
-    queryKey: ["DATASETS_COUNT", { variant, datapoint, input, functionConfig }],
-    queryFn: async ({ signal }) => {
-      return await fetchClientInference(
-        preparePlaygroundInferenceRequest(
-          variant,
-          functionName,
-          datapoint,
-          input,
-          functionConfig,
-        ),
-        { signal },
-      );
-    },
-    refetchOnMount: false,
-  });
+const DatapointPlaygroundOutput = memo(
+  function DatapointPlaygroundOutput({
+    datapoint,
+    variant,
+    input,
+    functionName,
+    functionConfig,
+  }: DatapointPlaygroundOutputProps) {
+    const query = useQuery({
+      queryKey: [
+        "DATASETS_COUNT",
+        { variant, datapoint, input, functionConfig },
+      ],
+      queryFn: async ({ signal }) => {
+        return await fetchClientInference(
+          preparePlaygroundInferenceRequest(
+            variant,
+            functionName,
+            datapoint,
+            input,
+            functionConfig,
+          ),
+          { signal },
+        );
+      },
+      // Only re-fetch when the user explicitly requests it
+      refetchOnMount: false,
+      refetchInterval: false,
+    });
 
-  const loadingIndicator = (
-    <div className="flex min-h-[8rem] items-center justify-center">
-      <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
-    </div>
-  );
-
-  const refreshButton = (
-    <Button
-      aria-label={`Reload ${variant.name} inference`}
-      variant="ghost"
-      size="icon"
-      className="absolute top-1 right-1 z-5 cursor-pointer opacity-25 transition-opacity hover:opacity-100"
-      onClick={() => query.refetch()}
-    >
-      <Refresh />
-    </Button>
-  );
-
-  if (query.isLoading || query.isRefetching) {
-    return loadingIndicator;
-  }
-
-  if (query.isError) {
-    return (
-      <>
-        {refreshButton}
-        <InferenceError error={query.error} />
-      </>
-    );
-  }
-
-  if (!query.data) {
-    return (
+    const loadingIndicator = (
       <div className="flex min-h-[8rem] items-center justify-center">
-        {refreshButton}
-        <div className="text-muted-foreground text-sm">
-          No inference available
-        </div>
+        <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
       </div>
     );
-  }
 
-  const output =
-    "content" in query.data ? query.data.content : query.data.output;
+    const refreshButton = (
+      <Button
+        aria-label={`Reload ${variant.name} inference`}
+        variant="ghost"
+        size="icon"
+        className="absolute top-1 right-1 z-5 cursor-pointer opacity-25 transition-opacity hover:opacity-100"
+        onClick={() => query.refetch()}
+      >
+        <Refresh />
+      </Button>
+    );
 
-  return (
-    <div className="group relative">
-      {refreshButton}
-      <Output output={output} maxHeight={480} />
-    </div>
-  );
-});
+    if (query.isLoading || query.isRefetching) {
+      return loadingIndicator;
+    }
+
+    if (query.isError) {
+      return (
+        <>
+          {refreshButton}
+          <InferenceError error={query.error} />
+        </>
+      );
+    }
+
+    if (!query.data) {
+      return (
+        <div className="flex min-h-[8rem] items-center justify-center">
+          {refreshButton}
+          <div className="text-muted-foreground text-sm">
+            No inference available
+          </div>
+        </div>
+      );
+    }
+
+    const output =
+      "content" in query.data ? query.data.content : query.data.output;
+
+    return (
+      <div className="group relative">
+        {refreshButton}
+        <Output output={output} maxHeight={480} />
+      </div>
+    );
+  },
+  // TODO: Remove custom comparison and making props stable instead
+  (prevProps, nextProps) => {
+    return (
+      prevProps.datapoint.id === nextProps.datapoint.id &&
+      prevProps.variant.name === nextProps.variant.name &&
+      prevProps.functionName === nextProps.functionName &&
+      JSON.stringify(prevProps.input) === JSON.stringify(nextProps.input)
+    );
+  },
+);
 
 export default DatapointPlaygroundOutput;
 
