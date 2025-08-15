@@ -39,6 +39,7 @@ use crate::providers::helpers::UrlParseErrExt;
 use crate::providers::openai::tensorzero_to_openai_assistant_message;
 use crate::stored_inference::RenderedSample;
 use crate::{
+    clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::ContentBlock,
@@ -400,6 +401,7 @@ impl Optimizer for FireworksSFTConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
+        _clickhouse_connection_info: &ClickHouseConnectionInfo,
     ) -> Result<Self::Handle, Error> {
         let train_rows: Vec<FireworksSupervisedRow<'_>> = train_examples
             .iter()
@@ -849,11 +851,13 @@ impl JobHandle for FireworksSFTJobHandle {
                         discard_unknown_chunks: false,
                     };
                     Ok(OptimizationJobInfo::Completed {
-                        output: OptimizerOutput::Model(UninitializedModelConfig {
-                            routing: vec![model_path.clone().into()],
-                            providers: HashMap::from([(model_path.into(), model_provider)]),
-                            timeouts: TimeoutsConfig::default(),
-                        }),
+                        output: OptimizerOutput::Model {
+                            model: UninitializedModelConfig {
+                                routing: vec![model_path.clone().into()],
+                                providers: HashMap::from([(model_path.into(), model_provider)]),
+                                timeouts: TimeoutsConfig::default(),
+                            },
+                        },
                     })
                 }
             }

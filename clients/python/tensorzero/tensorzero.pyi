@@ -112,6 +112,7 @@ class RenderedSample:
 
 @final
 class OptimizationJobHandle:
+    Dicl: Type["OptimizationJobHandle"]
     OpenAISFT: Type["OptimizationJobHandle"]
     FireworksSFT: Type["OptimizationJobHandle"]
     GCPVertexGeminiSFT: Type["OptimizationJobHandle"]
@@ -125,6 +126,7 @@ class OptimizationJobStatus:
 
 @final
 class OptimizationJobInfo:
+    Dicl: Type["OptimizationJobInfo"]
     OpenAISFT: Type["OptimizationJobInfo"]
     FireworksSFT: Type["OptimizationJobInfo"]
     GCPVertexGeminiSFT: Type["OptimizationJobInfo"]
@@ -137,6 +139,25 @@ class OptimizationJobInfo:
     def output(self) -> Optional[Any]: ...
     @property
     def estimated_finish(self) -> Optional[int]: ...
+
+@final
+class DiclOptimizationConfig:
+    def __init__(
+        self,
+        *,
+        provider: str,
+        embedding_model: str,
+        variant_name: str,
+        function_name: str,
+        dimensions: Optional[int],
+        batch_size: Optional[int],
+        max_concurrency: Optional[int],
+        retries: Optional[Dict[str, Any]],
+        k: Optional[int],
+        model: Optional[str],
+        credentials: Optional[str] = None,
+        api_base: Optional[str] = None,
+    ) -> None: ...
 
 @final
 class OpenAISFTConfig:
@@ -992,6 +1013,7 @@ __all__ = [
     "ChainOfThoughtConfig",
     "Config",
     "Datapoint",
+    "DiclOptimizationConfig",
     "DiclConfig",
     "FunctionConfigChat",
     "FunctionConfigJson",

@@ -127,6 +127,7 @@ pub async fn launch_optimization_workflow(
             train_examples,
             val_examples,
             &InferenceCredentials::default(),
+            clickhouse_connection_info,
         )
         .await
 }
@@ -148,6 +149,7 @@ pub struct LaunchOptimizationParams {
 pub async fn launch_optimization(
     http_client: &reqwest::Client,
     params: LaunchOptimizationParams,
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
     // For the TODO above: will need to pass config in here
 ) -> Result<OptimizationJobHandle, Error> {
     let LaunchOptimizationParams {
@@ -162,6 +164,7 @@ pub async fn launch_optimization(
             train_examples,
             val_examples,
             &InferenceCredentials::default(),
+            clickhouse_connection_info,
         )
         .await
 }

@@ -7,11 +7,18 @@ export function dump_optimizer_output(optimizerOutput: OptimizerOutput) {
   if (type !== "model") {
     throw new Error(`Only model type is supported, got ${type}`);
   }
-  if (rest.routing.length !== 1) {
-    throw new Error(`Expected 1 routing entry, got ${rest.routing.length}`);
+  // TypeScript type guard: since we checked type === "model", rest must have model property
+  if (!("model" in rest)) {
+    throw new Error("Expected model property in optimizer output");
   }
-  const modelName = rest.routing[0];
-  const providerConfig = rest.providers[modelName];
+  const modelConfig = rest.model;
+  if (modelConfig.routing.length !== 1) {
+    throw new Error(
+      `Expected 1 routing entry, got ${modelConfig.routing.length}`,
+    );
+  }
+  const modelName = modelConfig.routing[0];
+  const providerConfig = modelConfig.providers[modelName];
   // drop the timeout config
   // allow it to be unused
   if (!providerConfig) {

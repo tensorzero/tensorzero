@@ -116,6 +116,10 @@ fn make_router() -> axum::Router {
             axum::routing::post(completions_handler),
         )
         .route(
+            "/openai/embeddings",
+            axum::routing::post(embeddings_handler),
+        )
+        .route(
             "/openai/fine_tuning/jobs",
             axum::routing::post(create_openai_fine_tuning_job),
         )
@@ -329,6 +333,42 @@ struct OpenAIFineTuningMessage {
     #[serde(default)]
     #[expect(unused)]
     tool_calls: Option<Vec<Value>>,
+}
+
+async fn embeddings_handler(Json(params): Json<serde_json::Value>) -> Json<serde_json::Value> {
+    let input = &params["input"];
+    let model = params["model"].as_str().unwrap_or("text-embedding-3-small");
+
+    // Create mock embeddings - return 1536-dimensional zero vectors for each input
+    let embeddings = if let Some(input_array) = input.as_array() {
+        // Multiple inputs
+        (0..input_array.len())
+            .map(|i| {
+                json!({
+                    "object": "embedding",
+                    "index": i,
+                    "embedding": vec![0.0; 1536]
+                })
+            })
+            .collect::<Vec<_>>()
+    } else {
+        // Single input
+        vec![json!({
+            "object": "embedding",
+            "index": 0,
+            "embedding": vec![0.0; 1536]
+        })]
+    };
+
+    Json(json!({
+        "object": "list",
+        "data": embeddings,
+        "model": model,
+        "usage": {
+            "prompt_tokens": 10,
+            "total_tokens": 10
+        }
+    }))
 }
 
 async fn completions_handler(Json(params): Json<serde_json::Value>) -> Response<Body> {
