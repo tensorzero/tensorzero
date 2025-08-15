@@ -1,0 +1,23 @@
+{
+  "name": "tensorzero-ollama-embeddings-example",
+  "version": "1.0.0",
+  "description": "TensorZero Ollama Embeddings Example in Node.js",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js"
+  },
+  "dependencies": {
+    "openai": "^4.0.0"
+  },
+  "keywords": [
+    "tensorzero",
+    "ollama",
+    "embeddings",
+    "ai",
+    "ml",
+    "local"
+  ],
+  "author": "TensorZero",
+  "license": "MIT"
+}
