@@ -12,6 +12,7 @@ function makeOrderedUuid(num = 0): string {
 
 const config: Config = {
   gateway: {
+    disable_pseudonymous_usage_analytics: false,
     observability: {
       enabled: true,
       async_writes: false,

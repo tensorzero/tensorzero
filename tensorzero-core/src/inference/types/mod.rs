@@ -1931,6 +1931,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config_parser::SchemaData;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::TemplateConfig;
@@ -2690,9 +2691,7 @@ mod tests {
         let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             implicit_tool_call_config,
             output_schema,
             description: None,
@@ -2958,9 +2957,7 @@ mod tests {
         let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             implicit_tool_call_config,
             output_schema,
             description: None,
@@ -3058,9 +3055,7 @@ mod tests {
         let output_schema = StaticJSONSchema::from_value(static_output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             implicit_tool_call_config,
             output_schema,
             description: None,
