@@ -1,0 +1,25 @@
+# Function for testing dynamic routing between OpenAI and AWS Bedrock
+[functions.chat_test]
+type = "chat"
+
+[functions.chat_test.variants.multi_provider]
+type = "chat_completion"
+model = "openai_bedrock_model"
+weight = 1.0
+
+# Model with OpenAI and AWS Bedrock providers for dynamic routing
+[models.openai_bedrock_model]
+routing = ["aws_bedrock","openai"]  # Default routing: OpenAI first, then AWS Bedrock
+
+[models.openai_bedrock_model.providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini"
+api_key_location = "dynamic::OPENAI_API_KEY"
+
+
+[models.openai_bedrock_model.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+region = "us-west-2"
+
+

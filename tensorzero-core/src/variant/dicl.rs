@@ -199,11 +199,14 @@ impl Variant for DiclConfig {
         let (inference_result_stream, mut model_used_info) = infer_model_request_stream(
             request,
             self.model.clone(),
-            &model_config,
-            function,
             clients,
-            inference_params,
-            self.retries,
+            super::StreamInferenceConfig {
+                model_config: &model_config,
+                function,
+                inference_params,
+                retry_config: self.retries,
+                dynamic_routing: inference_config.dynamic_routing,
+            },
         )
         .await?;
 
