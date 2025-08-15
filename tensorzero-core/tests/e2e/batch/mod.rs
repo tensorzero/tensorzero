@@ -515,7 +515,7 @@ async fn test_write_read_completed_batch_inference_json() {
         status,
         errors: vec![],
     });
-    let output_schema = StaticJSONSchema::from_value(&json!({
+    let output_schema = StaticJSONSchema::from_value(json!({
         "type": "object",
         "properties": {
             "answer": {
