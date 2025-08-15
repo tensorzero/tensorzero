@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use std::env;
 use std::time::{Duration, Instant};
 
-use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
+use crate::config_parser::BatchWritesConfig;
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails};
 use crate::serde_util::deserialize_u64;
@@ -354,8 +355,8 @@ pub async fn insert_migration_record(
     let migration_id = migration.migration_num()?;
     let migration_name = migration.name();
     clickhouse
-        .write(
-            &[MigrationRecordDatabaseInsert {
+        .write_non_batched(
+            Rows::Unserialized(&[MigrationRecordDatabaseInsert {
                 migration_id,
                 migration_name,
                 gateway_version: TENSORZERO_VERSION.to_string(),
@@ -364,7 +365,7 @@ pub async fn insert_migration_record(
                     .to_string(),
                 execution_time_ms: execution_time.as_millis() as u64,
                 applied_at: None,
-            }],
+            }]),
             TableName::TensorZeroMigration,
         )
         .await?;
@@ -380,14 +381,18 @@ pub struct RunMigrationArgs<'a, T: Migration + ?Sized> {
 }
 
 pub async fn manual_run_migrations() -> Result<(), Error> {
-    let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
-        .ok()
-        .or_else(|| {
-            std::env::var("CLICKHOUSE_URL").ok().inspect(|_| {
-                tracing::warn!("Deprecation Warning: The environment variable \"CLICKHOUSE_URL\" has been renamed to \"TENSORZERO_CLICKHOUSE_URL\" and will be removed in a future version. Please update your environment to use \"TENSORZERO_CLICKHOUSE_URL\" instead.");
-            })
-        }).ok_or_else(|| Error::new(ErrorDetails::ClickHouseConfiguration { message: "TENSORZERO_CLICKHOUSE_URL not found".to_string() }))?;
-    let clickhouse = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
+    let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
+    if clickhouse_url.as_ref().is_none() && std::env::var("CLICKHOUSE_URL").is_ok() {
+        return Err(ErrorDetails::ClickHouseConfiguration { message: "`CLICKHOUSE_URL` is deprecated and no longer accepted. Please set `TENSORZERO_CLICKHOUSE_URL`".to_string() }.into());
+    }
+    let Some(clickhouse_url) = clickhouse_url else {
+        return Err(ErrorDetails::ClickHouseConfiguration {
+            message: "`TENSORZERO_CLICKHOUSE_URL` was not found.".to_string(),
+        }
+        .into());
+    };
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&clickhouse_url, BatchWritesConfig::default()).await?;
     run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
         // If we manually run the migrations, we should not skip any.

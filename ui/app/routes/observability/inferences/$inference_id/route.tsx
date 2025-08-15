@@ -636,9 +636,9 @@ function prepareDemonstrationFromVariantOutput(
   variantOutput: VariantResponseInfo,
 ) {
   const output = variantOutput.output;
-  // output can either be a JsonInferenceOutput or a ContentBlockOutput[] (or undefined)
+  // output can either be a JsonInferenceOutput or a ContentBlockChatOutput[] (or undefined)
   // if it is a JsonInferenceOutput, we need to take the Parsed field and throw if it is missing
-  // if it is a ContentBlockOutput[], we can return as is
+  // if it is a ContentBlockChatOutput[], we can return as is
   if (Array.isArray(output)) {
     return output;
   } else if (output && "parsed" in output) {

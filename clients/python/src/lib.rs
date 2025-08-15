@@ -67,7 +67,10 @@ use tensorzero_rust::{
 use tokio::sync::Mutex;
 use url::Url;
 
+mod gil_helpers;
 mod python_helpers;
+
+use crate::gil_helpers::DropInTokio;
 
 #[pymodule]
 fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -127,13 +130,21 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
 struct LocalHttpGateway {
     #[pyo3(get)]
     base_url: String,
-    shutdown_handle: Option<ShutdownHandle>,
+    // We use a double `Option` so that we can implement `LocalHttpGateway.close`
+    // by setting it to `None`, without needing to complicate the api of `DropInTokio`
+    shutdown_handle: Option<DropInTokio<Option<ShutdownHandle>>>,
+}
+
+impl Drop for LocalHttpGateway {
+    fn drop(&mut self) {
+        self.close();
+    }
 }
 
 #[pymethods]
 impl LocalHttpGateway {
     fn close(&mut self) {
-        self.shutdown_handle.take();
+        self.shutdown_handle = None;
     }
 }
 
@@ -154,7 +165,7 @@ fn _start_http_gateway(
         .await?;
         Ok(LocalHttpGateway {
             base_url: format!("http://{addr}/openai/v1"),
-            shutdown_handle: Some(handle),
+            shutdown_handle: Some(DropInTokio::new(Some(handle), || None)),
         })
     };
     if async_setup {
@@ -171,14 +182,20 @@ fn _start_http_gateway(
 }
 
 // TODO - this should extend the python `ABC` class once pyo3 supports it: https://github.com/PyO3/pyo3/issues/991
-#[pyclass(subclass)]
+#[pyclass(subclass, frozen)]
 struct BaseTensorZeroGateway {
-    client: Arc<Client>,
+    client: DropInTokio<Client>,
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 struct AsyncStreamWrapper {
     stream: Arc<Mutex<InferenceStream>>,
+    // A handle to the original `AsyncTensorZeroGateway` object.
+    // This ensures that Python will only garbage-collect the `AsyncTensorZeroGateway`
+    // after all `AsyncStreamWrapper` objects have been garbage collected.
+    // This allows us to safely block from within the Drop impl of `AsyncTensorZeroGateway`.
+    // knowing that there are no remaining Python objects holding on to a `ClickhouseConnectionInfo`
+    _gateway: PyObject,
 }
 
 #[pymethods]
@@ -212,9 +229,15 @@ impl AsyncStreamWrapper {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 struct StreamWrapper {
     stream: Arc<Mutex<InferenceStream>>,
+    // A handle to the original `TensorZeroGateway` object.
+    // This ensures that Python will only garbage-collect the `TensorZeroGateway`
+    // after all `StreamWrapper` objects have been garbage collected.
+    // This allows us to safely block from within the Drop impl of `TensorZeroGateway`.
+    // knowing that there are no remaining Python objects holding on to a `ClickhouseConnectionInfo`
+    _gateway: PyObject,
 }
 
 #[pymethods]
@@ -234,6 +257,12 @@ impl StreamWrapper {
         let chunk = chunk.map_err(|e| convert_error(py, err_to_http(e)))?;
         parse_inference_chunk(py, chunk)
     }
+}
+
+/// Constructs a dummy embedded client. We use this so that we can move out of the real 'client'
+/// field of `BaseTensorZeroGateway` when it is dropped.
+fn make_dummy_client() -> Client {
+    ClientBuilder::build_dummy()
 }
 
 #[pymethods]
@@ -274,7 +303,7 @@ impl BaseTensorZeroGateway {
         };
 
         Ok(Self {
-            client: Arc::new(client),
+            client: DropInTokio::new(client, make_dummy_client),
         })
     }
 
@@ -558,7 +587,7 @@ impl TensorZeroGateway {
             }
         };
         let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-            client: Arc::new(client),
+            client: DropInTokio::new(client, make_dummy_client),
         })
         .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
@@ -636,7 +665,7 @@ impl TensorZeroGateway {
         };
         // Construct an instance of `TensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
         let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-            client: Arc::new(client),
+            client: DropInTokio::new(client, make_dummy_client),
         })
         .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
@@ -748,32 +777,30 @@ impl TensorZeroGateway {
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
     ) -> PyResult<Py<PyAny>> {
-        let fut =
-            this.as_super()
-                .client
-                .inference(BaseTensorZeroGateway::prepare_inference_params(
-                    py,
-                    input,
-                    function_name,
-                    model_name,
-                    episode_id,
-                    stream,
-                    params,
-                    variant_name,
-                    dryrun,
-                    output_schema,
-                    allowed_tools,
-                    additional_tools,
-                    tool_choice,
-                    parallel_tool_calls,
-                    internal.unwrap_or(false),
-                    tags,
-                    credentials,
-                    cache_options,
-                    extra_body,
-                    extra_headers,
-                    include_original_response.unwrap_or(false),
-                )?);
+        let client = this.as_super().client.clone();
+        let fut = client.inference(BaseTensorZeroGateway::prepare_inference_params(
+            py,
+            input,
+            function_name,
+            model_name,
+            episode_id,
+            stream,
+            params,
+            variant_name,
+            dryrun,
+            output_schema,
+            allowed_tools,
+            additional_tools,
+            tool_choice,
+            parallel_tool_calls,
+            internal.unwrap_or(false),
+            tags,
+            credentials,
+            cache_options,
+            extra_body,
+            extra_headers,
+            include_original_response.unwrap_or(false),
+        )?);
 
         // We're in the synchronous `TensorZeroGateway` class, so we need to block on the Rust future,
         // and then return the result to the Python caller directly (not wrapped in a Python `Future`).
@@ -782,6 +809,7 @@ impl TensorZeroGateway {
             InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
             InferenceOutput::Streaming(stream) => Ok(StreamWrapper {
                 stream: Arc::new(Mutex::new(stream)),
+                _gateway: this.into_pyobject(py)?.into_any().unbind(),
             }
             .into_pyobject(py)?
             .into_any()
@@ -1191,7 +1219,7 @@ impl AsyncTensorZeroGateway {
 
                 // Construct an instance of `AsyncTensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
                 let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-                    client: Arc::new(client),
+                    client: DropInTokio::new(client, make_dummy_client),
                 })
                 .add_subclass(AsyncTensorZeroGateway {});
                 Py::new(py, instance)
@@ -1272,7 +1300,6 @@ impl AsyncTensorZeroGateway {
             verify_credentials: true,
         })
         .build();
-
         let fut = async move {
             let client = client_fut.await;
             // We need to interact with Python objects here (to build up a Python `AsyncTensorZeroGateway`),
@@ -1290,7 +1317,7 @@ impl AsyncTensorZeroGateway {
 
                 // Construct an instance of `AsyncTensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
                 let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-                    client: Arc::new(client),
+                    client: DropInTokio::new(client, make_dummy_client),
                 })
                 .add_subclass(AsyncTensorZeroGateway {});
                 Py::new(py, instance)
@@ -1389,6 +1416,7 @@ impl AsyncTensorZeroGateway {
             include_original_response.unwrap_or(false),
         )?;
         let client = this.as_super().client.clone();
+        let gateway = this.into_pyobject(py)?.into_any().unbind();
         // See `AsyncStreamWrapper::__anext__` for more details about `future_into_py`
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let res = client.inference(params).await;
@@ -1400,6 +1428,7 @@ impl AsyncTensorZeroGateway {
                     InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
                     InferenceOutput::Streaming(stream) => Ok(AsyncStreamWrapper {
                         stream: Arc::new(Mutex::new(stream)),
+                        _gateway: gateway,
                     }
                     .into_pyobject(py)?
                     .into_any()

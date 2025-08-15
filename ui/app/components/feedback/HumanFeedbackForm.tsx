@@ -175,7 +175,7 @@ export function HumanFeedbackForm({
  * If the type of the demonstration value is JsonInferenceOutput,
  * we need to submit only demonstrationValue.parsed and not the entire
  * demonstrationValue object.
- * For ContentBlockOutput[], we submit the entire object.
+ * For ContentBlockChatOutput[], we submit the entire object.
  */
 function getDemonstrationValueToSubmit(
   demonstrationValue: ContentBlockChatOutput[] | JsonInferenceOutput,
