@@ -160,7 +160,7 @@ function getOutputSummary(
   output: JsonInferenceOutput | ContentBlockChatOutput[],
 ): string {
   if (Array.isArray(output)) {
-    // It's ContentBlockOutput[]
+    // It's ContentBlockChatOutput[]
     if (output.length === 0) return "Empty output";
 
     const firstBlock = output[0];

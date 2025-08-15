@@ -330,6 +330,29 @@ impl ClientBuilder {
         }
     }
 
+    /// Builds a dummy client for use in pyo3. Should not otherwise be used
+    /// This avoids logging any messages
+    #[cfg(feature = "pyo3")]
+    pub fn build_dummy() -> Client {
+        use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
+
+        Client {
+            mode: Arc::new(ClientMode::EmbeddedGateway {
+                gateway: EmbeddedGateway {
+                    handle: GatewayHandle::new_with_clickhouse_and_http_client(
+                        Arc::new(Config::default()),
+                        ClickHouseConnectionInfo::Disabled,
+                        reqwest::Client::new(),
+                    ),
+                },
+                timeout: None,
+            }),
+            verbose_errors: false,
+            #[cfg(feature = "e2e_tests")]
+            last_body: Default::default(),
+        }
+    }
+
     #[cfg(any(test, feature = "e2e_tests"))]
     pub async fn build_from_state(handle: GatewayHandle) -> Result<Client, ClientBuilderError> {
         Ok(Client {
