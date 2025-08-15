@@ -1,8 +1,8 @@
+use crate::error::Error;
+use crate::serde_util::deserialize_option_u64;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-
-use crate::error::Error;
 
 pub mod clickhouse;
 
@@ -39,9 +39,12 @@ pub enum TimeWindow {
 pub struct ModelUsageTimePoint {
     pub period_start: DateTime<Utc>,
     pub model_name: String,
-    pub input_tokens: u64,
-    pub output_tokens: u64,
-    pub count: u64,
+    #[serde(deserialize_with = "deserialize_option_u64")]
+    pub input_tokens: Option<u64>,
+    #[serde(deserialize_with = "deserialize_option_u64")]
+    pub output_tokens: Option<u64>,
+    #[serde(deserialize_with = "deserialize_option_u64")]
+    pub count: Option<u64>,
 }
 
 impl<T: SelectQueries + HealthCheckable + Send + Sync> DatabaseConnection for T {}

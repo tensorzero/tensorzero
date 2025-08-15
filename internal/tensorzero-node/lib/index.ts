@@ -126,7 +126,10 @@ export class DatabaseClient {
     timeWindow: TimeWindow,
     maxPeriods: number,
   ): Promise<ModelUsageTimePoint[]> {
-    const params = safeStringify({ timeWindow, maxPeriods });
+    const params = safeStringify({
+      time_window: timeWindow,
+      max_periods: maxPeriods,
+    });
     const modelUsageTimeseriesString =
       await this.nativeDatabaseClient.getModelUsageTimeseries(params);
     return JSON.parse(modelUsageTimeseriesString) as ModelUsageTimePoint[];

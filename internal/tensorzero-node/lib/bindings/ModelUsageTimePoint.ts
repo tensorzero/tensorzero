@@ -3,7 +3,7 @@
 export type ModelUsageTimePoint = {
   period_start: string;
   model_name: string;
-  input_tokens: bigint;
-  output_tokens: bigint;
-  count: bigint;
+  input_tokens: bigint | null;
+  output_tokens: bigint | null;
+  count: bigint | null;
 };
