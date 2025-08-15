@@ -368,10 +368,8 @@ impl Optimizer for DiclOptimizationConfig {
 
         tracing::info!("🔄 Phase transition: Embedding → ClickHouse storage");
 
-        // Use the provided ClickHouse connection
-        let clickhouse = clickhouse_connection_info;
         insert_dicl_examples_with_batching(
-            clickhouse,
+            clickhouse_connection_info,
             examples_with_embeddings,
             &self.function_name,
             &self.variant_name,
