@@ -2,7 +2,7 @@
 
 export type ModelLatencyDatapoint = {
   model_name: string;
-  response_time_ms_quantiles: Array<bigint>;
-  ttft_ms_quantiles: Array<bigint>;
+  response_time_ms_quantiles: Array<number | null>;
+  ttft_ms_quantiles: Array<number | null>;
   count: bigint;
 };
