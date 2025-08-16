@@ -2,10 +2,10 @@ import type { DisplayInput } from "~/utils/clickhouse/common";
 import { z } from "zod";
 import type {
   Datapoint as TensorZeroDatapoint,
-  InferenceResponse,
   VariantInfo,
   ClientInferenceParams,
   FunctionConfig,
+  InferenceResponse,
 } from "tensorzero-node";
 import { prepareInferenceActionRequest } from "../api/tensorzero/inference.utils";
 import { getExtraInferenceOptions } from "~/utils/feature_flags";
@@ -15,40 +15,23 @@ export function isEditedVariantName(variantName: string): boolean {
   return variantName.startsWith("tensorzero::edited::");
 }
 
-export function refreshClientInference(
-  setPromise: (
-    outerKey: string,
-    innerKey: string,
-    promise: Promise<InferenceResponse>,
-  ) => void,
-  input: DisplayInput,
-  datapoint: TensorZeroDatapoint,
-  variant: PlaygroundVariantInfo,
-  functionName: string,
-  functionConfig: FunctionConfig,
-) {
-  const request = preparePlaygroundInferenceRequest(
-    variant,
-    functionName,
-    datapoint,
-    input,
-    functionConfig,
-  );
+export async function fetchClientInference(
+  request: ClientInferenceParams,
+  args?: { signal?: AbortSignal },
+): Promise<InferenceResponse> {
   // The API endpoint takes form data so we need to stringify it and send as data
   const formData = new FormData();
   formData.append("data", JSON.stringify(request));
-  const responsePromise = async () => {
-    const response = await fetch("/api/tensorzero/inference", {
-      method: "POST",
-      body: formData,
-    });
-    const data = await response.json();
-    if (data.error) {
-      throw new Error(data.error);
-    }
-    return data;
-  };
-  setPromise(variant.name, datapoint.id, responsePromise());
+  const response = await fetch("/api/tensorzero/inference", {
+    method: "POST",
+    body: formData,
+    signal: args?.signal,
+  });
+  const data = await response.json();
+  if (data.error) {
+    throw new Error(data.error);
+  }
+  return data;
 }
 
 const BuiltInVariantInfoSchema = z.object({
