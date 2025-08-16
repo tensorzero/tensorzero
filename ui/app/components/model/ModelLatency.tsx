@@ -10,6 +10,20 @@ import {
 } from "recharts";
 import React, { useRef, useState, useMemo, useCallback } from "react";
 import { Await } from "react-router";
+import {
+  Select,
+  SelectItem,
+  SelectContent,
+  SelectValue,
+  SelectTrigger,
+} from "~/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "~/components/ui/card";
 
 type LatencyMetric = "response_time_ms" | "ttft_ms";
 
@@ -134,12 +148,10 @@ function CustomTooltipContent({
 export function LatencyECDFChart({
   latencyData,
   selectedMetric,
-  onMetricChange,
   quantiles,
 }: {
   latencyData: ModelLatencyDatapoint[];
   selectedMetric: LatencyMetric;
-  onMetricChange: (m: LatencyMetric) => void;
   quantiles: number[];
 }) {
   // Prepare eCDF series (your existing transform is fine)
@@ -234,8 +246,9 @@ export function LatencyECDFChart({
           {hoveredPct != null && (
             <ReferenceLine
               y={hoveredPct}
-              stroke="hsl(var(--border))"
+              stroke="#666666"
               strokeDasharray="3 3"
+              strokeWidth={2}
               ifOverflow="extendDomain"
             />
           )}
@@ -325,17 +338,58 @@ export function ModelLatency({
     useState<LatencyMetric>("response_time_ms");
 
   return (
-    <React.Suspense fallback={<div>Loading latency data...</div>}>
-      <Await resolve={modelLatencyDataPromise}>
-        {(latencyData) => (
-          <LatencyECDFChart
-            latencyData={latencyData}
-            selectedMetric={selectedMetric}
-            onMetricChange={setSelectedMetric}
-            quantiles={quantiles}
-          />
-        )}
-      </Await>
-    </React.Suspense>
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between">
+        <div>
+          <CardTitle>Model Latency Distribution</CardTitle>
+          <CardDescription>
+            Empirical cumulative distribution function (eCDF) of latency metrics
+            by model
+          </CardDescription>
+        </div>
+        <div className="flex flex-col justify-center gap-2">
+          <Select
+            value={timeGranularity}
+            onValueChange={onTimeGranularityChange}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Choose time granularity" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="hour">Hour</SelectItem>
+              <SelectItem value="day">Day</SelectItem>
+              <SelectItem value="week">Week</SelectItem>
+              <SelectItem value="month">Month</SelectItem>
+              <SelectItem value="cumulative">Cumulative</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={selectedMetric}
+            onValueChange={(value: LatencyMetric) => setSelectedMetric(value)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Choose metric" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="response_time_ms">Response Time</SelectItem>
+              <SelectItem value="ttft_ms">Time to First Token</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <React.Suspense fallback={<div>Loading latency data...</div>}>
+          <Await resolve={modelLatencyDataPromise}>
+            {(latencyData) => (
+              <LatencyECDFChart
+                latencyData={latencyData}
+                selectedMetric={selectedMetric}
+                quantiles={quantiles}
+              />
+            )}
+          </Await>
+        </React.Suspense>
+      </CardContent>
+    </Card>
   );
 }
