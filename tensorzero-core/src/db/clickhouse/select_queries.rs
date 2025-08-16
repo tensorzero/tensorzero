@@ -101,8 +101,8 @@ impl SelectQueries for ClickHouseConnectionInfo {
             r"
             SELECT
                 model_name,
-                quantilesTDigestMerge({qs})(response_time_ms_quantiles) AS response_time_quantiles,
-                quantilesTDigestMerge({qs})(ttft_quantiles) AS ttft_quantiles,
+                quantilesTDigestMerge({qs})(response_time_ms_quantiles) AS response_time_ms_quantiles,
+                quantilesTDigestMerge({qs})(ttft_ms_quantiles) AS ttft_ms_quantiles,
                 countMerge(count) as count
             FROM ModelProviderStatistics
             WHERE {time_filter}
@@ -112,6 +112,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
             ",
         );
         let response = self.run_query_synchronous_no_params(query).await?;
+        println!("quantile response: {}", response.response);
         // Deserialize the results into ModelLatencyDatapoint
         response
             .response
