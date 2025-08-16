@@ -1,7 +1,8 @@
 import type { TimeWindow, ModelUsageTimePoint } from "tensorzero-node";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { formatChartNumber, formatDetailedNumber } from "~/utils/chart";
-import { useState } from "react";
+import { useState, Suspense } from "react";
+import { Await } from "react-router";
 
 import {
   Card,
@@ -87,17 +88,15 @@ function MetricSelector({
   );
 }
 
-export function ModelUsage({
+function ModelUsageChart({
   modelUsageData,
-  timeGranularity,
-  onTimeGranularityChange,
+  selectedMetric,
+  onMetricChange,
 }: {
   modelUsageData: ModelUsageTimePoint[];
-  timeGranularity: TimeWindow;
-  onTimeGranularityChange: (timeGranularity: TimeWindow) => void;
+  selectedMetric: ModelUsageMetric;
+  onMetricChange: (metric: ModelUsageMetric) => void;
 }) {
-  const [selectedMetric, setSelectedMetric] =
-    useState<ModelUsageMetric>("inferences");
   const { data, modelNames } = transformModelUsageData(
     modelUsageData,
     selectedMetric,
@@ -116,20 +115,115 @@ export function ModelUsage({
     );
 
   return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between">
+        <div>
+          <CardTitle>Model Usage Over Time</CardTitle>
+          <CardDescription>
+            {METRIC_TYPE_CONFIG[selectedMetric].description} by model
+          </CardDescription>
+        </div>
+        <div className="flex flex-col justify-center gap-2">
+          <MetricSelector
+            selectedMetric={selectedMetric}
+            onMetricChange={onMetricChange}
+          />
+        </div>
+      </CardHeader>
+      <CardContent>
+        <ChartContainer config={chartConfig} className="h-80 w-full">
+          <BarChart accessibilityLayer data={data}>
+            <CartesianGrid vertical={false} />
+            <XAxis
+              dataKey="date"
+              tickLine={false}
+              tickMargin={10}
+              axisLine={true}
+              tickFormatter={(value) => new Date(value).toLocaleDateString()}
+            />
+            <YAxis
+              tickLine={false}
+              tickMargin={10}
+              axisLine={true}
+              tickFormatter={formatChartNumber}
+            />
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  labelFormatter={(label) =>
+                    new Date(label).toLocaleDateString()
+                  }
+                  formatter={(value, name, entry) => {
+                    const count = entry.payload[`${name}_count`];
+                    const inputTokens = entry.payload[`${name}_input_tokens`];
+                    const outputTokens = entry.payload[`${name}_output_tokens`];
+                    const totalTokens = inputTokens + outputTokens;
+
+                    return (
+                      <div className="flex flex-1 items-center justify-between leading-none">
+                        <span className="text-muted-foreground">{name}</span>
+                        <div className="grid text-right">
+                          <span className="text-foreground font-mono font-medium tabular-nums">
+                            {METRIC_TYPE_CONFIG[selectedMetric].formatter(
+                              value as number,
+                            )}
+                          </span>
+                          {selectedMetric === "inferences" && (
+                            <span className="text-muted-foreground text-[10px]">
+                              {formatDetailedNumber(totalTokens)} tokens
+                            </span>
+                          )}
+                          {selectedMetric !== "inferences" && (
+                            <span className="text-muted-foreground text-[10px]">
+                              {formatDetailedNumber(count)} requests
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
+              }
+            />
+            <ChartLegend content={<ChartLegendContent />} />
+            {modelNames.map((modelName) => (
+              <Bar
+                key={modelName}
+                dataKey={modelName}
+                name={modelName}
+                fill={chartConfig[modelName].color}
+                radius={4}
+                maxBarSize={100}
+              />
+            ))}
+          </BarChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function ModelUsage({
+  modelUsageDataPromise,
+  timeGranularity,
+  onTimeGranularityChange,
+}: {
+  modelUsageDataPromise: Promise<ModelUsageTimePoint[]>;
+  timeGranularity: TimeWindow;
+  onTimeGranularityChange: (timeGranularity: TimeWindow) => void;
+}) {
+  const [selectedMetric, setSelectedMetric] =
+    useState<ModelUsageMetric>("inferences");
+
+  return (
     <div className="space-y-8">
       <Card>
         <CardHeader className="flex flex-row items-start justify-between">
           <div>
             <CardTitle>Model Usage Over Time</CardTitle>
-            <CardDescription>
-              {METRIC_TYPE_CONFIG[selectedMetric].description} by model
-            </CardDescription>
+            <CardDescription>Usage metrics by model</CardDescription>
           </div>
           <div className="flex flex-col justify-center gap-2">
-            <MetricSelector
-              selectedMetric={selectedMetric}
-              onMetricChange={setSelectedMetric}
-            />
             <Select
               value={timeGranularity}
               onValueChange={onTimeGranularityChange}
@@ -148,74 +242,17 @@ export function ModelUsage({
           </div>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={chartConfig} className="h-80 w-full">
-            <BarChart accessibilityLayer data={data}>
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="date"
-                tickLine={false}
-                tickMargin={10}
-                axisLine={true}
-                tickFormatter={(value) => new Date(value).toLocaleDateString()}
-              />
-              <YAxis
-                tickLine={false}
-                tickMargin={10}
-                axisLine={true}
-                tickFormatter={formatChartNumber}
-              />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    labelFormatter={(label) =>
-                      new Date(label).toLocaleDateString()
-                    }
-                    formatter={(value, name, entry) => {
-                      const count = entry.payload[`${name}_count`];
-                      const inputTokens = entry.payload[`${name}_input_tokens`];
-                      const outputTokens =
-                        entry.payload[`${name}_output_tokens`];
-                      const totalTokens = inputTokens + outputTokens;
-
-                      return (
-                        <div className="flex flex-1 items-center justify-between leading-none">
-                          <span className="text-muted-foreground">{name}</span>
-                          <div className="grid text-right">
-                            <span className="text-foreground font-mono font-medium tabular-nums">
-                              {METRIC_TYPE_CONFIG[selectedMetric].formatter(
-                                value as number,
-                              )}
-                            </span>
-                            {selectedMetric === "inferences" && (
-                              <span className="text-muted-foreground text-[10px]">
-                                {formatDetailedNumber(totalTokens)} tokens
-                              </span>
-                            )}
-                            {selectedMetric !== "inferences" && (
-                              <span className="text-muted-foreground text-[10px]">
-                                {formatDetailedNumber(count)} requests
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    }}
-                  />
-                }
-              />
-              <ChartLegend content={<ChartLegendContent />} />
-              {modelNames.map((modelName) => (
-                <Bar
-                  key={modelName}
-                  dataKey={modelName}
-                  name={modelName}
-                  fill={chartConfig[modelName].color}
-                  radius={4}
-                  maxBarSize={100}
+          <Suspense fallback={<div>Loading model usage data...</div>}>
+            <Await resolve={modelUsageDataPromise}>
+              {(modelUsageData) => (
+                <ModelUsageChart
+                  modelUsageData={modelUsageData}
+                  selectedMetric={selectedMetric}
+                  onMetricChange={setSelectedMetric}
                 />
-              ))}
-            </BarChart>
-          </ChartContainer>
+              )}
+            </Await>
+          </Suspense>
         </CardContent>
       </Card>
     </div>

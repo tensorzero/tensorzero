@@ -35,18 +35,18 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const numPeriods = parseInt(url.searchParams.get("usageNumPeriods") || "10");
   const databaseClient = await getNativeDatabaseClient();
-  const modelUsageTimeseries = await databaseClient.getModelUsageTimeseries(
+  const modelUsageTimeseriesPromise = databaseClient.getModelUsageTimeseries(
     time_granularity,
     numPeriods,
   );
   return {
-    modelUsageTimeseries,
+    modelUsageTimeseriesPromise,
     timeGranularity: time_granularity,
   };
 }
 
 export default function ModelsPage({ loaderData }: Route.ComponentProps) {
-  const { modelUsageTimeseries, timeGranularity } = loaderData;
+  const { modelUsageTimeseriesPromise, timeGranularity } = loaderData;
   const navigate = useNavigate();
 
   const [currentTimeGranularity, setCurrentTimeGranularity] =
@@ -67,7 +67,7 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
         <SectionLayout>
           <SectionHeader heading="Usage" />
           <ModelUsage
-            modelUsageData={modelUsageTimeseries}
+            modelUsageDataPromise={modelUsageTimeseriesPromise}
             timeGranularity={currentTimeGranularity}
             onTimeGranularityChange={handleTimeGranularityChange}
           />
