@@ -6,7 +6,9 @@ use reqwest::Client;
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use tensorzero_core::clickhouse::test_helpers::{get_clickhouse, select_chat_inference_clickhouse};
+use tensorzero_core::db::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse,
+};
 use uuid::Uuid;
 
 use crate::{

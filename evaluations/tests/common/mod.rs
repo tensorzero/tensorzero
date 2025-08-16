@@ -7,7 +7,7 @@ use std::{
 use tensorzero::{
     ChatInferenceDatapoint, Client, ClientBuilder, ClientBuilderMode, JsonInferenceDatapoint,
 };
-use tensorzero_core::clickhouse::{
+use tensorzero_core::db::clickhouse::{
     test_helpers::{get_clickhouse, CLICKHOUSE_URL},
     TableName,
 };

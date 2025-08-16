@@ -4,7 +4,7 @@ use tensorzero::{
     InferenceOutputSource, ListInferencesParams, StoredInference, TagComparisonOperator, TagNode,
     TimeComparisonOperator, TimeNode,
 };
-use tensorzero_core::clickhouse::{
+use tensorzero_core::db::clickhouse::{
     query_builder::{OrderBy, OrderByTerm, OrderDirection},
     ClickhouseFormat,
 };

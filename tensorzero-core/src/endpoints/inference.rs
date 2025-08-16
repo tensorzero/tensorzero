@@ -21,8 +21,8 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
-use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::config_parser::{Config, ObjectStoreInfo, SchemaData, UninitializedVariantInfo};
+use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;

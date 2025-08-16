@@ -12,8 +12,8 @@ use tokio::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
+use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};

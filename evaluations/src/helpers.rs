@@ -4,10 +4,10 @@ use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use serde_json::Value;
 use tensorzero::{CacheParamsOptions, DynamicToolParams, InferenceResponse};
-use tensorzero_core::clickhouse::escape_string_for_clickhouse_literal;
+use tensorzero_core::db::clickhouse::escape_string_for_clickhouse_literal;
 use tensorzero_core::serde_util::deserialize_json_string;
 use tensorzero_core::{
-    cache::CacheEnabledMode, clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
+    cache::CacheEnabledMode, db::clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
     tool::ToolCallConfigDatabaseInsert,
 };
 use tracing::debug;

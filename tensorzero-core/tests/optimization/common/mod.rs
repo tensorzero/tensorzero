@@ -9,9 +9,9 @@ use tensorzero::{
 };
 use tensorzero_core::{
     cache::CacheOptions,
-    clickhouse::test_helpers::CLICKHOUSE_URL,
-    clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
     config_parser::ProviderTypesConfig,
+    db::clickhouse::test_helpers::CLICKHOUSE_URL,
+    db::clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
     endpoints::inference::InferenceClients,
     inference::types::{
         resolved_input::FileWithPath,
