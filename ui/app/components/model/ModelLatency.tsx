@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import React, { useRef, useState, useMemo, useCallback } from "react";
 import { Await } from "react-router";
+import { TimeWindowSelector } from "~/components/ui/TimeWindowSelector";
 import {
   Select,
   SelectItem,
@@ -348,21 +349,10 @@ export function ModelLatency({
           </CardDescription>
         </div>
         <div className="flex flex-col justify-center gap-2">
-          <Select
+          <TimeWindowSelector
             value={timeGranularity}
             onValueChange={onTimeGranularityChange}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Choose time granularity" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="hour">Hour</SelectItem>
-              <SelectItem value="day">Day</SelectItem>
-              <SelectItem value="week">Week</SelectItem>
-              <SelectItem value="month">Month</SelectItem>
-              <SelectItem value="cumulative">Cumulative</SelectItem>
-            </SelectContent>
-          </Select>
+          />
           <Select
             value={selectedMetric}
             onValueChange={(value: LatencyMetric) => setSelectedMetric(value)}

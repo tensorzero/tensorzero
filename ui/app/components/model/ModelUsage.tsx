@@ -18,6 +18,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "~/components/ui/chart";
+import { TimeWindowSelector } from "~/components/ui/TimeWindowSelector";
 import {
   Select,
   SelectItem,
@@ -224,21 +225,10 @@ export function ModelUsage({
             <CardDescription>Usage metrics by model</CardDescription>
           </div>
           <div className="flex flex-col justify-center gap-2">
-            <Select
+            <TimeWindowSelector
               value={timeGranularity}
               onValueChange={onTimeGranularityChange}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Choose time granularity" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="hour">Hour</SelectItem>
-                <SelectItem value="day">Day</SelectItem>
-                <SelectItem value="week">Week</SelectItem>
-                <SelectItem value="month">Month</SelectItem>
-                <SelectItem value="cumulative">Cumulative</SelectItem>
-              </SelectContent>
-            </Select>
+            />
           </div>
         </CardHeader>
         <CardContent>
