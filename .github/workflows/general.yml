@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: ["main"]
 
+# When triggered from the merge queue, cancel any existing workflow runs for the same PR branch
+# Otherwise, use the unique run id for the concurrency group, to prevent anything from getting cancelled
+concurrency:
+  group: ${{ github.event_name == 'merge_group' && format('{0}-{1}', github.workflow, github.ref) || github.run_id }}
+  cancel-in-progress: true
+
 env:
   FORCE_COLOR: 1
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"

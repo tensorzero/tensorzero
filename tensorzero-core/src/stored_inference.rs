@@ -538,26 +538,11 @@ fn render_model_input(
             variant_name: variant_name.clone(),
         }));
     };
-    let system_template_name = chat_completion_config
-        .system_template
-        .as_ref()
-        .map(|x| x.path.get_template_key());
-    let user_template_name = chat_completion_config
-        .user_template
-        .as_ref()
-        .map(|x| x.path.get_template_key());
-    let assistant_template_name = chat_completion_config
-        .assistant_template
-        .as_ref()
-        .map(|x| x.path.get_template_key());
     prepare_model_input(
         resolved_input.system.as_ref(),
         &resolved_input.messages,
         &config.templates,
-        system_template_name.as_deref(),
-        user_template_name.as_deref(),
-        assistant_template_name.as_deref(),
-        function_config.template_schema_info(),
+        &chat_completion_config.templates,
     )
 }
 

@@ -368,6 +368,7 @@ pub async fn make_embedded_gateway() -> Client {
         timeout: None,
         verify_credentials: true,
     })
+    .with_verbose_errors(true)
     .build()
     .await
     .unwrap()
@@ -378,6 +379,7 @@ pub async fn make_http_gateway() -> Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
         url: "http://localhost:3000".parse().unwrap(),
     })
+    .with_verbose_errors(true)
     .build()
     .await
     .unwrap()

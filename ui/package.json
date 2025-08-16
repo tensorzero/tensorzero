@@ -94,7 +94,7 @@
     "@react-router/dev": "^7.6.3",
     "@storybook/addon-docs": "^9.1.1",
     "@storybook/addon-onboarding": "^9.1.1",
-    "@storybook/addon-vitest": "9.0.4",
+    "@storybook/addon-vitest": "^9.1.1",
     "@storybook/react": "^9.1.1",
     "@storybook/react-vite": "^9.1.1",
     "@types/json-schema": "^7.0.15",
