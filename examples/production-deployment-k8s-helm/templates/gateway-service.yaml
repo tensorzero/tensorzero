@@ -5,9 +5,6 @@ metadata:
   labels:
     {{- include "tensorzero.labels" . | nindent 4 }}
     app.kubernetes.io/component: gateway
-    {{- with .Values.globalLabels }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
 spec:
   type: {{ .Values.gateway.service.type }}
   ports:

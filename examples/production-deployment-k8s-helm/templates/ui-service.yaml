@@ -6,9 +6,6 @@ metadata:
   labels:
     {{- include "tensorzero.labels" . | nindent 4 }}
     app.kubernetes.io/component: ui
-    {{- with .Values.globalLabels }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
 spec:
   type: {{ .Values.ui.service.type | default "ClusterIP" }}
   ports:
@@ -19,4 +16,4 @@ spec:
   selector:
     {{- include "tensorzero.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: ui
-{{- end }}
+{{- end }} 

@@ -39,6 +39,11 @@ helm.sh/chart: {{ include "tensorzero.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+
+{{- range $label, $value := .Values.globalLabels }}
+{{ $label }}: {{ $value }}
+{{- end }}
+
 {{- end }}
 
 {{/*

@@ -8,9 +8,6 @@ metadata:
   labels:
     {{- include "tensorzero.labels" . | nindent 4 }}
     app.kubernetes.io/component: ui
-    {{- with .Values.globalLabels }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
   {{- with .Values.ui.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -46,4 +43,4 @@ spec:
                   number: {{ $uiSvcPort }}
           {{- end }}
     {{- end }}
-{{- end }}
+{{- end }} 
