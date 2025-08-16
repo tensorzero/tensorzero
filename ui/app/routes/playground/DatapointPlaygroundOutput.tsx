@@ -32,7 +32,7 @@ const DatapointPlaygroundOutput = memo(
   }: DatapointPlaygroundOutputProps) {
     const query = useQuery({
       queryKey: [
-        "DATASETS_COUNT",
+        "CLIENT_INFERENCE",
         { variant, datapoint, input, functionConfig },
       ],
       queryFn: async ({ signal }) => {
