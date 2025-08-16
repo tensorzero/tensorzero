@@ -50,6 +50,7 @@ const DatapointPlaygroundOutput = memo(
       // Only re-fetch when the user explicitly requests it
       refetchOnMount: false,
       refetchInterval: false,
+      retry: false,
     });
 
     const loadingIndicator = (
