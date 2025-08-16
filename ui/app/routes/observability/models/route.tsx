@@ -73,13 +73,22 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
   } = loaderData;
   const navigate = useNavigate();
 
-  const [currentTimeGranularity, setCurrentTimeGranularity] =
+  const [currentUsageTimeGranularity, setCurrentUsageTimeGranularity] =
     useState<TimeWindow>(usageTimeGranularity);
+  const [currentLatencyTimeGranularity, setCurrentLatencyTimeGranularity] =
+    useState<TimeWindow>(latencyTimeGranularity);
 
-  const handleTimeGranularityChange = (granularity: TimeWindow) => {
-    setCurrentTimeGranularity(granularity);
+  const handleUsageTimeGranularityChange = (granularity: TimeWindow) => {
+    setCurrentUsageTimeGranularity(granularity);
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("usageTimeGranularity", granularity);
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  const handleLatencyTimeGranularityChange = (granularity: TimeWindow) => {
+    setCurrentLatencyTimeGranularity(granularity);
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("latencyTimeGranularity", granularity);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
@@ -92,8 +101,8 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
           <SectionHeader heading="Usage" />
           <ModelUsage
             modelUsageDataPromise={modelUsageTimeseriesPromise}
-            timeGranularity={currentTimeGranularity}
-            onTimeGranularityChange={handleTimeGranularityChange}
+            timeGranularity={currentUsageTimeGranularity}
+            onTimeGranularityChange={handleUsageTimeGranularityChange}
           />
         </SectionLayout>
         <SectionLayout>
@@ -101,6 +110,8 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
           <ModelLatency
             modelLatencyDataPromise={modelLatencyQuantilesPromise}
             quantiles={quantiles}
+            timeGranularity={currentLatencyTimeGranularity}
+            onTimeGranularityChange={handleLatencyTimeGranularityChange}
           />
         </SectionLayout>
       </SectionsGroup>
