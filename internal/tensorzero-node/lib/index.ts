@@ -25,6 +25,7 @@ const {
   TensorZeroClient: NativeTensorZeroClient,
   getConfig: nativeGetConfig,
   DatabaseClient: NativeDatabaseClient,
+  getQuantiles,
 } = require("../index.cjs") as typeof import("../index");
 
 // Wrapper class for type safety and convenience
@@ -97,6 +98,9 @@ export async function getConfig(configPath: string): Promise<Config> {
   const configString = await nativeGetConfig(configPath);
   return JSON.parse(configString) as Config;
 }
+
+// Export quantiles array from migration_0035
+export { getQuantiles };
 
 function safeStringify(obj: unknown) {
   try {

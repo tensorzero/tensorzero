@@ -4,7 +4,7 @@ use url::Url;
 
 use tensorzero::{
     Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, InferenceOutput,
-    OptimizationJobHandle,
+    OptimizationJobHandle, QUANTILES,
 };
 
 mod database;
@@ -128,4 +128,9 @@ pub async fn get_config(config_path: String) -> Result<String, napi::Error> {
     let config_str =
         serde_json::to_string(&config).map_err(|e| napi::Error::from_reason(e.to_string()))?;
     Ok(config_str)
+}
+
+#[napi]
+pub fn get_quantiles() -> Vec<f64> {
+    QUANTILES.to_vec()
 }
