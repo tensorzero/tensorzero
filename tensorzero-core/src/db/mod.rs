@@ -57,8 +57,8 @@ pub struct ModelUsageTimePoint {
 pub struct ModelLatencyDatapoint {
     pub model_name: String,
     // should be an array of quantiles_len u64
-    pub response_time_ms_quantiles: Vec<Option<u32>>,
-    pub ttft_ms_quantiles: Vec<Option<u32>>,
+    pub response_time_ms_quantiles: Vec<Option<f32>>,
+    pub ttft_ms_quantiles: Vec<Option<f32>>,
     #[serde(deserialize_with = "deserialize_u64")]
     pub count: u64,
 }

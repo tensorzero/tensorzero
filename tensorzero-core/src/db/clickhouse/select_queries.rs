@@ -112,7 +112,6 @@ impl SelectQueries for ClickHouseConnectionInfo {
             ",
         );
         let response = self.run_query_synchronous_no_params(query).await?;
-        println!("quantile response: {}", response.response);
         // Deserialize the results into ModelLatencyDatapoint
         response
             .response
