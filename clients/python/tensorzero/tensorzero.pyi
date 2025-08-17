@@ -155,7 +155,6 @@ class DiclOptimizationConfig:
         k: Optional[int],
         model: Optional[str],
         credentials: Optional[str] = None,
-        api_base: Optional[str] = None,
     ) -> None: ...
 
 @final
