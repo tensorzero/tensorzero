@@ -15,17 +15,12 @@ impl OptimizationTestCase for DiclTestCase {
         true
     }
 
-    fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
+    fn get_optimizer_info(&self, _use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
         UninitializedOptimizerInfo {
             inner: UninitializedOptimizerConfig::Dicl(UninitializedDiclOptimizationConfig {
                 embedding_model: "text-embedding-3-small".to_string(),
                 variant_name: "test_dicl".to_string(),
                 function_name: "basic_test".to_string(),
-                api_base: if use_mock_inference_provider {
-                    Some("http://localhost:3030/openai/".parse().unwrap())
-                } else {
-                    None
-                },
                 ..Default::default()
             }),
         }

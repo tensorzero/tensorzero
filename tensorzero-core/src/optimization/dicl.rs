@@ -1,6 +1,4 @@
 #[cfg(feature = "pyo3")]
-use pyo3::exceptions::PyValueError;
-#[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -63,7 +61,6 @@ pub struct DiclOptimizationConfig {
     pub credentials: OpenAICredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocation>,
-    pub api_base: Option<Url>,
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -87,7 +84,6 @@ pub struct UninitializedDiclOptimizationConfig {
     pub model: String,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credentials: Option<CredentialLocation>,
-    pub api_base: Option<Url>,
 }
 
 impl Default for UninitializedDiclOptimizationConfig {
@@ -103,7 +99,6 @@ impl Default for UninitializedDiclOptimizationConfig {
             k: default_k(),
             model: default_model(),
             credentials: None,
-            api_base: None,
         }
     }
 }
@@ -124,7 +119,7 @@ impl UninitializedDiclOptimizationConfig {
     /// prints out signature:
     /// ($self, /, *args, **kwargs)
     #[new]
-    #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None, api_base=None))]
+    #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None))]
     #[expect(clippy::too_many_arguments)]
     pub fn new(
         embedding_model: String,
@@ -136,17 +131,10 @@ impl UninitializedDiclOptimizationConfig {
         k: Option<usize>,
         model: Option<String>,
         credentials: Option<String>,
-        api_base: Option<String>,
     ) -> PyResult<Self> {
         // Use Deserialize to convert the string to a CredentialLocation
         let credentials =
             credentials.map(|s| serde_json::from_str(&s).unwrap_or(CredentialLocation::Env(s)));
-        let api_base = api_base
-            .map(|s| {
-                Url::parse(&s)
-                    .map_err(|e| PyErr::new::<PyValueError, std::string::String>(e.to_string()))
-            })
-            .transpose()?;
         Ok(Self {
             embedding_model,
             variant_name,
@@ -158,7 +146,6 @@ impl UninitializedDiclOptimizationConfig {
             k: k.unwrap_or_else(default_k),
             model: model.unwrap_or_else(default_model),
             credentials,
-            api_base,
         })
     }
 
@@ -173,9 +160,8 @@ impl UninitializedDiclOptimizationConfig {
     /// :param k: The number of nearest neighbors to use for the DICL variant.
     /// :param model: The model to use for the DICL variant.
     /// :param credentials: The credentials to use for embedding. This should be a string like "env::OPENAI_API_KEY". See docs for more details.
-    /// :param api_base: The base URL to use for embedding. This is primarily used for testing.
     #[expect(unused_variables, clippy::too_many_arguments)]
-    #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None, api_base=None))]
+    #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None))]
     fn __init__(
         this: Py<Self>,
         embedding_model: String,
@@ -187,7 +173,6 @@ impl UninitializedDiclOptimizationConfig {
         k: Option<usize>,
         model: Option<String>,
         credentials: Option<String>,
-        api_base: Option<String>,
     ) -> Py<Self> {
         this
     }
@@ -205,7 +190,6 @@ impl UninitializedDiclOptimizationConfig {
             retries: self.retries,
             k: self.k,
             model: self.model,
-            api_base: self.api_base,
             credentials: build_creds_caching_default(
                 self.credentials.clone(),
                 default_api_key_location(),
