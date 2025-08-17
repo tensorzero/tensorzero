@@ -852,13 +852,11 @@ impl JobHandle for FireworksSFTJobHandle {
                         discard_unknown_chunks: false,
                     };
                     Ok(OptimizationJobInfo::Completed {
-                        output: OptimizerOutput::Model {
-                            model: UninitializedModelConfig {
-                                routing: vec![model_path.clone().into()],
-                                providers: HashMap::from([(model_path.into(), model_provider)]),
-                                timeouts: TimeoutsConfig::default(),
-                            },
-                        },
+                        output: OptimizerOutput::Model(UninitializedModelConfig {
+                            routing: vec![model_path.clone().into()],
+                            providers: HashMap::from([(model_path.into(), model_provider)]),
+                            timeouts: TimeoutsConfig::default(),
+                        }),
                     })
                 }
             }

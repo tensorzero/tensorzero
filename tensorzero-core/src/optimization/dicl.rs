@@ -404,26 +404,24 @@ impl JobHandle for DiclOptimizationJobHandle {
         // DICL produces a variant configuration that references the stored examples
         // Return a DICL variant with the configuration from the optimization job
         Ok(OptimizationJobInfo::Completed {
-            output: OptimizerOutput::Variant {
-                variant: Box::new(VariantConfig::Dicl(DiclConfig {
-                    weight: None,
-                    embedding_model: Arc::from(self.embedding_model.as_str()),
-                    k: self.k as u32,
-                    model: Arc::from(self.model.as_str()),
-                    system_instructions: String::new(),
-                    temperature: None,
-                    top_p: None,
-                    stop_sequences: None,
-                    presence_penalty: None,
-                    frequency_penalty: None,
-                    max_tokens: None,
-                    seed: None,
-                    json_mode: None,
-                    extra_body: None,
-                    extra_headers: None,
-                    retries: RetryConfig::default(),
-                })),
-            },
+            output: OptimizerOutput::Variant(Box::new(VariantConfig::Dicl(DiclConfig {
+                weight: None,
+                embedding_model: Arc::from(self.embedding_model.as_str()),
+                k: self.k as u32,
+                model: Arc::from(self.model.as_str()),
+                system_instructions: String::new(),
+                temperature: None,
+                top_p: None,
+                stop_sequences: None,
+                presence_penalty: None,
+                frequency_penalty: None,
+                max_tokens: None,
+                seed: None,
+                json_mode: None,
+                extra_body: None,
+                extra_headers: None,
+                retries: RetryConfig::default(),
+            }))),
         })
     }
 }

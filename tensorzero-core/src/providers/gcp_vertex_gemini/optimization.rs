@@ -212,13 +212,11 @@ pub fn convert_to_optimizer_status(
                 discard_unknown_chunks: false,
             };
             OptimizationJobInfo::Completed {
-                output: OptimizerOutput::Model {
-                    model: UninitializedModelConfig {
-                        routing: vec![model_name.clone().into()],
-                        providers: HashMap::from([(model_name.clone().into(), model_provider)]),
-                        timeouts: TimeoutsConfig::default(),
-                    },
-                },
+                output: OptimizerOutput::Model(UninitializedModelConfig {
+                    routing: vec![model_name.clone().into()],
+                    providers: HashMap::from([(model_name.clone().into(), model_provider)]),
+                    timeouts: TimeoutsConfig::default(),
+                }),
             }
         }
     })
@@ -366,7 +364,7 @@ mod tests {
         assert!(matches!(
             status,
             OptimizationJobInfo::Completed {
-                output: OptimizerOutput::Model { .. },
+                output: OptimizerOutput::Model(_),
             }
         ));
 

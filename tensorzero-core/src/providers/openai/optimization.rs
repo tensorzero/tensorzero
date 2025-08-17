@@ -266,13 +266,11 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizat
                 discard_unknown_chunks: false,
             };
             OptimizationJobInfo::Completed {
-                output: OptimizerOutput::Model {
-                    model: UninitializedModelConfig {
-                        routing: vec![model_name.clone().into()],
-                        providers: HashMap::from([(model_name.clone().into(), model_provider)]),
-                        timeouts: TimeoutsConfig::default(),
-                    },
-                },
+                output: OptimizerOutput::Model(UninitializedModelConfig {
+                    routing: vec![model_name.clone().into()],
+                    providers: HashMap::from([(model_name.clone().into(), model_provider)]),
+                    timeouts: TimeoutsConfig::default(),
+                }),
             }
         }
         OpenAIFineTuningJobStatus::Failed => OptimizationJobInfo::Failed {
@@ -374,7 +372,7 @@ mod tests {
         assert!(matches!(
             status,
             OptimizationJobInfo::Completed {
-                output: OptimizerOutput::Model { .. },
+                output: OptimizerOutput::Model(_),
             }
         ));
 
@@ -392,7 +390,7 @@ mod tests {
         assert!(matches!(
             status,
             OptimizationJobInfo::Completed {
-                output: OptimizerOutput::Model { .. },
+                output: OptimizerOutput::Model(_),
             }
         ));
 
