@@ -4369,7 +4369,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
 }
 
 /// This test is similar to `test_tool_use_tool_choice_auto_used_inference_request_with_provider`, but it steers the model to not use the tool.
-/// This ensures that ToolChoice::Auto is working as expected.
+/// This ensures that `ToolChoice::Auto` is working as expected.
 pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -4624,7 +4624,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
 }
 
 /// This test is similar to `test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider`, but it steers the model to not use the tool.
-/// This ensures that ToolChoice::Auto is working as expected.
+/// This ensures that `ToolChoice::Auto` is working as expected.
 pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {

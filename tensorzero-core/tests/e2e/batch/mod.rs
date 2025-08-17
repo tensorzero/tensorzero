@@ -209,7 +209,7 @@ async fn test_write_poll_batch_inference() {
     assert_eq!(batch_request.status, BatchStatus::Failed);
 }
 
-/// Helper function to write 2 rows to the BatchModelInference table
+/// Helper function to write 2 rows to the `BatchModelInference` table
 async fn write_2_batch_model_inference_rows(
     clickhouse: &ClickHouseConnectionInfo,
     batch_id: Uuid,

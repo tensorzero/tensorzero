@@ -8,7 +8,7 @@ use serde::Deserialize;
 use std::time::Duration;
 
 /// This migration adds a `CumulativeUsage` table and `CumulativeUsageView` materialized view
-/// This will allow the sum of tokens in the ModelInference table to be amortized and
+/// This will allow the sum of tokens in the `ModelInference` table to be amortized and
 /// looked up as needed.
 pub struct Migration0034<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,

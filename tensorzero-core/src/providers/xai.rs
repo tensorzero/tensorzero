@@ -297,9 +297,9 @@ impl InferenceProvider for XAIProvider {
 /// This struct defines the supported parameters for the xAI API
 /// See the [xAI API documentation](https://docs.x.ai/api/endpoints#chat-completions)
 /// for more details.
-/// We are not handling logprobs, top_logprobs, n,
-/// logit_bias, seed, service_tier, stop, user or response_format.
-/// or the deprecated function_call and functions arguments.
+/// We are not handling `logprobs`, `top_logprobs`, `n`,
+/// `logit_bias`, `seed`, `service_tier`, `stop`, `user` or `response_format`.
+/// or the deprecated `function_call` and `functions` arguments.
 #[derive(Debug, Serialize)]
 struct XAIRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,

@@ -35,8 +35,8 @@ pub trait StoredSample {
     fn owned_simple_info(self) -> SimpleStoredSampleInfo;
 }
 
-/// Utility struct that contains the information needed for a RenderedSample
-/// that is just copied over from the StoredSample.
+/// Utility struct that contains the information needed for a `RenderedSample`
+/// that is just copied over from the `StoredSample`.
 pub struct SimpleStoredSampleInfo {
     pub function_name: String,
     pub episode_id: Option<Uuid>,
@@ -508,7 +508,7 @@ impl std::fmt::Display for RenderedSample {
     }
 }
 
-/// Convert a StoredInference's input to a ModelInput.
+/// Convert a `StoredInference`'s input to a `ModelInput`.
 /// `variants` should be a map from function name to variant name, i.e. what variant to use for a particular function
 /// as the stored inference is being rendered.
 /// This does not handle resolving network resources (e.g. images).
@@ -546,7 +546,7 @@ fn render_model_input(
     )
 }
 
-/// Render an impl StoredSample to a RenderedStoredInference.
+/// Render an impl `StoredSample` to a `RenderedStoredInference`.
 /// `variants` should be a map from function name to variant name, i.e. what variant to use for a particular function
 /// as the inference example is being rendered.
 ///
@@ -585,8 +585,8 @@ pub fn render_stored_sample<T: StoredSample>(
     })
 }
 
-/// Since we store the input in the database in the form of ResolvedInput but without e.g. images inside,
-/// we need to reresolve the input when we retrieve it from the database.
+/// Since we store the input in the database in the form of `ResolvedInput` but without e.g. images inside,
+/// we need to re-resolve the input when we retrieve it from the database.
 /// Resolves images in place.
 pub async fn reresolve_input_for_fine_tuning(
     input: &mut ResolvedInput,
