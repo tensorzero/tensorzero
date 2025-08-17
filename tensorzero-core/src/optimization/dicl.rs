@@ -50,7 +50,6 @@ fn default_model() -> String {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct DiclOptimizationConfig {
-    pub provider: String,
     pub embedding_model: String,
     pub variant_name: String,
     pub function_name: String,
@@ -72,7 +71,6 @@ pub struct DiclOptimizationConfig {
 #[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "DiclOptimizationConfig"))]
 pub struct UninitializedDiclOptimizationConfig {
-    pub provider: String,
     pub embedding_model: String,
     pub variant_name: String,
     pub function_name: String,
@@ -95,7 +93,6 @@ pub struct UninitializedDiclOptimizationConfig {
 impl Default for UninitializedDiclOptimizationConfig {
     fn default() -> Self {
         Self {
-            provider: String::new(),
             embedding_model: String::new(),
             variant_name: String::new(),
             function_name: String::new(),
@@ -127,10 +124,9 @@ impl UninitializedDiclOptimizationConfig {
     /// prints out signature:
     /// ($self, /, *args, **kwargs)
     #[new]
-    #[pyo3(signature = (*, provider, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None, api_base=None))]
+    #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None, api_base=None))]
     #[expect(clippy::too_many_arguments)]
     pub fn new(
-        provider: String,
         embedding_model: String,
         variant_name: String,
         function_name: String,
@@ -152,7 +148,6 @@ impl UninitializedDiclOptimizationConfig {
             })
             .transpose()?;
         Ok(Self {
-            provider,
             embedding_model,
             variant_name,
             function_name,
@@ -169,7 +164,6 @@ impl UninitializedDiclOptimizationConfig {
 
     /// Initialize the DiclOptimizationConfig. All parameters are optional except for `embedding_model`.
     ///
-    /// :param provider: The provider of the embedding model.
     /// :param embedding_model: The embedding model to use.
     /// :param variant_name: The name to be used for the DICL variant.
     /// :param function_name: The name of the function to optimize.
@@ -181,10 +175,9 @@ impl UninitializedDiclOptimizationConfig {
     /// :param credentials: The credentials to use for embedding. This should be a string like "env::OPENAI_API_KEY". See docs for more details.
     /// :param api_base: The base URL to use for embedding. This is primarily used for testing.
     #[expect(unused_variables, clippy::too_many_arguments)]
-    #[pyo3(signature = (*, provider, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None, api_base=None))]
+    #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None, api_base=None))]
     fn __init__(
         this: Py<Self>,
-        provider: String,
         embedding_model: String,
         variant_name: String,
         function_name: String,
@@ -203,7 +196,6 @@ impl UninitializedDiclOptimizationConfig {
 impl UninitializedDiclOptimizationConfig {
     pub fn load(self) -> Result<DiclOptimizationConfig, Error> {
         Ok(DiclOptimizationConfig {
-            provider: self.provider,
             embedding_model: self.embedding_model,
             variant_name: self.variant_name,
             function_name: self.function_name,
