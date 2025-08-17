@@ -6,7 +6,7 @@ describe("dump_optimizer_output", () => {
   it("should create correct config for fireworks model", async () => {
     const optimizerOutput: OptimizerOutput = {
       type: "model",
-      model: {
+      content: {
         routing: ["claude-2"],
         providers: {
           "claude-2": {
@@ -44,7 +44,7 @@ describe("dump_optimizer_output", () => {
   it("should create correct config for openai model", async () => {
     const optimizerOutput: OptimizerOutput = {
       type: "model",
-      model: {
+      content: {
         routing: ["gpt-4o"],
         providers: {
           "gpt-4o": {

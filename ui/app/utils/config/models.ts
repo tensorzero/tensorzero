@@ -2,16 +2,12 @@ import { stringify } from "smol-toml";
 import type { OptimizerOutput } from "tensorzero-node";
 
 export function dump_optimizer_output(optimizerOutput: OptimizerOutput) {
-  /// Drop type key from the optimizer output
-  const { type, ...rest } = optimizerOutput;
-  if (type !== "model") {
-    throw new Error(`Only model type is supported, got ${type}`);
+  if (optimizerOutput.type !== "model") {
+    throw new Error(
+      `Only model type is supported, got ${optimizerOutput.type}`,
+    );
   }
-  // TypeScript type guard: since we checked type === "model", rest must have model property
-  if (!("model" in rest)) {
-    throw new Error("Expected model property in optimizer output");
-  }
-  const modelConfig = rest.model;
+  const modelConfig = optimizerOutput.content;
   if (modelConfig.routing.length !== 1) {
     throw new Error(
       `Expected 1 routing entry, got ${modelConfig.routing.length}`,

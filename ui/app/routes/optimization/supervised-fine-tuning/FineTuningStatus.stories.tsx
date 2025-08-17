@@ -102,7 +102,7 @@ export const Completed: Story = {
       status: "completed",
       output: {
         type: "model",
-        model: {
+        content: {
           routing: ["ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123"],
           providers: {
             "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123": {
@@ -169,7 +169,7 @@ export const LongJobId: Story = {
       status: "completed",
       output: {
         type: "model",
-        model: {
+        content: {
           routing: ["ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123"],
           providers: {
             "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123": {
