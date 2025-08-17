@@ -4,6 +4,7 @@ import {
   redirect,
   useNavigate,
   useSearchParams,
+  Await,
 } from "react-router";
 import type { LoaderFunctionArgs, RouteHandle } from "react-router";
 import BasicInfo from "./VariantBasicInfo";
@@ -21,7 +22,7 @@ import {
   getVariantPerformances,
   type TimeWindowUnit,
 } from "~/utils/clickhouse/function";
-import { useMemo, useState } from "react";
+import { useState, Suspense } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { getInferenceTableName } from "~/utils/clickhouse/common";
@@ -97,28 +98,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         })
       : undefined;
 
-  const [
-    inferences,
-    inference_bounds,
-    num_inferences,
-    variant_performances,
-    metricsWithFeedback,
-  ] = await Promise.all([
+  return {
+    function_name,
+    variant_name,
     inferencePromise,
     tableBoundsPromise,
     numInferencesPromise,
     variantPerformancesPromise,
     metricsWithFeedbackPromise,
-  ]);
-
-  return {
-    function_name,
-    variant_name,
-    num_inferences,
-    inferences,
-    inference_bounds,
-    variant_performances,
-    metricsWithFeedback,
   };
 }
 
@@ -126,11 +113,11 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
   const {
     function_name,
     variant_name,
-    num_inferences,
-    inferences,
-    inference_bounds,
-    variant_performances,
-    metricsWithFeedback,
+    inferencePromise,
+    tableBoundsPromise,
+    numInferencesPromise,
+    variantPerformancesPromise,
+    metricsWithFeedbackPromise,
   } = loaderData;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -155,31 +142,6 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     );
   }
 
-  const topInference = inferences.length > 0 ? inferences[0] : null;
-  const bottomInference =
-    inferences.length > 0 ? inferences[inferences.length - 1] : null;
-
-  const handleNextInferencePage = () => {
-    if (!bottomInference) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("afterInference");
-    searchParams.set("beforeInference", bottomInference.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const handlePreviousInferencePage = () => {
-    if (!topInference) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("beforeInference");
-    searchParams.set("afterInference", topInference.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const disablePreviousInferencePage =
-    !topInference || inference_bounds.last_id === topInference.id;
-  const disableNextInferencePage =
-    !bottomInference || inference_bounds.first_id === bottomInference.id;
-
   const [metric_name, setMetricName] = useState(
     () => searchParams.get("metric_name") || "",
   );
@@ -190,15 +152,6 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     searchParams.set("metric_name", metric);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
-
-  const metricsExcludingDemonstrations = useMemo(
-    () => ({
-      metrics: metricsWithFeedback.metrics.filter(
-        ({ metric_type }) => metric_type !== "demonstration",
-      ),
-    }),
-    [metricsWithFeedback],
-  );
 
   const [time_granularity, setTimeGranularity] =
     useState<TimeWindowUnit>("week");
@@ -224,19 +177,47 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Metrics" />
-          <MetricSelector
-            metricsWithFeedback={metricsExcludingDemonstrations}
-            selectedMetric={metric_name || ""}
-            onMetricChange={handleMetricChange}
-          />
-          {variant_performances && (
-            <VariantPerformance
-              variant_performances={variant_performances}
-              metric_name={metric_name}
-              time_granularity={time_granularity}
-              onTimeGranularityChange={handleTimeGranularityChange}
-            />
-          )}
+          <Suspense fallback={<div>Loading metrics...</div>}>
+            <Await resolve={metricsWithFeedbackPromise}>
+              {(metricsWithFeedback) => {
+                const metricsExcludingDemonstrations = {
+                  metrics: metricsWithFeedback.metrics.filter(
+                    ({ metric_type }) => metric_type !== "demonstration",
+                  ),
+                };
+
+                return (
+                  <>
+                    <MetricSelector
+                      metricsWithFeedback={metricsExcludingDemonstrations}
+                      selectedMetric={metric_name || ""}
+                      onMetricChange={handleMetricChange}
+                    />
+                    {variantPerformancesPromise && (
+                      <Suspense
+                        fallback={<div>Loading performance data...</div>}
+                      >
+                        <Await resolve={variantPerformancesPromise}>
+                          {(variant_performances) =>
+                            variant_performances && (
+                              <VariantPerformance
+                                variant_performances={variant_performances}
+                                metric_name={metric_name}
+                                time_granularity={time_granularity}
+                                onTimeGranularityChange={
+                                  handleTimeGranularityChange
+                                }
+                              />
+                            )
+                          }
+                        </Await>
+                      </Suspense>
+                    )}
+                  </>
+                );
+              }}
+            </Await>
+          </Suspense>
         </SectionLayout>
 
         <SectionLayout>
@@ -245,22 +226,88 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
         </SectionLayout>
 
         <SectionLayout>
-          <SectionHeader heading="Inferences" count={num_inferences} />
-          {inferences.length > 0 ? (
-            <>
-              <VariantInferenceTable inferences={inferences} />
-              <PageButtons
-                onPreviousPage={handlePreviousInferencePage}
-                onNextPage={handleNextInferencePage}
-                disablePrevious={disablePreviousInferencePage}
-                disableNext={disableNextInferencePage}
-              />
-            </>
-          ) : (
-            <div className="rounded-lg border border-gray-200 p-4 text-center text-gray-500">
-              No inferences found
-            </div>
-          )}
+          <Suspense fallback={<div>Loading inference count...</div>}>
+            <Await resolve={numInferencesPromise}>
+              {(num_inferences) => (
+                <SectionHeader heading="Inferences" count={num_inferences} />
+              )}
+            </Await>
+          </Suspense>
+          <Suspense fallback={<div>Loading inferences...</div>}>
+            <Await resolve={inferencePromise}>
+              {(inferences) => (
+                <>
+                  {inferences.length > 0 ? (
+                    <>
+                      <VariantInferenceTable inferences={inferences} />
+                      <Suspense fallback={<div>Loading pagination...</div>}>
+                        <Await resolve={tableBoundsPromise}>
+                          {(inference_bounds) => {
+                            const topInference =
+                              inferences.length > 0 ? inferences[0] : null;
+                            const bottomInference =
+                              inferences.length > 0
+                                ? inferences[inferences.length - 1]
+                                : null;
+
+                            const handleNextInferencePage = () => {
+                              if (!bottomInference) return;
+                              const searchParams = new URLSearchParams(
+                                window.location.search,
+                              );
+                              searchParams.delete("afterInference");
+                              searchParams.set(
+                                "beforeInference",
+                                bottomInference.id,
+                              );
+                              navigate(`?${searchParams.toString()}`, {
+                                preventScrollReset: true,
+                              });
+                            };
+
+                            const handlePreviousInferencePage = () => {
+                              if (!topInference) return;
+                              const searchParams = new URLSearchParams(
+                                window.location.search,
+                              );
+                              searchParams.delete("beforeInference");
+                              searchParams.set(
+                                "afterInference",
+                                topInference.id,
+                              );
+                              navigate(`?${searchParams.toString()}`, {
+                                preventScrollReset: true,
+                              });
+                            };
+
+                            const disablePreviousInferencePage =
+                              !topInference ||
+                              inference_bounds.last_id === topInference.id;
+                            const disableNextInferencePage =
+                              !bottomInference ||
+                              inference_bounds.first_id === bottomInference.id;
+
+                            return (
+                              <PageButtons
+                                onPreviousPage={handlePreviousInferencePage}
+                                onNextPage={handleNextInferencePage}
+                                disablePrevious={disablePreviousInferencePage}
+                                disableNext={disableNextInferencePage}
+                              />
+                            );
+                          }}
+                        </Await>
+                      </Suspense>
+                    </>
+                  ) : (
+                    <div className="rounded-lg border border-gray-200 p-4 text-center text-gray-500">
+                      No inferences found
+                    </div>
+                  )}
+                </>
+              )}
+            </Await>
+          </Suspense>
         </SectionLayout>
       </SectionsGroup>
     </PageLayout>
