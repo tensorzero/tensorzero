@@ -2,7 +2,6 @@
 import type { RetryConfig } from "./RetryConfig";
 
 export type DiclOptimizationConfig = {
-  provider: string;
   embedding_model: string;
   variant_name: string;
   function_name: string;
