@@ -27,7 +27,6 @@ import { Output } from "~/components/inference/Output";
 import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
 import { safeParseInt, symmetricDifference } from "~/utils/common";
-import type { InferenceResponse } from "tensorzero-node";
 import { EditButton } from "~/components/utils/EditButton";
 import { VariantEditor } from "~/components/function/variant/VariantEditor";
 import { Badge } from "~/components/ui/badge";
@@ -136,7 +135,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     });
   }
   const datasetName = searchParams.get("datasetName");
-  const variants = getVariants(searchParams);
 
   let datapoints, totalDatapoints;
   try {
@@ -174,18 +172,6 @@ export async function loader({ request }: Route.LoaderArgs) {
         status: 500,
       },
     );
-  }
-
-  // Do not block on all the server inferences, just return the promises
-  // Create a map of maps of promises, one for each datapoint/variant combination
-  // The structure should be: serverInferences[variantName][datapointId] = promise
-  // We can use this to avoid re-running the same inference multiple times
-  const serverInferences = new Map<
-    string,
-    Map<string, Promise<InferenceResponse>>
-  >();
-  for (const variant of variants) {
-    serverInferences.set(variant.name, new Map());
   }
 
   return {
