@@ -3058,8 +3058,10 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") || check_cache {
+    // NB: Azure OpenAI doesn't support input/output tokens during streaming, but Azure Llama does
+    if (provider.variant_name.contains("azure") && !provider.variant_name.contains("llama"))
+        || check_cache
+    {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -3167,8 +3169,8 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI doesn't support input/output tokens during streaming, but Azure Llama does
+    if provider.variant_name.contains("azure") && !provider.variant_name.contains("llama") {
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else {
@@ -3563,8 +3565,8 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI doesn't support input/output tokens during streaming, but Azure Llama does
+    if provider.variant_name.contains("azure") && !provider.variant_name.contains("llama") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -3693,8 +3695,8 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI doesn't support input/output tokens during streaming, but Azure Llama does
+    if provider.variant_name.contains("azure") && !provider.variant_name.contains("llama") {
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else {
