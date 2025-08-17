@@ -88,21 +88,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         })
       : undefined;
 
-  // const [
-  //   inferences,
-  //   inference_bounds,
-  //   num_inferences,
-  //   metricsWithFeedback,
-  //   variant_performances,
-  //   variant_counts,
-  // ] = await Promise.all([
-  //   inferencePromise,
-  //   tableBoundsPromise,
-  //   numInferencesPromise,
-  //   metricsWithFeedbackPromise,
-  //   variantPerformancesPromise,
-  //   variantCountsPromise,
-  // ]);
   const variantCountsWithMetadataPromise = variantCountsPromise.then(
     (variant_counts) =>
       variant_counts.map((variant_count) => {
