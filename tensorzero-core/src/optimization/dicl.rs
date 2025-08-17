@@ -7,14 +7,15 @@ use serde_json::json;
 use url::Url;
 
 use crate::{
+    cache::CacheOptions,
     clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
-    config_parser::{Config, ProviderTypesConfig},
+    config_parser::Config,
     embeddings::{
-        EmbeddingEncodingFormat, EmbeddingInput, EmbeddingProvider, EmbeddingProviderInfo,
-        EmbeddingRequest, UninitializedEmbeddingProviderConfig,
+        Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModelConfig, EmbeddingRequest,
     },
-    endpoints::inference::InferenceCredentials,
+    endpoints::inference::{InferenceClients, InferenceCredentials},
     error::{Error, ErrorDetails},
+    function::FunctionConfig,
     model::{build_creds_caching_default, CredentialLocation},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
     providers::openai::{
@@ -253,7 +254,7 @@ impl Optimizer for DiclOptimizationConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: &Config,
+        config: &Config,
     ) -> Result<Self::Handle, Error> {
         // Warn if val_examples is provided (not used in DICL)
         if val_examples.is_some() {
@@ -270,6 +271,45 @@ impl Optimizer for DiclOptimizationConfig {
                     .to_string(),
             }));
         }
+
+        // 1. Check that the function exists in the config
+        let function_config = config.functions.get(&self.function_name).ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "function '{}' not found in configuration",
+                    self.function_name
+                ),
+            })
+        })?;
+
+        // 2. Check that the variant name is not already in the function variants
+        let variants = match &**function_config {
+            FunctionConfig::Chat(chat_config) => &chat_config.variants,
+            FunctionConfig::Json(json_config) => &json_config.variants,
+        };
+
+        if variants.contains_key(&self.variant_name) {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "variant '{}' already exists in function '{}' - DICL optimization cannot overwrite existing variants",
+                    self.variant_name, self.function_name
+                ),
+            }));
+        }
+
+        // 3. Check that the embedding model exists in the config
+        let embedding_model_config = config
+            .embedding_models
+            .get(&self.embedding_model)
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "embedding model '{}' not found in configuration",
+                        self.embedding_model
+                    ),
+                })
+            })?;
 
         // Check if we have examples to process
         if train_examples.is_empty() {
@@ -319,37 +359,10 @@ impl Optimizer for DiclOptimizationConfig {
             })
             .collect();
 
-        // Initialize the embedding provider
-        let provider_config_str = format!(
-            r#"
-            type = "{}"
-            model_name = "{}"
-            "#,
-            self.provider, self.embedding_model
-        );
-
-        if let Some(_api_base) = &self.api_base {
-            // If api_base is provided, we need to use it
-            // TODO: Support custom API base for embeddings
-            tracing::warn!("Custom api_base for embeddings not yet supported in DICL optimization");
-        }
-
-        let provider_config =
-            toml::from_str::<UninitializedEmbeddingProviderConfig>(&provider_config_str)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!("Failed to create embedding provider config: {e}"),
-                    })
-                })?
-                .load(
-                    &ProviderTypesConfig::default(),
-                    Arc::from(self.embedding_model.clone()),
-                )
-                .await?;
-
         // Process embeddings with batching and concurrency control
         let all_embeddings = process_embeddings_with_batching(
-            &provider_config,
+            &embedding_model_config,
+            &self.embedding_model,
             client,
             credentials,
             input_texts,
@@ -449,8 +462,10 @@ impl JobHandle for DiclOptimizationJobHandle {
 }
 
 /// Processes a batch of input texts to get embeddings with retry logic
+#[expect(clippy::too_many_arguments)]
 async fn process_embedding_batch(
-    provider_config: &EmbeddingProviderInfo,
+    embedding_model_config: &EmbeddingModelConfig,
+    model_name: &str,
     client: &reqwest::Client,
     credentials: &InferenceCredentials,
     batch_texts: Vec<String>,
@@ -468,8 +483,17 @@ async fn process_embedding_batch(
             encoding_format: EmbeddingEncodingFormat::Float,
         };
 
-        match provider_config
-            .embed(&embedding_request, client, credentials)
+        // Create InferenceClients context for the embedding model
+        let cache_options = CacheOptions::default();
+        let clients = InferenceClients {
+            http_client: client,
+            credentials,
+            clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+            cache_options: &cache_options,
+        };
+
+        match embedding_model_config
+            .embed(&embedding_request, model_name, &clients)
             .await
         {
             Ok(response) => {
@@ -479,15 +503,13 @@ async fn process_embedding_batch(
                     .embeddings
                     .into_iter()
                     .map(|embedding| match embedding {
-                        crate::embeddings::Embedding::Float(vec_f32) => {
+                        Embedding::Float(vec_f32) => {
                             Ok(vec_f32.into_iter().map(|f| f as f64).collect())
                         }
-                        crate::embeddings::Embedding::Base64(_) => {
-                            Err(Error::new(ErrorDetails::Inference {
-                                message: "Base64 embeddings not supported for DICL optimization"
-                                    .to_string(),
-                            }))
-                        }
+                        Embedding::Base64(_) => Err(Error::new(ErrorDetails::Inference {
+                            message: "Base64 embeddings not supported for DICL optimization"
+                                .to_string(),
+                        })),
                     })
                     .collect();
                 return embeddings;
@@ -521,7 +543,8 @@ async fn process_embedding_batch(
 /// Processes all embedding batches with concurrency control
 #[expect(clippy::too_many_arguments)]
 async fn process_embeddings_with_batching(
-    provider_config: &EmbeddingProviderInfo,
+    embedding_model_config: &EmbeddingModelConfig,
+    model_name: &str,
     client: &reqwest::Client,
     credentials: &InferenceCredentials,
     input_texts: Vec<String>,
@@ -561,7 +584,8 @@ async fn process_embeddings_with_batching(
                 })?;
 
                 let result = process_embedding_batch(
-                    provider_config,
+                    embedding_model_config,
+                    model_name,
                     client,
                     credentials,
                     batch,
@@ -718,46 +742,42 @@ mod tests {
     use super::*;
     use crate::{
         config_parser::TimeoutsConfig,
-        embeddings::{EmbeddingProviderConfig, EmbeddingProviderInfo},
+        embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo},
         endpoints::inference::InferenceCredentials,
         variant::RetryConfig,
     };
+    use std::collections::HashMap;
 
-    // Helper functions to create test providers using the Dummy provider
+    // Helper functions to create test embedding models using the Dummy provider
 
-    fn create_test_embedding_provider(_embeddings: Vec<Vec<f32>>) -> EmbeddingProviderInfo {
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            use crate::providers::dummy::DummyProvider;
-            EmbeddingProviderInfo {
-                inner: EmbeddingProviderConfig::Dummy(DummyProvider {
-                    model_name: "test-embedding".into(),
-                    ..Default::default()
-                }),
-                timeouts: TimeoutsConfig::default(),
-                provider_name: Arc::from("dummy"),
-            }
-        }
-        #[cfg(not(any(test, feature = "e2e_tests")))]
-        {
-            panic!("This function is only available in test mode")
-        }
+    fn create_test_embedding_model() -> EmbeddingModelConfig {
+        create_test_embedding_model_with_name("test-embedding")
     }
 
-    fn create_test_embedding_provider_with_failure(
-        _embeddings: Vec<Vec<f32>>,
-        _fail_attempt: usize,
-    ) -> EmbeddingProviderInfo {
+    fn create_test_embedding_model_with_failure() -> EmbeddingModelConfig {
+        create_test_embedding_model_with_name("error") // This will cause the dummy provider to fail
+    }
+
+    fn create_test_embedding_model_with_name(model_name: &str) -> EmbeddingModelConfig {
         #[cfg(any(test, feature = "e2e_tests"))]
         {
             use crate::providers::dummy::DummyProvider;
-            EmbeddingProviderInfo {
-                inner: EmbeddingProviderConfig::Dummy(DummyProvider {
-                    model_name: "error".into(), // This will cause the dummy provider to fail
-                    ..Default::default()
-                }),
+            let mut providers = HashMap::new();
+            providers.insert(
+                Arc::from("dummy"),
+                EmbeddingProviderInfo {
+                    inner: EmbeddingProviderConfig::Dummy(DummyProvider {
+                        model_name: model_name.to_string(),
+                        ..Default::default()
+                    }),
+                    timeouts: TimeoutsConfig::default(),
+                    provider_name: Arc::from("dummy"),
+                },
+            );
+            EmbeddingModelConfig {
+                routing: vec![Arc::from("dummy")],
+                providers,
                 timeouts: TimeoutsConfig::default(),
-                provider_name: Arc::from("dummy"),
             }
         }
         #[cfg(not(any(test, feature = "e2e_tests")))]
@@ -768,8 +788,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_embedding_batch_success() {
-        let provider =
-            create_test_embedding_provider(vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]]);
+        let embedding_model = create_test_embedding_model();
 
         let client = reqwest::Client::new();
         let credentials = InferenceCredentials::default();
@@ -777,7 +796,8 @@ mod tests {
         let retry_config = RetryConfig::default();
 
         let result = process_embedding_batch(
-            &provider,
+            &embedding_model,
+            "test-embedding",
             &client,
             &credentials,
             batch_texts,
@@ -797,7 +817,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_embedding_batch_with_dimensions() {
-        let provider = create_test_embedding_provider(vec![vec![1.0, 2.0, 3.0]]);
+        let embedding_model = create_test_embedding_model();
 
         let client = reqwest::Client::new();
         let credentials = InferenceCredentials::default();
@@ -806,7 +826,8 @@ mod tests {
         let dimensions = Some(512);
 
         let result = process_embedding_batch(
-            &provider,
+            &embedding_model,
+            "test-embedding",
             &client,
             &credentials,
             batch_texts,
@@ -824,7 +845,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_embedding_batch_retry_exhausted() {
-        let provider = create_test_embedding_provider_with_failure(vec![], 0);
+        let embedding_model = create_test_embedding_model_with_failure();
 
         let client = reqwest::Client::new();
         let credentials = InferenceCredentials::default();
@@ -835,7 +856,8 @@ mod tests {
         };
 
         let result = process_embedding_batch(
-            &provider,
+            &embedding_model,
+            "error", // Use "error" model name to trigger failure
             &client,
             &credentials,
             batch_texts,
@@ -850,13 +872,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_embeddings_with_batching_success() {
-        let provider = create_test_embedding_provider(vec![
-            vec![1.0, 2.0],
-            vec![3.0, 4.0],
-            vec![5.0, 6.0],
-            vec![7.0, 8.0],
-            vec![9.0, 10.0],
-        ]);
+        let embedding_model = create_test_embedding_model();
 
         let client = reqwest::Client::new();
         let credentials = InferenceCredentials::default();
@@ -868,7 +884,8 @@ mod tests {
         let retry_config = RetryConfig::default();
 
         let result = process_embeddings_with_batching(
-            &provider,
+            &embedding_model,
+            "test-embedding",
             &client,
             &credentials,
             input_texts,
@@ -890,13 +907,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_embeddings_with_batching_respects_concurrency() {
-        let provider = create_test_embedding_provider(vec![
-            vec![1.0],
-            vec![2.0],
-            vec![3.0],
-            vec![4.0],
-            vec![5.0],
-        ]);
+        let embedding_model = create_test_embedding_model();
 
         let client = reqwest::Client::new();
         let credentials = InferenceCredentials::default();
@@ -904,7 +915,8 @@ mod tests {
         let retry_config = RetryConfig::default();
 
         let result = process_embeddings_with_batching(
-            &provider,
+            &embedding_model,
+            "test-embedding",
             &client,
             &credentials,
             input_texts,
