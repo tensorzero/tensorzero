@@ -4,49 +4,19 @@ import { Output } from "~/components/inference/Output";
 import { Button } from "~/components/ui/button";
 import { CodeEditor } from "~/components/ui/code-editor";
 import {
-  preparePlaygroundInferenceRequest,
-  fetchClientInference,
-  type PlaygroundVariantInfo,
+  type ClientInferenceInputArgs,
+  getClientInferenceQueryKey,
+  getClientInferenceQueryFunction,
 } from "./utils";
-import type { DisplayInput } from "~/utils/clickhouse/common";
-import type { Datapoint, FunctionConfig } from "tensorzero-node";
 import { useQuery } from "@tanstack/react-query";
 import { isErrorLike } from "~/utils/common";
 import { memo } from "react";
 
-interface DatapointPlaygroundOutputProps {
-  datapoint: Datapoint;
-  variant: PlaygroundVariantInfo;
-  input: DisplayInput;
-  functionName: string;
-  functionConfig: FunctionConfig;
-}
-
-const DatapointPlaygroundOutput = memo(
-  function DatapointPlaygroundOutput({
-    datapoint,
-    variant,
-    input,
-    functionName,
-    functionConfig,
-  }: DatapointPlaygroundOutputProps) {
+const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
+  function DatapointPlaygroundOutput(props) {
     const query = useQuery({
-      queryKey: [
-        "CLIENT_INFERENCE",
-        { variant, datapoint, input, functionConfig },
-      ],
-      queryFn: async ({ signal }) => {
-        return await fetchClientInference(
-          preparePlaygroundInferenceRequest(
-            variant,
-            functionName,
-            datapoint,
-            input,
-            functionConfig,
-          ),
-          { signal },
-        );
-      },
+      queryKey: getClientInferenceQueryKey(props),
+      queryFn: getClientInferenceQueryFunction(props),
       // Only re-fetch when the user explicitly requests it
       refetchOnMount: false,
       refetchInterval: false,
@@ -61,7 +31,7 @@ const DatapointPlaygroundOutput = memo(
 
     const refreshButton = (
       <Button
-        aria-label={`Reload ${variant.name} inference`}
+        aria-label={`Reload ${props.variant.name} inference`}
         variant="ghost"
         size="icon"
         className="absolute top-1 right-1 z-5 cursor-pointer opacity-25 transition-opacity hover:opacity-100"

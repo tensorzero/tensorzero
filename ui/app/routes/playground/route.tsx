@@ -32,11 +32,19 @@ import { VariantEditor } from "~/components/function/variant/VariantEditor";
 import { Badge } from "~/components/ui/badge";
 import {
   extractOriginalVariantNameFromEdited,
+  getClientInferenceQueryFunction,
+  getClientInferenceQueryKey,
   getNewVariantName,
   getVariants,
+  type ClientInferenceInputArgs,
   type PlaygroundVariantInfo,
 } from "./utils";
 import { BuiltinVariantFilter } from "./BuiltInVariantSelector";
+import {
+  dehydrate,
+  HydrationBoundary,
+  QueryClient,
+} from "@tanstack/react-query";
 
 const DEFAULT_LIMIT = 5;
 
@@ -174,6 +182,37 @@ export async function loader({ request }: Route.LoaderArgs) {
     );
   }
 
+  const queryClient = new QueryClient();
+  const variants = getVariants(searchParams);
+  if (
+    variants.length > 0 &&
+    datapoints &&
+    datapoints.length > 0 &&
+    datasetName &&
+    inputs &&
+    functionName &&
+    functionConfig
+  ) {
+    await Promise.all(
+      datapoints.flatMap((datapoint, index) =>
+        variants.map(async (variant) => {
+          const input = inputs[index];
+          const args: ClientInferenceInputArgs = {
+            datapoint,
+            functionConfig,
+            functionName,
+            input,
+            variant,
+          };
+          return queryClient.prefetchQuery({
+            queryKey: getClientInferenceQueryKey(args),
+            queryFn: getClientInferenceQueryFunction(args),
+          });
+        }),
+      ),
+    );
+  }
+
   return {
     functionName,
     datasetName,
@@ -182,6 +221,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     totalDatapoints,
     offset,
     limit,
+    dehydratedState: dehydrate(queryClient),
   };
 }
 
@@ -228,6 +268,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     totalDatapoints,
     offset,
     limit,
+    dehydratedState,
   } = loaderData;
   const functionConfig = useFunctionConfig(functionName);
   if (functionName && !functionConfig) {
@@ -376,63 +417,65 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                   </div>
                 </div>
 
-                {datapoints.map(
-                  (datapoint: TensorZeroDatapoint, index: number) => (
-                    <div
-                      key={datapoint.id}
-                      className="grid grid-cols-[400px_1fr] border-b last:border-b-0"
-                    >
-                      <div className="bg-background sticky left-0 z-10 flex flex-col gap-2 border-r p-4 text-sm">
-                        <div className="text-xs font-medium text-gray-500">
-                          Datapoint:{" "}
-                          <Link
-                            to={`/datasets/${encodeURIComponent(datasetName)}/datapoint/${datapoint.id}`}
-                            className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                          >
-                            {datapoint.id}
-                          </Link>
-                        </div>
-                        <div>
-                          <h3 className="mb-2 text-sm font-medium text-gray-500">
-                            Input
-                          </h3>
-                          <InputSnippet
-                            messages={inputs[index].messages}
-                            system={inputs[index].system}
-                          />
-                        </div>
-                        <div>
-                          <h3 className="mb-2 text-sm font-medium text-gray-500">
-                            Reference Output
-                          </h3>
-                          {datapoint.output ? (
-                            <Output output={datapoint.output} />
-                          ) : (
-                            <div className="text-sm text-gray-500">None</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
-                        {variants.map((variant) => {
-                          return (
-                            <div
-                              key={`${datapoint.id}-${variant.name}`}
-                              className="border-r p-4 last:border-r-0"
+                <HydrationBoundary state={dehydratedState}>
+                  {datapoints.map(
+                    (datapoint: TensorZeroDatapoint, index: number) => (
+                      <div
+                        key={datapoint.id}
+                        className="grid grid-cols-[400px_1fr] border-b last:border-b-0"
+                      >
+                        <div className="bg-background sticky left-0 z-10 flex flex-col gap-2 border-r p-4 text-sm">
+                          <div className="text-xs font-medium text-gray-500">
+                            Datapoint:{" "}
+                            <Link
+                              to={`/datasets/${encodeURIComponent(datasetName)}/datapoint/${datapoint.id}`}
+                              className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline"
                             >
-                              <DatapointPlaygroundOutput
-                                datapoint={datapoint}
-                                variant={variant}
-                                input={inputs[index]}
-                                functionName={functionName}
-                                functionConfig={functionConfig}
-                              />
-                            </div>
-                          );
-                        })}
+                              {datapoint.id}
+                            </Link>
+                          </div>
+                          <div>
+                            <h3 className="mb-2 text-sm font-medium text-gray-500">
+                              Input
+                            </h3>
+                            <InputSnippet
+                              messages={inputs[index].messages}
+                              system={inputs[index].system}
+                            />
+                          </div>
+                          <div>
+                            <h3 className="mb-2 text-sm font-medium text-gray-500">
+                              Reference Output
+                            </h3>
+                            {datapoint.output ? (
+                              <Output output={datapoint.output} />
+                            ) : (
+                              <div className="text-sm text-gray-500">None</div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
+                          {variants.map((variant) => {
+                            return (
+                              <div
+                                key={`${datapoint.id}-${variant.name}`}
+                                className="border-r p-4 last:border-r-0"
+                              >
+                                <DatapointPlaygroundOutput
+                                  datapoint={datapoint}
+                                  variant={variant}
+                                  input={inputs[index]}
+                                  functionName={functionName}
+                                  functionConfig={functionConfig}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ),
-                )}
+                    ),
+                  )}
+                </HydrationBoundary>
               </div>
             </div>
             <PageButtons
