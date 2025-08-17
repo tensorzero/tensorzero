@@ -1,3 +1,4 @@
+use backon::Retryable;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -25,7 +26,6 @@ use crate::{
 use futures::future::try_join_all;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
-use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
 fn default_batch_size() -> usize {
@@ -422,71 +422,44 @@ async fn process_embedding_batch(
     retry_config: &RetryConfig,
     dimensions: Option<u32>,
 ) -> Result<Vec<Vec<f64>>, Error> {
-    let max_retries = retry_config.num_retries;
-    let mut retries = 0;
+    let embedding_request = EmbeddingRequest {
+        input: EmbeddingInput::Batch(batch_texts),
+        dimensions,
+        encoding_format: EmbeddingEncodingFormat::Float,
+    };
 
-    loop {
-        let embedding_request = EmbeddingRequest {
-            input: EmbeddingInput::Batch(batch_texts.clone()),
-            dimensions,
-            encoding_format: EmbeddingEncodingFormat::Float,
-        };
+    // Create InferenceClients context for the embedding model
+    let cache_options = CacheOptions::default();
+    let clients = InferenceClients {
+        http_client: client,
+        credentials,
+        clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+        cache_options: &cache_options,
+    };
 
-        // Create InferenceClients context for the embedding model
-        let cache_options = CacheOptions::default();
-        let clients = InferenceClients {
-            http_client: client,
-            credentials,
-            clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
-            cache_options: &cache_options,
-        };
-
-        match embedding_model_config
+    let response = (|| async {
+        embedding_model_config
             .embed(&embedding_request, model_name, &clients)
             .await
-        {
-            Ok(response) => {
-                tracing::debug!("Successfully processed embedding batch {}", batch_index);
-                // Convert embeddings from Vec<Embedding> to Vec<Vec<f64>>
-                let embeddings: Result<Vec<Vec<f64>>, Error> = response
-                    .embeddings
-                    .into_iter()
-                    .map(|embedding| match embedding {
-                        Embedding::Float(vec_f32) => {
-                            Ok(vec_f32.into_iter().map(|f| f as f64).collect())
-                        }
-                        Embedding::Base64(_) => Err(Error::new(ErrorDetails::Inference {
-                            message: "Base64 embeddings not supported for DICL optimization"
-                                .to_string(),
-                        })),
-                    })
-                    .collect();
-                return embeddings;
-            }
-            Err(e) if retries < max_retries => {
-                retries += 1;
-                let delay_secs = (retries as f32).min(retry_config.max_delay_s);
-                tracing::warn!(
-                    "Embedding batch {} failed (attempt {}/{}): {}. Retrying in {:.1}s...",
-                    batch_index,
-                    retries,
-                    max_retries + 1,
-                    e,
-                    delay_secs
-                );
-                sleep(Duration::from_secs_f32(delay_secs)).await;
-            }
-            Err(e) => {
-                tracing::error!(
-                    "Embedding batch {} failed after {} attempts: {}",
-                    batch_index,
-                    max_retries + 1,
-                    e
-                );
-                return Err(e);
-            }
-        }
-    }
+    })
+    .retry(retry_config.get_backoff())
+    .await?;
+
+    tracing::debug!("Successfully processed embedding batch {}", batch_index);
+
+    // Convert embeddings from Vec<Embedding> to Vec<Vec<f64>>
+    let embeddings: Result<Vec<Vec<f64>>, Error> = response
+        .embeddings
+        .into_iter()
+        .map(|embedding| match embedding {
+            Embedding::Float(vec_f32) => Ok(vec_f32.into_iter().map(|f| f as f64).collect()),
+            Embedding::Base64(_) => Err(Error::new(ErrorDetails::Inference {
+                message: "Base64 embeddings not supported for DICL optimization".to_string(),
+            })),
+        })
+        .collect();
+
+    embeddings
 }
 
 /// Processes all embedding batches with concurrency control
