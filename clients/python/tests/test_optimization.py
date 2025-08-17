@@ -18,10 +18,9 @@ def test_sync_dicl(
     mixed_rendered_samples: List[RenderedSample],
 ):
     optimization_config = DiclOptimizationConfig(
-        provider="openai",
         embedding_model="text-embedding-3-small",
-        variant_name="test",
-        function_name="test",
+        variant_name="test_dicl",
+        function_name="basic_test",
     )
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
         train_samples=mixed_rendered_samples,
@@ -87,10 +86,9 @@ async def test_async_dicl(
     mixed_rendered_samples: List[RenderedSample],
 ):
     optimization_config = DiclOptimizationConfig(
-        provider="openai",
         embedding_model="text-embedding-3-small",
-        variant_name="test",
-        function_name="test",
+        variant_name="test_dicl",
+        function_name="basic_test",
     )
     optimization_job_handle = (
         await embedded_async_client.experimental_launch_optimization(

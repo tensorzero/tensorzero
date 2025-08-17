@@ -145,7 +145,6 @@ class DiclOptimizationConfig:
     def __init__(
         self,
         *,
-        provider: str,
         embedding_model: str,
         variant_name: str,
         function_name: str,
