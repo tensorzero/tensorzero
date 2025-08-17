@@ -248,6 +248,13 @@ impl Optimizer for DiclOptimizationConfig {
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: &Config,
     ) -> Result<Self::Handle, Error> {
+        // Check if we have examples to process
+        if train_examples.is_empty() {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "DICL optimization requires at least one training example".to_string(),
+            }));
+        }
+
         // Warn if val_examples is provided (not used in DICL)
         if val_examples.is_some() {
             tracing::warn!("val_examples provided for DICL optimization but will be ignored");
@@ -302,38 +309,6 @@ impl Optimizer for DiclOptimizationConfig {
                     ),
                 })
             })?;
-
-        // Check if we have examples to process
-        if train_examples.is_empty() {
-            tracing::warn!(
-                "⚠️  No training examples provided for DICL optimization - creating empty variant"
-            );
-
-            // Create a job handle indicating immediate success with empty processing
-            let job_handle = DiclOptimizationJobHandle {
-                job_url: Url::parse("https://tensorzero.com/dicl").map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!("Failed to parse job URL: {e}"),
-                    })
-                })?, // TODO: Remove job_url once UI error is addressed
-                embedding_model: self.embedding_model.clone(),
-                k: self.k,
-                model: self.model.clone(),
-            };
-
-            tracing::info!(
-                "🎉 DICL optimization completed (no examples)!\n\
-                📈 Summary:\n\
-                ├─ Function: '{}'\n\
-                ├─ Variant: '{}'\n\
-                ├─ Examples processed: 0\n\
-                └─ Status: Empty variant created",
-                self.function_name,
-                self.variant_name
-            );
-
-            return Ok(job_handle);
-        }
 
         tracing::info!(
             "🚀 Starting DICL optimization for function '{}' variant '{}' with {} examples",
