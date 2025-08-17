@@ -12,5 +12,4 @@ export type UninitializedDiclOptimizationConfig = {
   k: number;
   model: string;
   credentials: string | null;
-  api_base: string | null;
 };

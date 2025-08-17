@@ -12,5 +12,4 @@ export type DiclOptimizationConfig = {
   k: number;
   model: string;
   credential_location: string | null;
-  api_base: string | null;
 };
