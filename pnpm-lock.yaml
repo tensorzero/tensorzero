@@ -48,26 +48,6 @@ importers:
 
   clients/placeholder-javascript: {}
 
-  examples/demo:
-    dependencies:
-      openai:
-        specifier: ^4.104.0
-        version: 4.104.0(ws@8.18.2)(zod@3.25.76)
-    devDependencies:
-      tsx:
-        specifier: ^4.20.3
-        version: 4.20.3
-
-  examples/demo2:
-    dependencies:
-      openai:
-        specifier: ^4.104.0
-        version: 4.104.0(ws@8.18.2)(zod@3.25.76)
-    devDependencies:
-      tsx:
-        specifier: ^4.20.3
-        version: 4.20.3
-
   examples/guides/tool-use:
     dependencies:
       openai:
