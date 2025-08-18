@@ -652,6 +652,7 @@ impl TensorZeroGateway {
             clickhouse_url,
             timeout,
             verify_credentials: true,
+            allow_batch_writes: false,
         })
         .build();
         let client = tokio_block_on_without_gil(cls.py(), client_fut);
@@ -1299,6 +1300,7 @@ impl AsyncTensorZeroGateway {
             clickhouse_url,
             timeout,
             verify_credentials: true,
+            allow_batch_writes: false,
         })
         .build();
         let fut = async move {

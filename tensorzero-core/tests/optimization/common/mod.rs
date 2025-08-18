@@ -367,6 +367,7 @@ pub async fn make_embedded_gateway() -> Client {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
         verify_credentials: true,
+        allow_batch_writes: true,
     })
     .with_verbose_errors(true)
     .build()
