@@ -1,4 +1,4 @@
-use crate::clickhouse::TableName;
+use crate::db::clickhouse::TableName;
 use crate::function::FunctionConfigType;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
@@ -22,8 +22,8 @@ use uuid::Uuid;
 use crate::inference::types::Text;
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredSample};
 use crate::{
-    clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     config_parser::Config,
+    db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     error::{Error, ErrorDetails},
     function::FunctionConfig,
     gateway_util::{AppState, StructuredJson},
