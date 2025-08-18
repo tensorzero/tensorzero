@@ -20,8 +20,8 @@ use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::config_parser::{ConfigFileGlob, MetricConfigOptimize};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::{
-    clickhouse::ClickHouseConnectionInfo, config_parser::Config, endpoints::datasets::Datapoint,
-    function::FunctionConfig,
+    config_parser::Config, db::clickhouse::ClickHouseConnectionInfo,
+    endpoints::datasets::Datapoint, function::FunctionConfig,
 };
 use tokio::{sync::Semaphore, task::JoinSet};
 use tracing::{debug, error, info, instrument};
@@ -126,6 +126,7 @@ pub async fn run_evaluation(
             clickhouse_url: Some(clickhouse_url.clone()),
             timeout: None,
             verify_credentials: true,
+            allow_batch_writes: true,
         }),
     }
     .build()
