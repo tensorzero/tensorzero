@@ -253,6 +253,7 @@ jobs:
 
       - name: Print vLLM GPT-OSS modal logs
         if: always()
+        continue-on-error: true
         run: cat vllm_gpt_oss_modal_logs.txt
 
       - name: Upload provider-proxy cache
