@@ -415,6 +415,7 @@ fn json_output_to_content_block_chat_output(
 pub struct RenderedSample {
     pub function_name: String,
     pub input: ModelInput,
+    pub stored_input: ResolvedInput,
     pub output: Option<Vec<ContentBlockChatOutput>>,
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
@@ -498,6 +499,11 @@ impl RenderedSample {
     pub fn get_tags(&self) -> HashMap<String, String> {
         self.tags.clone()
     }
+
+    #[getter]
+    pub fn get_stored_input(&self) -> ResolvedInput {
+        self.stored_input.clone()
+    }
 }
 
 impl std::fmt::Display for RenderedSample {
@@ -556,6 +562,7 @@ pub fn render_stored_sample<T: StoredSample>(
     config: &Config,
     variants: &HashMap<String, String>,
 ) -> Result<RenderedSample, Error> {
+    let resolved_input = stored_sample.input().clone();
     let model_input = render_model_input(
         stored_sample.input(),
         stored_sample.function_name(),
@@ -577,6 +584,7 @@ pub fn render_stored_sample<T: StoredSample>(
         episode_id,
         inference_id,
         input: model_input,
+        stored_input: resolved_input,
         output,
         dispreferred_outputs,
         tool_params,
