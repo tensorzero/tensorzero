@@ -41,16 +41,16 @@ export default function VariantTemplate({
   if (variantConfig.type === "chat_completion") {
     const templates = {
       system:
-        variantConfig.system_template?.contents ??
-        variantConfig.system_template?.path ??
+        variantConfig.templates.system?.template?.contents ??
+        variantConfig.templates.system?.template?.path ??
         "",
       user:
-        variantConfig.user_template?.contents ??
-        variantConfig.user_template?.path ??
+        variantConfig.templates.user?.template?.contents ??
+        variantConfig.templates.user?.template?.path ??
         "",
       assistant:
-        variantConfig.assistant_template?.contents ??
-        variantConfig.assistant_template?.path ??
+        variantConfig.templates.assistant?.template?.contents ??
+        variantConfig.templates.assistant?.template?.path ??
         "",
     };
 

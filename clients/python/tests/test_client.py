@@ -3260,6 +3260,47 @@ def test_sync_include_original_response_json(sync_client: TensorZeroGateway):
     assert response.original_response == '{"answer":"Hello"}'
 
 
+def test_sync_clickhouse_batch_writes():
+    # Create a temp file and write to it
+    with tempfile.NamedTemporaryFile() as temp_file:
+        temp_file.write(b"gateway.observability.enabled = true\n")
+        temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
+        client = TensorZeroGateway.build_embedded(
+            config_file=temp_file.name,
+            clickhouse_url=clickhouse_url,
+        )
+        num_inferences = 100
+        results: t.List[t.Any] = []
+        episode_id = str(uuid7())
+        for _ in range(num_inferences):
+            results.append(
+                client.inference(
+                    model_name="dummy::good",
+                    episode_id=episode_id,
+                    input={
+                        "messages": [{"role": "user", "content": "Hello, world!"}],
+                    },
+                )
+            )
+
+        assert len(results) == num_inferences
+
+        # Wait for results to be written to ClickHouse
+        time.sleep(1)
+
+        expected_inference_ids = set(result.inference_id for result in results)
+
+        clickhouse_client = get_client(dsn=clickhouse_url)
+        clickhouse_result = clickhouse_client.query_df(  # type: ignore
+            f"SELECT * FROM ChatInference where episode_id = '{episode_id}'"
+        )
+        assert len(clickhouse_result) == num_inferences  # type: ignore
+
+        actual_inference_ids = set(row.id for row in clickhouse_result.iloc)  # type: ignore
+        assert actual_inference_ids == expected_inference_ids
+
+
 @pytest.mark.asyncio
 async def test_async_clickhouse_batch_writes():
     # Create a temp file and write to it

@@ -11,7 +11,7 @@ use tensorzero::FeedbackParams;
 use tensorzero::InferenceOutput;
 use tensorzero::Role;
 use tensorzero::{ClientInferenceParams, ClientInput};
-use tensorzero_core::config_parser::Config;
+use tensorzero_core::config_parser::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager;
 use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
@@ -33,9 +33,12 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
     let config = Arc::new(
-        Config::load_from_path_optional_verify_credentials(&config_path, false)
-            .await
-            .unwrap(),
+        Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new_from_path(&config_path).unwrap(),
+            false,
+        )
+        .await
+        .unwrap(),
     );
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,

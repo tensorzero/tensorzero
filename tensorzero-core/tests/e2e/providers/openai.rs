@@ -226,7 +226,7 @@ pub async fn test_provider_config_extra_body() {
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -337,8 +337,8 @@ async fn test_default_function_default_tool_choice() {
         "tool_call"
     );
 
-    // Sleep for 100ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 200ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Just check 'tool_choice' in the raw request, since we already have lots of tests
     // that check the full ChatInference/ModelInference rows

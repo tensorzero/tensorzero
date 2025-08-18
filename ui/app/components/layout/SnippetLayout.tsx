@@ -129,6 +129,7 @@ export interface SnippetTab {
 interface SnippetTabsProps {
   tabs: SnippetTab[];
   defaultTab?: string;
+  activeTab?: string;
   children?: ((activeTab: string) => ReactNode) | ReactNode;
   onTabChange?: (tabId: string) => void;
 }
@@ -147,14 +148,21 @@ const tabIndicator = cva("", {
 export function SnippetTabs({
   tabs,
   defaultTab,
+  activeTab: controlledActiveTab,
   children,
   onTabChange,
 }: SnippetTabsProps) {
   const defaultTabId = defaultTab || tabs[0]?.id;
-  const [activeTab, setActiveTab] = useState(defaultTabId);
+  const [uncontrolledActiveTab, setUncontrolledActiveTab] =
+    useState(defaultTabId);
+
+  // Use controlled tab if provided, otherwise use internal state
+  const activeTab = controlledActiveTab ?? uncontrolledActiveTab;
 
   const handleTabChange = (tabId: string) => {
-    setActiveTab(tabId);
+    if (!controlledActiveTab) {
+      setUncontrolledActiveTab(tabId);
+    }
     onTabChange?.(tabId);
   };
 
