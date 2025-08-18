@@ -3266,6 +3266,7 @@ def test_sync_clickhouse_batch_writes():
     with tempfile.NamedTemporaryFile() as temp_file:
         temp_file.write(b"gateway.observability.enabled = true\n")
         temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        temp_file.flush()
         clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
         client = TensorZeroGateway.build_embedded(
             config_file=temp_file.name,
@@ -3309,6 +3310,7 @@ async def test_async_clickhouse_batch_writes():
     with tempfile.NamedTemporaryFile() as temp_file:
         temp_file.write(b"gateway.observability.enabled = true\n")
         temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        temp_file.flush()
         clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
         client_fut = AsyncTensorZeroGateway.build_embedded(
             config_file=temp_file.name,
@@ -3353,11 +3355,18 @@ def test_sync_cannot_enable_batch_writes():
     with tempfile.NamedTemporaryFile() as temp_file:
         temp_file.write(b"gateway.observability.enabled = true\n")
         temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        temp_file.flush()
         clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
-        client = TensorZeroGateway.build_embedded(
-            config_file=temp_file.name,
-            clickhouse_url=clickhouse_url,
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            TensorZeroGateway.build_embedded(
+                config_file=temp_file.name,
+                clickhouse_url=clickhouse_url,
+            )
+        assert (
+            str(exc_info.value)
+            == """Failed to construct TensorZero client: Clickhouse(Other { source: TensorZeroInternalError(Error(Config { message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode" })) })"""
         )
+
 
 @pytest.mark.asyncio
 async def test_async_cannot_enable_batch_writes():
@@ -3365,10 +3374,16 @@ async def test_async_cannot_enable_batch_writes():
     with tempfile.NamedTemporaryFile() as temp_file:
         temp_file.write(b"gateway.observability.enabled = true\n")
         temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        temp_file.flush()
         clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
         client_fut = AsyncTensorZeroGateway.build_embedded(
             config_file=temp_file.name,
             clickhouse_url=clickhouse_url,
         )
         assert inspect.isawaitable(client_fut)
-        client = await client_fut
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            await client_fut
+        assert (
+            str(exc_info.value)
+            == """Failed to construct TensorZero client: Clickhouse(Other { source: TensorZeroInternalError(Error(Config { message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode" })) })"""
+        )
