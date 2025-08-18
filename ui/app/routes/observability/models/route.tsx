@@ -1,5 +1,10 @@
 import { data, useNavigate } from "react-router";
 import type { Route } from "./+types/route";
+import type { RouteHandle } from "react-router";
+
+export const handle: RouteHandle = {
+  crumb: () => ["Models"],
+};
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import type { TimeWindow } from "tensorzero-node";
 import { getQuantiles } from "tensorzero-node";
