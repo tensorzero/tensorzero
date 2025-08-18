@@ -44,9 +44,11 @@ let configCache: ConfigCache | null = null;
 const defaultFunctionConfig: FunctionConfig = {
   type: "chat",
   variants: {},
-  system_schema: null,
-  user_schema: null,
-  assistant_schema: null,
+  schemas: {
+    system: null,
+    user: null,
+    assistant: null,
+  },
   tools: [],
   tool_choice: "auto",
   parallel_tool_calls: null,

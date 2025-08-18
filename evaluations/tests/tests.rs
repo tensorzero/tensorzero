@@ -10,7 +10,7 @@ use evaluations::{Clients, ThrottledTensorZeroClient};
 use serde_json::json;
 use tensorzero::input_handling::resolved_input_to_client_input;
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     select_human_static_evaluation_feedback_clickhouse, select_model_inferences_clickhouse,
 };
 use tensorzero_core::endpoints::datasets::Datapoint;
@@ -29,7 +29,7 @@ use std::{path::PathBuf, sync::Arc};
 use tensorzero::{ClientBuilder, ClientBuilderMode, FeedbackParams};
 use tensorzero::{InferenceResponse, Role};
 use tensorzero_core::{
-    clickhouse::test_helpers::{
+    db::clickhouse::test_helpers::{
         clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
         select_feedback_by_target_id_clickhouse, select_json_inference_clickhouse,
     },
@@ -351,7 +351,7 @@ async fn run_exact_match_evaluation_chat() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
-    sleep(Duration::from_millis(200)).await;
+    sleep(Duration::from_millis(1000)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();

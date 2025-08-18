@@ -3,7 +3,7 @@
 use http::StatusCode;
 use reqwest::Client;
 use serde_json::{json, Value};
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_model_inferences_clickhouse,
 };
 use uuid::Uuid;

@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
 
