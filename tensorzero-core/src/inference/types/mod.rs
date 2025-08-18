@@ -1763,6 +1763,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         extra_body: Cow::Borrowed(&extra_body),
         extra_headers: Cow::Borrowed(&extra_headers),
         extra_cache_key: None,
+        dynamic_routing: None, // Not used in this context
     };
     function
         .prepare_response(

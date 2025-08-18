@@ -1775,6 +1775,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         let response = function_config
             .prepare_response(
@@ -2086,6 +2087,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            dynamic_routing: None,
         };
         // Test with a correct content block
         let inference_id = Uuid::now_v7();

@@ -85,6 +85,7 @@ pub struct ClientInferenceParams {
     #[ts(skip)]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
+    pub dynamic_routing: Option<Vec<String>>,
 }
 
 impl TryFrom<ClientInferenceParams> for Params {
@@ -128,6 +129,7 @@ impl TryFrom<ClientInferenceParams> for Params {
             extra_body: this.extra_body,
             extra_headers: this.extra_headers,
             internal_dynamic_variant_config: this.internal_dynamic_variant_config,
+            dynamic_routing: this.dynamic_routing,
         })
     }
 }
@@ -156,6 +158,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         extra_body,
         extra_headers,
         internal_dynamic_variant_config,
+        dynamic_routing,
     } = client_params;
     let _ = Params {
         function_name,
@@ -176,6 +179,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         extra_body,
         extra_headers,
         internal_dynamic_variant_config,
+        dynamic_routing, // Pass through dynamic routing from client
     };
 }
 

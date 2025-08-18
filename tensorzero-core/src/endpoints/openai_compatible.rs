@@ -384,6 +384,8 @@ pub struct OpenAICompatibleParams {
     tensorzero_deny_unknown_fields: bool,
     #[serde(default, rename = "tensorzero::credentials")]
     tensorzero_credentials: InferenceCredentials,
+    #[serde(default, rename = "tensorzero::dynamic_routing")]
+    tensorzero_dynamic_routing: Option<Vec<String>>,
     #[serde(rename = "tensorzero::internal_dynamic_variant_config")]
     tensorzero_internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
     #[serde(flatten)]
@@ -634,6 +636,7 @@ impl Params {
             extra_headers: openai_compatible_params.tensorzero_extra_headers,
             internal_dynamic_variant_config: openai_compatible_params
                 .tensorzero_internal_dynamic_variant_config,
+            dynamic_routing: openai_compatible_params.tensorzero_dynamic_routing,
         })
     }
 }
@@ -1343,6 +1346,7 @@ mod tests {
                 tensorzero_tags: tensorzero_tags.clone(),
                 tensorzero_deny_unknown_fields: false,
                 tensorzero_credentials: InferenceCredentials::default(),
+                tensorzero_dynamic_routing: None,
                 unknown_fields: Default::default(),
                 stream_options: None,
                 stop: None,
@@ -1820,6 +1824,7 @@ mod tests {
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 tensorzero_tags: HashMap::new(),
                 tensorzero_credentials: InferenceCredentials::default(),
+                tensorzero_dynamic_routing: None,
                 unknown_fields: Default::default(),
                 stream_options: None,
                 stop: None,
@@ -1861,6 +1866,7 @@ mod tests {
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 tensorzero_tags: HashMap::new(),
                 tensorzero_credentials: InferenceCredentials::default(),
+                tensorzero_dynamic_routing: None,
                 unknown_fields: Default::default(),
                 stream_options: None,
                 stop: None,
@@ -1908,6 +1914,7 @@ mod tests {
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 tensorzero_tags: HashMap::new(),
                 tensorzero_credentials: InferenceCredentials::default(),
+                tensorzero_dynamic_routing: None,
                 unknown_fields: Default::default(),
                 stream_options: None,
                 stop: None,
@@ -1955,6 +1962,7 @@ mod tests {
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 tensorzero_tags: HashMap::new(),
                 tensorzero_credentials: InferenceCredentials::default(),
+                tensorzero_dynamic_routing: None,
                 unknown_fields: Default::default(),
                 stream_options: None,
                 stop: None,
