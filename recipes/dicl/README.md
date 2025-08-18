@@ -17,3 +17,19 @@ For float metrics, we offer the option to choose a cutoff score that qualifies a
 For demonstrations, we assume all are suitable.
 We expose all these settings in the beginning of `dicl.ipynb`.
 You may also want to modify this notebook to use your own strategies for choosing examples.
+
+## Setup
+
+### Using [`uv`](https://github.com/astral-sh/uv) (Recommended)
+
+```bash
+uv venv  # Create a new virtual environment
+uv pip sync requirements.txt  # Install the dependencies
+```
+
+### Using `pip`
+
+We recommend using Python 3.10+ and a virtual environment.
+
+```bash
+pip install -r requirements.txt

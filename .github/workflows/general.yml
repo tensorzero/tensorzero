@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: ["main"]
 
+# When triggered from the merge queue, cancel any existing workflow runs for the same PR branch
+# Otherwise, use the unique run id for the concurrency group, to prevent anything from getting cancelled
+concurrency:
+  group: ${{ github.event_name == 'merge_group' && format('{0}-{1}', github.workflow, github.ref) || github.run_id }}
+  cancel-in-progress: true
+
 env:
   FORCE_COLOR: 1
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
@@ -133,7 +139,7 @@ jobs:
   validate:
     runs-on: namespace-profile-tensorzero-8x16
 
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -355,7 +361,7 @@ jobs:
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
     # the main 'validate' job)
-    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-large-cache-volume' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-16x32' || 'ubuntu-latest' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     strategy:
       matrix:

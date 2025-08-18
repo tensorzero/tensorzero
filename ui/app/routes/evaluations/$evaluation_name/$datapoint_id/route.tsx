@@ -21,7 +21,7 @@ import {
   redirect,
   type RouteHandle,
 } from "react-router";
-import Output from "~/components/inference/NewOutput";
+import { Output } from "~/components/inference/Output";
 import {
   consolidate_evaluation_results,
   getEvaluatorMetricName,
