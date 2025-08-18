@@ -1,0 +1,36 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  GENERAL                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[object_storage]
+type = "filesystem"
+path = "object_storage"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.classify_document]
+type = "json"
+output_schema = "functions/classify_document/output_schema.json"
+
+[functions.classify_document.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-2024-08-06"
+json_mode = "strict"
+retries = { num_retries = 2, max_delay_s = 10 }
+
+# [functions.classify_document.variants.finetuned]
+# type = "chat_completion"
+# model = "openai::ft:gpt-4o-2024-08-06:tensorzero::xxxxxx"
+# json_mode = "strict"
+# retries = { num_retries = 2, max_delay_s = 10 }
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.correct_classification]
+type = "boolean"
+level = "inference"
+optimize = "max"

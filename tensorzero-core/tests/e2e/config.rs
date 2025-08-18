@@ -5,6 +5,7 @@ async fn test_embedded_invalid_glob() {
         clickhouse_url: None,
         timeout: None,
         verify_credentials: true,
+        allow_batch_writes: true,
     })
     .build()
     .await
@@ -44,6 +45,7 @@ async fn test_embedded_duplicate_key() {
         clickhouse_url: None,
         timeout: None,
         verify_credentials: true,
+        allow_batch_writes: true,
     })
     .build()
     .await

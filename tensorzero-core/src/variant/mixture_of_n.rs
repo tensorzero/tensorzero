@@ -838,8 +838,8 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        clickhouse::ClickHouseConnectionInfo,
         config_parser::SchemaData,
+        db::clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
