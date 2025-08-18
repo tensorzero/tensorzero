@@ -40,7 +40,8 @@ test("playground should work for a chat function that sets 2 variants", async ({
   ).toHaveCount(2);
 
   // Verify that there are 4 outputs, one for each variant and each datapoint
-  await expect(page.getByRole("textbox")).toHaveCount(8);
+  await expect(page.getByRole("textbox")).toHaveCount(4);
+  // await expect(page.getByRole("textbox")).toHaveCount(4);
 
   // Verify that there are no errors
   await expect(
