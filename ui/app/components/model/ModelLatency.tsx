@@ -10,7 +10,6 @@ import {
 } from "recharts";
 import React, { useRef, useState, useMemo, useCallback } from "react";
 import { Await } from "react-router";
-import { TimeWindowSelector } from "~/components/ui/TimeWindowSelector";
 import {
   Select,
   SelectItem,
@@ -37,6 +36,29 @@ const CHART_COLORS = [
 ] as const;
 
 const MARGIN = { top: 12, right: 16, bottom: 28, left: 56 };
+
+function LatencyTimeWindowSelector({
+  value,
+  onValueChange,
+}: {
+  value: TimeWindow;
+  onValueChange: (timeWindow: TimeWindow) => void;
+}) {
+  return (
+    <Select value={value} onValueChange={onValueChange}>
+      <SelectTrigger>
+        <SelectValue placeholder="Choose time window" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="hour">Last Hour</SelectItem>
+        <SelectItem value="day">Last Day</SelectItem>
+        <SelectItem value="week">Last Week</SelectItem>
+        <SelectItem value="month">Last Month</SelectItem>
+        <SelectItem value="cumulative">All Time</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
 
 /** Find latency at a given percentile p for one model’s quantile arrays. */
 function latencyAtPercentile(
@@ -134,7 +156,7 @@ function CustomTooltipContent({
                 className="inline-block h-2.5 w-2.5 rounded-[2px]"
                 style={{ background: r.color, border: `1px solid ${r.color}` }}
               />
-              <span className="text-muted-foreground">{r.name}</span>
+              <span className="text-muted-foreground mr-2">{r.name}</span>
             </div>
             <span className="text-foreground font-mono font-medium tabular-nums">
               {Math.round(r.value)}ms
@@ -349,7 +371,7 @@ export function ModelLatency({
           </CardDescription>
         </div>
         <div className="flex flex-col justify-center gap-2">
-          <TimeWindowSelector
+          <LatencyTimeWindowSelector
             value={timeGranularity}
             onValueChange={onTimeGranularityChange}
           />

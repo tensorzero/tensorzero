@@ -182,7 +182,7 @@ export function ModelUsage({
 
                             return (
                               <div className="flex flex-1 items-center justify-between leading-none">
-                                <span className="text-muted-foreground">
+                                <span className="text-muted-foreground mr-2">
                                   {name}
                                 </span>
                                 <div className="grid text-right">
