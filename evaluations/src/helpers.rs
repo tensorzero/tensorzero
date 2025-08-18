@@ -133,7 +133,9 @@ mod tests {
 
     use serde_json::json;
     use tensorzero::Tool;
-    use tensorzero_core::{function::FunctionConfigChat, tool::ToolChoice};
+    use tensorzero_core::{
+        config_parser::SchemaData, function::FunctionConfigChat, tool::ToolChoice,
+    };
 
     use super::*;
 
@@ -152,9 +154,7 @@ mod tests {
         };
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             tool_choice: ToolChoice::Specific("tool_1".to_string()),
             parallel_tool_calls: None,
@@ -189,9 +189,7 @@ mod tests {
         };
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec!["tool_1".to_string()],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
