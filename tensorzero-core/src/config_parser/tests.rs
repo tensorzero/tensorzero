@@ -2219,8 +2219,6 @@ async fn deny_user_template_and_input_wrapper() {
         );
 }
 
-
-
 #[tokio::test]
 async fn deny_fuser_user_template_and_input_wrapper() {
     let temp_dir = tempfile::tempdir().unwrap();
