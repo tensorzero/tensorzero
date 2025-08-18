@@ -1,0 +1,186 @@
+name: Debug Python Deadlock
+run-name: Debug Python Deadlock for ${{ github.ref }}
+
+on:
+  push:
+    branches:
+      - aaron/temp-pyo3-debug
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_REGION: "us-east-1"
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AZURE_OPENAI_API_BASE: ${{secrets.AZURE_OPENAI_API_BASE }}
+  AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+  AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }}
+  DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+  FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+  FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+  FORCE_COLOR: 1
+  GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
+  GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp_jwt_key.json
+  GCP_STORAGE_ACCESS_KEY_ID: ${{ secrets.GCP_STORAGE_ACCESS_KEY_ID }}
+  GCP_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.GCP_STORAGE_SECRET_ACCESS_KEY }}
+  GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
+  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+  HYPERBOLIC_API_KEY: ${{secrets.HYPERBOLIC_API_KEY}}
+  MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
+  TGI_API_KEY: ${{ secrets.TGI_API_KEY }}
+  TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+  VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
+  VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
+  VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
+  XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+
+jobs:
+  debug-python-deadlock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Update rust
+        run: |
+          rustup update stable
+          rustup default stable
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Print Rust version
+        run: rustc --version
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.4/install.sh | sh
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        with:
+          tool: cargo-nextest
+
+      - name: Write GCP JWT key to file
+        env:
+          GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+        run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
+
+      - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
+        run: |
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+
+      - name: Launch ClickHouse container for E2E tests
+        run: |
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
+
+      - name: Launch the provider-proxy cache for E2E tests
+        run: |
+          ./ci/run-provider-proxy.sh ci
+
+      - name: Launch the gateway for E2E tests
+        run: |
+          TENSORZERO_E2E_PROXY="http://localhost:3003" cargo run-e2e > e2e_logs.txt 2>&1 &
+          GATEWAY_PID=$!
+          echo "GATEWAY_PID=$GATEWAY_PID" >> $GITHUB_ENV
+          while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+            echo "Waiting for gateway to be healthy..."
+            sleep 1
+          done
+          echo "Gateway is healthy (PID: $GATEWAY_PID)"
+
+      - name: Install Python for python client tests
+        run: uv python install 3.9
+
+      - name: Install gdb for debugging
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdb
+
+      - name: Run Python tests with timeout and deadlock detection
+        working-directory: clients/python
+        timeout-minutes: 6
+        run: |
+          # Start the test in background and capture its PID
+          bash ./test.sh --verbose &
+          TEST_PID=$!
+          echo "Started test.sh with PID: $TEST_PID"
+          
+          # Wait for 5 minutes (300 seconds)
+          for i in {1..300}; do
+            if ! kill -0 $TEST_PID 2>/dev/null; then
+              echo "Test completed normally"
+              wait $TEST_PID
+              exit $?
+            fi
+            sleep 1
+          done
+          
+          echo "Test has been running for 5 minutes, capturing backtraces..."
+          
+          # Get all processes related to our test
+          echo "=== Process tree ==="
+          ps -ef | grep -E "(test\.sh|pytest|python)" | grep -v grep || true
+          
+          echo "=== Capturing backtraces with gdb ==="
+          # Find all python processes that might be related to our test
+          PYTHON_PIDS=$(pgrep -f "python.*pytest" || true)
+          if [ -n "$PYTHON_PIDS" ]; then
+            for pid in $PYTHON_PIDS; do
+              echo "--- Backtrace for Python process $pid ---"
+              sudo gdb -p $pid --batch \
+                -ex "set pagination off" \
+                -ex "thread apply all bt" \
+                -ex "info threads" \
+                -ex "detach" \
+                -ex "quit" 2>&1 || true
+              echo ""
+            done
+          else
+            echo "No Python processes found"
+          fi
+          
+          # Also check for any rust processes that might be hanging
+          RUST_PIDS=$(pgrep -f "cargo.*run" || true)
+          if [ -n "$RUST_PIDS" ]; then
+            for pid in $RUST_PIDS; do
+              echo "--- Backtrace for Rust process $pid ---"
+              sudo gdb -p $pid --batch \
+                -ex "set pagination off" \
+                -ex "thread apply all bt" \
+                -ex "info threads" \
+                -ex "detach" \
+                -ex "quit" 2>&1 || true
+              echo ""
+            done
+          else
+            echo "No Rust processes found"
+          fi
+          
+          echo "=== Killing hanging test ==="
+          kill -KILL $TEST_PID 2>/dev/null || true
+          exit 1
+
+      - name: Terminate the gateway
+        if: always()
+        run: |
+          if [ -n "$GATEWAY_PID" ]; then
+            echo "Killing gateway with pid $GATEWAY_PID"
+            kill $GATEWAY_PID 2>/dev/null || true
+          fi
+
+      - name: Print e2e logs
+        if: always()
+        run: cat e2e_logs.txt || true
+
+      - name: Print provider-proxy logs
+        if: always()
+        run: cat provider_proxy_logs.txt || true
