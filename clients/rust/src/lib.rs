@@ -292,6 +292,14 @@ impl ClientBuilder {
                     tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
                     Arc::new(Config::default())
                 };
+                if config.gateway.observability.batch_writes.enabled {
+                    return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                        source: tensorzero_core::error::Error::new(ErrorDetails::Config {
+                            message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode".to_string(),
+                        })
+                        .into(),
+                    }));
+                }
                 let clickhouse_connection_info =
                     setup_clickhouse(&config, clickhouse_url.clone(), true)
                         .await
