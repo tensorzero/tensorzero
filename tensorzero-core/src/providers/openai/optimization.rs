@@ -141,7 +141,7 @@ pub enum OpenAIGrader {
         image_tag: Option<String>, // Docker image for isolation
     },
     Multi {
-        calculate_output: String, // Expression to combine grader outputs
+        calculate_output: String, // Expression to combine grader outputs (e.g. "0.5 * grader_1_key + 0.5 * grader_2_key")
         graders: HashMap<String, Box<OpenAIGrader>>,
         name: String,
     },
@@ -258,6 +258,16 @@ impl OpenAIRFTRole {
     }
 }
 
+/// Response format configuration for OpenAI Reinforcement Fine-Tuning (RFT).
+///
+/// When a response format is specified, the model being fine-tuned will produce
+/// structured outputs that conform to the provided JSON schema during RFT sampling.
+/// These structured outputs will be populated in the `output_json` field of the
+/// Sample namespace.
+///
+/// If no response format is specified but the model is instructed (e.g., via prompts)
+/// to produce structured outputs, those outputs will be returned as raw JSON strings
+/// in the `output_text` field of the Sample namespace instead.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
