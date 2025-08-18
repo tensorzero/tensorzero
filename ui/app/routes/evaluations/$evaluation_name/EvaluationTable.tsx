@@ -1,8 +1,7 @@
 import { useMemo } from "react";
 import React from "react";
 import { useSearchParams, useNavigate } from "react-router";
-
-import * as RadixTooltip from "@radix-ui/react-tooltip";
+import { Tooltip as RadixTooltip } from "radix-ui";
 import {
   Table,
   TableBody,
