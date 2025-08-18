@@ -1227,6 +1227,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         clickhouse_url: None,
         timeout: None,
         verify_credentials: true,
+        allow_batch_writes: true,
     })
     .build()
     .await
