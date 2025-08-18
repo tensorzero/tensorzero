@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
-use crate::config_parser::{PathWithContents, SchemaData};
+use crate::config_parser::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
@@ -78,13 +78,23 @@ pub struct UninitializedBestOfNEvaluatorConfig {
 }
 
 impl UninitializedBestOfNSamplingConfig {
-    pub fn load(self, schemas: &SchemaData) -> Result<BestOfNSamplingConfig, Error> {
+    pub fn load(
+        self,
+        schemas: &SchemaData,
+        error_context: &ErrorContext,
+    ) -> Result<BestOfNSamplingConfig, Error> {
         Ok(BestOfNSamplingConfig {
             weight: self.weight,
             timeout_s: self.timeout_s,
             candidates: self.candidates,
             evaluator: BestOfNEvaluatorConfig {
-                inner: self.evaluator.inner.load(schemas)?,
+                inner: self.evaluator.inner.load(
+                    schemas,
+                    &ErrorContext {
+                        function_name: error_context.function_name.clone(),
+                        variant_name: format!("{}.evaluator", error_context.variant_name),
+                    },
+                )?,
             },
         })
     }

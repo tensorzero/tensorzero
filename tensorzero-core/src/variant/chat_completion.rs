@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::config_parser::path::TomlRelativePath;
-use crate::config_parser::{PathWithContents, SchemaData};
+use crate::config_parser::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails};
@@ -50,6 +50,83 @@ pub struct ChatTemplates {
     pub assistant: Option<TemplateWithSchema>,
 }
 
+impl ChatTemplates {
+    fn validate_wrapper(
+        template_and_schema: Option<TemplateWithSchema>,
+        schema: Option<&StaticJSONSchema>,
+        wrapper: Option<TomlRelativePath>,
+        error_prefix: &str,
+        name: &str,
+    ) -> Result<Option<TemplateWithSchema>, Error> {
+        // If both a function schema and an input wrapper are provided, error,
+        // as input wrappers just take in a plain text input.
+        if schema.is_some() && wrapper.is_some() {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "{error_prefix}: Cannot provide both `input_wrappers.{name}` and `{name}_schema`"
+                ),
+            }));
+        }
+        // Check the merged 'TemplateWithSchema' (the function template combined with a non-input-wrapper template)
+        // We don't allow specifying both a normal template and an input wrapper template.
+        match (template_and_schema, wrapper) {
+            // We have a `user`/`assistant`/`system` template and no corresponding `input_wrappers`,
+            // entry, so use our existing
+            (Some(schema), None) => Ok(Some(schema)),
+        // If we just have an input wrapper, then we create a new 'TemplateWithSchema'
+            // with no schema,
+            (None, Some(wrapper)) => Ok(Some(TemplateWithSchema {
+                template: PathWithContents::from_path(wrapper)?,
+                schema: None,
+            })),
+            (None, None) => Ok(None),
+            (Some(_), Some(_)) => Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "{error_prefix}: Cannot provide both `input_wrappers.{name}` and `{name}` template"
+                ),
+            })),
+        }
+    }
+    /// Applies the templates from `input_wrappers`,
+    /// erroring if we already have a template specified
+    pub fn apply_wrappers(
+        self,
+        input_wrappers: Option<UninitializedInputWrappers>,
+        schemas: &SchemaData,
+        // A string like 'functions.<function_name>.variants.<variant_name>', used in error messages
+        function_and_variant_name: &str,
+    ) -> Result<Self, Error> {
+        let UninitializedInputWrappers {
+            user: user_wrapper,
+            assistant: assistant_wrapper,
+            system: system_wrapper,
+        } = input_wrappers.unwrap_or_default();
+        Ok(ChatTemplates {
+            system: Self::validate_wrapper(
+                self.system,
+                schemas.system.as_ref(),
+                system_wrapper,
+                function_and_variant_name,
+                "system",
+            )?,
+            user: Self::validate_wrapper(
+                self.user,
+                schemas.user.as_ref(),
+                user_wrapper,
+                function_and_variant_name,
+                "user",
+            )?,
+            assistant: Self::validate_wrapper(
+                self.assistant,
+                schemas.assistant.as_ref(),
+                assistant_wrapper,
+                function_and_variant_name,
+                "assistant",
+            )?,
+        })
+    }
+}
+
 #[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -72,6 +149,15 @@ pub struct ChatCompletionConfig {
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+#[serde(deny_unknown_fields)]
+pub struct UninitializedInputWrappers {
+    user: Option<TomlRelativePath>,
+    assistant: Option<TomlRelativePath>,
+    system: Option<TomlRelativePath>,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
@@ -82,6 +168,7 @@ pub struct UninitializedChatCompletionConfig {
     pub system_template: Option<TomlRelativePath>,
     pub user_template: Option<TomlRelativePath>,
     pub assistant_template: Option<TomlRelativePath>,
+    pub input_wrappers: Option<UninitializedInputWrappers>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub max_tokens: Option<u32>,
@@ -102,7 +189,11 @@ pub struct UninitializedChatCompletionConfig {
 }
 
 impl UninitializedChatCompletionConfig {
-    pub fn load(self, schemas: &SchemaData) -> Result<ChatCompletionConfig, Error> {
+    pub fn load(
+        self,
+        schemas: &SchemaData,
+        error_context: &ErrorContext,
+    ) -> Result<ChatCompletionConfig, Error> {
         Ok(ChatCompletionConfig {
             weight: self.weight,
             model: self.model,
@@ -137,7 +228,16 @@ impl UninitializedChatCompletionConfig {
                         })
                     })
                     .transpose()?,
-            },
+            }
+            .apply_wrappers(
+                self.input_wrappers,
+                schemas,
+                format!(
+                    "functions.{}.variants.{}",
+                    error_context.function_name, error_context.variant_name
+                )
+                .as_str(),
+            )?,
             temperature: self.temperature,
             top_p: self.top_p,
             max_tokens: self.max_tokens,

@@ -282,6 +282,7 @@ pub async fn inference<T: Send + 'static>(
         params.internal_dynamic_variant_config,
         &mut templates,
         &function,
+        function_name.clone(),
     )?;
     let templates = &*templates;
 
@@ -1224,6 +1225,7 @@ fn prepare_candidate_variants(
     dynamic_variant_config: Option<UninitializedVariantInfo>,
     template_config: &mut Cow<'_, TemplateConfig>,
     function: &FunctionConfig,
+    function_name: String,
 ) -> Result<(), Error> {
     match (pinned_variant_name, dynamic_variant_config) {
         // If a variant is pinned, only that variant should be attempted
@@ -1244,8 +1246,11 @@ fn prepare_candidate_variants(
         }
         (None, Some(dynamic_variant_config)) => {
             // Replace the variant config with just the dynamic variant
-            let candidate_variant_info =
-                load_dynamic_variant_info(dynamic_variant_config, function.schemas())?;
+            let candidate_variant_info = load_dynamic_variant_info(
+                dynamic_variant_config,
+                function.schemas(),
+                function_name,
+            )?;
 
             // Replace templates in the template config with the ones passed in
             // We Clone here so that we can still reference the old templates that don't conflict

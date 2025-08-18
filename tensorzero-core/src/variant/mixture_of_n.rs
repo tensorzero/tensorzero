@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
-use crate::config_parser::{PathWithContents, SchemaData};
+use crate::config_parser::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
@@ -80,13 +80,23 @@ pub struct UninitializedFuserConfig {
 }
 
 impl UninitializedMixtureOfNConfig {
-    pub fn load(self, schemas: &SchemaData) -> Result<MixtureOfNConfig, Error> {
+    pub fn load(
+        self,
+        schemas: &SchemaData,
+        error_context: &ErrorContext,
+    ) -> Result<MixtureOfNConfig, Error> {
         Ok(MixtureOfNConfig {
             weight: self.weight,
             timeout_s: self.timeout_s,
             candidates: self.candidates,
             fuser: FuserConfig {
-                inner: self.fuser.inner.load(schemas)?,
+                inner: self.fuser.inner.load(
+                    schemas,
+                    &ErrorContext {
+                        function_name: error_context.function_name.clone(),
+                        variant_name: format!("{}.fuser", error_context.variant_name),
+                    },
+                )?,
             },
         })
     }
