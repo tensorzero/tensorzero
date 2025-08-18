@@ -108,6 +108,7 @@ export function ModelUsage({
           <CardTitle>Model Usage Over Time</CardTitle>
           <CardDescription>
             {METRIC_TYPE_CONFIG[selectedMetric].description} by model
+            {timeGranularity === "hour" && " (times shown in UTC)"}
           </CardDescription>
         </div>
         <div className="flex flex-col justify-center gap-2">
@@ -154,7 +155,17 @@ export function ModelUsage({
                         tickMargin={10}
                         axisLine={true}
                         tickFormatter={(value) =>
-                          new Date(value).toLocaleDateString()
+                          timeGranularity === "hour"
+                            ? new Date(value).toLocaleString("en-US", {
+                                timeZone: "UTC",
+                                month: "short",
+                                day: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })
+                            : new Date(value).toLocaleDateString("en-US", {
+                                timeZone: "UTC",
+                              })
                         }
                       />
                     )}
@@ -170,7 +181,17 @@ export function ModelUsage({
                           labelFormatter={(label) =>
                             timeGranularity === "cumulative"
                               ? "Total"
-                              : new Date(label).toLocaleDateString()
+                              : timeGranularity === "hour"
+                                ? new Date(label).toLocaleString("en-US", {
+                                    timeZone: "UTC",
+                                    month: "short",
+                                    day: "numeric",
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                  })
+                                : new Date(label).toLocaleDateString("en-US", {
+                                    timeZone: "UTC",
+                                  })
                           }
                           formatter={(value, name, entry) => {
                             const count = entry.payload[`${name}_count`];
