@@ -468,7 +468,10 @@ async fn run_rollback_instructions(
 }
 async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bool) {
     let (fresh_clickhouse, _cleanup_fresh_clickhouse) = get_clean_clickhouse(true);
-    fresh_clickhouse.create_database().await.unwrap();
+    fresh_clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
     let migrations = make_all_migrations(&fresh_clickhouse);
     println!(
         "Running migrations up to {}",
@@ -503,7 +506,10 @@ async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bo
     // to try to run commands on a non-existent database.
     // We make sure that the database exists at the end of the rollback to prevent '_cleanup_fresh_clickhouse' from
     // panicking on drop.
-    fresh_clickhouse.create_database().await.unwrap();
+    fresh_clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
 }
 
 // Generate tests named 'test_rollback_up_to_migration_index_n' for each migration index `n``
@@ -522,7 +528,10 @@ invoke_all_separate_tests!(
 #[traced_test]
 async fn test_rollback_apply_rollback() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    clickhouse.create_database().await.unwrap();
+    clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
     let migrations = make_all_migrations(&clickhouse);
     for migration in migrations {
         let name = migration.name();
@@ -552,7 +561,10 @@ async fn test_rollback_apply_rollback() {
         // This migration drops the entire database during rollback, so we need to re-create it
         if migration.name() == "Migration0000" {
             sleep(Duration::from_millis(500)).await;
-            clickhouse.create_database().await.unwrap();
+            clickhouse
+                .create_database_and_migrations_table()
+                .await
+                .unwrap();
         }
 
         println!("Re-apply migration: {name}");
@@ -577,9 +589,15 @@ async fn test_rollback_apply_rollback() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clickhouse_migration_manager() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    clickhouse.create_database().await.unwrap();
+    clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
     // Run it twice to test that it is a no-op the second time
-    clickhouse.create_database().await.unwrap();
+    clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
     let migrations = make_all_migrations(&clickhouse);
     let initial_clean_start = Cell::new(true);
     let manual_run = clickhouse.is_cluster_configured();
@@ -950,7 +968,10 @@ async fn test_concurrent_clickhouse_migrations() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_migration_0013_old_table() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    clickhouse.create_database().await.unwrap();
+    clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
 
     // When creating a new migration, add it to the end of this array,
     // and adjust the call to `invoke_all!` to include the new array index.
@@ -1036,7 +1057,10 @@ async fn test_migration_0013_old_table() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_migration_0013_data_no_table() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    clickhouse.create_database().await.unwrap();
+    clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
 
     // When creating a new migration, add it to the end of this array,
     // and adjust the call to `invoke_all!` to include the new array index.
@@ -1137,7 +1161,10 @@ async fn test_run_migrations_clean() {
 #[traced_test]
 async fn test_run_migrations_fake_row() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    clickhouse.create_database().await.unwrap();
+    clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
 
     struct Migration99999;
 

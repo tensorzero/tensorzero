@@ -578,7 +578,7 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn create_database(&self) -> Result<(), Error> {
+    pub async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => {}
             Self::Mock { .. } => {}
