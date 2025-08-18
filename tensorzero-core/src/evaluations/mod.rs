@@ -55,6 +55,7 @@ pub enum EvaluatorConfig {
     ExactMatch(ExactMatchConfig),
     #[serde(rename = "llm_judge")]
     LLMJudge(LLMJudgeConfig),
+    Regex(RegexConfig),
 }
 
 impl EvaluatorConfig {
@@ -62,6 +63,7 @@ impl EvaluatorConfig {
         match self {
             EvaluatorConfig::ExactMatch(config) => config.cutoff,
             EvaluatorConfig::LLMJudge(config) => config.cutoff,
+            EvaluatorConfig::Regex(config) => config.cutoff,
         }
     }
 
@@ -69,6 +71,7 @@ impl EvaluatorConfig {
         match self {
             EvaluatorConfig::ExactMatch(_) => MetricConfigOptimize::Max,
             EvaluatorConfig::LLMJudge(config) => config.optimize.into(),
+            EvaluatorConfig::Regex(_) => MetricConfigOptimize::Max,
         }
     }
 }
@@ -89,6 +92,15 @@ pub struct LLMJudgeConfig {
     pub output_type: LLMJudgeOutputType,
     pub include: LLMJudgeIncludeConfig,
     pub optimize: LLMJudgeOptimize,
+    pub cutoff: Option<f32>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct RegexConfig {
+    pub regex: String,
+    #[serde(default)]
     pub cutoff: Option<f32>,
 }
 
@@ -270,6 +282,7 @@ enum UninitializedEvaluatorConfig {
     ExactMatch(ExactMatchConfig),
     #[serde(rename = "llm_judge")]
     LLMJudge(UninitializedLLMJudgeConfig),
+    Regex(RegexConfig),
 }
 
 #[derive(Debug, Deserialize)]
@@ -428,6 +441,15 @@ impl UninitializedEvaluatorConfig {
                     },
                 ))
             }
+            UninitializedEvaluatorConfig::Regex(params) => Ok((
+                EvaluatorConfig::Regex(params),
+                None,
+                MetricConfig {
+                    r#type: MetricConfigType::Boolean,
+                    optimize: MetricConfigOptimize::Max,
+                    level: MetricConfigLevel::Inference,
+                },
+            ))
         }
     }
 }

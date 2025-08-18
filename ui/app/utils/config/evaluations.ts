@@ -9,6 +9,8 @@ export const getOptimize = (evaluatorConfig?: EvaluatorConfig) => {
       return "max";
     case "llm_judge":
       return evaluatorConfig.optimize;
+    case "regex":
+      return "max";
   }
 };
 
@@ -20,5 +22,7 @@ export const getMetricType = (
       return "boolean";
     case "llm_judge":
       return evaluatorConfig.output_type;
+    case "regex":
+      return "boolean";
   }
 };
