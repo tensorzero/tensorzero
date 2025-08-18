@@ -2097,7 +2097,7 @@ mod tests {
         assert_eq!(
             details,
             ErrorDetails::InferenceClient {
-                message: "test_message".to_string(),
+                message: "raw response".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some("raw request".to_string()),
@@ -2114,7 +2114,7 @@ mod tests {
         assert_eq!(
             details,
             ErrorDetails::InferenceClient {
-                message: "test_message".to_string(),
+                message: "raw response".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some("raw request".to_string()),
@@ -2131,7 +2131,7 @@ mod tests {
         assert_eq!(
             details,
             ErrorDetails::InferenceClient {
-                message: "test_message".to_string(),
+                message: "raw response".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some("raw request".to_string()),
@@ -2148,7 +2148,7 @@ mod tests {
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
-                message: "test_message".to_string(),
+                message: "raw response".to_string(),
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
@@ -2164,7 +2164,7 @@ mod tests {
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
-                message: "test_message".to_string(),
+                message: "raw response".to_string(),
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
