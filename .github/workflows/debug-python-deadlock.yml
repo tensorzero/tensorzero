@@ -44,7 +44,7 @@ env:
 jobs:
   debug-python-deadlock:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -106,69 +106,103 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gdb
 
-      - name: Run Python tests with timeout and deadlock detection
+      - name: Run Python tests multiple times with timeout and deadlock detection
         working-directory: clients/python
-        timeout-minutes: 6
+        timeout-minutes: 35
         run: |
-          # Start the test in background and capture its PID
-          bash ./test.sh --verbose &
-          TEST_PID=$!
-          echo "Started test.sh with PID: $TEST_PID"
-          
-          # Wait for 5 minutes (300 seconds)
-          for i in {1..300}; do
-            if ! kill -0 $TEST_PID 2>/dev/null; then
-              echo "Test completed normally"
-              wait $TEST_PID
-              exit $?
+          # Function to run a single test with timeout and deadlock detection
+          run_single_test() {
+            local run_number=$1
+            echo "=== Starting test run $run_number at $(date) ==="
+            
+            # Start the test in background and capture its PID
+            bash ./test.sh --verbose &
+            TEST_PID=$!
+            echo "Started test.sh run $run_number with PID: $TEST_PID"
+            
+            # Wait for 5 minutes (300 seconds)
+            for i in {1..300}; do
+              if ! kill -0 $TEST_PID 2>/dev/null; then
+                echo "Test run $run_number completed normally"
+                wait $TEST_PID
+                local exit_code=$?
+                if [ $exit_code -eq 0 ]; then
+                  echo "Test run $run_number: SUCCESS"
+                  return 0
+                else
+                  echo "Test run $run_number: FAILED with exit code $exit_code"
+                  return $exit_code
+                fi
+              fi
+              sleep 1
+            done
+            
+            echo "=== Test run $run_number has been running for 5 minutes, capturing backtraces... ==="
+            
+            # Get all processes related to our test
+            echo "--- Process tree for run $run_number ---"
+            ps -ef | grep -E "(test\.sh|pytest|python)" | grep -v grep || true
+            
+            echo "--- Capturing backtraces with gdb for run $run_number ---"
+            # Find all python processes that might be related to our test
+            PYTHON_PIDS=$(pgrep -f "python.*pytest" || true)
+            if [ -n "$PYTHON_PIDS" ]; then
+              for pid in $PYTHON_PIDS; do
+                echo ">>> Backtrace for Python process $pid (run $run_number) <<<"
+                sudo gdb -p $pid --batch \
+                  -ex "set pagination off" \
+                  -ex "thread apply all bt" \
+                  -ex "info threads" \
+                  -ex "detach" \
+                  -ex "quit" 2>&1 || true
+                echo ""
+              done
+            else
+              echo "No Python processes found for run $run_number"
             fi
-            sleep 1
+            
+            # Also check for any rust processes that might be hanging
+            RUST_PIDS=$(pgrep -f "cargo.*run" || true)
+            if [ -n "$RUST_PIDS" ]; then
+              for pid in $RUST_PIDS; do
+                echo ">>> Backtrace for Rust process $pid (run $run_number) <<<"
+                sudo gdb -p $pid --batch \
+                  -ex "set pagination off" \
+                  -ex "thread apply all bt" \
+                  -ex "info threads" \
+                  -ex "detach" \
+                  -ex "quit" 2>&1 || true
+                echo ""
+              done
+            else
+              echo "No Rust processes found for run $run_number"
+            fi
+            
+            echo "--- Killing hanging test run $run_number ---"
+            kill -KILL $TEST_PID 2>/dev/null || true
+            echo "=== DEADLOCK DETECTED in run $run_number ==="
+            return 1
+          }
+          
+          # Run tests multiple times to increase chance of deadlock
+          DEADLOCK_DETECTED=false
+          for run in {1..6}; do
+            if ! run_single_test $run; then
+              DEADLOCK_DETECTED=true
+              echo "DEADLOCK found in run $run - continuing to run more tests for comparison"
+            fi
+            
+            # Small delay between runs
+            sleep 2
           done
           
-          echo "Test has been running for 5 minutes, capturing backtraces..."
-          
-          # Get all processes related to our test
-          echo "=== Process tree ==="
-          ps -ef | grep -E "(test\.sh|pytest|python)" | grep -v grep || true
-          
-          echo "=== Capturing backtraces with gdb ==="
-          # Find all python processes that might be related to our test
-          PYTHON_PIDS=$(pgrep -f "python.*pytest" || true)
-          if [ -n "$PYTHON_PIDS" ]; then
-            for pid in $PYTHON_PIDS; do
-              echo "--- Backtrace for Python process $pid ---"
-              sudo gdb -p $pid --batch \
-                -ex "set pagination off" \
-                -ex "thread apply all bt" \
-                -ex "info threads" \
-                -ex "detach" \
-                -ex "quit" 2>&1 || true
-              echo ""
-            done
+          if [ "$DEADLOCK_DETECTED" = true ]; then
+            echo "=== SUMMARY: At least one deadlock was detected ==="
+            exit 1
           else
-            echo "No Python processes found"
+            echo "=== SUMMARY: All test runs completed successfully ==="
+            exit 0
           fi
-          
-          # Also check for any rust processes that might be hanging
-          RUST_PIDS=$(pgrep -f "cargo.*run" || true)
-          if [ -n "$RUST_PIDS" ]; then
-            for pid in $RUST_PIDS; do
-              echo "--- Backtrace for Rust process $pid ---"
-              sudo gdb -p $pid --batch \
-                -ex "set pagination off" \
-                -ex "thread apply all bt" \
-                -ex "info threads" \
-                -ex "detach" \
-                -ex "quit" 2>&1 || true
-              echo ""
-            done
-          else
-            echo "No Rust processes found"
-          fi
-          
-          echo "=== Killing hanging test ==="
-          kill -KILL $TEST_PID 2>/dev/null || true
-          exit 1
 
       - name: Terminate the gateway
         if: always()
