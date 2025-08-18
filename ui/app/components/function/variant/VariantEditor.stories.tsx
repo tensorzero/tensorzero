@@ -70,19 +70,30 @@ export const FullyPopulated: Story = {
           type: "chat_completion",
           weight: 1.0,
           model: "gpt-4-turbo-preview",
-          system_template: {
-            path: "templates/system.jinja2",
-            contents:
-              "You are a helpful AI assistant. Today's date is {{ date }}.",
-          },
-          user_template: {
-            path: "templates/user.jinja2",
-            contents: "User query: {{ query }}\\n\\nContext: {{ context }}",
-          },
-          assistant_template: {
-            path: "templates/assistant.jinja2",
-            contents:
-              "Based on the context, here's my response: {{ response }}",
+          templates: {
+            system: {
+              template: {
+                path: "templates/system.jinja2",
+                contents:
+                  "You are a helpful AI assistant. Today's date is {{ date }}.",
+              },
+              schema: null,
+            },
+            user: {
+              template: {
+                path: "templates/user.jinja2",
+                contents: "User query: {{ query }}\\n\\nContext: {{ context }}",
+              },
+              schema: null,
+            },
+            assistant: {
+              template: {
+                path: "templates/assistant.jinja2",
+                contents:
+                  "Based on the context, here's my response: {{ response }}",
+              },
+              schema: null,
+            },
           },
           temperature: 0.7,
           top_p: 0.9,
@@ -125,9 +136,11 @@ export const MinimalConfig: Story = {
           type: "chat_completion",
           weight: null,
           model: "gpt-3.5-turbo",
-          system_template: null,
-          user_template: null,
-          assistant_template: null,
+          templates: {
+            system: null,
+            user: null,
+            assistant: null,
+          },
           temperature: null,
           top_p: null,
           max_tokens: null,
@@ -169,17 +182,25 @@ export const WithJsonMode: Story = {
           type: "chat_completion",
           weight: 0.8,
           model: "claude-3-opus-20240229",
-          system_template: {
-            path: "templates/json_system.jinja2",
-            contents:
-              "You are a JSON API that always responds with valid JSON.",
+          templates: {
+            system: {
+              template: {
+                path: "templates/json_system.jinja2",
+                contents:
+                  "You are a JSON API that always responds with valid JSON.",
+              },
+              schema: null,
+            },
+            user: {
+              template: {
+                path: "templates/json_user.jinja2",
+                contents:
+                  "Extract the following information from the text: {{ text }}",
+              },
+              schema: null,
+            },
+            assistant: null,
           },
-          user_template: {
-            path: "templates/json_user.jinja2",
-            contents:
-              "Extract the following information from the text: {{ text }}",
-          },
-          assistant_template: null,
           temperature: 0.3,
           top_p: 0.95,
           max_tokens: 1024,
@@ -221,27 +242,38 @@ export const WithTemplatesOnly: Story = {
           type: "chat_completion",
           weight: null,
           model: "mixtral-8x7b",
-          system_template: {
-            path: "templates/creative_system.jinja2",
-            contents: `You are a creative writing assistant specialized in {{ genre }} stories.
-Your tone should be {{ tone }} and engaging.`,
-          },
-          user_template: {
-            path: "templates/creative_user.jinja2",
-            contents: `Write a story about: {{ prompt }}
-
-Requirements:
-- Length: {{ word_count }} words
-- Include these elements: {{ elements | join(", ") }}`,
-          },
-          assistant_template: {
-            path: "templates/creative_assistant.jinja2",
-            contents: `Title: {{ title }}
-
-{{ story }}
-
----
-The End`,
+          templates: {
+            system: {
+              template: {
+                path: "templates/creative_system.jinja2",
+                contents: `You are a creative writing assistant specialized in {{ genre }} stories.
+    Your tone should be {{ tone }} and engaging.`,
+              },
+              schema: null,
+            },
+            user: {
+              template: {
+                path: "templates/creative_user.jinja2",
+                contents: `Write a story about: {{ prompt }}
+    
+    Requirements:
+    - Length: {{ word_count }} words
+    - Include these elements: {{ elements | join(", ") }}`,
+              },
+              schema: null,
+            },
+            assistant: {
+              template: {
+                path: "templates/creative_assistant.jinja2",
+                contents: `Title: {{ title }}
+    
+    {{ story }}
+    
+    ---
+    The End`,
+              },
+              schema: null,
+            },
           },
           temperature: null,
           top_p: null,

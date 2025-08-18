@@ -17,7 +17,7 @@ with TensorZeroGateway.build_http(
                         # Remote image of Ferris the crab
                         {
                             "type": "file",
-                            "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png",
+                            "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/eac2a230d4a4db1ea09e9c876e45bdb23a300364/tensorzero-core/tests/e2e/providers/ferris.png",
                         },
                         # One-pixel orange image encoded as a base64 string
                         {
