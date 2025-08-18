@@ -7,9 +7,7 @@ on:
       - aaron/temp-pyo3-debug
   workflow_dispatch:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+# Concurrency disabled to allow multiple simultaneous runs for deadlock reproduction
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
