@@ -58,7 +58,7 @@ e2e_aws_sagemaker_openai = { max-threads = 2 }
 e2e_groq = { max-threads = 1 }
 
 # Require that nothing else runs at the same time as a Jaeger test,
-# so that so we can find our Jaeger traces (without other tests
+# so that we can find our Jaeger traces (without other tests
 # flushing our target spans out of the Jaeger buffer).
 [[profile.default.overrides]]
 filter = 'test(test_jaeger)'
