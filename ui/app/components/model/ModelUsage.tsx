@@ -147,15 +147,17 @@ export function ModelUsage({
                 <ChartContainer config={chartConfig} className="h-80 w-full">
                   <BarChart accessibilityLayer data={data}>
                     <CartesianGrid vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      tickLine={false}
-                      tickMargin={10}
-                      axisLine={true}
-                      tickFormatter={(value) =>
-                        new Date(value).toLocaleDateString()
-                      }
-                    />
+                    {timeGranularity !== "cumulative" && (
+                      <XAxis
+                        dataKey="date"
+                        tickLine={false}
+                        tickMargin={10}
+                        axisLine={true}
+                        tickFormatter={(value) =>
+                          new Date(value).toLocaleDateString()
+                        }
+                      />
+                    )}
                     <YAxis
                       tickLine={false}
                       tickMargin={10}
@@ -166,7 +168,9 @@ export function ModelUsage({
                       content={
                         <ChartTooltipContent
                           labelFormatter={(label) =>
-                            new Date(label).toLocaleDateString()
+                            timeGranularity === "cumulative"
+                              ? "Total"
+                              : new Date(label).toLocaleDateString()
                           }
                           formatter={(value, name, entry) => {
                             const count = entry.payload[`${name}_count`];
