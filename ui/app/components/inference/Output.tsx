@@ -1,14 +1,38 @@
 import { useEffect, useState } from "react";
-import { Badge } from "~/components/ui/badge";
-import { Card, CardContent } from "~/components/ui/card";
 import type {
-  JsonInferenceOutput,
   ContentBlockChatOutput,
+  JsonInferenceOutput,
+  JsonValue,
 } from "tensorzero-node";
+import {
+  SnippetLayout,
+  SnippetContent,
+  SnippetTabs,
+  SnippetMessage,
+  type SnippetTab,
+} from "~/components/layout/SnippetLayout";
+import {
+  EmptyMessage,
+  TextMessage,
+  ToolCallMessage,
+} from "~/components/layout/SnippetContent";
+import { CodeEditor } from "../ui/code-editor";
+
+/*
+NOTE: This is the new output component but it is not editable yet so we are rolling
+it out across the UI incrementally.
+*/
+
+export type ChatInferenceOutputRenderingData = ContentBlockChatOutput[];
+
+export interface JsonInferenceOutputRenderingData extends JsonInferenceOutput {
+  schema?: JsonValue;
+}
 
 // Base interface with just the common required properties
 interface BaseOutputProps {
-  output: JsonInferenceOutput | ContentBlockChatOutput[];
+  output: ChatInferenceOutputRenderingData | JsonInferenceOutputRenderingData;
+  maxHeight?: number;
 }
 
 // For when isEditing is not provided (default behavior)
@@ -21,7 +45,10 @@ interface DefaultOutputProps extends BaseOutputProps {
 interface EditableOutputProps extends BaseOutputProps {
   isEditing: boolean;
   onOutputChange: (
-    output: JsonInferenceOutput | ContentBlockChatOutput[] | null,
+    output:
+      | ChatInferenceOutputRenderingData
+      | JsonInferenceOutputRenderingData
+      | null,
   ) => void;
 }
 
@@ -29,114 +56,259 @@ type OutputProps = DefaultOutputProps | EditableOutputProps;
 
 function isJsonInferenceOutput(
   output: OutputProps["output"],
-): output is JsonInferenceOutput {
+): output is JsonInferenceOutputRenderingData {
   return "raw" in output;
 }
 
-// ContentBlock Props
-interface BaseContentBlockProps {
-  block: ContentBlockChatOutput;
-  index: number;
-}
-
-interface DefaultContentBlockProps extends BaseContentBlockProps {
-  isEditing?: never;
-  onBlockChange?: never;
-}
-
-interface EditableContentBlockProps extends BaseContentBlockProps {
-  isEditing: boolean;
-  onBlockChange: (updatedBlock: ContentBlockChatOutput) => void;
-}
-
-type ContentBlockProps = DefaultContentBlockProps | EditableContentBlockProps;
-
-function renderContentBlock({
-  block,
-  index,
-  isEditing,
-  onBlockChange,
-}: ContentBlockProps) {
-  switch (block.type) {
-    case "text":
-      return (
-        <TextBlock
-          key={index}
-          block={block}
-          isEditing={isEditing ?? false}
-          onBlockChange={onBlockChange}
-        />
-      );
-    case "tool_call":
-      return (
-        <OutputToolCallBlock
-          key={index}
-          block={block}
-          isEditing={isEditing ?? false}
-          onBlockChange={onBlockChange}
-        />
-      );
-    default:
-      return null;
-  }
-}
-
-// TextBlock component
-interface TextBlockProps {
-  block: Extract<ContentBlockChatOutput, { type: "text" }>;
+interface JsonInferenceOutputComponentProps {
+  output: JsonInferenceOutputRenderingData;
+  maxHeight?: number;
   isEditing?: boolean;
-  onBlockChange?: (
+  onOutputChange?: (output: JsonInferenceOutputRenderingData | null) => void;
+}
+
+function JsonInferenceOutputComponent({
+  output,
+  maxHeight,
+  isEditing,
+  onOutputChange,
+}: JsonInferenceOutputComponentProps) {
+  const [displayValue, setDisplayValue] = useState<string | undefined>(
+    output.raw ?? undefined,
+  );
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string | undefined>();
+
+  useEffect(() => {
+    // Update display value when output.raw changes externally
+    setDisplayValue(output.raw ?? undefined);
+  }, [output.raw]);
+
+  useEffect(() => {
+    // Switch to raw tab when entering edit mode
+    if (isEditing) {
+      setActiveTab("raw");
+    }
+  }, [isEditing]);
+
+  const handleRawChange = (value: string | undefined) => {
+    if (onOutputChange && value !== undefined) {
+      setDisplayValue(value);
+
+      try {
+        // Attempt to parse the JSON to validate it
+        const parsedValue = JSON.parse(value);
+        setJsonError(null);
+        onOutputChange({
+          ...output,
+          raw: value,
+          parsed: parsedValue,
+        });
+      } catch {
+        setJsonError("Invalid JSON format");
+        onOutputChange({
+          ...output,
+          raw: value,
+          parsed: null,
+        });
+      }
+    }
+  };
+  const tabs: SnippetTab[] = [
+    {
+      id: "parsed",
+      label: "Parsed Output",
+      indicator: output.parsed ? "content" : "fail",
+    },
+    {
+      id: "raw",
+      label: "Raw Output",
+    },
+  ];
+
+  // Add Output Schema tab if available
+  if (output.schema) {
+    tabs.push({
+      id: "schema",
+      label: "Output Schema",
+    });
+  }
+
+  // Set default tab to Raw when editing, otherwise Parsed if it has content
+  const defaultTab = isEditing ? "raw" : output.parsed ? "parsed" : "raw";
+
+  return (
+    <SnippetTabs
+      tabs={tabs}
+      defaultTab={defaultTab}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+    >
+      {(currentTab) => (
+        <SnippetContent maxHeight={maxHeight}>
+          {currentTab === "parsed" ? (
+            <>
+              {output.parsed ? (
+                <>
+                  <CodeEditor
+                    allowedLanguages={["json"]}
+                    value={JSON.stringify(output.parsed, null, 2)}
+                    readOnly
+                  />
+                  {isEditing && jsonError && (
+                    <div className="mt-2 text-sm text-red-500">{jsonError}</div>
+                  )}
+                </>
+              ) : (
+                <EmptyMessage message="The inference output failed to parse against the schema." />
+              )}
+            </>
+          ) : currentTab === "raw" ? (
+            <>
+              <CodeEditor
+                allowedLanguages={["json"]}
+                value={isEditing ? displayValue : (output.raw ?? undefined)}
+                readOnly={!isEditing}
+                onChange={isEditing ? handleRawChange : undefined}
+              />
+              {isEditing && jsonError && (
+                <div className="mt-2 text-sm text-red-500">{jsonError}</div>
+              )}
+            </>
+          ) : (
+            <CodeEditor
+              allowedLanguages={["json"]}
+              value={JSON.stringify(output.schema, null, 2)}
+              readOnly
+            />
+          )}
+        </SnippetContent>
+      )}
+    </SnippetTabs>
+  );
+}
+
+interface ChatInferenceOutputComponentProps {
+  output: ChatInferenceOutputRenderingData;
+  maxHeight?: number;
+  isEditing?: boolean;
+  onOutputChange?: (output: ChatInferenceOutputRenderingData) => void;
+}
+
+function ChatInferenceOutputComponent({
+  output,
+  maxHeight,
+  isEditing,
+  onOutputChange,
+}: ChatInferenceOutputComponentProps) {
+  const handleBlockChange = (
+    index: number,
+    updatedBlock: ContentBlockChatOutput,
+  ) => {
+    if (onOutputChange) {
+      const updatedBlocks = [...output];
+      updatedBlocks[index] = updatedBlock;
+      onOutputChange(updatedBlocks);
+    }
+  };
+  return (
+    <SnippetContent maxHeight={maxHeight}>
+      {output.length === 0 ? (
+        <EmptyMessage message="The output was empty" />
+      ) : (
+        <SnippetMessage>
+          {output.map((block, index) => {
+            switch (block.type) {
+              case "text":
+                return isEditing && onOutputChange ? (
+                  <EditableTextMessage
+                    key={index}
+                    block={block}
+                    onBlockChange={(updatedBlock) =>
+                      handleBlockChange(index, updatedBlock)
+                    }
+                  />
+                ) : (
+                  <TextMessage key={index} label="Text" content={block.text} />
+                );
+              case "tool_call":
+                return isEditing && onOutputChange ? (
+                  <EditableToolCallMessage
+                    key={index}
+                    block={block}
+                    onBlockChange={(updatedBlock) =>
+                      handleBlockChange(index, updatedBlock)
+                    }
+                  />
+                ) : (
+                  <ToolCallMessage
+                    key={index}
+                    toolName={block.name}
+                    toolRawName={block.raw_name}
+                    toolArguments={
+                      block.arguments
+                        ? JSON.stringify(block.arguments, null, 2)
+                        : null
+                    }
+                    toolRawArguments={block.raw_arguments}
+                    toolCallId={block.id}
+                  />
+                );
+              default:
+                return null;
+            }
+          })}
+        </SnippetMessage>
+      )}
+    </SnippetContent>
+  );
+}
+
+// Editable Text Message component
+interface EditableTextMessageProps {
+  block: Extract<ContentBlockChatOutput, { type: "text" }>;
+  onBlockChange: (
     updatedBlock: Extract<ContentBlockChatOutput, { type: "text" }>,
   ) => void;
 }
 
-function TextBlock({ block, isEditing, onBlockChange }: TextBlockProps) {
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (onBlockChange) {
+function EditableTextMessage({
+  block,
+  onBlockChange,
+}: EditableTextMessageProps) {
+  const handleChange = (value: string | undefined) => {
+    if (value !== undefined) {
       onBlockChange({
         ...block,
-        text: e.target.value,
+        text: value,
       });
     }
   };
 
-  if (isEditing) {
-    return (
-      <div className="bg-muted rounded-md p-4">
-        <Badge className="mb-2">Text</Badge>
-        <textarea
-          className="w-full rounded border border-slate-300 bg-white p-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800"
-          value={block.text}
-          onChange={handleChange}
-          rows={3}
-        />
-      </div>
-    );
-  }
-
   return (
-    <div className="bg-muted rounded-md p-4">
-      <Badge className="mb-2">Text</Badge>
-      <pre className="overflow-x-auto break-words whitespace-pre-wrap">
-        <code className="text-sm">{block.text}</code>
-      </pre>
+    <div className="space-y-2">
+      <div className="text-muted-foreground text-xs font-medium">Text</div>
+      <CodeEditor
+        allowedLanguages={["markdown"]}
+        value={block.text}
+        onChange={handleChange}
+      />
     </div>
   );
 }
 
-// ToolCallBlock component
-interface OutputToolCallBlockProps {
+// Editable Tool Call Message component
+interface EditableToolCallMessageProps {
   block: Extract<ContentBlockChatOutput, { type: "tool_call" }>;
-  isEditing?: boolean;
-  onBlockChange?: (
+  onBlockChange: (
     updatedBlock: Extract<ContentBlockChatOutput, { type: "tool_call" }>,
   ) => void;
 }
-function OutputToolCallBlock({
+
+function EditableToolCallMessage({
   block,
-  isEditing,
   onBlockChange,
-}: OutputToolCallBlockProps) {
+}: EditableToolCallMessageProps) {
   const [displayValue, setDisplayValue] = useState(
     JSON.stringify(block.arguments, null, 2),
   );
@@ -147,233 +319,78 @@ function OutputToolCallBlock({
     setDisplayValue(JSON.stringify(block.arguments, null, 2));
   }, [block.arguments]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (onBlockChange) {
-      const newValue = e.target.value;
-      setDisplayValue(newValue);
+  const handleChange = (value: string | undefined) => {
+    if (value !== undefined) {
+      setDisplayValue(value);
 
       try {
-        const parsedValue = JSON.parse(newValue);
+        const parsedValue = JSON.parse(value);
         setJsonError(null);
         onBlockChange({
           ...block,
           arguments: parsedValue,
-          raw_arguments: newValue,
+          raw_arguments: value,
         });
       } catch {
         setJsonError("Invalid JSON format");
       }
-    }
-  };
-
-  if (isEditing) {
-    return (
-      <div className="bg-muted rounded-md p-4">
-        <Badge className="mb-2">Tool: {block.name}</Badge>
-        <textarea
-          className={`w-full rounded border bg-white p-2 font-mono text-sm ${
-            jsonError
-              ? "border-red-500 dark:border-red-500"
-              : "border-slate-300 dark:border-slate-700"
-          } dark:bg-slate-800`}
-          value={displayValue}
-          onChange={handleChange}
-          rows={3}
-        />
-        {jsonError && (
-          <div className="mt-1 text-sm text-red-500">{jsonError}</div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-muted rounded-md p-4">
-      <Badge className="mb-2">Tool: {block.name}</Badge>
-      <pre className="overflow-x-auto break-words whitespace-pre-wrap">
-        <code className="text-sm">
-          {JSON.stringify(block.arguments, null, 2)}
-        </code>
-      </pre>
-    </div>
-  );
-}
-
-// JsonOutput component for handling JsonInferenceOutput
-interface JsonOutputProps {
-  output: JsonInferenceOutput;
-  isEditing?: boolean;
-  onOutputChange?: (output: JsonInferenceOutput | null) => void; // null is used if the output is not valid JSON
-}
-
-function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
-  const [displayValue, setDisplayValue] = useState(output.raw);
-  const [jsonError, setJsonError] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Update display value when output.raw changes externally
-    setDisplayValue(output.raw);
-  }, [output.raw]);
-
-  const handleRawChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (onOutputChange) {
-      const newValue = e.target.value;
-      setDisplayValue(newValue);
-
-      try {
-        // Attempt to parse the JSON to validate it
-        const parsedValue = JSON.parse(newValue);
-        setJsonError(null);
-        onOutputChange({
-          ...output,
-          raw: newValue,
-          parsed: parsedValue,
-        });
-      } catch {
-        setJsonError("Invalid JSON format");
-        onOutputChange(null);
-      }
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      {output.parsed && (
-        <div className="bg-muted rounded-md p-4">
-          <Badge className="mb-2">Parsed Output</Badge>
-          <pre className="overflow-x-auto break-words whitespace-pre-wrap">
-            <code className="text-sm">
-              {JSON.stringify(output.parsed, null, 2)}
-            </code>
-          </pre>
-        </div>
-      )}
-      <div className="bg-muted rounded-md p-4">
-        <Badge className="mb-2">Raw Output</Badge>
-        {isEditing ? (
-          <div>
-            <textarea
-              className={`w-full rounded border bg-white p-2 font-mono text-sm ${
-                jsonError
-                  ? "border-red-500 dark:border-red-500"
-                  : "border-slate-300 dark:border-slate-700"
-              } dark:bg-slate-800`}
-              value={displayValue ?? undefined}
-              onChange={handleRawChange}
-              rows={5}
-            />
-            {jsonError && (
-              <div className="mt-1 text-sm text-red-500">{jsonError}</div>
-            )}
-          </div>
-        ) : (
-          <pre className="overflow-x-auto break-words whitespace-pre-wrap">
-            <code className="text-sm">{output.raw}</code>
-          </pre>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ContentBlocksOutput component for handling ContentBlockOutput[]
-interface ContentBlocksOutputProps {
-  blocks: ContentBlockChatOutput[];
-  isEditing?: boolean;
-  onBlocksChange?: (blocks: ContentBlockChatOutput[]) => void;
-}
-
-function ContentBlocksOutput({
-  blocks,
-  isEditing,
-  onBlocksChange,
-}: ContentBlocksOutputProps) {
-  const handleBlockChange = (
-    index: number,
-    updatedBlock: ContentBlockChatOutput,
-  ) => {
-    if (onBlocksChange) {
-      const updatedBlocks = [...blocks];
-      updatedBlocks[index] = updatedBlock;
-      onBlocksChange(updatedBlocks);
     }
   };
 
   return (
     <div className="space-y-2">
-      {blocks.map((block, index) =>
-        renderContentBlock({
-          block,
-          index,
-          isEditing: isEditing ?? false,
-          onBlockChange: (updatedBlock) =>
-            handleBlockChange(index, updatedBlock),
-        }),
-      )}
+      <div className="text-muted-foreground text-xs font-medium">
+        Tool: {block.name}
+      </div>
+      <CodeEditor
+        allowedLanguages={["json"]}
+        value={displayValue}
+        onChange={handleChange}
+      />
+      {jsonError && <div className="text-sm text-red-500">{jsonError}</div>}
     </div>
   );
 }
 
-export function OutputContent({
+export function Output({
   output,
+  maxHeight,
   isEditing,
   onOutputChange,
 }: OutputProps) {
   const handleJsonOutputChange = (
-    updatedOutput: JsonInferenceOutput | null,
+    updatedOutput: JsonInferenceOutputRenderingData | null,
   ) => {
     if (onOutputChange) {
       onOutputChange(updatedOutput);
     }
   };
 
-  const handleBlocksChange = (updatedBlocks: ContentBlockChatOutput[]) => {
+  const handleChatOutputChange = (
+    updatedOutput: ChatInferenceOutputRenderingData,
+  ) => {
     if (onOutputChange) {
-      onOutputChange(updatedBlocks);
+      onOutputChange(updatedOutput);
     }
   };
 
-  return isJsonInferenceOutput(output) ? (
-    <JsonOutput
-      output={output}
-      isEditing={isEditing ?? false}
-      onOutputChange={handleJsonOutputChange}
-    />
-  ) : (
-    <ContentBlocksOutput
-      blocks={output}
-      isEditing={isEditing ?? false}
-      onBlocksChange={handleBlocksChange}
-    />
-  );
-}
-
-export default function Output({
-  output,
-  isEditing,
-  onOutputChange,
-}: OutputProps) {
-  // Don't pass undefined values to OutputContent when in editing mode
-  if (isEditing) {
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          <OutputContent
-            output={output}
-            isEditing={isEditing}
-            onOutputChange={onOutputChange}
-          />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // Default non-editing mode
   return (
-    <Card>
-      <CardContent className="pt-6">
-        <OutputContent output={output} />
-      </CardContent>
-    </Card>
+    <SnippetLayout>
+      {isJsonInferenceOutput(output) ? (
+        <JsonInferenceOutputComponent
+          output={output}
+          maxHeight={maxHeight}
+          isEditing={isEditing}
+          onOutputChange={handleJsonOutputChange}
+        />
+      ) : (
+        <ChatInferenceOutputComponent
+          output={output}
+          maxHeight={maxHeight}
+          isEditing={isEditing}
+          onOutputChange={handleChatOutputChange}
+        />
+      )}
+    </SnippetLayout>
   );
 }

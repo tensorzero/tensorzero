@@ -41,6 +41,7 @@ python main.py
 
 </details>
 
+<details>
 <summary><b>Python (OpenAI)</b></summary>
 
 a. Install the dependencies:

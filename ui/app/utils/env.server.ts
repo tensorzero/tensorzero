@@ -1,7 +1,5 @@
 // This is the only file in which `process.env` should be accessed directly.
 
-import { logger } from "./logger";
-
 class EnvironmentVariableError extends Error {
   constructor(
     public message: string,
@@ -69,13 +67,6 @@ function getClickhouseUrl() {
   const url = process.env.TENSORZERO_CLICKHOUSE_URL;
   if (url) {
     return url;
-  }
-
-  if (process.env.CLICKHOUSE_URL) {
-    logger.warn(
-      'Deprecation Warning: The environment variable "CLICKHOUSE_URL" has been renamed to "TENSORZERO_CLICKHOUSE_URL" and will be removed in a future version. Please update your environment to use "TENSORZERO_CLICKHOUSE_URL" instead.',
-    );
-    return process.env.CLICKHOUSE_URL;
   }
 
   throw new EnvironmentVariableError(

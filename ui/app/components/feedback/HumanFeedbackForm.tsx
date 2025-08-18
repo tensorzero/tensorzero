@@ -5,7 +5,7 @@ import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
 } from "tensorzero-node";
-import Output from "../inference/Output";
+import { Output } from "../inference/Output";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
@@ -175,7 +175,7 @@ export function HumanFeedbackForm({
  * If the type of the demonstration value is JsonInferenceOutput,
  * we need to submit only demonstrationValue.parsed and not the entire
  * demonstrationValue object.
- * For ContentBlockOutput[], we submit the entire object.
+ * For ContentBlockChatOutput[], we submit the entire object.
  */
 function getDemonstrationValueToSubmit(
   demonstrationValue: ContentBlockChatOutput[] | JsonInferenceOutput,
