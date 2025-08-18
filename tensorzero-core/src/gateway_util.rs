@@ -1,6 +1,5 @@
 use std::future::IntoFuture;
 use std::net::SocketAddr;
-use std::path::Path;
 use std::sync::Arc;
 
 use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
@@ -15,7 +14,7 @@ use tracing::instrument;
 
 use crate::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::Config;
+use crate::config_parser::{Config, ConfigFileGlob};
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
@@ -46,7 +45,6 @@ pub struct GatewayHandle {
 
 impl Drop for GatewayHandle {
     fn drop(&mut self) {
-        tracing::info!("Shutting down gateway");
         self.cancel_token.cancel();
         let handle = self
             .app_state
@@ -96,13 +94,13 @@ pub type AppState = axum::extract::State<AppStateData>;
 
 impl GatewayHandle {
     pub async fn new(config: Arc<Config>) -> Result<Self, Error> {
-        let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
-            .ok()
-            .or_else(|| {
-                std::env::var("CLICKHOUSE_URL").ok().inspect(|_| {
-                    tracing::warn!("Deprecation Warning: The environment variable \"CLICKHOUSE_URL\" has been renamed to \"TENSORZERO_CLICKHOUSE_URL\" and will be removed in a future version. Please update your environment to use \"TENSORZERO_CLICKHOUSE_URL\" instead.");
-                })
-            });
+        let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
+        if clickhouse_url.is_none()
+            && std::env::var("CLICKHOUSE_URL").is_ok()
+            && config.gateway.observability.enabled.is_none()
+        {
+            return Err(ErrorDetails::ClickHouseConfiguration { message: "`CLICKHOUSE_URL` is deprecated and no longer accepted. Please set `TENSORZERO_CLICKHOUSE_URL`".to_string() }.into());
+        }
         Self::new_with_clickhouse(config, clickhouse_url).await
     }
 
@@ -132,7 +130,11 @@ impl GatewayHandle {
         http_client: Client,
     ) -> Self {
         let cancel_token = CancellationToken::new();
-        setup_howdy(clickhouse_connection_info.clone(), cancel_token.clone());
+        setup_howdy(
+            &config,
+            clickhouse_connection_info.clone(),
+            cancel_token.clone(),
+        );
         Self {
             app_state: AppStateData {
                 config,
@@ -308,7 +310,7 @@ pub async fn start_openai_compatible_gateway(
     })?;
 
     let config = if let Some(config_file) = config_file {
-        Arc::new(Config::load_and_verify_from_path(Path::new(&config_file)).await?)
+        Arc::new(Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?)
     } else {
         Arc::new(Config::default())
     };
@@ -366,6 +368,7 @@ mod tests {
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
+            disable_pseudonymous_usage_analytics: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -425,6 +428,7 @@ mod tests {
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
+            disable_pseudonymous_usage_analytics: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -452,6 +456,7 @@ mod tests {
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
+            disable_pseudonymous_usage_analytics: false,
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -481,6 +486,7 @@ mod tests {
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
+            disable_pseudonymous_usage_analytics: false,
         };
         let config = Config {
             gateway: gateway_config,

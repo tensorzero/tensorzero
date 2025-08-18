@@ -1,16 +1,32 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export const logger = {
-  info: (message: string, ...args: any[]) => {
-    console.log(`[TensorZero UI v${__APP_VERSION__}] ${message}`, ...args);
+  info: (message: any, ...args: any[]) => {
+    // `messageStr` is a hack until we figure out a way to enforce the type checker for errors
+    const messageStr =
+      typeof message === "string" ? message : JSON.stringify(message);
+
+    console.log(`[TensorZero UI ${__APP_VERSION__}] ${messageStr}`, ...args);
   },
   error: (message: any, ...args: any[]) => {
-    console.error(`[TensorZero UI v${__APP_VERSION__}] ${message}`, ...args);
+    // `messageStr` is a hack until we figure out a way to enforce the type checker for errors
+    const messageStr =
+      typeof message === "string" ? message : JSON.stringify(message);
+
+    console.error(`[TensorZero UI ${__APP_VERSION__}] ${messageStr}`, ...args);
   },
-  warn: (message: string, ...args: any[]) => {
-    console.warn(`[TensorZero UI v${__APP_VERSION__}] ${message}`, ...args);
+  warn: (message: any, ...args: any[]) => {
+    // `messageStr` is a hack until we figure out a way to enforce the type checker for errors
+    const messageStr =
+      typeof message === "string" ? message : JSON.stringify(message);
+
+    console.warn(`[TensorZero UI ${__APP_VERSION__}] ${messageStr}`, ...args);
   },
-  debug: (message: string, ...args: any[]) => {
-    console.debug(`[TensorZero UI v${__APP_VERSION__}] ${message}`, ...args);
+  debug: (message: any, ...args: any[]) => {
+    // `messageStr` is a hack until we figure out a way to enforce the type checker for errors
+    const messageStr =
+      typeof message === "string" ? message : JSON.stringify(message);
+
+    console.debug(`[TensorZero UI ${__APP_VERSION__}] ${messageStr}`, ...args);
   },
 };
 
