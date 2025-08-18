@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { useFetcher, Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
@@ -16,140 +16,50 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { useDatasetCountFetcher } from "~/routes/api/datasets/count_dataset_function.route";
-import { useConfig } from "~/context/config";
+import { useConfig, useFunctionConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "~/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "~/components/ui/popover";
-import { Check, ChevronsUpDown } from "lucide-react";
-import { cn } from "~/utils/common";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
+import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 
 interface LaunchEvaluationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  dataset_names: string[];
 }
 
-interface DatasetSelectorProps {
-  dataset_names: string[];
-  selectedDatasetName: string | null;
-  setSelectedDatasetName: (value: string | null) => void;
-}
-
-function DatasetSelector({
-  dataset_names,
-  selectedDatasetName,
-  setSelectedDatasetName,
-}: DatasetSelectorProps) {
-  const [datasetPopoverOpen, setDatasetPopoverOpen] = useState(false);
-  const [datasetInputValue, setDatasetInputValue] = useState("");
-
-  const filteredDatasets = datasetInputValue
-    ? dataset_names.filter((name) =>
-        name.toLowerCase().includes(datasetInputValue.toLowerCase()),
-      )
-    : dataset_names;
-
-  return (
-    <>
-      <input
-        type="hidden"
-        name="dataset_name"
-        value={selectedDatasetName || ""}
-      />
-      <Popover open={datasetPopoverOpen} onOpenChange={setDatasetPopoverOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            aria-expanded={datasetPopoverOpen}
-            className="w-full justify-between font-normal"
-          >
-            {selectedDatasetName || "Select a dataset"}
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-          <Command>
-            <CommandInput
-              placeholder="Search datasets..."
-              value={datasetInputValue}
-              onValueChange={setDatasetInputValue}
-              className="h-9"
-            />
-            <CommandList>
-              <CommandEmpty className="px-4 py-2 text-sm">
-                No datasets found.
-              </CommandEmpty>
-              <CommandGroup heading="Datasets">
-                {filteredDatasets.map((dataset_name) => (
-                  <CommandItem
-                    key={dataset_name}
-                    value={dataset_name}
-                    onSelect={() => {
-                      setSelectedDatasetName(dataset_name);
-                      setDatasetInputValue("");
-                      setDatasetPopoverOpen(false);
-                    }}
-                    className="flex items-center justify-between"
-                  >
-                    <div className="flex items-center">
-                      <Check
-                        className={cn(
-                          "mr-2 h-4 w-4",
-                          selectedDatasetName === dataset_name
-                            ? "opacity-100"
-                            : "opacity-0",
-                        )}
-                      />
-                      <span>{dataset_name}</span>
-                    </div>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-    </>
-  );
-}
-
-function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
+function EvaluationForm({
+  initialFormState,
+}: {
+  initialFormState: Partial<EvaluationsFormValues> | null;
+}) {
   const fetcher = useFetcher();
   const config = useConfig();
   const evaluation_names = Object.keys(config.evaluations);
   const [selectedEvaluationName, setSelectedEvaluationName] = useState<
     string | null
-  >(null);
+  >(initialFormState?.evaluation_name ?? null);
   const [selectedDatasetName, setSelectedDatasetName] = useState<string | null>(
-    null,
+    initialFormState?.dataset_name ?? null,
   );
   const [selectedVariantName, setSelectedVariantName] = useState<string | null>(
-    null,
+    initialFormState?.variant_name ?? null,
   );
-  const [concurrencyLimit, setConcurrencyLimit] = useState<string>("5");
-  const [inferenceCache, setInferenceCache] =
-    useState<InferenceCacheSetting>("on");
+  const [concurrencyLimit, setConcurrencyLimit] = useState<string>(
+    initialFormState?.concurrency_limit ?? "5",
+  );
+  const [inferenceCache, setInferenceCache] = useState<InferenceCacheSetting>(
+    initialFormState?.inference_cache ?? "on",
+  );
 
   let count = null;
   let isLoading = false;
   let function_name = null;
   if (selectedEvaluationName) {
-    function_name = config.evaluations[selectedEvaluationName]?.function_name;
+    function_name =
+      config.evaluations[selectedEvaluationName]?.function_name ?? null;
   }
+  const functionConfig = useFunctionConfig(function_name);
+
   const { count: datasetCount, isLoading: datasetLoading } =
     useDatasetCountFetcher(selectedDatasetName, function_name);
   count = datasetCount;
@@ -166,7 +76,13 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
     concurrencyLimit !== "";
 
   return (
-    <fetcher.Form method="post">
+    <fetcher.Form
+      method="post"
+      onSubmit={(event) => {
+        const formData = new FormData(event.currentTarget);
+        persistToLocalStorage(formData);
+      }}
+    >
       <div className="mt-4">
         <label
           htmlFor="evaluation_name"
@@ -177,6 +93,7 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
       </div>
       <Select
         name="evaluation_name"
+        defaultValue={initialFormState?.evaluation_name ?? undefined}
         onValueChange={(value) => {
           setSelectedEvaluationName(value);
           setSelectedVariantName(null); // Reset variant selection when evaluation changes
@@ -202,10 +119,18 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
         </label>
       </div>
 
+      <input
+        type="hidden"
+        name="dataset_name"
+        value={selectedDatasetName ?? undefined}
+      />
+
       <DatasetSelector
-        dataset_names={dataset_names}
-        selectedDatasetName={selectedDatasetName}
-        setSelectedDatasetName={setSelectedDatasetName}
+        functionName={function_name ?? undefined}
+        selected={selectedDatasetName ?? undefined}
+        onSelect={setSelectedDatasetName}
+        allowCreation={false}
+        disabled={!selectedEvaluationName}
       />
 
       <div className="text-muted-foreground mt-2 mb-1 text-xs">
@@ -240,6 +165,7 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
       </div>
       <Select
         name="variant_name"
+        defaultValue={initialFormState?.variant_name ?? undefined}
         disabled={!selectedEvaluationName}
         onValueChange={(value) => setSelectedVariantName(value)}
       >
@@ -248,13 +174,9 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
         </SelectTrigger>
         <SelectContent>
           {(() => {
-            if (!selectedEvaluationName) return null;
+            if (!selectedEvaluationName || !functionConfig) return null;
 
-            const evaluation_function =
-              config.evaluations[selectedEvaluationName].function_name;
-            const variant_names = Object.keys(
-              config.functions[evaluation_function].variants,
-            );
+            const variant_names = Object.keys(functionConfig.variants);
 
             return variant_names.map((variant_name) => (
               <SelectItem key={variant_name} value={variant_name}>
@@ -275,6 +197,7 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
           type="number"
           id="concurrency_limit"
           name="concurrency_limit"
+          data-testid="concurrency-limit"
           min="1"
           value={concurrencyLimit}
           onChange={(e) => setConcurrencyLimit(e.target.value)}
@@ -284,8 +207,9 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
       </div>
       <div className="mt-4">
         <AdvancedParametersAccordion
-          inference_cache={inferenceCache}
+          inferenceCache={inferenceCache}
           setInferenceCache={setInferenceCache}
+          defaultOpen={inferenceCache !== "on"}
         />
         <input type="hidden" name="inference_cache" value={inferenceCache} />
       </div>
@@ -301,17 +225,78 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
 export default function LaunchEvaluationModal({
   isOpen,
   onClose,
-  dataset_names,
 }: LaunchEvaluationModalProps) {
+  const [initialFormState, setInitialFormState] =
+    useState<EvaluationsFormState | null>(null);
+  // useLayoutEffect to update fields before paint to avoid flicker of old state
+  useLayoutEffect(() => {
+    const storedValues = getFromLocalStorage();
+    if (storedValues) {
+      setInitialFormState({
+        ...storedValues,
+        // generate a key that we'll use to force re-render the form so that all
+        // internal state values are reset when given new data
+        renderKey: Date.now().toString(),
+      });
+    }
+  }, []);
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Launch Evaluation</DialogTitle>
         </DialogHeader>
-
-        <EvaluationForm dataset_names={dataset_names} />
+        <EvaluationForm
+          key={initialFormState?.renderKey}
+          initialFormState={initialFormState}
+        />
       </DialogContent>
     </Dialog>
   );
+}
+
+interface EvaluationsFormValues {
+  dataset_name: string | null;
+  evaluation_name: string | null;
+  variant_name: string | null;
+  concurrency_limit: string;
+  inference_cache: InferenceCacheSetting;
+}
+
+interface EvaluationsFormState extends Partial<EvaluationsFormValues> {
+  renderKey: string;
+}
+
+const LOCAL_STORAGE_KEY = "tensorzero:evaluationForm";
+
+function persistToLocalStorage(formData: FormData) {
+  const formObject: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) {
+    if (typeof value !== "string") continue;
+    formObject[key] = value;
+  }
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(formObject));
+  } catch {
+    // silently ignore errors, e.g. if localStorage is full
+  }
+}
+
+function getFromLocalStorage() {
+  const values = localStorage.getItem(LOCAL_STORAGE_KEY);
+  if (!values) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(values);
+    if (parsed == null || typeof parsed !== "object") {
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      return null;
+    }
+  } catch {
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
+    return null;
+  }
+
+  // TODO: add validation
+  return parsed as Partial<EvaluationsFormValues>;
 }

@@ -7,6 +7,7 @@ dependencies = [
     "ipykernel",
     "jupyter",
     "markdownify",
-    "tensorzero @ file://${PROJECT_ROOT}/../../../clients/python", # TODO: eventually we should remove this
+    "tensorzero",
+    "tqdm>=4.67.1",
     "wikipedia",
 ]

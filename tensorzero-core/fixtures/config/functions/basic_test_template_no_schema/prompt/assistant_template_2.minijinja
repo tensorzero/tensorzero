@@ -1,0 +1,1 @@
+outer template assistant text: `{{ assistant_text }}`

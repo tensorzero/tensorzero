@@ -1,8 +1,8 @@
 import { z } from "zod";
 import {
-  contentBlockOutputSchema,
+  contentBlockChatOutputSchema,
   jsonInferenceOutputSchema,
-  resolvedInputSchema,
+  displayInputSchema,
 } from "./common";
 
 export const EvaluationRunInfoSchema = z.object({
@@ -31,6 +31,7 @@ export const EvaluationResultSchema = z.object({
   dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
+  is_human_feedback: z.boolean(),
 });
 
 export type EvaluationResult = z.infer<typeof EvaluationResultSchema>;
@@ -48,13 +49,14 @@ export const JsonEvaluationResultSchema = z.object({
   datapoint_id: z.string().uuid(),
   evaluation_run_id: z.string().uuid(),
   evaluator_inference_id: z.string().uuid().nullable(),
-  input: resolvedInputSchema,
+  input: displayInputSchema,
   generated_output: jsonInferenceOutputSchema,
   reference_output: jsonInferenceOutputSchema,
   dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
   feedback_id: z.string().uuid(),
+  is_human_feedback: z.boolean(),
 });
 
 export type JsonEvaluationResult = z.infer<typeof JsonEvaluationResultSchema>;
@@ -64,13 +66,14 @@ export const ChatEvaluationResultSchema = z.object({
   datapoint_id: z.string().uuid(),
   evaluation_run_id: z.string().uuid(),
   evaluator_inference_id: z.string().uuid().nullable(),
-  input: resolvedInputSchema,
-  generated_output: z.array(contentBlockOutputSchema),
-  reference_output: z.array(contentBlockOutputSchema),
+  input: displayInputSchema,
+  generated_output: z.array(contentBlockChatOutputSchema),
+  reference_output: z.array(contentBlockChatOutputSchema),
   dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
   feedback_id: z.string().uuid(),
+  is_human_feedback: z.preprocess((val) => val === 1, z.boolean()),
 });
 
 export type ChatEvaluationResult = z.infer<typeof ChatEvaluationResultSchema>;
@@ -150,6 +153,7 @@ export type ConsolidatedMetric = {
   metric_value: string;
   evaluator_name: string;
   evaluator_inference_id: string | null;
+  is_human_feedback: boolean;
 };
 
 // Define a type for consolidated evaluation results
@@ -182,6 +186,7 @@ export const consolidate_evaluation_results = (
             metric_value,
             evaluator_name: getEvaluatorNameFromMetricName(metric_name),
             evaluator_inference_id: result.evaluator_inference_id,
+            is_human_feedback: result.is_human_feedback,
           },
         ],
       });
@@ -193,6 +198,7 @@ export const consolidate_evaluation_results = (
         metric_value: result.metric_value,
         evaluator_name: getEvaluatorNameFromMetricName(result.metric_name),
         evaluator_inference_id: result.evaluator_inference_id,
+        is_human_feedback: result.is_human_feedback,
       });
     }
   }

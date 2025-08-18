@@ -2,37 +2,47 @@ import { getConfig } from "./config/index.server";
 import {
   FeedbackRequestSchema,
   TensorZeroClient,
+  TensorZeroServerError,
   type FeedbackResponse,
-  type JSONValue,
-} from "./tensorzero";
+} from "~/utils/tensorzero";
+import type { JsonValue } from "tensorzero-node";
+import { getEnv } from "./env.server";
+import { getFeedbackConfig } from "./config/feedback";
+import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 
-if (!process.env.TENSORZERO_GATEWAY_URL) {
-  throw new Error("TENSORZERO_GATEWAY_URL environment variable is required");
+let _tensorZeroClient: TensorZeroClient | undefined;
+
+export function getTensorZeroClient() {
+  if (_tensorZeroClient) {
+    return _tensorZeroClient;
+  }
+
+  _tensorZeroClient = new TensorZeroClient(getEnv().TENSORZERO_GATEWAY_URL);
+  return _tensorZeroClient;
 }
-
-// Export a singleton instance
-export const tensorZeroClient = new TensorZeroClient(
-  process.env.TENSORZERO_GATEWAY_URL,
-);
 
 export async function addHumanFeedback(formData: FormData) {
   const metricName = formData.get("metricName")?.toString();
   if (!metricName) {
-    throw new Error("Metric name is required");
+    throw new TensorZeroServerError.InvalidMetricName(
+      "Metric name is required",
+    );
   }
   const config = await getConfig();
-  const metric = config.metrics[metricName];
-  if (!metric) {
-    throw new Error(`Metric ${metricName} not found`);
+  const metricConfig = getFeedbackConfig(metricName, config);
+  if (!metricConfig) {
+    throw new TensorZeroServerError.UnknownMetric(
+      `Metric ${metricName} not found`,
+    );
   }
-  const metricType = metric.type;
+  const metricType = metricConfig.type;
   // Metrics can be of type boolean, float, comment, or demonstration.
   // In this case we need to handle the value differently depending on the metric type.
-  const formValue = formData.get("value")?.toString();
-  if (!formValue) {
-    throw new Error("Value is required");
+  const formValue = formData.get("value");
+  if (!formValue || typeof formValue !== "string") {
+    throw new TensorZeroServerError.InputValidation("Value is required");
   }
-  let value: JSONValue;
+  let value: JsonValue;
   if (metricType === "boolean") {
     value = formValue === "true";
   } else if (metricType === "float") {
@@ -42,7 +52,9 @@ export async function addHumanFeedback(formData: FormData) {
   } else if (metricType === "demonstration") {
     value = JSON.parse(formValue);
   } else {
-    throw new Error(`Unsupported metric type: ${metricType}`);
+    throw new TensorZeroServerError.InputValidation(
+      `Unsupported metric type: ${metricType}`,
+    );
   }
   const episodeId = formData.get("episodeId");
   const inferenceId = formData.get("inferenceId");
@@ -59,16 +71,16 @@ export async function addHumanFeedback(formData: FormData) {
   } else if (!datapointId && !evaluatorInferenceId) {
     // Do nothing
   } else {
-    throw new Error(
+    throw new TensorZeroServerError.InputValidation(
       "Either both or neither of datapointId and evaluatorInferenceId should be provided",
     );
   }
   if ((episodeId && inferenceId) || (!episodeId && !inferenceId)) {
-    throw new Error(
+    throw new TensorZeroServerError.InputValidation(
       "Exactly one of episodeId and inferenceId should be provided",
     );
   }
-  const feedbackRequest = FeedbackRequestSchema.parse({
+  const feedbackRequest = FeedbackRequestSchema.safeParse({
     metric_name: metricName,
     value,
     episode_id: episodeId,
@@ -76,7 +88,12 @@ export async function addHumanFeedback(formData: FormData) {
     tags,
     internal: true,
   });
-  const response = await tensorZeroClient.feedback(feedbackRequest);
+  if (!feedbackRequest.success) {
+    throw new TensorZeroServerError.InputValidation(
+      feedbackRequest.error.message,
+    );
+  }
+  const response = await getTensorZeroClient().feedback(feedbackRequest.data);
   return response;
 }
 
@@ -125,7 +142,7 @@ export async function addJudgeDemonstration(formData: FormData) {
     throw new Error(`Metric ${metricName} not found`);
   }
   const metricType = metric.type;
-  let parsedValue: JSONValue;
+  let parsedValue: JsonValue;
   if (metricType === "float") {
     parsedValue = parseFloat(value);
   } else if (metricType === "boolean") {
@@ -142,6 +159,21 @@ export async function addJudgeDemonstration(formData: FormData) {
     tags: { "tensorzero::human_feedback": "true" },
     internal: true,
   });
-  const response = await tensorZeroClient.feedback(feedbackRequest);
+  const response = await getTensorZeroClient().feedback(feedbackRequest);
+  return response;
+}
+
+export async function listDatapoints(
+  datasetName: string,
+  functionName?: string,
+  limit?: number,
+  offset?: number,
+): Promise<TensorZeroDatapoint[]> {
+  const response = await getTensorZeroClient().listDatapoints(
+    datasetName,
+    functionName,
+    limit,
+    offset,
+  );
   return response;
 }

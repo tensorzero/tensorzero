@@ -37,9 +37,21 @@ model_name = "ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
+[functions.json_success_no_input_schema]
+type = "json"
+output_schema = "functions/json_success_no_input_schema/output_schema.json"
+
+[functions.json_success_no_input_schema.variants.test]
+type = "chat_completion"
+weight = 1
+model = "dummy::json"
+max_tokens = 100
+json_mode = "strict"
+
 [functions.extract_entities]
 type = "json"
 output_schema = "functions/extract_entities/output_schema.json"
+description = "Extract named entities from text"
 
 [functions.extract_entities.variants.gpt4o_mini_initial_prompt]
 type = "chat_completion"
@@ -79,6 +91,7 @@ system_template = "functions/extract_entities/baseline/system_template.minijinja
 [functions.write_haiku]
 type = "chat"
 user_schema = "functions/write_haiku/user_schema.json"
+description = "Generate a haiku about a given topic"
 
 [functions.write_haiku.variants.initial_prompt_gpt4o_mini]
 type = "chat_completion"
@@ -423,3 +436,7 @@ json_mode = "strict"
 type = "s3_compatible"
 bucket_name = "tensorzero-e2e-test-images"
 region = "us-east-1"
+
+[gateway.observability.batch_writes]
+enabled = true
+flush_interval_ms = 80

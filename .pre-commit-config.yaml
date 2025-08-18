@@ -13,10 +13,14 @@ repos:
       - id: check-vcs-permalinks
       - id: check-xml
       - id: check-yaml
+        exclude: |
+          (?x)^(
+              examples/production-deployment-k8s-helm/templates/.*\.yaml
+          )$
       - id: detect-private-key
         exclude: |
           (?x)^(
-              tensorzero-internal/src/inference/providers/gcp_vertex_gemini\.rs|
+              tensorzero-core/src/providers/gcp_vertex_gemini/mod\.rs|
               ci/dummy-gcp-credentials\.json
           )$
       - id: end-of-file-fixer
@@ -25,25 +29,9 @@ repos:
 
   - repo: local
     hooks:
-      # Find every pyproject.toml and generate a uv.lock file
-      - id: uv-lock
-        name: uv lock
-        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Locking $f"; (cd "$dir" && uv lock --project="pyproject.toml" && git add --intent-to-add "uv.lock"); done'
-        language: system
-        pass_filenames: false
-        always_run: true
-
-      # Find every pyproject.toml and generate a requirements.txt file
-      - id: uv-export
-        name: uv export
-        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Exporting $f"; (cd "$dir" && uv export --project="pyproject.toml" --output-file="requirements.txt" --quiet && git add --intent-to-add "requirements.txt"); done'
-        language: system
-        pass_filenames: false
-        always_run: true
-
       - id: cargo-deny
         name: cargo deny
-        entry: cargo deny check advisories bans
+        entry: cargo deny check
         language: system
         types: [rust]
         pass_filenames: false
@@ -62,16 +50,9 @@ repos:
         types: [rust]
         pass_filenames: false
 
-      - id: cargo-test-unit
-        name: cargo test-unit
-        entry: cargo test-unit
-        language: system
-        types: [rust]
-        pass_filenames: false
-
       - id: "prettier: ui"
         name: "prettier: ui"
-        entry: bash -c 'cd ui && pnpm run format'
+        entry: bash -c 'pnpm --filter=tensorzero-ui run format'
         language: node
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
@@ -84,7 +65,20 @@ repos:
 
       - id: "prettier: openai-node"
         name: "prettier: openai-node"
-        entry: bash -c 'cd clients/openai-node && pnpm run format'
+        entry: bash -c 'pnpm --filter=openai-node run format'
+        language: node
+        types_or:
+          [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
+        additional_dependencies:
+          - prettier
+          - prettier-plugin-tailwindcss
+          - "@prettier/plugin-xml"
+        exclude: '.*\.ipynb$'
+        pass_filenames: false
+
+      - id: "prettier: tensorzero-node"
+        name: "prettier: tensorzero-node"
+        entry: bash -c 'pnpm --filter=tensorzero-node run format'
         language: node
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
@@ -97,7 +91,7 @@ repos:
 
       - id: "eslint: ui"
         name: "eslint: ui"
-        entry: bash -c 'cd ui && pnpm run lint'
+        entry: bash -c 'pnpm --filter=tensorzero-ui run lint'
         language: node
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
@@ -108,7 +102,18 @@ repos:
 
       - id: "eslint: openai-node"
         name: "eslint: openai-node"
-        entry: bash -c 'cd clients/openai-node && pnpm run lint'
+        entry: bash -c 'pnpm --filter=openai-node run lint'
+        language: node
+        types_or: [javascript, jsx, ts, tsx]
+        additional_dependencies:
+          - eslint
+          - "@typescript-eslint/parser"
+          - "@typescript-eslint/eslint-plugin"
+        pass_filenames: false
+
+      - id: "eslint: tensorzero-node"
+        name: "eslint: tensorzero-node"
+        entry: bash -c 'pnpm --filter=tensorzero-node run lint'
         language: node
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
@@ -119,7 +124,7 @@ repos:
 
       - id: "tsc: ui"
         name: "tsc: ui"
-        entry: bash -c 'cd ui && pnpm run typecheck'
+        entry: bash -c 'pnpm --filter=tensorzero-ui run typecheck'
         language: node
         types_or: [ts, tsx]
         additional_dependencies:
@@ -128,12 +133,28 @@ repos:
 
       - id: "tsc: openai-node"
         name: "tsc: openai-node"
-        entry: bash -c 'cd clients/openai-node && pnpm run typecheck'
+        entry: bash -c 'pnpm --filter=openai-node run typecheck'
         language: node
         types_or: [ts, tsx]
         additional_dependencies:
           - typescript
         pass_filenames: false
+
+      - id: "tsc: tensorzero-node"
+        name: "tsc: tensorzero-node"
+        entry: bash -c 'pnpm --filter=tensorzero-node run typecheck'
+        language: node
+        types_or: [ts, tsx]
+        additional_dependencies:
+          - typescript
+        pass_filenames: false
+
+      - id: compile-check-notebooks
+        name: compile-check-notebooks
+        entry: ci/compile-check-notebooks.sh all
+        language: system # run in the host environment (needs uvx)
+        # Restrict to files that matter so other commits don't pay the cost
+        files: ^recipes/.*(\.ipynb|_nb\.py)$
 
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0
@@ -147,6 +168,7 @@ repos:
     hooks:
       - id: ruff
         args: ["--extend-select", "I", "--fix"]
+        exclude: ^recipes/.*/_nb\.py$|^recipes/.*_nb\.py$
       - id: ruff-format
 
   - repo: https://github.com/RobertCraigie/pyright-python

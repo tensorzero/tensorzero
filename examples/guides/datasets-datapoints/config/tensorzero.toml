@@ -1,0 +1,19 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.extract_recipient]
+type = "json"
+output_schema = "functions/extract_recipient/output_schema.json"
+
+[functions.extract_recipient.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+json_mode = "strict"
+
+[functions.draft_email]
+type = "chat"
+
+[functions.draft_email.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"

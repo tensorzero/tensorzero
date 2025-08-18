@@ -1,7 +1,8 @@
 import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
+import devtoolsJson from "vite-plugin-devtools-json";
 import wasm from "vite-plugin-wasm";
 import react from "@vitejs/plugin-react";
 
@@ -10,13 +11,22 @@ import react from "@vitejs/plugin-react";
 const shouldLoadReactRouter =
   !process.env.VITEST && !process.argv[1]?.includes("storybook");
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
+    devtoolsJson(),
     wasm(),
     tailwindcss(),
     shouldLoadReactRouter ? reactRouter() : react(),
     tsconfigPaths(),
   ],
+
+  define: {
+    __APP_VERSION__: JSON.stringify(
+      process.env.npm_package_version || "unknown",
+    ),
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
+
   // IMPORTANT:
   // If we don't set the target to es2022, we need `vite-plugin-top-level-await`
   // for "vite-plugin-wasm".
@@ -32,4 +42,18 @@ export default defineConfig({
       // https://github.com/remix-run/react-router/issues/12786#issuecomment-2634033513
       { warmup: { clientFiles: ["./app/root.tsx"] } }
     : undefined,
-});
+  test: {
+    // Load env variables from .env if it exists
+    // https://vite.dev/config/
+    env: loadEnv(mode, process.cwd(), ""),
+    environment: "node",
+    include: ["**/*.test.ts", "**/*.test.tsx"],
+    deps: {
+      optimizer: {
+        ssr: {
+          include: ["tslib"],
+        },
+      },
+    },
+  },
+}));

@@ -1,21 +1,22 @@
-<img src="https://github.com/user-attachments/assets/47d67430-386d-4675-82ad-d4734d3262d9" width=128 height=128>
+<p><picture><img src="https://github.com/user-attachments/assets/47d67430-386d-4675-82ad-d4734d3262d9" alt="TensorZero Logo" width=128 height=128></picture></p>
 
 # TensorZero
 
-**TensorZero creates a feedback loop for optimizing LLM applications — turning production data into smarter, faster, and cheaper models.**
+> <img src="https://assets.tensorzero.com/product-hunt.svg" alt="Product Hunt logo" height="10" width="10"> TensorZero is **[launching on Product Hunt today](https://www.producthunt.com/products/tensorzero?launch=tensorzero)** and we'd really appreciate your support!
 
-1. Integrate our model gateway
-2. Send metrics or feedback
-3. Optimize prompts, models, and inference strategies
-4. Watch your LLMs improve over time
+<p><picture><img src="https://www.tensorzero.com/github-trending-badge.svg" alt="#1 Repository Of The Day"></picture></p>
 
-It provides a **data & learning flywheel for LLMs** by unifying:
+**TensorZero is an open-source stack for _industrial-grade LLM applications_:**
 
-- [x] **Inference:** one API for all LLMs, with <1ms P99 overhead
-- [x] **Observability:** inference & feedback → your database
-- [x] **Optimization:** from prompts to fine-tuning and RL
-- [x] **Evaluations:** compare prompts, models, inference strategies
-- [x] **Experimentation:** built-in A/B testing, routing, fallbacks
+- **Gateway:** access every LLM provider through a unified API, built for performance (<1ms p99 latency)
+- **Observability:** store inferences and feedback in your database, available programmatically or in the UI
+- **Optimization:** collect metrics and human feedback to optimize prompts, models, and inference strategies
+- **Evaluation:** benchmark individual inferences or end-to-end workflows using heuristics, LLM judges, etc.
+- **Experimentation:** ship with confidence with built-in A/B testing, routing, fallbacks, retries, etc.
+
+Take what you need, adopt incrementally, and complement with other tools.
+
+<video src="https://github.com/user-attachments/assets/04a8466e-27d8-4189-b305-e7cecb6881ee"></video>
 
 ---
 
@@ -33,8 +34,6 @@ It provides a **data & learning flywheel for LLMs** by unifying:
   <br>
   <b><a href="https://www.tensorzero.com/docs/quickstart" target="_blank">Quick Start (5min)</a></b>
   ·
-  <b><a href="https://www.tensorzero.com/docs/gateway/tutorial" target="_blank">Comprehensive Tutorial</a></b>
-  ·
   <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Deployment Guide</a></b>
   ·
   <b><a href="https://www.tensorzero.com/docs/gateway/api-reference" target="_blank">API Reference</a></b>
@@ -47,19 +46,19 @@ It provides a **data & learning flywheel for LLMs** by unifying:
 <table>
   <tr>
     <td width="30%" valign="top"><b>What is TensorZero?</b></td>
-    <td width="70%" valign="top">TensorZero is an open-source framework for building production-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluations, and experimentation.</td>
+    <td width="70%" valign="top">TensorZero is an open-source stack for industrial-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluation, and experimentation.</td>
   </tr>
   <tr>
     <td width="30%" valign="top"><b>How is TensorZero different from other LLM frameworks?</b></td>
     <td width="70%" valign="top">
       1. TensorZero enables you to optimize complex LLM applications based on production metrics and human feedback.<br>
-      2. TensorZero supports the needs of industrial-scale LLM applications: low latency, high throughput, type safety, self-hosted, GitOps, customizability, etc.<br>
+      2. TensorZero supports the needs of industrial-grade LLM applications: low latency, high throughput, type safety, self-hosted, GitOps, customizability, etc.<br>
       3. TensorZero unifies the entire LLMOps stack, creating compounding benefits. For example, LLM evaluations can be used for fine-tuning models alongside AI judges.
     </td>
   </tr>
   <tr>
     <td width="30%" valign="top"><b>Can I use TensorZero with ___?</b></td>
-    <td width="70%" valign="top">Yes. Every major programming language is supported. You can use TensorZero with our Python client, any OpenAI SDK, or our HTTP API.</td>
+    <td width="70%" valign="top">Yes. Every major programming language is supported. You can use TensorZero with our Python client, any OpenAI SDK or OpenAI-compatible client, or our HTTP API.</td>
   </tr>
   <tr>
     <td width="30%" valign="top"><b>Is TensorZero production-ready?</b></td>
@@ -87,6 +86,14 @@ It provides a **data & learning flywheel for LLMs** by unifying:
 
 > **Integrate with TensorZero once and access every major LLM provider.**
 
+- [x] Access every major LLM provider (API or self-hosted) through a single unified API
+- [x] Infer with streaming, tool use, structured generation (JSON mode), batch, multimodal (VLMs), file inputs, caching, etc.
+- [x] Define prompt templates and schemas to enforce a consistent, typed interface between your application and the LLMs
+- [x] Satisfy extreme throughput and latency needs, thanks to 🦀 Rust: <1ms p99 latency overhead at 10k+ QPS
+- [x] Integrate using our Python client, any OpenAI SDK or OpenAI-compatible client, or our HTTP API (use any programming language)
+- [x] Ensure high availability with routing, retries, fallbacks, load balancing, granular timeouts, etc.
+- [ ] Soon: embeddings; real-time voice
+
 <table>
   <tr></tr> <!-- flip highlight order -->
   <tr>
@@ -108,12 +115,16 @@ It provides a **data & learning flywheel for LLMs** by unifying:
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-anthropic">GCP Vertex AI Anthropic</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-gemini">GCP Vertex AI Gemini</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/google-ai-studio-gemini">Google AI Studio (Gemini API)</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/groq">Groq</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/hyperbolic">Hyperbolic</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/mistral">Mistral</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openai">OpenAI</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/together">Together</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openrouter">OpenRouter</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/sglang">SGLang</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/tgi">TGI</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/together">Together AI</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/vllm">vLLM</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/xai">xAI</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/xai">xAI (Grok)</a></b></li>
       </ul>
       <p>
         <em>
@@ -130,7 +141,7 @@ It provides a **data & learning flywheel for LLMs** by unifying:
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks">Retries & Fallbacks</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations">Inference-Time Optimizations</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/prompt-templates-schemas">Prompt Templates & Schemas</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/tutorial#experimentation">Experimentation (A/B Testing)</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/experimentation/">Experimentation (A/B Testing)</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/configuration-reference">Configuration-as-Code (GitOps)</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/batch-inference">Batch Inference</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/multimodal-inference">Multimodal Inference (VLMs)</a></b></li>
@@ -287,9 +298,56 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 
 <br>
 
+### 🔍 LLM Observability
+
+> **Zoom in to debug individual API calls, or zoom out to monitor metrics across models and prompts over time &mdash; all using the open-source TensorZero UI.**
+
+- [x] Store inferences and feedback (metrics, human edits, etc.) in your own database
+- [x] Dive into individual inferences or high-level aggregate patterns using the TensorZero UI or programmatically
+- [x] Build datasets for optimization, evaluation, and other workflows
+- [x] Replay historical inferences with new prompts, models, inference strategies, etc.
+- [x] Export OpenTelemetry (OTLP) traces to your favorite general-purpose observability tool
+- [ ] Soon: AI-assisted debugging and root cause analysis; AI-assisted data labeling
+
+<table>
+<tr></tr> <!-- flip highlight order -->
+<tr>
+<td width="50%" align="center" valign="middle"><b>Observability » UI</b></td>
+<td width="50%" align="center" valign="middle"><b>Observability » Programmatic</b></td>
+</tr>
+<tr>
+<td width="50%" align="center" valign="middle"><video src="https://github.com/user-attachments/assets/a23e4c95-18fa-482c-8423-6078fb4cf285"></video></td>
+<td width="50%" align="left" valign="middle">
+  
+```python
+t0.experimental_list_inferences(
+  function_name="sales_agent",
+  variant_name="qwen3-promptv2",
+  filters=BooleanMetricFilter(
+      metric_name="converted_sale",
+      value=True,
+  ),
+  order_by=[OrderBy(by="timestamp", direction="DESC")],
+  limit=100_000,
+  # ... and more ...
+)
+```
+
+</td>
+</tr>
+</table>
+
+<br>
+
 ### 📈 LLM Optimization
 
 > **Send production metrics and human feedback to easily optimize your prompts, models, and inference strategies &mdash; using the UI or programmatically.**
+
+- [x] Optimize your models with supervised fine-tuning, RLHF, and other techniques
+- [x] Optimize your prompts with automated prompt engineering algorithms like MIPROv2
+- [x] Optimize your inference strategy with dynamic in-context learning, chain of thought, best/mixture-of-N sampling, etc.
+- [x] Enable a feedback loop for your LLMs: a data & learning flywheel turning production data into smarter, faster, and cheaper models
+- [ ] Soon: programmatic optimization; synthetic data generation
 
 #### Model Optimization
 
@@ -302,7 +360,7 @@ Optimize closed-source and open-source models using supervised fine-tuning (SFT)
     <td width="50%" align="center" valign="middle"><b>Preference Fine-tuning (DPO) &mdash; Jupyter Notebook</b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/cf7acf66-732b-43b3-af2a-5eba1ce40f6f"></td>
+    <td width="50%" align="center" valign="middle"><video src="https://github.com/user-attachments/assets/82f76be7-5e02-4ada-b503-69dfa209a442"></video></td>
     <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/a67a0634-04a7-42b0-b934-9130cb7cdf51"></td>
   </tr>
 </table>
@@ -349,7 +407,7 @@ Optimize your prompts programmatically using research-driven optimization techni
     <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/d81a7c37-382f-4c46-840f-e6c2593301db" alt="MIPROv2 diagram"></td>
     <td width="50%" align="center" valign="middle">
       TensorZero comes with several optimization recipes, but you can also easily create your own.
-      This example shows to optimize a TensorZero function using an arbitrary tool — here, DSPy, a popular library for automated prompt engineering.
+      This example shows how to optimize a TensorZero function using an arbitrary tool — here, DSPy, a popular library for automated prompt engineering.
     </td>
   </tr>
 </table>
@@ -358,27 +416,14 @@ _More coming soon..._
 
 <br>
 
-### 🔍 LLM Observability
+### 📊 LLM Evaluation
 
-> **Zoom in to debug individual API calls, or zoom out to monitor metrics across models and prompts over time &mdash; all using the open-source TensorZero UI.**
+> **Compare prompts, models, and inference strategies using evaluations powered by heuristics and LLM judges.**
 
-<table>
-  <tr></tr> <!-- flip highlight order -->
-  <tr>
-    <td width="50%" align="center" valign="middle"><b>Observability » Inference</b></td>
-    <td width="50%" align="center" valign="middle"><b>Observability » Function</b></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/2cc3cc9a-f33f-4e94-b8de-07522326f80a"></td>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/00ae6605-8fa0-4efd-8238-ae8ea589860f"></td>
-  </tr>
-</table>
-
-<br>
-
-### 📊 LLM Evaluations
-
-> **Compare prompts, models, and inference strategies using TensorZero Evaluations &mdash; with support for heuristics and LLM judges.**
+- [x] Evaluate individual inferences with _static evaluations_ powered by heuristics or LLM judges (&approx; unit tests for LLMs)
+- [x] Evaluate end-to-end workflows with _dynamic evaluations_ with complete flexibility (&approx; integration tests for LLMs)
+- [x] Optimize LLM judges just like any other TensorZero function to align them to human preferences
+- [ ] Soon: more built-in evaluators; headless evaluations
 
 <table>
   <tr></tr> <!-- flip highlight order -->
@@ -404,6 +449,23 @@ item_count: 7.15 ± 0.39</code></pre>
   </tr>
 </table>
 
+### 🧪 LLM Experimentation
+
+> **Ship with confidence with built-in A/B testing, routing, fallbacks, retries, etc.**
+
+- [x] Ship with confidence with built-in A/B testing for models, prompts, providers, hyperparameters, etc.
+- [x] Enforce principled experiments (RCTs) in complex workflows, including multi-turn and compound LLM systems
+- [ ] Soon: multi-armed bandits; AI-managed experiments
+
+### & more!
+
+> **Build with an open-source stack well-suited for prototypes but designed from the ground up to support the most complex LLM applications and deployments.**
+
+- [x] Build simple applications or massive deployments with GitOps-friendly orchestration
+- [x] Extend TensorZero with built-in escape hatches, programmatic-first usage, direct database access, and more
+- [x] Integrate with third-party tools: specialized observability and evaluations, model providers, agent orchestration frameworks, etc.
+- [ ] Soon: UI playground
+
 ## Demo
 
 > **Watch LLMs get better at data extraction in real-time with TensorZero!**
@@ -413,35 +475,10 @@ item_count: 7.15 ± 0.39</code></pre>
 
 https://github.com/user-attachments/assets/4df1022e-886e-48c2-8f79-6af3cdad79cb
 
-## LLM Engineering with TensorZero
-
-<br>
-<p align="center" >
-  <a href="https://www.tensorzero.com/docs">
-    <picture>
-      <source media="(prefers-color-scheme: light)" srcset="https://github.com/user-attachments/assets/34a92c18-242e-4d76-a99c-861283de68a6">
-      <source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/e8bc699b-6378-4c2a-9cc1-6d189025e270">
-      <img alt="TensorZero Flywheel" src="https://github.com/user-attachments/assets/34a92c18-242e-4d76-a99c-861283de68a6" width=720>
-    </picture>
-  </a>
-</p>
-<br>
-
-1. The **[TensorZero Gateway](https://www.tensorzero.com/docs/gateway/)** is a high-performance model gateway written in Rust 🦀 that provides a unified API interface for all major LLM providers, allowing for seamless cross-platform integration and fallbacks.
-2. It handles structured schema-based inference with &lt;1ms P99 latency overhead (see **[Benchmarks](https://www.tensorzero.com/docs/gateway/benchmarks)**) and built-in observability, experimentation, and **[inference-time optimizations](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations)**.
-3. It also collects downstream metrics and feedback associated with these inferences, with first-class support for multi-step LLM systems.
-4. Everything is stored in a ClickHouse data warehouse that you control for real-time, scalable, and developer-friendly analytics.
-5. Over time, **[TensorZero Recipes](https://www.tensorzero.com/docs/recipes)** leverage this structured dataset to optimize your prompts and models: run pre-built recipes for common workflows like fine-tuning, or create your own with complete flexibility using any language and platform.
-6. Finally, the gateway's experimentation features and GitOps orchestration enable you to iterate and deploy with confidence, be it a single LLM or thousands of LLMs.
-
-Our goal is to help engineers build, manage, and optimize the next generation of LLM applications: systems that learn from real-world experience.
-Read more about our **[Vision & Roadmap](https://www.tensorzero.com/docs/vision-roadmap/)**.
-
 ## Get Started
 
 **Start building today.**
 The **[Quick Start](https://www.tensorzero.com/docs/quickstart)** shows it's easy to set up an LLM application with TensorZero.
-If you want to dive deeper, the **[Tutorial](https://www.tensorzero.com/docs/gateway/tutorial)** teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
 
 **Questions?**
 Ask us on **[Slack](https://www.tensorzero.com/slack)** or **[Discord](https://www.tensorzero.com/discord)**.

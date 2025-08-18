@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "description": "End the search process and answer a question. Returns the answer to the question.",
+  "properties": {
+    "answer": {
+      "type": "string",
+      "description": "The answer to the question."
+    }
+  },
+  "required": ["answer"],
+  "additionalProperties": false
+}

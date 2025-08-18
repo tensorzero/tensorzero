@@ -1,12 +1,12 @@
-import type { FunctionConfig, JSONSchema } from "~/utils/config/function";
+import type { FunctionConfig, JsonValue } from "tensorzero-node";
 import {
   SnippetLayout,
   SnippetContent,
   SnippetTabs,
   type SnippetTab,
-  SnippetMessage,
 } from "~/components/layout/SnippetLayout";
-import { CodeMessage } from "~/components/layout/SnippetContent";
+import { EmptyMessage } from "~/components/layout/SnippetContent";
+import { CodeEditor } from "~/components/ui/code-editor";
 
 interface FunctionSchemaProps {
   functionConfig: FunctionConfig;
@@ -16,7 +16,7 @@ interface FunctionSchemaProps {
 function createSchemaTab(
   id: string,
   label: string,
-  schema?: JSONSchema,
+  schema?: JsonValue,
   emptyMessage?: string,
 ): SnippetTab & { emptyMessage?: string } {
   return {
@@ -31,11 +31,11 @@ export default function FunctionSchema({
   functionConfig,
 }: FunctionSchemaProps) {
   const schemas = {
-    system: functionConfig.system_schema?.content,
-    user: functionConfig.user_schema?.content,
-    assistant: functionConfig.assistant_schema?.content,
+    system: functionConfig.schemas.system?.value,
+    user: functionConfig.schemas.user?.value,
+    assistant: functionConfig.schemas.assistant?.value,
     ...(functionConfig.type === "json"
-      ? { output: functionConfig.output_schema?.content }
+      ? { output: functionConfig.output_schema?.value }
       : {}),
   };
 
@@ -86,13 +86,15 @@ export default function FunctionSchema({
 
           return (
             <SnippetContent maxHeight={240}>
-              <SnippetMessage>
-                <CodeMessage
-                  content={formattedContent}
-                  showLineNumbers={true}
-                  emptyMessage={tab?.emptyMessage}
+              {formattedContent ? (
+                <CodeEditor
+                  allowedLanguages={["json"]}
+                  value={formattedContent}
+                  readOnly
                 />
-              </SnippetMessage>
+              ) : (
+                <EmptyMessage message={tab?.emptyMessage} />
+              )}
             </SnippetContent>
           );
         }}

@@ -2,6 +2,8 @@
 name = "tensorzero"
 version = "0.1.0"
 edition = "2021"
+rust-version.workspace = true
+license.workspace = true
 
 [[test]]
 name = "client_tests"
@@ -18,7 +20,8 @@ uuid = { workspace = true }
 reqwest-eventsource = { workspace = true }
 async-stream = { workspace = true }
 tokio-stream = { workspace = true }
-tensorzero-internal = { path = "../../tensorzero-internal" }
+tensorzero-core = { path = "../../tensorzero-core" }
+ts-rs = { workspace = true }
 url = { workspace = true }
 thiserror = "2.0.11"
 pyo3 = { workspace = true, optional = true }
@@ -27,7 +30,9 @@ tokio = { workspace = true }
 serde-untagged = { workspace = true }
 git2 = { workspace = true }
 serde_path_to_error = { workspace = true }
-tensorzero-derive = { path = "../../tensorzero-derive" }
+tensorzero-derive = { path = "../../internal/tensorzero-derive" }
+mime = { workspace = true }
+tokio-util = "0.7.15"
 
 [lints]
 workspace = true
@@ -42,8 +47,10 @@ tracing-subscriber = "0.3.19"
 tracing-test = { workspace = true }
 
 [features]
-pyo3 = ["dep:pyo3"]
+# Forward this feature to 'tensorzero-core', so that our types will generate
+# the appropriate pyo3 attributes.
+pyo3 = ["dep:pyo3", "tensorzero-core/pyo3"]
 default = []
-# Forward this feature to 'tensorzero-internal', so that our embedded
+# Forward this feature to 'tensorzero-core', so that our embedded
 # client can recognize things like the `dummy` provider
-e2e_tests = ["tensorzero-internal/e2e_tests"]
+e2e_tests = ["tensorzero-core/e2e_tests"]

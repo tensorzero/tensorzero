@@ -2,23 +2,25 @@
 
 set -euo pipefail
 
+DATABASE_NAME="${1:-tensorzero_ui_fixtures}"
+
 echo "Verifying fixture counts for tables..."
 echo "==============================================="
 
 # Define tables and their corresponding files
 declare -A all_tables
-all_tables["JsonInference"]="json_inference_examples.jsonl"
-all_tables["BooleanMetricFeedback"]="boolean_metric_feedback_examples.jsonl"
-all_tables["BooleanMetricFeedbackByTargetId"]="boolean_metric_feedback_examples.jsonl"
-all_tables["FloatMetricFeedback"]="float_metric_feedback_examples.jsonl"
-all_tables["FloatMetricFeedbackByTargetId"]="float_metric_feedback_examples.jsonl"
-all_tables["CommentFeedback"]="comment_feedback_examples.jsonl"
-all_tables["DemonstrationFeedback"]="demonstration_feedback_examples.jsonl"
-all_tables["ChatInference"]="chat_inference_examples.jsonl ./s3-fixtures/large_chat_inference.parquet"
-all_tables["ModelInference"]="model_inference_examples.jsonl ./s3-fixtures/large_model_inference.parquet"
+all_tables["JsonInference"]="json_inference_examples.jsonl ./s3-fixtures/large_json_inference_v2.parquet"
+all_tables["BooleanMetricFeedback"]="boolean_metric_feedback_examples.jsonl ./s3-fixtures/large_chat_boolean_feedback.parquet ./s3-fixtures/large_json_boolean_feedback.parquet"
+all_tables["BooleanMetricFeedbackByTargetId"]="boolean_metric_feedback_examples.jsonl ./s3-fixtures/large_chat_boolean_feedback.parquet ./s3-fixtures/large_json_boolean_feedback.parquet"
+all_tables["FloatMetricFeedback"]="float_metric_feedback_examples.jsonl ./s3-fixtures/large_chat_float_feedback.parquet ./s3-fixtures/large_json_float_feedback.parquet"
+all_tables["FloatMetricFeedbackByTargetId"]="float_metric_feedback_examples.jsonl ./s3-fixtures/large_chat_float_feedback.parquet ./s3-fixtures/large_json_float_feedback.parquet"
+all_tables["CommentFeedback"]="comment_feedback_examples.jsonl ./s3-fixtures/large_chat_comment_feedback.parquet ./s3-fixtures/large_json_comment_feedback.parquet"
+all_tables["DemonstrationFeedback"]="demonstration_feedback_examples.jsonl ./s3-fixtures/large_chat_demonstration_feedback.parquet ./s3-fixtures/large_json_demonstration_feedback.parquet"
+all_tables["ChatInference"]="chat_inference_examples.jsonl ./s3-fixtures/large_chat_inference_v2.parquet"
+all_tables["ModelInference"]="model_inference_examples.jsonl ./s3-fixtures/large_chat_model_inference_v2.parquet ./s3-fixtures/large_json_model_inference_v2.parquet"
 all_tables["ChatInferenceDatapoint FINAL"]="chat_inference_datapoint_examples.jsonl"
 all_tables["JsonInferenceDatapoint FINAL"]="json_inference_datapoint_examples.jsonl"
-all_tables["ModelInferenceCache"]="model_inference_cache_examples.jsonl"
+all_tables["ModelInferenceCache"]="model_inference_cache_e2e.jsonl"
 all_tables["DynamicEvaluationRun"]="dynamic_evaluation_run_examples.jsonl"
 all_tables["DynamicEvaluationRunEpisode"]="dynamic_evaluation_run_episode_examples.jsonl"
 
@@ -29,7 +31,7 @@ mismatch=0
 for table in "${!all_tables[@]}"; do
     # Get total count from database
     db_count=$(clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword \
-              --database tensorzero_ui_fixtures --query "SELECT count() FROM $table" 2>/dev/null || echo "ERROR")
+              --database "$DATABASE_NAME" --query "SELECT count() FROM $table" 2>/dev/null || echo "ERROR")
 
     if [[ "$db_count" == "ERROR" ]]; then
         echo "  $table: ERROR accessing ClickHouse"
@@ -47,8 +49,8 @@ for table in "${!all_tables[@]}"; do
         if [ -f "$file" ]; then
             if [[ "$file" == *.parquet ]]; then
                 # For parquet files, use parquet-tools to count rows
-                if command -v parquet-tools &> /dev/null; then
-                    file_count=$(parquet-tools inspect "$file" | grep "num_rows:" | awk '{print $2}')
+                if command -v uv run parquet-tools &> /dev/null; then
+                    file_count=$(uv run parquet-tools inspect "$file" | grep "num_rows:" | awk '{print $2}')
                     echo "  - $file: $file_count rows (parquet)"
                 else
                     echo "  - WARNING: parquet-tools not installed, cannot count rows in $file"
@@ -88,7 +90,7 @@ if [ $mismatch -eq 0 ]; then
     for table in "${tables_to_check_duplicates[@]}"; do
         echo "Checking for duplicate ids in $table..."
         duplicates=$(clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword \
-                      --database tensorzero_ui_fixtures --query "SELECT
+                      --database "$DATABASE_NAME" --query "SELECT
         id,
         count() AS duplicate_count
     FROM $table

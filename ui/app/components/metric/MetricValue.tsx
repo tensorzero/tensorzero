@@ -1,14 +1,18 @@
+import { UserFeedback } from "../icons/Icons";
+
 // Format metric value display component
 export default function MetricValue({
   value,
   metricType,
   optimize,
+  isHumanFeedback,
   cutoff,
   className = "",
 }: {
   value: string;
   metricType: "boolean" | "float" | "comment" | "demonstration";
   optimize: "min" | "max";
+  isHumanFeedback: boolean;
   cutoff?: number;
   className?: string;
 }): React.ReactElement {
@@ -19,7 +23,9 @@ export default function MetricValue({
 
     return (
       <span
-        className={`flex items-center gap-2 whitespace-nowrap ${failed ? "text-red-700" : "text-gray-700"} ${className}`}
+        className={`inline-flex items-center gap-2 whitespace-nowrap ${
+          failed ? "text-red-700" : "text-gray-700"
+        } ${className}`}
       >
         <div
           className={`h-2 w-2 rounded-full ${
@@ -27,6 +33,7 @@ export default function MetricValue({
           }`}
         />
         {boolValue ? "True" : "False"}
+        {isHumanFeedback && <UserFeedback />}
       </span>
     );
   } else if (metricType === "float") {
@@ -38,9 +45,12 @@ export default function MetricValue({
         optimize && cutoff ? isCutoffFailed(numValue, optimize, cutoff) : false;
       return (
         <span
-          className={`whitespace-nowrap ${failsCutoff ? "text-red-700" : "text-gray-700"} ${className}`}
+          className={`inline-flex items-center gap-2 whitespace-nowrap ${
+            failsCutoff ? "text-red-700" : "text-gray-700"
+          } ${className}`}
         >
           {numValue}
+          {isHumanFeedback && <UserFeedback />}
         </span>
       );
     }

@@ -1,13 +1,12 @@
 use futures::future::try_join_all;
 use serde_json::Value;
-use tensorzero_internal::error::Error;
 
 use crate::{Client, ClientInput, ClientInputMessage, ClientInputMessageContent, TensorZeroError};
-use tensorzero_internal::tool::{ToolCall, ToolCallInput};
-use tensorzero_internal::{
+use tensorzero_core::tool::{ToolCall, ToolCallInput};
+use tensorzero_core::{
     error::ErrorDetails,
     inference::types::{
-        storage::StoragePath, Image, ResolvedInput, ResolvedInputMessage,
+        storage::StoragePath, File, ResolvedInput, ResolvedInputMessage,
         ResolvedInputMessageContent, TextKind,
     },
 };
@@ -60,7 +59,7 @@ async fn resolved_input_message_content_to_client_input_message_content(
                 arguments: o,
             })),
             _ => Err(TensorZeroError::Other {
-                source: tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+                source: tensorzero_core::error::Error::new(ErrorDetails::Serialization {
                     message: "Text types must be a string or an object".to_string(),
                 })
                 .into(),
@@ -78,17 +77,17 @@ async fn resolved_input_message_content_to_client_input_message_content(
         ResolvedInputMessageContent::Thought(thought) => {
             Ok(ClientInputMessageContent::Thought(thought))
         }
-        ResolvedInputMessageContent::Image(image) => {
-            let mime_type = image.image.mime_type;
-            let data = match image.image.data {
+        ResolvedInputMessageContent::File(file) => {
+            let mime_type = file.file.mime_type;
+            let data = match file.file.data {
                 Some(data) => data,
                 None => {
-                    let storage_path = image.storage_path;
-                    fetch_image_data(storage_path, client).await?
+                    let storage_path = file.storage_path;
+                    fetch_file_data(storage_path, client).await?
                 }
             };
 
-            Ok(ClientInputMessageContent::Image(Image::Base64 {
+            Ok(ClientInputMessageContent::File(File::Base64 {
                 mime_type,
                 data,
             }))
@@ -103,67 +102,7 @@ async fn resolved_input_message_content_to_client_input_message_content(
     }
 }
 
-/// Since we store the input in the database in the form of ResolvedInput but without e.g. images inside,
-/// we need to reresolve the input when we retrieve it from the database.
-/// Resolves images in place.
-pub async fn reresolve_input_for_fine_tuning(
-    input: &mut ResolvedInput,
-    client: &Client,
-) -> Result<(), TensorZeroError> {
-    let mut image_fetch_tasks = Vec::new();
-
-    for (message_index, message) in input.messages.iter_mut().enumerate() {
-        // First pass: identify images to fetch and collect tasks
-        for (content_index, content) in message.content.iter_mut().enumerate() {
-            if let ResolvedInputMessageContent::Image(image_with_path) = content {
-                if image_with_path.image.data.is_none() {
-                    let storage_path = image_with_path.storage_path.clone();
-                    let fut = async move {
-                        let result = fetch_image_data(storage_path, client).await?;
-                        Ok((message_index, content_index, result))
-                    };
-                    image_fetch_tasks.push(fut);
-                }
-            }
-        }
-    }
-
-    // Execute fetch tasks concurrently for the current message
-    if !image_fetch_tasks.is_empty() {
-        let fetched_data_results = try_join_all(image_fetch_tasks).await?;
-
-        // Second pass: update the content with fetched data
-        for (message_index, content_index, fetched_data) in fetched_data_results {
-            if let Some(message) = input.messages.get_mut(message_index) {
-                if let Some(ResolvedInputMessageContent::Image(image_with_path)) =
-                    message.content.get_mut(content_index)
-                {
-                    image_with_path.image.data = Some(fetched_data);
-                } else {
-                    return Err(TensorZeroError::Other {
-                        source: Error::new(ErrorDetails::Serialization {
-                            message:
-                                "Content type changed or index invalid during input reresolution"
-                                    .to_string(),
-                        })
-                        .into(),
-                    });
-                }
-            } else {
-                return Err(TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::Serialization {
-                        message: "Message index invalid during input reresolution".to_string(),
-                    })
-                    .into(),
-                });
-            }
-        }
-    }
-
-    Ok(())
-}
-
-async fn fetch_image_data(
+async fn fetch_file_data(
     storage_path: StoragePath,
     client: &Client,
 ) -> Result<String, TensorZeroError> {
@@ -175,8 +114,8 @@ async fn fetch_image_data(
 mod tests {
     use object_store::path::Path;
 
-    use tensorzero_internal::inference::types::{
-        resolved_input::ImageWithPath, storage::StorageKind, Base64Image, ImageKind,
+    use tensorzero_core::inference::types::{
+        resolved_input::FileWithPath, storage::StorageKind, Base64File,
     };
     use url::Url;
 
@@ -229,19 +168,19 @@ mod tests {
                 endpoint: Some("test-endpoint".to_string()),
                 allow_http: Some(true),
                 #[cfg(feature = "e2e_tests")]
-                prefix: "".to_string(),
+                prefix: String::new(),
             },
         };
 
         // Create the resolved input message content with an image
-        let resolved_content = ResolvedInputMessageContent::Image(ImageWithPath {
-            image: Base64Image {
+        let resolved_content = ResolvedInputMessageContent::File(Box::new(FileWithPath {
+            file: Base64File {
                 url: Some(Url::parse("http://notaurl.com").unwrap()),
-                mime_type: ImageKind::Jpeg,
+                mime_type: mime::IMAGE_JPEG,
                 data: Some(image_data.to_string()),
             },
             storage_path: storage_path.clone(),
-        });
+        }));
 
         // Call the function under test
         let result = resolved_input_message_content_to_client_input_message_content(
@@ -253,11 +192,11 @@ mod tests {
 
         // Verify the result
         match result {
-            ClientInputMessageContent::Image(Image::Base64 {
+            ClientInputMessageContent::File(File::Base64 {
                 mime_type: result_mime_type,
                 data: result_data,
             }) => {
-                assert_eq!(result_mime_type, ImageKind::Jpeg);
+                assert_eq!(result_mime_type, mime::IMAGE_JPEG);
                 assert_eq!(result_data, image_data);
             }
             _ => panic!("Expected ClientInputMessageContent::Image, got something else"),

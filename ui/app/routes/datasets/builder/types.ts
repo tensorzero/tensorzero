@@ -1,19 +1,19 @@
-import { z } from "zod";
+import { z, ZodType } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  getComparisonOperator,
-  MetricConfigSchema,
-} from "~/utils/config/metric";
+import { getComparisonOperator } from "~/utils/config/feedback";
+import type { MetricConfig } from "tensorzero-node";
 import { DatasetQueryParamsSchema } from "~/utils/clickhouse/datasets";
 import type { DatasetQueryParams } from "~/utils/clickhouse/datasets";
 import { getInferenceJoinKey } from "~/utils/clickhouse/curation";
+
+const MetricConfigSchema: ZodType<MetricConfig> = z.any();
 
 export const DatasetBuilderFormValuesSchema = z.object({
   dataset: z.string().refine((val) => val !== "builder", {
     message: "Dataset name cannot be 'builder'",
   }),
   type: z.enum(["chat", "json"]),
-  function: z.string().optional(),
+  function: z.string(),
   variant: z.string().optional(),
   metric_name: z
     .string()

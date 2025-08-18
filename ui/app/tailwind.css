@@ -86,6 +86,7 @@
   --color-destructive-foreground: hsl(var(--destructive-foreground));
 
   --color-border: hsl(var(--border));
+  --color-border-accent: hsl(var(--border-accent));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
 
@@ -246,6 +247,7 @@
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
     --border: 0 0% 90%;
+    --border-accent: 0 0% 80%;
     --input: 0 0% 88%;
     --ring: 222.2 84% 4.9%;
     --chart-1: 12 76% 61%;
@@ -337,15 +339,6 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
   }
 }
 

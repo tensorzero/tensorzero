@@ -1,4 +1,4 @@
-# Example: OpenAI Codex and TensorZero Integration
+# Example: Integrating OpenAI Codex with TensorZero
 
 This example shows how to use OpenAI Codex with TensorZero — fully open-source and self-hosted.
 

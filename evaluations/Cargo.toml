@@ -2,6 +2,8 @@
 name = "evaluations"
 version.workspace = true
 edition = "2021"
+rust-version.workspace = true
+license.workspace = true
 
 [[test]]
 name = "e2e"
@@ -10,7 +12,7 @@ required-features = ["e2e_tests"]
 
 [dependencies]
 tensorzero = { path = "../clients/rust" }
-tensorzero-internal = { path = "../tensorzero-internal" }
+tensorzero-core = { path = "../tensorzero-core" }
 clap = { workspace = true }
 url = { workspace = true }
 tracing = { workspace = true }
@@ -21,7 +23,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 futures = { workspace = true }
-indicatif = "0.17.11"
+indicatif = "0.18.0"
 
 [dev-dependencies]
 tensorzero = { path = "../clients/rust" }

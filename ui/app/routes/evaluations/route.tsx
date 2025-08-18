@@ -18,7 +18,7 @@ import {
   runEvaluation,
   type InferenceCacheSetting,
 } from "~/utils/evaluations.server";
-import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const totalEvaluationRuns = await countTotalEvaluationRuns();
@@ -26,16 +26,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   const searchParams = new URLSearchParams(url.search);
   const offset = parseInt(searchParams.get("offset") || "0");
   const pageSize = parseInt(searchParams.get("pageSize") || "15");
-  const [evaluationRuns, datasetCounts] = await Promise.all([
-    getEvaluationRunInfo(pageSize, offset),
-    getDatasetCounts(),
-  ]);
-  const dataset_names = datasetCounts.map((dataset) => dataset.dataset_name);
+  const evaluationRuns = await getEvaluationRunInfo(pageSize, offset);
 
   return {
     totalEvaluationRuns,
     evaluationRuns,
-    dataset_names,
     offset,
     pageSize,
   };
@@ -58,7 +53,7 @@ export async function action({ request }: Route.ActionArgs) {
       inference_cache as InferenceCacheSetting,
     );
   } catch (error) {
-    console.error("Error starting evaluation:", error);
+    logger.error("Error starting evaluation:", error);
     throw new Response(`Failed to start evaluation: ${error}`, {
       status: 500,
     });
@@ -72,13 +67,7 @@ export default function EvaluationSummaryPage({
   loaderData,
 }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const {
-    totalEvaluationRuns,
-    evaluationRuns,
-    offset,
-    pageSize,
-    dataset_names,
-  } = loaderData;
+  const { totalEvaluationRuns, evaluationRuns, offset, pageSize } = loaderData;
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -111,14 +100,13 @@ export default function EvaluationSummaryPage({
       <LaunchEvaluationModal
         isOpen={launchEvaluationModalIsOpen}
         onClose={() => setLaunchEvaluationModalIsOpen(false)}
-        dataset_names={dataset_names}
       />
     </PageLayout>
   );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

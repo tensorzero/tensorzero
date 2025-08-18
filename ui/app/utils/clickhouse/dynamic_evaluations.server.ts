@@ -1,4 +1,4 @@
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 import { CountSchema } from "./common";
 import {
   dynamicEvaluationProjectSchema,
@@ -11,6 +11,8 @@ import {
   type DynamicEvaluationRunEpisodeWithFeedback,
   type DynamicEvaluationRunStatisticsByMetricName,
   type GroupedDynamicEvaluationRunEpisodeWithFeedback,
+  type DynamicEvaluationRunWithEpisodeCount,
+  dynamicEvaluationRunWithEpisodeCountSchema,
 } from "./dynamic_evaluations";
 
 export async function getDynamicEvaluationRuns(
@@ -18,22 +20,45 @@ export async function getDynamicEvaluationRuns(
   offset: number,
   run_id?: string,
   project_name?: string,
-): Promise<DynamicEvaluationRun[]> {
+): Promise<DynamicEvaluationRunWithEpisodeCount[]> {
   const query = `
+    WITH FilteredDynamicEvaluationRuns AS (
+      SELECT
+          run_display_name as name,
+          uint_to_uuid(run_id_uint) as id,
+          run_id_uint,
+          variant_pins,
+          tags,
+          project_name,
+          formatDateTime(UUIDv7ToDateTime(uint_to_uuid(run_id_uint)), '%Y-%m-%dT%H:%i:%SZ') as timestamp
+      FROM DynamicEvaluationRun
+      ${run_id ? `WHERE toUInt128(toUUID({run_id:String})) = run_id_uint` : ""}
+      ${project_name ? `WHERE project_name = {project_name:String}` : ""}
+      ORDER BY run_id_uint DESC
+      LIMIT {page_size:UInt64}
+      OFFSET {offset:UInt64}
+    ),
+    DynamicEvaluationRunsEpisodeCounts AS (
+      SELECT
+        run_id_uint,
+        toUInt32(count()) as num_episodes
+      FROM DynamicEvaluationRunEpisodeByRunId
+      WHERE run_id_uint IN (SELECT run_id_uint FROM FilteredDynamicEvaluationRuns)
+      GROUP BY run_id_uint
+    )
     SELECT
-      run_display_name as name,
-      uint_to_uuid(run_id_uint) as id,
+      name,
+      id,
       variant_pins,
       tags,
       project_name,
-      formatDateTime(UUIDv7ToDateTime(uint_to_uuid(run_id_uint)), '%Y-%m-%dT%H:%i:%SZ') as timestamp
-    FROM DynamicEvaluationRun
-    ${run_id ? `WHERE toUInt128(toUUID({run_id:String})) = run_id_uint` : ""}
-    ${project_name ? `WHERE project_name = {project_name:String}` : ""}
+      COALESCE(num_episodes, 0) AS num_episodes,
+      timestamp
+    FROM FilteredDynamicEvaluationRuns
+    LEFT JOIN DynamicEvaluationRunsEpisodeCounts USING run_id_uint
     ORDER BY run_id_uint DESC
-    LIMIT {page_size:UInt64} OFFSET {offset:UInt64}
-    `;
-  const result = await clickhouseClient.query({
+  `;
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -43,8 +68,10 @@ export async function getDynamicEvaluationRuns(
       project_name,
     },
   });
-  const rows = await result.json<DynamicEvaluationRun[]>();
-  return rows.map((row) => dynamicEvaluationRunSchema.parse(row));
+  const rows = await result.json<DynamicEvaluationRunWithEpisodeCount[]>();
+  return rows.map((row) =>
+    dynamicEvaluationRunWithEpisodeCountSchema.parse(row),
+  );
 }
 
 export async function getDynamicEvaluationRunsByIds(
@@ -76,7 +103,7 @@ export async function getDynamicEvaluationRunsByIds(
     ORDER BY run_id_uint DESC
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { run_ids, project_name },
@@ -90,7 +117,10 @@ export async function countDynamicEvaluationRuns(): Promise<number> {
   const query = `
     SELECT toUInt32(count()) as count FROM DynamicEvaluationRun
   `;
-  const result = await clickhouseClient.query({ query, format: "JSONEachRow" });
+  const result = await getClickhouseClient().query({
+    query,
+    format: "JSONEachRow",
+  });
   const rows = await result.json<{ count: number }[]>();
   const parsedRows = rows.map((row) => CountSchema.parse(row));
   return parsedRows[0].count;
@@ -192,7 +222,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
       e.tags,
       e.task_name
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { page_size, offset, run_id },
@@ -249,7 +279,7 @@ export async function getDynamicEvaluationRunStatisticsByMetricName(
     SELECT * FROM results
     ORDER BY metric_name ASC
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { run_id, metric_name },
@@ -268,7 +298,7 @@ export async function countDynamicEvaluationRunEpisodes(
     SELECT toUInt32(count()) as count FROM DynamicEvaluationRunEpisodeByRunId
     WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { run_id },
@@ -292,7 +322,7 @@ export async function getDynamicEvaluationProjects(
     LIMIT {page_size:UInt64}
     OFFSET {offset:UInt64}
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { page_size, offset },
@@ -307,7 +337,10 @@ export async function countDynamicEvaluationProjects(): Promise<number> {
   FROM DynamicEvaluationRunByProjectName
   WHERE project_name IS NOT NULL
 `;
-  const result = await clickhouseClient.query({ query, format: "JSONEachRow" });
+  const result = await getClickhouseClient().query({
+    query,
+    format: "JSONEachRow",
+  });
   const rows = await result.json<{ count: number }[]>();
   const parsedRows = rows.map((row) => CountSchema.parse(row));
   return parsedRows[0].count;
@@ -354,7 +387,7 @@ export async function searchDynamicEvaluationRuns(
     OFFSET {offset:UInt64}
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { project_name, search_query, page_size, offset },
@@ -480,7 +513,7 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
       e.episode_id_uint
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { runIds, page_size, offset },
@@ -529,7 +562,7 @@ export async function countDynamicEvaluationRunEpisodesByTaskName(
     FROM episodes_raw
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { runIds },

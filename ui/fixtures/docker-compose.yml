@@ -5,9 +5,6 @@ services:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: chpassword
-    tmpfs:
-      # So the fixtures aren't persisted between restarts of the containers and double-added
-      - /var/lib/clickhouse
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
@@ -22,6 +19,7 @@ services:
       timeout: 1s
 
   gateway:
+    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
     build:
       context: ../..
       dockerfile: gateway/Dockerfile
@@ -32,10 +30,12 @@ services:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
     env_file:
       - .env
+      - .env-gateway
     ports:
       - "3000:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "howdy.tensorzero.com:127.0.0.1"
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -49,7 +49,21 @@ services:
           "--spider",
           "http://localhost:3000/health",
         ]
-      start_period: 1s
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  mock-inference-provider:
+    build:
+      context: ../../
+      dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
+    environment:
+      RUST_LOG: debug
+    ports:
+      - "3030:3030"
+    healthcheck:
+      test: wget --spider --tries 1 http://localhost:3030/status
+      start_period: 30s
       start_interval: 1s
       timeout: 1s
 
@@ -67,12 +81,11 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
-    # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
-    command:
-      ["bash", "-c", "cd /fixtures && ./load_fixtures.sh && sleep infinity"]
+    command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
     healthcheck:
-      test: ["CMD", "test", "-f", "/tmp/load_complete.marker"]
+      test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
       retries: 48 # Retry for up to 4 minutes
-      start_period: 5s # Give the script time to start
+      start_interval: 1s
+      start_period: 300s # Give the script time to start

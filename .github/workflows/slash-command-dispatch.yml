@@ -1,0 +1,31 @@
+name: Slash Command Dispatch
+
+permissions:
+  pull-requests: write  # For doing the emoji reaction on a PR comment
+  issues: write  # For doing the emoji reaction on an issue comment
+  contents: write  # For executing the repository_dispatch event
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+jobs:
+  slashCommandDispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Check permission"
+        id: check-permission
+        run: |
+          MEMBER=$((gh api 'orgs/tensorzero/members/${{ github.actor }}' && echo 1) || echo 0)
+          echo "ACTOR_MEMBER=$MEMBER" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Slash Command Dispatch
+        if: ${{ steps.check-permission.outputs.ACTOR_MEMBER == '1' }}
+        uses: peter-evans/slash-command-dispatch@13bc09769d122a64f75aa5037256f6f2d78be8c4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commands: |
+            regen-fixtures
+          # Use our custom permission check above, since `peter-evans/slash-command-dispatch` doesn't handle organizations 
+          permission: none

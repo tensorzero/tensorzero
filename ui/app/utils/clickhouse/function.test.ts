@@ -4,8 +4,8 @@ import {
   getVariantCounts,
   getVariantPerformances,
 } from "./function";
-import type { FunctionConfig } from "../config/function";
-import type { MetricConfig } from "../config/metric";
+import type { FunctionConfig } from "tensorzero-node";
+import type { MetricConfig } from "tensorzero-node";
 
 describe("getVariantPerformances", () => {
   test("getVariantPerformances for extract_entities", async () => {
@@ -585,8 +585,8 @@ describe("getVariantCounts", () => {
     });
     expect(result).toMatchObject([
       {
-        count: 648,
-        last_used: "2025-04-14T23:09:51.000Z",
+        count: 649,
+        last_used: "2025-05-12T21:59:20.000Z",
         variant_name: "initial_prompt_gpt4o_mini",
       },
       {

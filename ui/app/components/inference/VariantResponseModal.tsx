@@ -11,10 +11,69 @@ import { Separator } from "~/components/ui/separator";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
-import NewOutput from "~/components/inference/NewOutput";
+import { Output } from "~/components/inference/Output";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { Card, CardContent } from "~/components/ui/card";
 import type { VariantResponseInfo } from "~/routes/api/tensorzero/inference.utils";
+
+interface ResponseColumnProps {
+  title: string;
+  response: VariantResponseInfo | null;
+  errorMessage?: string | null;
+  children?: React.ReactNode;
+}
+
+function ResponseColumn({
+  title,
+  response,
+  errorMessage,
+  children,
+}: ResponseColumnProps) {
+  return (
+    <div className="flex flex-1 flex-col">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold">{title}</h3>
+      </div>
+      {errorMessage ? (
+        <div className="flex-1">
+          <Card>
+            <CardContent className="pt-8">
+              <div className="text-red-600">
+                <p className="font-semibold">Error</p>
+                <p>{errorMessage}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        response && (
+          <>
+            {response.output && (
+              <div className="flex-1">
+                <Output output={response.output} />
+              </div>
+            )}
+
+            <div className="mt-4 grid grid-cols-2 justify-end gap-4">
+              {response.usage && (
+                <div>
+                  <h4 className="mb-1 text-xs font-semibold">Usage</h4>
+                  <p className="text-xs">
+                    Input tokens: {response.usage.input_tokens}
+                  </p>
+                  <p className="text-xs">
+                    Output tokens: {response.usage.output_tokens}
+                  </p>
+                </div>
+              )}
+              <div className="flex justify-end">{children}</div>
+            </div>
+          </>
+        )
+      )}
+    </div>
+  );
+}
 
 interface VariantResponseModalProps {
   isOpen: boolean;
@@ -30,6 +89,7 @@ interface VariantResponseModalProps {
   error?: string | null;
   variantResponse: VariantResponseInfo | null;
   rawResponse: InferenceResponse | null;
+  children?: React.ReactNode;
 }
 
 export function VariantResponseModal({
@@ -43,6 +103,7 @@ export function VariantResponseModal({
   error,
   variantResponse,
   rawResponse,
+  children,
 }: VariantResponseModalProps) {
   const [showRawResponse, setShowRawResponse] = useState(false);
 
@@ -62,59 +123,6 @@ export function VariantResponseModal({
     // reset when modal opens or closes
     setShowRawResponse(false);
   }, [isOpen]);
-
-  const ResponseColumn = ({
-    title,
-    response,
-    errorMessage,
-  }: {
-    title: string;
-    response: VariantResponseInfo | null;
-    errorMessage?: string | null;
-  }) => (
-    <div className="flex flex-1 flex-col">
-      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
-      {errorMessage ? (
-        <div className="flex-1">
-          <Card>
-            <CardContent className="pt-8">
-              <div className="text-red-600">
-                <p className="font-semibold">Error</p>
-                <p>{errorMessage}</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : (
-        response && (
-          <>
-            {response.output && (
-              <div className="flex-1">
-                <NewOutput
-                  output={response.output}
-                  outputSchema={
-                    "output_schema" in item ? item.output_schema : undefined
-                  }
-                />
-              </div>
-            )}
-
-            {response.usage && (
-              <div className="mt-4">
-                <h4 className="mb-1 text-xs font-semibold">Usage</h4>
-                <p className="text-xs">
-                  Input tokens: {response.usage.input_tokens}
-                </p>
-                <p className="text-xs">
-                  Output tokens: {response.usage.output_tokens}
-                </p>
-              </div>
-            )}
-          </>
-        )
-      )}
-    </div>
-  );
 
   // Create a dynamic title based on the source
   const getTitle = () => {
@@ -169,8 +177,11 @@ export function VariantResponseModal({
                   title="New"
                   response={variantResponse}
                   errorMessage={error}
-                />
+                >
+                  {children}
+                </ResponseColumn>
               </div>
+
               <Separator className="my-4" />
               <div>
                 <Button

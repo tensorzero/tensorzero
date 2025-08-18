@@ -4,24 +4,25 @@ use axum::middleware::Next;
 use axum::response::Response;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
-use axum_tracing_opentelemetry::middleware::OtelAxumLayer;
 use clap::Parser;
 use mimalloc::MiMalloc;
 use std::fmt::Display;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
+use tensorzero_core::clickhouse::migration_manager::manual_run_migrations;
 use tokio::signal;
-use tower_http::trace::TraceLayer;
+use tower_http::trace::{DefaultOnFailure, TraceLayer};
+use tracing::Level;
 
-use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
-use tensorzero_internal::config_parser::Config;
-use tensorzero_internal::endpoints;
-use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_internal::error;
-use tensorzero_internal::gateway_util;
-use tensorzero_internal::observability::{self, LogFormat};
+use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::config_parser::{Config, ConfigFileGlob};
+use tensorzero_core::endpoints;
+use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
+use tensorzero_core::error;
+use tensorzero_core::gateway_util;
+use tensorzero_core::observability::{self, LogFormat, RouterExt};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -29,7 +30,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
-    /// Use the `tensorzero.toml` config file at the specified path. Incompatible with `--default-config`
+    /// Use all of the config files matching the specified glob pattern. Incompatible with `--default-config`
     #[arg(long)]
     config_file: Option<PathBuf>,
 
@@ -47,6 +48,10 @@ struct Args {
     #[arg(value_enum)]
     #[clap(default_value_t = LogFormat::default())]
     log_format: LogFormat,
+
+    /// Run database migrations manually then exit.
+    #[arg(long)]
+    run_migrations_only: bool,
 
     /// Deprecated: use `--config-file` instead
     tensorzero_toml: Option<PathBuf>,
@@ -87,7 +92,13 @@ async fn main() {
         .await
         .expect_pretty("Failed to set up logs");
 
-    let git_sha = tensorzero_internal::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
+    let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
+    if args.run_migrations_only {
+        manual_run_migrations()
+            .await
+            .expect_pretty("Failed to run migrations");
+        return;
+    }
 
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
 
@@ -119,16 +130,25 @@ async fn main() {
         tracing::warn!("Running the gateway without any config-related arguments is deprecated. Use `--default-config` to start the gateway with the default config.");
     }
 
-    let config = if let Some(path) = &config_path {
-        Arc::new(
-            Config::load_and_verify_from_path(Path::new(&path))
-                .await
-                .ok() // Don't print the error here, since it was already printed when it was constructed
-                .expect_pretty("Failed to load config"),
+    let (config, glob) = if let Some(path) = &config_path {
+        let glob =
+            ConfigFileGlob::new_from_path(path).expect_pretty("Failed to process config file glob");
+        (
+            Arc::new(
+                Config::load_and_verify_from_path(&glob)
+                    .await
+                    .ok() // Don't print the error here, since it was already printed when it was constructed
+                    .expect_pretty(&format!(
+                        "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
+                        glob.glob,
+                        glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
+                    )),
+            ),
+            Some(glob),
         )
     } else {
         tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
-        Arc::new(Config::default())
+        (Arc::new(Config::default()), None)
     };
 
     if config.gateway.debug {
@@ -157,21 +177,32 @@ async fn main() {
             }
         }
 
-        delayed_log_config
-            .delayed_otel
-            .enable_otel()
-            .expect_pretty("Failed to enable OpenTelemetry");
-
-        tracing::info!("Enabled OpenTelemetry OTLP export");
+        match delayed_log_config.delayed_otel {
+            Ok(delayed_otel) => {
+                delayed_otel
+                    .enable_otel()
+                    .expect_pretty("Failed to enable OpenTelemetry");
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Could not enable OpenTelemetry export due to previous error: `{e}`. Exiting."
+                );
+                std::process::exit(1);
+            }
+        }
+    } else if let Err(e) = delayed_log_config.delayed_otel {
+        tracing::warn!(
+            "[gateway.export.otlp.traces.enabled] is `false`, so ignoring OpenTelemetry error: `{e}`"
+        );
     }
 
-    // Initialize AppState
-    let app_state = gateway_util::AppStateData::new(config.clone())
+    // Initialize GatewayHandle
+    let gateway_handle = gateway_util::GatewayHandle::new(config.clone())
         .await
         .expect_pretty("Failed to initialize AppState");
 
     // Create a new observability_enabled_pretty string for the log message below
-    let observability_enabled_pretty = match &app_state.clickhouse_connection_info {
+    let observability_enabled_pretty = match &gateway_handle.app_state.clickhouse_connection_info {
         ClickHouseConnectionInfo::Disabled => "disabled".to_string(),
         ClickHouseConnectionInfo::Mock { healthy, .. } => {
             format!("mocked (healthy={healthy})")
@@ -183,8 +214,10 @@ async fn main() {
 
     // Set debug mode
     error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");
+    error::set_unstable_error_json(config.gateway.unstable_error_json)
+        .expect_pretty("Failed to set unstable error JSON");
 
-    let router = Router::new()
+    let api_routes = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
         .route(
             "/batch_inference",
@@ -202,25 +235,41 @@ async fn main() {
             "/openai/v1/chat/completions",
             post(endpoints::openai_compatible::inference_handler),
         )
+        .route(
+            "/openai/v1/embeddings",
+            post(endpoints::openai_compatible::embeddings_handler),
+        )
         .route("/feedback", post(endpoints::feedback::feedback_handler))
         // Everything above this layer has OpenTelemetry tracing enabled
         // Note - we do *not* attach a `OtelInResponseLayer`, as this seems to be incorrect according to the W3C Trace Context spec
         // (the only response header is `traceresponse` for a completed trace)
-        .layer(OtelAxumLayer::default())
+        .apply_otel_http_trace_layer()
         // Everything below the Otel layers does not have OpenTelemetry tracing enabled
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
         .route(
             "/datasets/{dataset_name}/datapoints/bulk",
-            post(endpoints::datasets::create_datapoint_handler),
+            post(endpoints::datasets::bulk_insert_datapoints_handler),
         )
         .route(
             "/datasets/{dataset_name}/datapoints/{datapoint_id}",
             delete(endpoints::datasets::delete_datapoint_handler),
         )
         .route(
+            "/datasets/{dataset_name}/datapoints",
+            get(endpoints::datasets::list_datapoints_handler),
+        )
+        .route(
+            "/datasets/{dataset_name}",
+            delete(endpoints::datasets::stale_dataset_handler),
+        )
+        .route(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            get(endpoints::datasets::get_datapoint_handler),
+        )
+        .route(
             "/internal/datasets/{dataset_name}/datapoints",
-            post(endpoints::datasets::create_from_existing_datapoint_handler),
+            post(endpoints::datasets::insert_from_existing_datapoint_handler),
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
@@ -242,14 +291,39 @@ async fn main() {
             "/metrics",
             get(move || std::future::ready(metrics_handle.render())),
         )
+        .route(
+            "/experimental_optimization_workflow",
+            post(endpoints::optimization::launch_optimization_workflow_handler),
+        )
+        .route(
+            "/experimental_optimization/{job_handle}",
+            get(endpoints::optimization::poll_optimization_handler),
+        );
+
+    let base_path = config.gateway.base_path.as_deref().unwrap_or("/");
+    if !base_path.starts_with("/") {
+        tracing::error!("[gateway.base_path] must start with a `/` : `{base_path}`");
+        std::process::exit(1);
+    }
+    let base_path = base_path.trim_end_matches("/");
+
+    // The path was just `/` (or multiple slashes)
+    let router = if base_path.is_empty() {
+        Router::new().merge(api_routes)
+    } else {
+        Router::new().nest(base_path, api_routes)
+    };
+
+    let router = router
         .fallback(endpoints::fallback::handle_404)
         .layer(axum::middleware::from_fn(add_version_header))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
         // Note - this is intentionally *not* used by our OTEL exporter (it creates a span without any `http.` or `otel.` fields)
         // This is only used to output request/response information to our logs
         // OTEL exporting is done by the `OtelAxumLayer` above, which is only enabled for certain routes (and includes much more information)
-        .layer(TraceLayer::new_for_http())
-        .with_state(app_state);
+        // We log failed requests messages at 'DEBUG', since we already have our own error-logging code,
+        .layer(TraceLayer::new_for_http().on_failure(DefaultOnFailure::new().level(Level::DEBUG)))
+        .with_state(gateway_handle.app_state.clone());
 
     // Bind to the socket address specified in the config, or default to 0.0.0.0:3000
     let bind_address = config
@@ -271,21 +345,52 @@ async fn main() {
             std::process::exit(1);
         }
     };
+
     // This will give us the chosen port if the user specified a port of 0
     let actual_bind_address = listener
         .local_addr()
         .expect_pretty("Failed to get bind address from listener");
 
-    let config_path_pretty = if let Some(path) = &config_path {
-        format!("config file `{}`", path.to_string_lossy())
+    // Print the bind address
+    tracing::info!("TensorZero Gateway is listening on {actual_bind_address}");
+
+    // Print the base path if set
+    if base_path.is_empty() {
+        tracing::info!("├ API Base Path: /");
     } else {
-        "no config file".to_string()
-    };
+        tracing::info!("├ API Base Path: {base_path}");
+    }
 
-    tracing::info!(
-        "TensorZero Gateway is listening on {actual_bind_address} with {config_path_pretty} and observability {observability_enabled_pretty}.",
-    );
+    // Print the configuration being used
+    if let Some(glob) = &glob {
+        tracing::info!("├ Configuration: glob `{}` resolved to:", glob.glob);
+        for path in &glob.paths {
+            tracing::info!("│  ├ {}", path.to_string_lossy());
+        }
+    } else {
+        tracing::info!("├ Configuration: default");
+    }
 
+    // Print whether observability is enabled
+    tracing::info!("├ Observability: {observability_enabled_pretty}");
+    if config.gateway.observability.batch_writes.enabled {
+        tracing::info!(
+            "├ Batch Writes: enabled (flush_interval_ms = {}, max_rows = {})",
+            config.gateway.observability.batch_writes.flush_interval_ms,
+            config.gateway.observability.batch_writes.max_rows
+        );
+    } else {
+        tracing::info!("├ Batch Writes: disabled");
+    }
+
+    // Print whether OpenTelemetry is enabled
+    if config.gateway.export.otlp.traces.enabled {
+        tracing::info!("└ OpenTelemetry: enabled");
+    } else {
+        tracing::info!("└ OpenTelemetry: disabled");
+    }
+
+    // Start the server
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())
         .await
@@ -322,13 +427,13 @@ pub async fn shutdown_signal() {
     let hangup = std::future::pending::<()>();
 
     tokio::select! {
-        _ = ctrl_c => {
+        () = ctrl_c => {
             tracing::info!("Received Ctrl+C signal");
         }
-        _ = terminate => {
+        () = terminate => {
             tracing::info!("Received SIGTERM signal");
         }
-        _ = hangup => {
+        () = hangup => {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             tracing::info!("Received SIGHUP signal");
         }

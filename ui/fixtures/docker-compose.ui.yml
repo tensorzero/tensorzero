@@ -1,11 +1,17 @@
 services:
   ui:
+    image: tensorzero/ui:${TENSORZERO_UI_TAG:-latest}
     build:
       context: ../..
       dockerfile: ui/Dockerfile
     environment:
-      TENSORZERO_GATEWAY_URL: http://gateway:3000
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
+      - TENSORZERO_GATEWAY_URL=${TENSORZERO_GATEWAY_URL:-http://gateway:3000}
+      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
+      # Allow overriding these from environment variables
+      - OPENAI_BASE_URL
+      - FIREWORKS_BASE_URL
+      - FIREWORKS_ACCOUNT_ID
+      - VITE_TENSORZERO_FORCE_CACHE_ON
     volumes:
       - ./config:/app/config:ro
     env_file:
@@ -13,3 +19,5 @@ services:
     ports:
       - "4000:4000"
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

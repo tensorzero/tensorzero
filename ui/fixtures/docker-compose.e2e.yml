@@ -5,9 +5,6 @@ services:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: chpassword
-    tmpfs:
-      # So the fixtures aren't persisted between restarts of the containers and double-added
-      - /var/lib/clickhouse
     volumes:
       - ./config.xml:/etc/clickhouse-server/config.xml:ro
     ports:
@@ -27,8 +24,8 @@ services:
   # so that we use the mock server for SFT jobs
   mock-inference-provider:
     build:
-      context: ../..
-      dockerfile: tensorzero-internal/tests/mock-inference-provider/Dockerfile
+      context: ../../
+      dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
     environment:
       RUST_LOG: debug
     ports:
@@ -40,21 +37,24 @@ services:
       timeout: 1s
 
   gateway:
+    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
     build:
       context: ../..
       dockerfile: gateway/Dockerfile
       target: gateway
     volumes:
       - ./config:/app/config:ro
-    command: --config-file /app/config/tensorzero.e2e.toml
+    command: --config-file ${TENSORZERO_GATEWAY_CONFIG:-/app/config/tensorzero.e2e.toml}
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
     env_file:
       - .env
+      - .env-gateway
     ports:
       - "3000:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "howdy.tensorzero.com:127.0.0.1"
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -66,9 +66,9 @@ services:
           "--no-verbose",
           "--tries=1",
           "--spider",
-          "http://localhost:3000/health",
+          "${TENSORZERO_GATEWAY_URL:-http://localhost:3000}/health",
         ]
-      start_period: 1s
+      start_period: 30s
       start_interval: 1s
       timeout: 1s
 
@@ -79,19 +79,20 @@ services:
       - .:/fixtures
       - ~/.aws:/root/.aws
     environment:
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-      CLICKHOUSE_HOST: clickhouse
-      CLICKHOUSE_PASSWORD: chpassword
-      CLICKHOUSE_USER: chuser
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PASSWORD=chpassword
+      - CLICKHOUSE_USER=chuser
+      - TENSORZERO_SKIP_LARGE_FIXTURES
     depends_on:
       gateway:
         condition: service_healthy
-    command:
-      ["bash", "-c", "cd /fixtures && ./load_fixtures.sh && sleep infinity"]
+    command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
     # Added healthcheck to wait for the marker file created by the script
     healthcheck:
-      test: ["CMD", "test", "-f", "/tmp/load_complete.marker"]
+      test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
       retries: 48 # Retry for up to 4 minutes
-      start_period: 5s # Give the script time to start
+      start_interval: 1s
+      start_period: 300s # Give the script time to start

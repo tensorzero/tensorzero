@@ -1,6 +1,6 @@
-# Example: Integrating TensorZero with Helicone
+# Example: Integrating Helicone with TensorZero
 
-This example demonstrates how to integrate TensorZero with Helicone.
+This example demonstrates how to integrate Helicone with TensorZero.
 
 ## Getting Started
 

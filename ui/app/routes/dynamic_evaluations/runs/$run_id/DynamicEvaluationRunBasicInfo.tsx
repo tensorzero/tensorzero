@@ -9,6 +9,7 @@ import { Calendar } from "~/components/icons/Icons";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
 import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
 import KVChip from "~/components/ui/KVChip";
+import { CommitHash } from "~/components/ui/CommitHash";
 
 // Create timestamp tooltip component
 const createTimestampTooltip = (timestamp: string | number | Date) => {
@@ -37,6 +38,12 @@ export default function BasicInfo({
   const timestampTooltip = createTimestampTooltip(
     dynamicEvaluationRun.timestamp,
   );
+
+  const filteredTags = Object.entries(dynamicEvaluationRun.tags).filter(
+    ([k]) => !k.startsWith("tensorzero::"),
+  );
+
+  const commitHash = dynamicEvaluationRun.tags["tensorzero::git_commit_hash"];
 
   return (
     <BasicInfoLayout>
@@ -88,16 +95,27 @@ export default function BasicInfo({
         </BasicInfoItemContent>
       </BasicInfoItem>
 
-      <BasicInfoItem>
-        <BasicInfoItemTitle>Tags</BasicInfoItemTitle>
-        <BasicInfoItemContent>
-          <div className="flex flex-wrap gap-1">
-            {Object.entries(dynamicEvaluationRun.tags).map(([k, v]) => (
-              <KVChip key={k} k={k} v={v} />
-            ))}
-          </div>
-        </BasicInfoItemContent>
-      </BasicInfoItem>
+      {commitHash && (
+        <BasicInfoItem>
+          <BasicInfoItemTitle>Git Commit</BasicInfoItemTitle>
+          <BasicInfoItemContent>
+            <CommitHash tags={dynamicEvaluationRun.tags} />
+          </BasicInfoItemContent>
+        </BasicInfoItem>
+      )}
+
+      {filteredTags.length > 0 && (
+        <BasicInfoItem>
+          <BasicInfoItemTitle>Tags</BasicInfoItemTitle>
+          <BasicInfoItemContent>
+            <div className="flex flex-wrap gap-1">
+              {filteredTags.map(([k, v]) => (
+                <KVChip key={k} k={k} v={v} />
+              ))}
+            </div>
+          </BasicInfoItemContent>
+        </BasicInfoItem>
+      )}
 
       <BasicInfoItem>
         <BasicInfoItemTitle>Episode Count</BasicInfoItemTitle>

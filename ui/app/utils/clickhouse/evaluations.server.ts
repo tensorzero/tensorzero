@@ -1,6 +1,7 @@
-import { getConfig } from "../config/index.server";
+import { logger } from "~/utils/logger";
+import { getConfig, getFunctionConfig } from "../config/index.server";
 import { resolveInput } from "../resolve.server";
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 import { CountSchema, inputSchema } from "./common";
 import {
   EvaluationRunInfoSchema,
@@ -45,7 +46,7 @@ export async function getEvaluationRunInfos(
       toUInt128(toUUID(evaluation_run_id)) DESC
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -63,7 +64,11 @@ export async function getEvaluationRunInfosForDatapoint(
   function_name: string,
 ): Promise<EvaluationRunInfo[]> {
   const config = await getConfig();
-  const function_type = config.functions[function_name].type;
+  const functionConfig = await getFunctionConfig(function_name, config);
+  const function_type = functionConfig?.type;
+  if (!function_type) {
+    throw new Error(`Function ${function_name} not found in config`);
+  }
   const inference_table_name =
     function_type === "chat" ? "ChatInference" : "JsonInference";
 
@@ -83,7 +88,7 @@ export async function getEvaluationRunInfosForDatapoint(
     GROUP BY
       tags['tensorzero::evaluation_run_id']
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -98,15 +103,17 @@ export async function getEvaluationRunInfosForDatapoint(
 
 async function parseEvaluationResult(
   result: EvaluationResult,
+  function_name: string,
 ): Promise<ParsedEvaluationResult> {
   // Parse the input field
   const parsedInput = inputSchema.parse(JSON.parse(result.input));
-  const resolvedInput = await resolveInput(parsedInput);
+  const config = await getConfig();
+  const functionConfig = await getFunctionConfig(function_name, config);
+  const resolvedInput = await resolveInput(parsedInput, functionConfig);
 
   // Parse the outputs
   const generatedOutput = JSON.parse(result.generated_output);
   const referenceOutput = JSON.parse(result.reference_output);
-
   // Determine if this is a chat result by checking if generated_output is an array
   if (Array.isArray(generatedOutput)) {
     // This is likely a chat evaluation result
@@ -129,10 +136,11 @@ async function parseEvaluationResult(
 
 async function parseEvaluationResultWithVariant(
   result: EvaluationResultWithVariant,
+  function_name: string,
 ): Promise<ParsedEvaluationResultWithVariant> {
   try {
     // Parse using the same logic as parseEvaluationResult
-    const parsedResult = await parseEvaluationResult(result);
+    const parsedResult = await parseEvaluationResult(result, function_name);
 
     // Add the variant_name to the parsed result
     const parsedResultWithVariant = {
@@ -143,7 +151,7 @@ async function parseEvaluationResultWithVariant(
       parsedResultWithVariant,
     );
   } catch (error) {
-    console.warn(
+    logger.warn(
       "Failed to parse evaluation result with variant using structure-based detection:",
       error,
     );
@@ -213,6 +221,7 @@ export async function getEvaluationResults(
              argMax(toString(value), timestamp) as value,
              argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
              argMax(id, timestamp) as feedback_id,
+             argMax(tags['tensorzero::human_feedback'], timestamp) == 'true' as is_human_feedback,
              target_id
       FROM BooleanMetricFeedback
       WHERE metric_name IN ({metric_names:Array(String)})
@@ -223,6 +232,7 @@ export async function getEvaluationResults(
              argMax(toString(value), timestamp) as value,
              argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
              argMax(id, timestamp) as feedback_id,
+             argMax(tags['tensorzero::human_feedback'], timestamp) == 'true' as is_human_feedback,
              target_id
       FROM FloatMetricFeedback
       WHERE metric_name IN ({metric_names:Array(String)})
@@ -241,17 +251,18 @@ export async function getEvaluationResults(
     ci.id as inference_id,
     feedback.metric_name as metric_name,
     feedback.value as metric_value,
-    feedback.feedback_id as feedback_id
+    feedback.feedback_id as feedback_id,
+    toBool(feedback.is_human_feedback) as is_human_feedback
   FROM filtered_dp dp
   INNER JOIN filtered_inference ci
     ON toUUIDOrNull(ci.tags['tensorzero::datapoint_id']) = dp.id
-  INNER JOIN filtered_feedback feedback
+  LEFT JOIN filtered_feedback feedback
     ON feedback.target_id = ci.id
   ORDER BY toUInt128(datapoint_id) DESC
 
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -265,7 +276,9 @@ export async function getEvaluationResults(
     },
   });
   const rows = await result.json<EvaluationResult>();
-  return Promise.all(rows.map((row) => parseEvaluationResult(row)));
+  return Promise.all(
+    rows.map((row) => parseEvaluationResult(row, function_name)),
+  );
 }
 
 /*
@@ -330,7 +343,7 @@ export async function getEvaluationStatistics(
     toUInt128(toUUID(filtered_inference.tags['tensorzero::evaluation_run_id'])) DESC
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -363,7 +376,7 @@ export async function countDatapointsForEvaluation(
       FROM all_datapoint_ids
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -382,7 +395,7 @@ export async function countTotalEvaluationRuns() {
   const query = `
     SELECT toUInt32(uniqExact(value)) as count FROM TagInference WHERE key = 'tensorzero::evaluation_run_id'
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
   });
@@ -421,7 +434,7 @@ export async function getEvaluationRunInfo(
     LIMIT {limit:UInt32}
     OFFSET {offset:UInt32}
   `;
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -459,7 +472,7 @@ export async function searchEvaluationRuns(
     OFFSET {offset:UInt32}
     `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -480,11 +493,18 @@ export async function getEvaluationsForDatapoint(
   evaluation_run_ids: string[],
 ): Promise<ParsedEvaluationResultWithVariant[]> {
   const config = await getConfig();
-  const function_name = config.evaluations[evaluation_name].function_name;
+  const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw new Error(`Evaluation ${evaluation_name} not found in config`);
+  }
+  const function_name = evaluation_config.function_name;
   if (!function_name) {
     throw new Error(`evaluation ${evaluation_name} not found in config`);
   }
-  const function_config = config.functions[function_name];
+  const function_config = await getFunctionConfig(function_name, config);
+  if (!function_config) {
+    throw new Error(`Function ${function_name} not found in config`);
+  }
   const function_type = function_config.type;
   const inference_table_name =
     function_type === "chat" ? "ChatInference" : "JsonInference";
@@ -493,7 +513,7 @@ export async function getEvaluationsForDatapoint(
       ? "ChatInferenceDatapoint"
       : "JsonInferenceDatapoint";
 
-  const evaluators = config.evaluations[evaluation_name].evaluators;
+  const evaluators = evaluation_config.evaluators;
   const metric_names = Object.keys(evaluators).map((evaluatorName) =>
     getEvaluatorMetricName(evaluation_name, evaluatorName),
   );
@@ -515,7 +535,8 @@ export async function getEvaluationsForDatapoint(
             metric_name,
             argMax(toString(value), timestamp) as value,
             argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
-            argMax(id, timestamp) as feedback_id
+            argMax(id, timestamp) as feedback_id,
+            argMax(tags['tensorzero::human_feedback'], timestamp) == 'true' as is_human_feedback
       FROM BooleanMetricFeedback
       WHERE metric_name IN ({metric_names:Array(String)})
       AND target_id IN (SELECT inference_id FROM all_inference_ids)
@@ -525,7 +546,8 @@ export async function getEvaluationsForDatapoint(
             metric_name,
             argMax(toString(value), timestamp) as value,
             argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
-            argMax(id, timestamp) as feedback_id
+            argMax(id, timestamp) as feedback_id,
+            argMax(tags['tensorzero::human_feedback'], timestamp) == 'true' as is_human_feedback
       FROM FloatMetricFeedback
       WHERE metric_name IN ({metric_names:Array(String)})
       AND target_id IN (SELECT inference_id FROM all_inference_ids)
@@ -548,16 +570,17 @@ export async function getEvaluationsForDatapoint(
       if(length(filtered_feedback.evaluator_inference_id) > 0, filtered_feedback.evaluator_inference_id, null) as evaluator_inference_id,
       filtered_feedback.metric_name as metric_name,
       filtered_feedback.value as metric_value,
-      filtered_feedback.feedback_id as feedback_id
+      filtered_feedback.feedback_id as feedback_id,
+      toBool(filtered_feedback.is_human_feedback) as is_human_feedback
     FROM filtered_inference
     INNER JOIN filtered_datapoint
       ON filtered_datapoint.id = toUUIDOrNull(filtered_inference.tags['tensorzero::datapoint_id'])
-    INNER JOIN filtered_feedback
+    LEFT JOIN filtered_feedback
       ON filtered_feedback.target_id = filtered_inference.id
 
   `;
 
-  const result = await clickhouseClient.query({
+  const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: {
@@ -571,7 +594,7 @@ export async function getEvaluationsForDatapoint(
   });
   const rows = await result.json<EvaluationResultWithVariant>();
   const parsed_rows = await Promise.all(
-    rows.map((row) => parseEvaluationResultWithVariant(row)),
+    rows.map((row) => parseEvaluationResultWithVariant(row, function_name)),
   );
   return parsed_rows;
 }
@@ -619,7 +642,7 @@ export async function pollForEvaluations(
   }
 
   if (!found) {
-    console.warn(
+    logger.warn(
       `Evaluation with feedback ${new_feedback_id} for datapoint ${datapoint_id} not found after ${max_retries} retries.`,
     );
   }
@@ -678,7 +701,7 @@ export async function pollForEvaluationResults(
   }
 
   if (!found) {
-    console.warn(
+    logger.warn(
       `Evaluation result with feedback ${new_feedback_id} not found after ${max_retries} retries.`,
     );
   }

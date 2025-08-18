@@ -1,0 +1,1 @@
+exclude = ["recipes/**/*_nb.py"]

@@ -9,12 +9,12 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
-import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
+import type { DynamicEvaluationRunWithEpisodeCount } from "~/utils/clickhouse/dynamic_evaluations";
 
 export default function DynamicEvaluationRunsTable({
   dynamicEvaluationRuns,
 }: {
-  dynamicEvaluationRuns: DynamicEvaluationRun[];
+  dynamicEvaluationRuns: DynamicEvaluationRunWithEpisodeCount[];
 }) {
   return (
     <div>
@@ -24,6 +24,7 @@ export default function DynamicEvaluationRunsTable({
             <TableHead>Name</TableHead>
             <TableHead>ID</TableHead>
             <TableHead>Project</TableHead>
+            <TableHead>Episodes</TableHead>
             <TableHead>Timestamp</TableHead>
           </TableRow>
         </TableHeader>
@@ -54,10 +55,16 @@ export default function DynamicEvaluationRunsTable({
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                    {run.project_name}
-                  </code>
+                  <Link
+                    to={`/dynamic_evaluations/projects/${run.project_name}?run_ids=${run.id}`}
+                    className="block no-underline"
+                  >
+                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                      {run.project_name}
+                    </code>
+                  </Link>
                 </TableCell>
+                <TableCell>{run.num_episodes}</TableCell>
                 <TableCell>{formatDate(new Date(run.timestamp))}</TableCell>
               </TableRow>
             ))

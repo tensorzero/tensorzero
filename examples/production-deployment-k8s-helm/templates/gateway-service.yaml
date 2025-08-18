@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tensorzero.fullname" . }}-gateway
+  labels:
+    {{- include "tensorzero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  type: {{ .Values.gateway.service.type }}
+  ports:
+    - port: {{ .Values.gateway.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "tensorzero.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway

@@ -1,36 +1,65 @@
 use anyhow::{bail, Result};
 use serde_json::Value;
 use tensorzero::InferenceResponse;
-use tensorzero_internal::endpoints::datasets::Datapoint;
+use tensorzero_core::endpoints::datasets::Datapoint;
+use tracing::{debug, instrument, warn};
 
+#[instrument(skip(inference_response, datapoint), fields(datapoint_id = %datapoint.id()))]
 pub(super) fn run_exact_match_evaluator(
     inference_response: &InferenceResponse,
     datapoint: &Datapoint,
 ) -> Result<Option<Value>> {
     match (inference_response, datapoint) {
-        (InferenceResponse::Chat(response), Datapoint::ChatInference(datapoint)) => {
+        (InferenceResponse::Chat(response), Datapoint::Chat(datapoint)) => {
+            debug!("Running exact match evaluation for chat response");
             match &datapoint.output {
                 // Right now this is order-sensitive, but we may consider relaxing this in the future
-                Some(output) => Ok(Some(Value::Bool(output == &response.content))),
-                None => Ok(None),
+                Some(output) => {
+                    let matches = output == &response.content;
+                    debug!(matches = %matches, "Chat exact match comparison completed");
+                    Ok(Some(Value::Bool(matches)))
+                }
+                None => {
+                    debug!("No reference output available for chat comparison");
+                    Ok(None)
+                }
             }
         }
-        (InferenceResponse::Json(json_completion), Datapoint::JsonInference(json_inference)) => {
+        (InferenceResponse::Json(json_completion), Datapoint::Json(json_inference)) => {
+            debug!("Running exact match evaluation for JSON response");
             match &json_inference.output {
                 Some(output) => {
                     // `output.parsed` is an Option<Value> but it should always be Some here
                     if output.parsed.is_none() {
-                        tracing::warn!("Datapoint {} has no parsed output", json_inference.id);
+                        warn!("Datapoint {} has no parsed output", json_inference.id);
                         return Ok(None);
                     }
-                    Ok(Some(Value::Bool(
-                        output.parsed == json_completion.output.parsed,
-                    )))
+                    let matches = output.parsed == json_completion.output.parsed;
+                    debug!(matches = %matches, "JSON exact match comparison completed");
+                    Ok(Some(Value::Bool(matches)))
                 }
-                None => Ok(None),
+                None => {
+                    debug!("No reference output available for JSON comparison");
+                    Ok(None)
+                }
             }
         }
-        _ => bail!("Datapoint and inference response types do not match"),
+        _ => {
+            let datapoint_type = match datapoint {
+                Datapoint::Chat(_) => "Chat",
+                Datapoint::Json(_) => "Json",
+            };
+            let response_type = match inference_response {
+                InferenceResponse::Chat(_) => "Chat",
+                InferenceResponse::Json(_) => "Json",
+            };
+            warn!(
+                datapoint_type = %datapoint_type,
+                response_type = %response_type,
+                "Datapoint and inference response types do not match"
+            );
+            bail!("Datapoint and inference response types do not match")
+        }
     }
 }
 
@@ -40,7 +69,7 @@ mod tests {
     use super::*;
     use serde_json::json;
     use tensorzero::Role;
-    use tensorzero_internal::{
+    use tensorzero_core::{
         endpoints::{
             datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint},
             inference::{ChatInferenceResponse, JsonInferenceResponse},
@@ -55,7 +84,7 @@ mod tests {
     #[test]
     fn test_exact_match_evaluator_chat() {
         // Test a match
-        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             id: Uuid::now_v7(),
             input: ResolvedInput {
                 system: None,
@@ -74,10 +103,11 @@ mod tests {
             })]),
             tool_params: None,
             tags: None,
-            auxiliary: "".to_string(),
+            auxiliary: String::new(),
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: false,
         });
         let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
             inference_id: Uuid::now_v7(),
@@ -115,7 +145,7 @@ mod tests {
         assert_eq!(result, Some(Value::Bool(false)));
 
         // Test with missing output (should be None)
-        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             id: Uuid::now_v7(),
             input: ResolvedInput {
                 system: None,
@@ -132,10 +162,11 @@ mod tests {
             output: None,
             tool_params: None,
             tags: None,
-            auxiliary: "".to_string(),
+            auxiliary: String::new(),
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, None);
@@ -144,7 +175,7 @@ mod tests {
     #[test]
     fn test_exact_match_evaluator_json() {
         // Test a match
-        let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             id: Uuid::now_v7(),
             input: ResolvedInput {
                 system: None,
@@ -171,10 +202,11 @@ mod tests {
                 raw: Some(r#"{"foo": "bar"}"#.to_string()),
             }),
             tags: None,
-            auxiliary: "".to_string(),
+            auxiliary: String::new(),
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let inference_response = InferenceResponse::Json(JsonInferenceResponse {
             inference_id: Uuid::now_v7(),
@@ -214,7 +246,7 @@ mod tests {
         assert_eq!(result, Some(Value::Bool(false)));
 
         // Test with missing output (should be None)
-        let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             id: Uuid::now_v7(),
             input: ResolvedInput {
                 system: None,
@@ -238,16 +270,17 @@ mod tests {
                 }
             }),
             tags: None,
-            auxiliary: "".to_string(),
+            auxiliary: String::new(),
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, None);
 
         // Test with datapoint with malformed output schema (should be None)
-        let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             id: Uuid::now_v7(),
             input: ResolvedInput {
                 system: None,
@@ -274,10 +307,11 @@ mod tests {
                 }
             }),
             tags: None,
-            auxiliary: "".to_string(),
+            auxiliary: String::new(),
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, None);

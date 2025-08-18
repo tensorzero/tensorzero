@@ -5,7 +5,10 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "./tooltip";
+import { getFunctionTypeIcon } from "~/utils/icon";
 import { formatDate } from "~/utils/date";
+import { useFunctionConfig } from "~/context/config";
+import { AlertDialog } from "~/components/ui/AlertDialog";
 
 interface TableItemShortUuidProps {
   id: string | null;
@@ -63,4 +66,66 @@ function TableItemTime({ timestamp }: TableItemTimeProps) {
   );
 }
 
-export { TableItemShortUuid, TableItemTime };
+interface TableItemFunctionProps {
+  functionName: string;
+  functionType: string;
+  link?: string;
+}
+
+function TableItemFunction({
+  functionName,
+  functionType,
+  link,
+}: TableItemFunctionProps) {
+  const functionIconConfig = getFunctionTypeIcon(functionType);
+  const functionConfig = useFunctionConfig(functionName);
+
+  const baseClasses =
+    "flex items-center text-sm text-fg-primary gap-2 rounded-md font-mono";
+
+  const content = (
+    <>
+      <TooltipProvider delayDuration={400}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className={`${functionIconConfig.iconBg} rounded-sm p-0.5`}>
+              {functionIconConfig.icon}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent
+            className="border-border bg-bg-secondary text-fg-primary border shadow-lg"
+            sideOffset={5}
+          >
+            {functionIconConfig.label}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <span className="text-fg-primary inline-block truncate transition-colors duration-300 group-hover:text-gray-500">
+        {functionName}
+      </span>
+    </>
+  );
+
+  if (link) {
+    if (functionConfig) {
+      return (
+        <Link to={link} className={`${baseClasses} group cursor-pointer`}>
+          {content}
+        </Link>
+      );
+    } else {
+      return (
+        <AlertDialog
+          message="This function is not present in your configuration file."
+          trigger={
+            <div className={`${baseClasses} cursor-default`}>{content}</div>
+          }
+        />
+      );
+    }
+  }
+
+  return <div className={`${baseClasses} cursor-default`}>{content}</div>;
+}
+
+export { TableItemShortUuid, TableItemTime, TableItemFunction };

@@ -1,0 +1,6 @@
+[project]
+name = "tensorzero-examples-guides-datasets-datapoints"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["tensorzero>=2025.5.7"]

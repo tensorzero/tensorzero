@@ -9,16 +9,14 @@ use evaluations::evaluators::llm_judge::{run_llm_judge_evaluator, RunLLMJudgeEva
 use evaluations::{Clients, ThrottledTensorZeroClient};
 use serde_json::json;
 use tensorzero::input_handling::resolved_input_to_client_input;
-use tensorzero_internal::cache::CacheEnabledMode;
-use tensorzero_internal::clickhouse::test_helpers::{
+use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::clickhouse::test_helpers::{
     select_human_static_evaluation_feedback_clickhouse, select_model_inferences_clickhouse,
 };
-use tensorzero_internal::endpoints::datasets::Datapoint;
-use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
-use tensorzero_internal::function::{FunctionConfig, FunctionConfigJson};
-use tensorzero_internal::inference::types::{
-    ResolvedInputMessage, ResolvedInputMessageContent, Text,
-};
+use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
+use tensorzero_core::function::{FunctionConfig, FunctionConfigJson};
+use tensorzero_core::inference::types::{ResolvedInputMessage, ResolvedInputMessageContent, Text};
 use tokio::time::sleep;
 use url::Url;
 
@@ -30,14 +28,14 @@ use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
 use tensorzero::{ClientBuilder, ClientBuilderMode, FeedbackParams};
 use tensorzero::{InferenceResponse, Role};
-use tensorzero_internal::{
+use tensorzero_core::{
     clickhouse::test_helpers::{
         clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
         select_feedback_by_target_id_clickhouse, select_json_inference_clickhouse,
     },
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, Usage},
 };
-use tensorzero_internal::{
+use tensorzero_core::{
     endpoints::{
         datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint},
         inference::{ChatInferenceResponse, JsonInferenceResponse},
@@ -54,14 +52,14 @@ async fn run_evaluations_json() {
     let tensorzero_client = get_tensorzero_client().await;
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -82,6 +80,7 @@ async fn run_evaluations_json() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_millis(200)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -278,6 +277,7 @@ async fn run_evaluations_json() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_millis(200)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut total_sports = 0;
@@ -324,14 +324,14 @@ async fn run_exact_match_evaluation_chat() {
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -351,6 +351,7 @@ async fn run_exact_match_evaluation_chat() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_millis(1000)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -444,14 +445,14 @@ async fn run_llm_judge_evaluation_chat() {
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("good-haikus-no-output".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let tensorzero_client = get_tensorzero_client().await;
@@ -472,6 +473,7 @@ async fn run_llm_judge_evaluation_chat() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_millis(200)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -616,6 +618,7 @@ async fn run_llm_judge_evaluation_chat() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_millis(200)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut total_topic_fs = 0;
@@ -661,14 +664,14 @@ async fn run_image_evaluation() {
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("baz".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -874,14 +877,14 @@ async fn check_invalid_image_evaluation() {
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("baz".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -973,14 +976,14 @@ async fn run_llm_judge_evaluation_chat_pretty() {
     let dataset_name = format!("good-haikus-no-output-{}", Uuid::now_v7());
     write_chat_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("good-haikus-no-output".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1014,14 +1017,14 @@ async fn run_llm_judge_evaluation_json_pretty() {
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1168,14 +1171,14 @@ async fn run_evaluations_errors() {
     let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1195,6 +1198,7 @@ async fn run_evaluations_errors() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_millis(200)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     for line in output_lines {
@@ -1217,11 +1221,12 @@ async fn run_evaluations_errors() {
 async fn test_run_llm_judge_evaluator_chat() {
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(PathBuf::from(&format!(
-            "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+            "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         ))),
         clickhouse_url: None,
         timeout: None,
+        verify_credentials: true,
     })
     .build()
     .await
@@ -1245,7 +1250,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         },
         variant_name: "test_variant".to_string(),
     });
-    let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
         input: ResolvedInput {
             system: None,
             messages: vec![ResolvedInputMessage {
@@ -1255,7 +1260,7 @@ async fn test_run_llm_judge_evaluator_chat() {
                 }],
             }],
         },
-        auxiliary: "".to_string(),
+        auxiliary: String::new(),
         dataset_name: "test_dataset".to_string(),
         episode_id: Some(Uuid::now_v7()),
         id: Uuid::now_v7(),
@@ -1268,6 +1273,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         tool_params: None,
         source_inference_id: None,
         staled_at: None,
+        is_custom: true,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1349,7 +1355,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     assert_eq!(result.value, json!(1));
 
     // Try without output
-    let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
         input: ResolvedInput {
             system: None,
             messages: vec![ResolvedInputMessage {
@@ -1359,7 +1365,7 @@ async fn test_run_llm_judge_evaluator_chat() {
                 }],
             }],
         },
-        auxiliary: "".to_string(),
+        auxiliary: String::new(),
         dataset_name: "test_dataset".to_string(),
         episode_id: Some(Uuid::now_v7()),
         id: Uuid::now_v7(),
@@ -1370,6 +1376,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         tool_params: None,
         source_inference_id: None,
         staled_at: None,
+        is_custom: true,
     });
 
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
@@ -1411,7 +1418,7 @@ async fn test_run_llm_judge_evaluator_json() {
         },
         variant_name: "test_variant".to_string(),
     });
-    let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+    let datapoint = Datapoint::Json(JsonInferenceDatapoint {
         input: ResolvedInput {
             system: None,
             messages: vec![ResolvedInputMessage {
@@ -1421,7 +1428,7 @@ async fn test_run_llm_judge_evaluator_json() {
                 }],
             }],
         },
-        auxiliary: "".to_string(),
+        auxiliary: String::new(),
         dataset_name: "test_dataset".to_string(),
         episode_id: Some(Uuid::now_v7()),
         id: Uuid::now_v7(),
@@ -1435,6 +1442,7 @@ async fn test_run_llm_judge_evaluator_json() {
         tags: None,
         source_inference_id: None,
         staled_at: None,
+        is_custom: true,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1516,7 +1524,7 @@ async fn test_run_llm_judge_evaluator_json() {
     assert_eq!(result.value, json!(1));
 
     // Try without output
-    let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
         input: ResolvedInput {
             system: None,
             messages: vec![ResolvedInputMessage {
@@ -1526,7 +1534,7 @@ async fn test_run_llm_judge_evaluator_json() {
                 }],
             }],
         },
-        auxiliary: "".to_string(),
+        auxiliary: String::new(),
         dataset_name: "test_dataset".to_string(),
         episode_id: Some(Uuid::now_v7()),
         id: Uuid::now_v7(),
@@ -1537,6 +1545,7 @@ async fn test_run_llm_judge_evaluator_json() {
         tool_params: None,
         source_inference_id: None,
         staled_at: None,
+        is_custom: true,
     });
 
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
@@ -1561,14 +1570,14 @@ async fn run_evaluations_best_of_3() {
     let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1588,6 +1597,7 @@ async fn run_evaluations_best_of_3() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_millis(200)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -1731,7 +1741,7 @@ async fn run_evaluations_best_of_3() {
                 assert!(model_inference["system"]
                     .as_str()
                     .unwrap()
-                    .starts_with("You are an assistant tasked with re-ranking"))
+                    .starts_with("You are an assistant tasked with re-ranking"));
             }
         }
         assert_eq!(happy_count, 3);
@@ -1746,14 +1756,14 @@ async fn run_evaluations_mixture_of_3() {
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1773,6 +1783,7 @@ async fn run_evaluations_mixture_of_3() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_millis(200)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -1919,7 +1930,7 @@ async fn run_evaluations_mixture_of_3() {
                 assert!(model_inference["system"]
                     .as_str()
                     .unwrap()
-                    .starts_with("You have been provided with a set of responses from various"))
+                    .starts_with("You have been provided with a set of responses from various"));
             }
         }
         assert_eq!(happy_count, 3);
@@ -1934,14 +1945,14 @@ async fn run_evaluations_dicl() {
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1961,6 +1972,7 @@ async fn run_evaluations_dicl() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_millis(200)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -2125,7 +2137,7 @@ async fn test_query_skips_staled_datapoints() {
     let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("exact_matches_empty".to_string(), dataset_name.clone())]),

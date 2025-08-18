@@ -1,5 +1,5 @@
 import { Badge } from "~/components/ui/badge";
-import type { FunctionConfig } from "~/utils/config/function";
+import type { FunctionConfig } from "tensorzero-node";
 
 const getBadgeStyle = (type: string) => {
   switch (type) {

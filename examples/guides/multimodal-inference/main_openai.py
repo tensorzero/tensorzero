@@ -15,7 +15,7 @@ with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                            "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/eac2a230d4a4db1ea09e9c876e45bdb23a300364/tensorzero-core/tests/e2e/providers/ferris.png",
                         },
                     },
                     # One-pixel orange image encoded as a base64 string

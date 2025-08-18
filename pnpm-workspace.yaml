@@ -1,0 +1,5 @@
+packages:
+  - "ui"
+  - "clients/*"
+  - "examples/**/*"
+  - "internal/tensorzero-node"

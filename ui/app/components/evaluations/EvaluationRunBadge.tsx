@@ -8,6 +8,7 @@ import {
 import { Badge } from "../ui/badge";
 import { X } from "lucide-react";
 import { formatDate } from "~/utils/date";
+import { cn } from "~/utils/common";
 
 interface EvaluationRunBadgeProps {
   runInfo: EvaluationRunSearchResult;
@@ -33,7 +34,12 @@ export default function EvaluationRunBadge({
   // If runId is empty, render a simple badge without tooltip
   if (!runId) {
     return (
-      <Badge className={`${variantColor} flex items-center gap-1.5 px-2 py-1`}>
+      <Badge
+        className={cn(
+          "flex w-fit items-center gap-1.5 px-2 py-1",
+          variantColor,
+        )}
+      >
         <span>{runInfo.variant_name}</span>
         {onRemove && (
           <X
@@ -50,7 +56,10 @@ export default function EvaluationRunBadge({
       <Tooltip>
         <TooltipTrigger asChild>
           <Badge
-            className={`${variantColor} flex cursor-help items-center gap-1.5 px-2 py-1`}
+            className={cn(
+              "flex w-fit cursor-help items-center gap-1.5 px-2 py-1",
+              variantColor,
+            )}
           >
             <span>{runInfo.variant_name}</span>
             <span className="border-l border-white/30 pl-1.5 text-xs opacity-80">

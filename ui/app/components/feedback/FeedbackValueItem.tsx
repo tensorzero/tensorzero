@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { getFeedbackIcon } from "~/utils/icon";
+import { UserFeedback } from "../icons/Icons";
 
 interface ValueItemProps {
   iconType:
@@ -36,56 +37,78 @@ function ValueItem({ iconType, children, onClick }: ValueItemProps) {
   );
 }
 
+function ValueItemText({ children }: { children: ReactNode }) {
+  return (
+    <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+      {children}
+    </span>
+  );
+}
+
 function BooleanItem({
   value,
   status,
+  isHumanFeedback,
 }: {
   value: boolean;
   status: "success" | "failure" | "default";
+  isHumanFeedback: boolean;
 }) {
   return (
     <ValueItem iconType={status === "default" ? "unknown" : status}>
-      <span>{value ? "True" : "False"}</span>
+      <ValueItemText>{value ? "True" : "False"}</ValueItemText>
+      {isHumanFeedback && <UserFeedback />}
     </ValueItem>
   );
 }
 
-function FloatItem({ value }: { value: number }) {
+function FloatItem({
+  value,
+  isHumanFeedback,
+}: {
+  value: number;
+  isHumanFeedback: boolean;
+}) {
   return (
     <ValueItem iconType="float">
-      <span>{value.toFixed(3)}</span>
+      <ValueItemText>{value.toFixed(3)}</ValueItemText>
+      {isHumanFeedback && <UserFeedback />}
     </ValueItem>
   );
 }
 
 function CommentItem({
   value,
+  isHumanFeedback,
   onClick,
 }: {
   value: string;
+  isHumanFeedback: boolean;
   onClick?: (event: React.MouseEvent) => void;
 }) {
   return (
     <ValueItem iconType="comment" onClick={onClick}>
-      <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-        {value}
-      </span>
+      <ValueItemText>{value}</ValueItemText>
+      {isHumanFeedback && <UserFeedback />}
     </ValueItem>
   );
 }
 
 function DemonstrationItem({
   value,
+  isHumanFeedback,
   onClick,
 }: {
   value: string;
+  isHumanFeedback: boolean;
   onClick?: (event: React.MouseEvent) => void;
 }) {
   return (
     <ValueItem iconType="demonstration" onClick={onClick}>
-      <span className="overflow-hidden font-mono text-ellipsis whitespace-nowrap">
-        {value}
-      </span>
+      <ValueItemText>
+        <span className="font-mono">{value}</span>
+      </ValueItemText>
+      {isHumanFeedback && <UserFeedback />}
     </ValueItem>
   );
 }

@@ -19,7 +19,7 @@ from tools import load_wikipedia_page, search_wikipedia
 MAX_INFERENCES = 20
 
 # The maximum number of characters in the messages before compacting.
-MAX_MESSAGE_LENGTH = 200000
+MAX_MESSAGE_LENGTH = 100_000
 
 
 @dataclass

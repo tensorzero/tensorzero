@@ -1,0 +1,46 @@
+{{- if and .Values.ui.ingress.enabled .Values.ui.deploy }}
+{{- $fullName := include "tensorzero.fullname" . -}}
+{{- $uiSvcPort := .Values.ui.service.port -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}-ui
+  labels:
+    {{- include "tensorzero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+  {{- with .Values.ui.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ui.ingress.className }}
+  ingressClassName: {{ .Values.ui.ingress.className }}
+  {{- end }}
+  {{- if .Values.ui.ingress.tls }}
+  tls:
+    {{- range .Values.ui.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- if .secretName }}
+      secretName: {{ .secretName }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.ui.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ $fullName }}-ui
+                port:
+                  number: {{ $uiSvcPort }}
+          {{- end }}
+    {{- end }}
+{{- end }} 

@@ -26,15 +26,16 @@ export function ProgressIndicator({
     getProgressPercentage(createdAt, estimatedCompletion, new Date()),
   );
 
+  // Update progress every second
+  const UPDATE_INTERVAL = 1000;
   useEffect(() => {
-    // Update progress every second
     const intervalId = setInterval(() => {
       const now = new Date();
       setProgress(getProgressPercentage(createdAt, estimatedCompletion, now));
       if (now >= estimatedCompletion) {
         clearInterval(intervalId);
       }
-    }, 1000);
+    }, UPDATE_INTERVAL);
 
     // Clean up interval on component unmount
     return () => clearInterval(intervalId);
@@ -43,10 +44,13 @@ export function ProgressIndicator({
   return (
     <div className="max-w-lg space-y-2">
       <div className="flex items-center justify-between">
-        <span className="font-medium">Estimated Completion</span>
         <CountdownTimer targetDate={estimatedCompletion} />
       </div>
-      <Progress value={progress} className="w-full" />
+      <Progress
+        updateInterval={UPDATE_INTERVAL}
+        value={progress}
+        className="w-full"
+      />
     </div>
   );
 }

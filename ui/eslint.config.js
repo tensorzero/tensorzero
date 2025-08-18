@@ -6,7 +6,6 @@ import pluginReactHooks from "eslint-plugin-react-hooks";
 export default [
   {
     ignores: [
-      "**/minijinja/pkg/",
       "**/node_modules/**",
       "**/build/**",
       "**/.react-router/**",
@@ -52,6 +51,24 @@ export default [
           selector:
             ":matches(Literal, TemplateElement)[value.raw=/tensorzero_ui_fixtures/]",
           message: "The string 'tensorzero_ui_fixtures' is not allowed.",
+        },
+        {
+          selector:
+            "MemberExpression[object.name='config'][property.name='functions']",
+          message:
+            "Direct access to config.functions is not allowed. Use the useFunctionConfig(functionName) hook instead.",
+        },
+        {
+          selector:
+            "MemberExpression[object.property.name='functions'][property.type='Literal']",
+          message:
+            "Direct access to config.functions[functionName] is not allowed. Use the useFunctionConfig(functionName) hook instead.",
+        },
+        {
+          selector:
+            "MemberExpression[object.property.name='functions'][property.type='Identifier']",
+          message:
+            "Direct access to config.functions[functionName] is not allowed. Use the useFunctionConfig(functionName) hook instead.",
         },
       ],
     },

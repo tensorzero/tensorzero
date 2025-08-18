@@ -1,22 +1,25 @@
 import { useConfig } from "~/context/config";
 import MetricSelector from "../metric/MetricSelector";
 import { useState } from "react";
-import type { ContentBlockOutput } from "~/utils/clickhouse/common";
-import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
-import Output from "../inference/Output";
+import type {
+  ContentBlockChatOutput,
+  JsonInferenceOutput,
+} from "tensorzero-node";
+import { Output } from "../inference/Output";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
   filterMetricsByLevel,
   filterStaticEvaluationMetrics,
-} from "~/utils/config/metric";
+} from "~/utils/config/feedback";
 import BooleanFeedbackInput from "./BooleanFeedbackInput";
 import FloatFeedbackInput from "./FloatFeedbackInput";
 import CommentFeedbackInput from "./CommentFeedbackInput";
 
 export interface HumanFeedbackFormSharedProps {
-  inferenceOutput?: ContentBlockOutput[] | JsonInferenceOutput;
-  formError?: string;
+  inferenceOutput?: ContentBlockChatOutput[] | JsonInferenceOutput;
+  formError?: string | null;
+  isSubmitting?: boolean;
 }
 
 type HumanFeedbackFormProps = HumanFeedbackFormSharedProps &
@@ -30,6 +33,7 @@ export function HumanFeedbackForm({
   episodeId,
   inferenceId,
   formError,
+  isSubmitting,
 }: HumanFeedbackFormProps) {
   const config = useConfig();
   // If there is no inference output this is likely an episode-level feedback and
@@ -46,7 +50,7 @@ export function HumanFeedbackForm({
   const [floatValue, setFloatValue] = useState<string>("");
   const [commentValue, setCommentValue] = useState<string>("");
   const [demonstrationValue, setDemonstrationValue] = useState<
-    ContentBlockOutput[] | JsonInferenceOutput | undefined
+    ContentBlockChatOutput[] | JsonInferenceOutput | undefined
   >(inferenceOutput);
   const [demonstrationIsValid, setDemonstrationIsValid] =
     useState<boolean>(true);
@@ -144,18 +148,22 @@ export function HumanFeedbackForm({
       )}
 
       {selectedMetricName && (
-        <div className="flex items-start justify-between gap-4">
+        <div className="mt-4 flex items-start justify-between gap-4">
           <div aria-live="polite">
-            {!!formError && <p className="text-destructive">{formError}</p>}
+            {!!formError && (
+              <p className="text-destructive text-sm font-bold">{formError}</p>
+            )}
           </div>
           <Button
             type="submit"
             disabled={
-              !selectedMetricName || isInputMissing || !demonstrationIsValid
+              isSubmitting ||
+              !selectedMetricName ||
+              isInputMissing ||
+              !demonstrationIsValid
             }
-            className="mt-2"
           >
-            Submit Feedback
+            {isSubmitting ? "Submitting…" : "Submit Feedback"}
           </Button>
         </div>
       )}
@@ -167,10 +175,10 @@ export function HumanFeedbackForm({
  * If the type of the demonstration value is JsonInferenceOutput,
  * we need to submit only demonstrationValue.parsed and not the entire
  * demonstrationValue object.
- * For ContentBlockOutput[], we submit the entire object.
+ * For ContentBlockChatOutput[], we submit the entire object.
  */
 function getDemonstrationValueToSubmit(
-  demonstrationValue: ContentBlockOutput[] | JsonInferenceOutput,
+  demonstrationValue: ContentBlockChatOutput[] | JsonInferenceOutput,
 ) {
   if (Array.isArray(demonstrationValue)) {
     return demonstrationValue;

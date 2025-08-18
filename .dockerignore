@@ -8,6 +8,10 @@ target-rust-analyzer
 **/node_modules
 **/.env*
 **/.vscode
+**/.claude
 /recipes
 /examples
-!/examples/integrations/cursor/experimental
+!/examples/integrations/cursor/feedback
+!/examples/quickstart/package.json
+!/examples/integrations/helicone/package.json
+!/examples/guides/tool-use/package.json

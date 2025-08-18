@@ -19,6 +19,7 @@ describe("getDynamicEvaluationRuns", () => {
       {
         id: "0196a0e5-9600-7c83-ab3b-dac7598fddbd",
         name: "agent-gemini-2.5-flash-compact_context-baseline",
+        num_episodes: 10,
         project_name: "beerqa-agentic-rag",
         tags: {},
         timestamp: "2025-05-05T14:42:02Z",
@@ -28,9 +29,34 @@ describe("getDynamicEvaluationRuns", () => {
         },
       },
       {
+        id: "0196a0e5-9600-7c83-ab3b-dabb145a9dc0",
+        name: "agent-baseline-compact_context-baseline",
+        num_episodes: 0,
+        project_name: null,
+        tags: {},
+        timestamp: "2025-05-05T14:42:02Z",
+        variant_pins: {
+          compact_context: "baseline",
+          multi_hop_rag_agent: "baseline",
+        },
+      },
+      {
+        id: "0196a0e5-9600-7c83-ab3b-dabb145a9dbf",
+        name: "agent-baseline-compact_context-baseline",
+        num_episodes: 0,
+        project_name: "beerqa-agentic-rag",
+        tags: {},
+        timestamp: "2025-05-05T14:42:02Z",
+        variant_pins: {
+          compact_context: "baseline",
+          multi_hop_rag_agent: "baseline",
+        },
+      },
+      {
         id: "0196a0e5-9600-7c83-ab3b-dabb145a9dbe",
         name: "agent-baseline-compact_context-baseline",
         project_name: "beerqa-agentic-rag",
+        num_episodes: 10,
         tags: {},
         timestamp: "2025-05-05T14:42:02Z",
         variant_pins: {
@@ -42,6 +68,7 @@ describe("getDynamicEvaluationRuns", () => {
         id: "0196a0e5-9600-7c83-ab3b-daa3fd908279",
         name: "agent-baseline-compact_context-gemini-2.5-flash",
         project_name: "beerqa-agentic-rag",
+        num_episodes: 10,
         tags: {},
         timestamp: "2025-05-05T14:42:02Z",
         variant_pins: {
@@ -53,6 +80,7 @@ describe("getDynamicEvaluationRuns", () => {
         id: "0196a0e5-9600-7c83-ab3b-da910bfdd03e",
         name: "agent-gpt-4.1-mini-compact_context-baseline",
         project_name: "beerqa-agentic-rag",
+        num_episodes: 10,
         tags: {},
         timestamp: "2025-05-05T14:42:02Z",
         variant_pins: {
@@ -64,6 +92,7 @@ describe("getDynamicEvaluationRuns", () => {
         id: "0196a0e5-9600-7c83-ab3b-da81097b66cd",
         name: "agent-gemini-2.5-flash-compact_context-gemini-2.5-flash",
         project_name: "beerqa-agentic-rag",
+        num_episodes: 10,
         tags: {},
         timestamp: "2025-05-05T14:42:02Z",
         variant_pins: {
@@ -75,6 +104,7 @@ describe("getDynamicEvaluationRuns", () => {
         id: "0196a0e5-9600-7c83-ab3b-da7bc6aac7e7",
         name: "agent-gpt-4.1-mini-compact_context-gemini-2.5-flash",
         project_name: "beerqa-agentic-rag",
+        num_episodes: 10,
         tags: {},
         timestamp: "2025-05-05T14:42:02Z",
         variant_pins: {
@@ -86,6 +116,7 @@ describe("getDynamicEvaluationRuns", () => {
         id: "01968d08-3198-7e82-b3c8-e228f8ddc779",
         name: "gpt-4.1-mini",
         project_name: "21_questions",
+        num_episodes: 50,
         tags: { foo: "bar" },
         timestamp: "2025-05-01T18:07:26Z",
         variant_pins: {
@@ -97,21 +128,11 @@ describe("getDynamicEvaluationRuns", () => {
         id: "01968d05-d734-7751-ab33-75dd8b3fb4a3",
         name: "baseline",
         project_name: "21_questions",
+        num_episodes: 50,
         tags: { foo: "bar" },
         timestamp: "2025-05-01T18:04:52Z",
         variant_pins: {
           ask_question: "baseline",
-          answer_question: "baseline",
-        },
-      },
-      {
-        id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
-        name: "gpt-4.1-nano",
-        project_name: "21_questions",
-        tags: { foo: "bar" },
-        timestamp: "2025-05-01T18:02:56Z",
-        variant_pins: {
-          ask_question: "gpt-4.1-nano",
           answer_question: "baseline",
         },
       },
@@ -219,7 +240,7 @@ describe("getDynamicEvaluationRunsByIds", () => {
 describe("countDynamicEvaluationRuns", () => {
   test("should return correct total number of runs", async () => {
     const totalRuns = await countDynamicEvaluationRuns();
-    expect(totalRuns).toBe(9);
+    expect(totalRuns).toBe(11);
   });
 });
 
@@ -373,7 +394,7 @@ describe("getDynamicEvaluationProjects", () => {
     const projects = await getDynamicEvaluationProjects(10, 0);
     expect(projects).toMatchObject([
       {
-        count: 6,
+        count: 7,
         last_updated: "2025-05-05T14:42:02Z",
         name: "beerqa-agentic-rag",
       },

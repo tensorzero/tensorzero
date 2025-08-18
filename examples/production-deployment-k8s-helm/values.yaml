@@ -1,0 +1,136 @@
+# TensorZero Configuration
+nameOverride: ""
+fullnameOverride: ""
+
+# Gateway Configuration
+gateway:
+  replicaCount: 1
+  command: ["gateway"]
+  args:
+    - --config-file=/app/config/tensorzero.toml
+
+  image:
+    repository: tensorzero/gateway
+    tag: 2025.7.5
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  additionalEnv:
+    secretName: "tensorzero-secret"
+    keys:
+      - name: TENSORZERO_CLICKHOUSE_URL
+        key: TENSORZERO_CLICKHOUSE_URL
+      - name: TENSORZERO_GATEWAY_URL
+        key: TENSORZERO_GATEWAY_URL
+      - name: OPENAI_API_KEY
+        key: OPENAI_API_KEY
+      # TODO: include other model provider credentials as needed
+
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4096Mi
+    requests:
+      cpu: 2000m
+      memory: 4096Mi
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
+  ingress:
+    enabled: true
+    className: ""
+    annotations:
+      {}
+      # kubernetes.io/tls-acme: "true"
+      # cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: tensorzero-gateway.local # TODO: change this to the correct host
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+    #  - secretName: tensorzero-gateway-tls
+    #    hosts:
+    #      - tensorzero-gateway.local
+
+# UI Configuration
+ui:
+  deploy: true # TODO: change this to false if you don't want to deploy the UI
+  replicaCount: 1
+  image:
+    repository: tensorzero/ui
+    tag: 2025.7.5
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 4000
+
+  additionalEnv:
+    secretName: "tensorzero-secret"
+    keys:
+      - name: TENSORZERO_CLICKHOUSE_URL
+        key: TENSORZERO_CLICKHOUSE_URL
+      - name: TENSORZERO_GATEWAY_URL
+        key: TENSORZERO_GATEWAY_URL
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1024Mi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
+
+  ingress:
+    enabled: true
+    className: ""
+    annotations:
+      {}
+      # kubernetes.io/tls-acme: "true"
+      # cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: tensorzero-ui.local # TODO: change this to the correct host
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+    #  - secretName: tensorzero-ui-tls
+    #    hosts:
+    #      - tensorzero-ui.local
+
+# Persistence Configuration
+persistence:
+  enabled: false
+  size: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClass: ""
+  mountPath: /app/storage
+
+# TensorZero Configuration
+configMap:
+  data:
+    tensorzero.toml: |
+      [functions.my_function_name]
+      type = "chat"
+
+      [functions.my_function_name.variants.my_variant_name]
+      type = "chat_completion"
+      model = "openai::gpt-4o-mini"
+
+      # [object_storage]
+      # type = "filesystem"
+      # path = "/app/storage/"

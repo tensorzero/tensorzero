@@ -1,4 +1,4 @@
-import { useConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import {
   BasicInfoLayout,
@@ -29,9 +29,8 @@ const createTimestampTooltip = (timestamp: string | number | Date) => {
   );
 };
 
-export default function BasicInfo({ datapoint }: BasicInfoProps) {
-  const config = useConfig();
-  const function_config = config.functions[datapoint.function_name];
+export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
+  const function_config = useFunctionConfig(datapoint.function_name);
   const type = function_config?.type;
   if (!type) {
     throw new Error(`Function ${datapoint.function_name} not found`);
@@ -71,23 +70,34 @@ export default function BasicInfo({ datapoint }: BasicInfoProps) {
         </BasicInfoItemContent>
       </BasicInfoItem>
 
-      <BasicInfoItem>
-        <BasicInfoItemTitle>Episode ID</BasicInfoItemTitle>
-        <BasicInfoItemContent>
-          <Chip
-            label={datapoint.episode_id ?? "N/A"}
-            link={
-              datapoint.episode_id
-                ? `/observability/episodes/${datapoint.episode_id}`
-                : undefined
-            }
-            font="mono"
-          />
-        </BasicInfoItemContent>
-      </BasicInfoItem>
+      {datapoint.source_inference_id && (
+        <BasicInfoItem>
+          <BasicInfoItemTitle>Inference</BasicInfoItemTitle>
+          <BasicInfoItemContent>
+            <Chip
+              label={datapoint.source_inference_id}
+              link={`/observability/inferences/${datapoint.source_inference_id}`}
+              font="mono"
+            />
+          </BasicInfoItemContent>
+        </BasicInfoItem>
+      )}
+
+      {datapoint.episode_id && (
+        <BasicInfoItem>
+          <BasicInfoItemTitle>Episode</BasicInfoItemTitle>
+          <BasicInfoItemContent>
+            <Chip
+              label={datapoint.episode_id}
+              link={`/observability/episodes/${datapoint.episode_id}`}
+              font="mono"
+            />
+          </BasicInfoItemContent>
+        </BasicInfoItem>
+      )}
 
       <BasicInfoItem>
-        <BasicInfoItemTitle>Timestamp</BasicInfoItemTitle>
+        <BasicInfoItemTitle>Last updated</BasicInfoItemTitle>
         <BasicInfoItemContent>
           <Chip
             icon={<Calendar className="text-fg-tertiary" />}

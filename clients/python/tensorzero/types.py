@@ -1,20 +1,14 @@
 import warnings
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from abc import ABC
+from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from json import JSONEncoder
-from typing import Any, Dict, List, Literal, Optional, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Protocol, Union, cast
 from uuid import UUID
 
 import httpx
+import uuid_utils
 from typing_extensions import NotRequired, TypedDict
-
-
-# Helper used to serialize Python objects to JSON, which may contain dataclasses like `Text`
-# Used by the Rust native module
-class ToDictEncoder(JSONEncoder):
-    def default(self, o: Any) -> Any:
-        return o.to_dict()
 
 
 @dataclass
@@ -23,19 +17,21 @@ class Usage:
     output_tokens: int
 
 
-@dataclass
-class ContentBlock(ABC):
+# For type checking purposes only
+class HasTypeField(Protocol):
     type: str
 
-    @abstractmethod
-    def to_dict(self) -> Dict[str, Any]:
-        pass
+
+@dataclass
+class ContentBlock(ABC, HasTypeField):
+    pass
 
 
 @dataclass
 class Text(ContentBlock):
     text: Optional[str] = None
     arguments: Optional[Any] = None
+    type: str = "text"
 
     def __post_init__(self):
         if self.text is None and self.arguments is None:
@@ -67,40 +63,46 @@ class Text(ContentBlock):
 
 
 @dataclass
-class RawText:
-    # This class does not subclass ContentBlock since it cannot be output by the API.
+class RawText(ContentBlock):
     value: str
-
-    def to_dict(self) -> Dict[str, Any]:
-        return dict(type="raw_text", value=self.value)
+    type: str = "raw_text"
 
 
 @dataclass
-class ImageBase64:
-    # This class does not subclass ContentBlock since it cannot be output by the API.
+class ImageBase64(ContentBlock):
     data: str
     mime_type: str
-
-    def to_dict(self) -> Dict[str, Any]:
-        return dict(type="image", data=self.data, mime_type=self.mime_type)
+    type: str = "image"
 
 
 @dataclass
-class ImageUrl:
-    # This class does not subclass ContentBlock since it cannot be output by the API.
-    url: str
+class FileBase64(ContentBlock):
+    data: str
+    mime_type: str
+    type: str = "file"
 
-    def to_dict(self) -> Dict[str, Any]:
-        return dict(type="image", url=self.url)
+
+@dataclass
+class ImageUrl(ContentBlock):
+    url: str
+    mime_type: Optional[str] = None
+    type: str = "image"
+
+
+@dataclass
+class FileUrl(ContentBlock):
+    url: str
+    type: str = "file"
 
 
 @dataclass
 class ToolCall(ContentBlock):
-    arguments: Optional[Dict[str, Any]]
     id: str
-    name: Optional[str]
     raw_arguments: str
     raw_name: str
+    arguments: Optional[Dict[str, Any]] = None
+    name: Optional[str] = None
+    type: str = "tool_call"
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -118,21 +120,25 @@ class ToolCall(ContentBlock):
 
 @dataclass
 class Thought(ContentBlock):
-    text: str
-
-    def to_dict(self) -> Dict[str, Any]:
-        return dict(type="thought", value=self.text)
+    text: Optional[str] = None
+    type: str = "thought"
+    signature: Optional[str] = None
+    _internal_provider_type: Optional[str] = None
 
 
 @dataclass
-class ToolResult:
-    # This class does not subclass ContentBlock since it cannot be output by the API.
+class ToolResult(ContentBlock):
     name: str
     result: str
     id: str
+    type: str = "tool_result"
 
-    def to_dict(self) -> Dict[str, Any]:
-        return dict(type="tool_result", name=self.name, result=self.result, id=self.id)
+
+@dataclass
+class UnknownContentBlock(ContentBlock):
+    data: Any
+    model_provider_name: Optional[str] = None
+    type: str = "unknown"
 
 
 class FinishReason(str, Enum):
@@ -145,8 +151,8 @@ class FinishReason(str, Enum):
 
 @dataclass
 class JsonInferenceOutput:
-    raw: Optional[str]
-    parsed: Optional[Dict[str, Any]]
+    raw: Optional[str] = None
+    parsed: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -156,7 +162,8 @@ class ChatInferenceResponse:
     variant_name: str
     content: List[ContentBlock]
     usage: Usage
-    finish_reason: Optional[FinishReason]
+    finish_reason: Optional[FinishReason] = None
+    original_response: Optional[str] = None
 
 
 @dataclass
@@ -166,7 +173,8 @@ class JsonInferenceResponse:
     variant_name: str
     output: JsonInferenceOutput
     usage: Usage
-    finish_reason: Optional[FinishReason]
+    finish_reason: Optional[FinishReason] = None
+    original_response: Optional[str] = None
 
 
 class Message(TypedDict):
@@ -197,6 +205,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             content=[parse_content_block(block) for block in data["content"]],  # type: ignore
             usage=Usage(**data["usage"]),
             finish_reason=finish_reason_enum,
+            original_response=data.get("original_response"),
         )
     elif "output" in data and isinstance(data["output"], dict):
         output = cast(Dict[str, Any], data["output"])
@@ -210,6 +219,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             output=JsonInferenceOutput(**output),
             usage=Usage(**data["usage"]),
             finish_reason=finish_reason_enum,
+            original_response=data.get("original_response"),
         )
     else:
         raise ValueError("Unable to determine response type")
@@ -229,7 +239,13 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
             type=block_type,
         )
     elif block_type == "thought":
-        return Thought(text=block["text"], type=block_type)
+        return Thought(
+            text=block["text"], signature=block.get("signature"), type=block_type
+        )
+    elif block_type == "unknown":
+        return UnknownContentBlock(
+            data=block["data"], model_provider_name=block.get("model_provider_name")
+        )
     else:
         raise ValueError(f"Unknown content block type: {block}")
 
@@ -238,8 +254,8 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
 
 
 @dataclass
-class ContentBlockChunk:
-    type: str
+class ContentBlockChunk(ABC, HasTypeField):
+    pass
 
 
 @dataclass
@@ -248,6 +264,7 @@ class TextChunk(ContentBlockChunk):
     # this `id` will be used to disambiguate them
     id: str
     text: str
+    type: str = "text"
 
 
 @dataclass
@@ -257,12 +274,16 @@ class ToolCallChunk(ContentBlockChunk):
     # `raw_arguments` will come as partial JSON
     raw_arguments: str
     raw_name: str
+    type: str = "tool_call"
 
 
 @dataclass
 class ThoughtChunk(ContentBlockChunk):
-    text: str
     id: str
+    text: str
+    type: str = "thought"
+    signature: Optional[str] = None
+    _internal_provider_type: Optional[str] = None
 
 
 @dataclass
@@ -271,7 +292,7 @@ class ChatChunk:
     episode_id: UUID
     variant_name: str
     content: List[ContentBlockChunk]
-    usage: Optional[Usage]
+    usage: Optional[Usage] = None
     finish_reason: Optional[FinishReason] = None
 
 
@@ -281,7 +302,7 @@ class JsonChunk:
     episode_id: UUID
     variant_name: str
     raw: str
-    usage: Optional[Usage]
+    usage: Optional[Usage] = None
     finish_reason: Optional[FinishReason] = None
 
 
@@ -291,13 +312,15 @@ InferenceChunk = Union[ChatChunk, JsonChunk]
 class VariantExtraBody(TypedDict):
     variant_name: str
     pointer: str
-    value: Any
+    value: NotRequired[Any]
+    delete: NotRequired[bool]
 
 
 class ProviderExtraBody(TypedDict):
     model_provider_name: str
     pointer: str
-    value: Any
+    value: NotRequired[Any]
+    delete: NotRequired[bool]
 
 
 ExtraBody = Union[VariantExtraBody, ProviderExtraBody]
@@ -332,16 +355,15 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
 def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
     block_type = block["type"]
     if block_type == "text":
-        return TextChunk(id=block["id"], text=block["text"], type=block_type)
+        return TextChunk(id=block["id"], text=block["text"])
     elif block_type == "tool_call":
         return ToolCallChunk(
             id=block["id"],
             raw_arguments=block["raw_arguments"],
             raw_name=block["raw_name"],
-            type=block_type,
         )
     elif block_type == "thought":
-        return ThoughtChunk(id=block["id"], text=block["text"], type=block_type)
+        return ThoughtChunk(id=block["id"], text=block["text"])
     else:
         raise ValueError(f"Unknown content block type: {block}")
 
@@ -366,7 +388,7 @@ class TensorZeroInternalError(BaseTensorZeroError):
 
 
 class TensorZeroError(BaseTensorZeroError):
-    def __init__(self, status_code: int, text: Optional[str]):
+    def __init__(self, status_code: int, text: Optional[str] = None):
         self.text = text
         self.status_code = status_code
         self._response = httpx.Response(status_code=status_code, text=text)
@@ -407,7 +429,7 @@ def parse_dynamic_evaluation_run_episode_response(
 
 
 @dataclass
-class ChatInferenceDatapointInput:
+class ChatDatapointInsert:
     function_name: str
     input: InferenceInput
     output: Optional[Any] = None
@@ -417,32 +439,184 @@ class ChatInferenceDatapointInput:
     parallel_tool_calls: Optional[bool] = None
     tags: Optional[Dict[str, str]] = None
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "function_name": self.function_name,
-            "input": self.input,
-            "output": self.output,
-            "allowed_tools": self.allowed_tools,
-            "additional_tools": self.additional_tools,
-            "tool_choice": self.tool_choice,
-            "parallel_tool_calls": self.parallel_tool_calls,
-            "tags": self.tags,
-        }
+
+# CAREFUL: deprecated
+class ChatInferenceDatapointInput(ChatDatapointInsert):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `ChatDatapointInsert` instead of `ChatInferenceDatapointInput`. In a future release, `ChatInferenceDatapointInput` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
 
 
 @dataclass
-class JsonInferenceDatapointInput:
+class JsonDatapointInsert:
     function_name: str
     input: InferenceInput
     output: Optional[Any] = None
     output_schema: Optional[Any] = None
     tags: Optional[Dict[str, str]] = None
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "function_name": self.function_name,
-            "input": self.input,
-            "output": self.output,
-            "output_schema": self.output_schema,
-            "tags": self.tags,
-        }
+
+# CAREFUL: deprecated
+class JsonInferenceDatapointInput(JsonDatapointInsert):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `JsonDatapointInsert` instead of `JsonInferenceDatapointInput`. In a future release, `JsonInferenceDatapointInput` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+@dataclass
+class Tool:
+    description: str
+    parameters: Any
+    name: str
+    strict: bool
+
+
+@dataclass
+class ToolParams:
+    tools_available: List[Tool]
+    tool_choice: str
+    parallel_tool_calls: Optional[bool] = None
+
+
+# Helper used to serialize Python objects to JSON, which may contain dataclasses like `Text`
+# Used by the Rust native module
+class TensorZeroTypeEncoder(JSONEncoder):
+    def default(self, o: Any) -> Any:
+        if isinstance(o, UUID) or isinstance(o, uuid_utils.UUID):
+            return str(o)
+        elif hasattr(o, "to_dict"):
+            return o.to_dict()
+        elif is_dataclass(o) and not isinstance(o, type):
+            return asdict(o)
+        else:
+            super().default(o)
+
+
+ToolChoice = Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
+
+
+# Types for the experimental list inferences API
+# These are serialized across the PyO3 boundary
+
+
+@dataclass
+class InferenceFilterTreeNode(ABC, HasTypeField):
+    pass
+
+
+@dataclass
+class FloatMetricFilter(InferenceFilterTreeNode):
+    metric_name: str
+    value: float
+    comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
+    type: str = "float_metric"
+
+
+# CAREFUL: deprecated
+class FloatMetricNode(FloatMetricFilter):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `FloatMetricFilter` instead of `FloatMetricNode`. In a future release, `FloatMetricNode` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+@dataclass
+class BooleanMetricFilter(InferenceFilterTreeNode):
+    metric_name: str
+    value: bool
+    type: str = "boolean_metric"
+
+
+# CAREFUL: deprecated
+class BooleanMetricNode(BooleanMetricFilter):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `BooleanMetricFilter` instead of `BooleanMetricNode`. In a future release, `BooleanMetricNode` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+@dataclass
+class TagFilter(InferenceFilterTreeNode):
+    key: str
+    value: str
+    comparison_operator: Literal["=", "!="]
+    type: str = "tag"
+
+
+@dataclass
+class TimeFilter(InferenceFilterTreeNode):
+    time: str  # RFC 3339 timestamp
+    comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
+    type: str = "time"
+
+
+@dataclass
+class AndFilter(InferenceFilterTreeNode):
+    children: List[InferenceFilterTreeNode]
+    type: str = "and"
+
+
+# CAREFUL: deprecated
+class AndNode(AndFilter):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `AndFilter` instead of `AndNode`. In a future release, `AndNode` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+@dataclass
+class OrFilter(InferenceFilterTreeNode):
+    children: List[InferenceFilterTreeNode]
+    type: str = "or"
+
+
+# CAREFUL: deprecated
+class OrNode(OrFilter):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `OrFilter` instead of `OrNode`. In a future release, `OrNode` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+@dataclass
+class NotFilter(InferenceFilterTreeNode):
+    child: InferenceFilterTreeNode
+    type: str = "not"
+
+
+# CAREFUL: deprecated
+class NotNode(NotFilter):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `NotFilter` instead of `NotNode`. In a future release, `NotNode` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+@dataclass
+class OrderBy:
+    by: Literal["timestamp", "metric"]
+    name: Optional[str] = None
+    direction: Literal["ASC", "DESC"] = "DESC"

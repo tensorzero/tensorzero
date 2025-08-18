@@ -1,10 +1,12 @@
 [package]
 name = "gateway"
 version.workspace = true
+rust-version.workspace = true
 edition = "2021"
+license.workspace = true
 
 [dependencies]
-tensorzero-internal = { path = "../tensorzero-internal" }
+tensorzero-core = { path = "../tensorzero-core" }
 axum = { workspace = true }
 tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
 tracing-subscriber = { version = "0.3.18", features = [
@@ -13,20 +15,21 @@ tracing-subscriber = { version = "0.3.18", features = [
     "json",
 ] }
 tokio = { workspace = true }
-mimalloc = "0.1.45"
+mimalloc = "0.1.47"
 clap = { workspace = true }
 serde = { workspace = true }
-axum-tracing-opentelemetry = "0.28.0"
-tracing-opentelemetry-instrumentation-sdk = { version = "0.28.0", features = ["tracing_level_info"] }
-tower-http = { version = "0.6.2", features = ["trace"] }
+tracing-opentelemetry-instrumentation-sdk = { workspace = true }
+tower-http = { workspace = true }
+tokio-util = "0.7.15"
 
 [lints]
 workspace = true
 
 [features]
-e2e_tests = ["tensorzero-internal/e2e_tests"]
+e2e_tests = ["tensorzero-core/e2e_tests"]
 default = []
 
 [dev-dependencies]
 reqwest.workspace = true
-tempfile = "3.19.1"
+tempfile = "3.20.0"
+tensorzero = { path = "../clients/rust"}

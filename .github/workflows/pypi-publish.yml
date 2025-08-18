@@ -48,3 +48,7 @@ jobs:
       - name: Publish to TestPyPI
         run: |
           ./ci/upload-python-client.sh testpypi
+        # TestPyPI is frequently down for maintenance, so don't fail the workflow
+        # when making actual releases. We still fail on the job when running the
+        # workflow manually, as that's the only reason we'd want to run it.
+        continue-on-error: ${{ github.event_name == 'release' }}

@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tensorzero.fullname" . }}-gateway
+  labels:
+    {{- include "tensorzero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  replicas: {{ .Values.gateway.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "tensorzero.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: gateway
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ toYaml .Values.configMap | sha256sum }}
+      labels:
+        {{- include "tensorzero.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: gateway
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.gateway.image.repository }}:{{ .Values.gateway.image.tag }}"
+          imagePullPolicy: {{ .Values.gateway.image.pullPolicy }}
+          {{- if .Values.gateway.command }}
+          command:
+            {{- toYaml .Values.gateway.command | nindent 12 }}
+          {{- end }}
+          {{- if .Values.gateway.args }}
+          args:
+            {{- toYaml .Values.gateway.args | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            {{- if and .Values.gateway.additionalEnv.secretName .Values.gateway.additionalEnv.keys }}
+            {{- range .Values.gateway.additionalEnv.keys }}
+            - name: {{ .name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.gateway.additionalEnv.secretName }}
+                  key: {{ .key }}
+            {{- end }}
+            {{- end }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/config
+            {{- if .Values.persistence.enabled }}
+            - name: storage-volume
+              mountPath: {{ .Values.persistence.mountPath }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.gateway.resources | nindent 12 }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ include "tensorzero.fullname" . }}
+        {{- if .Values.persistence.enabled }}
+        - name: storage-volume
+          persistentVolumeClaim:
+            claimName: {{ include "tensorzero.fullname" . }}-storage
+        {{- end }}
+      {{- with .Values.gateway.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.gateway.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.gateway.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

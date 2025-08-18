@@ -39,7 +39,7 @@ services:
 
   # For a production deployment, you can use AWS S3, GCP Cloud Storage, Cloudflare R2, etc.
   minio:
-    image: bitnami/minio
+    image: bitnami/minio:2025.4.22
     ports:
       - "9000:9000" # API port
       - "9001:9001" # Console port

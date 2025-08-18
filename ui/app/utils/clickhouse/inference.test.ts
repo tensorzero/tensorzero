@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import {
   countInferencesForEpisode,
   queryEpisodeTable,
@@ -15,19 +15,34 @@ import {
   queryInferenceTableBoundsByFunctionName,
   queryInferenceTableBoundsByVariantName,
   queryModelInferencesByInferenceId,
+  getAdjacentInferenceIds,
+  getAdjacentEpisodeIds,
 } from "./inference.server";
 import { countInferencesForFunction } from "./inference.server";
+import type { TextContent } from "./common";
+import { getClickhouseClient } from "./client.server";
 import type {
-  ContentBlockOutput,
+  ContentBlockChatOutput,
   JsonInferenceOutput,
-  TextContent,
-} from "./common";
+} from "tensorzero-node";
 
 // Test countInferencesForFunction
 test("countInferencesForFunction returns correct counts", async () => {
   const jsonCount = await countInferencesForFunction("extract_entities", {
     type: "json",
     variants: {},
+    schemas: {
+      system: null,
+      user: null,
+      assistant: null,
+    },
+    description: "",
+    output_schema: { value: {} },
+    implicit_tool_call_config: {
+      tools_available: [],
+      tool_choice: "none",
+      parallel_tool_calls: false,
+    },
   });
   expect(jsonCount).toBe(604);
 
@@ -37,15 +52,36 @@ test("countInferencesForFunction returns correct counts", async () => {
     tools: [],
     tool_choice: "none",
     parallel_tool_calls: false,
+    schemas: {
+      system: null,
+      user: null,
+      assistant: null,
+    },
+    description: "",
   });
-  expect(chatCount).toBe(803);
+  expect(chatCount).toBe(804);
 });
 
 // Test countInferencesForVariant
 test("countInferencesForVariant returns correct counts", async () => {
   const jsonCount = await countInferencesForVariant(
     "extract_entities",
-    { type: "json", variants: {} },
+    {
+      type: "json",
+      variants: {},
+      schemas: {
+        system: null,
+        user: null,
+        assistant: null,
+      },
+      description: "",
+      output_schema: { value: {} },
+      implicit_tool_call_config: {
+        tools_available: [],
+        tool_choice: "none",
+        parallel_tool_calls: false,
+      },
+    },
     "gpt4o_initial_prompt",
   );
   expect(jsonCount).toBe(132);
@@ -58,10 +94,16 @@ test("countInferencesForVariant returns correct counts", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
+      schemas: {
+        system: null,
+        user: null,
+        assistant: null,
+      },
+      description: "",
     },
     "initial_prompt_gpt4o_mini",
   );
-  expect(chatCount).toBe(648);
+  expect(chatCount).toBe(649);
 });
 
 test("queryInferenceTable", async () => {
@@ -301,13 +343,13 @@ test("queryInferenceTableByEpisodeId pages through a sample of results correctly
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0196a0ea-d197-76d0-b6fc-15778589a4da");
+  expect(bounds.last_id).toBe("0197177a-7c00-70a2-82a6-741f60a03b2e");
 });
 
 test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
-  expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0196a0ea-d197-76d0-b6fc-15778589a4da");
+  expect(bounds.first_id).toBe("0192ced0-947e-74b3-a3d7-02fd2c54d637");
+  expect(bounds.last_id).toBe("0197177a-7c00-70a2-82a6-744bcb064c42");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -404,55 +446,61 @@ test("queryInferenceTableBoundsByVariantName", async () => {
   expect(bounds.last_id).toBe("0196368e-5505-7721-88d2-654cd26483b4");
 });
 
-test("queryEpisodeTable", async () => {
-  const episodes = await queryEpisodeTable({
-    page_size: 10,
-  });
-  expect(episodes.length).toBe(10);
-
-  // Verify last_inference_ids are in descending order
-  for (let i = 1; i < episodes.length; i++) {
-    expect(
-      episodes[i - 1].last_inference_id > episodes[i].last_inference_id,
-    ).toBe(true);
-  }
-
-  // Test pagination with before
-  const episodes2 = await queryEpisodeTable({
-    before: episodes[episodes.length - 1].last_inference_id,
-    page_size: 10,
-  });
-  expect(episodes2.length).toBe(10);
-
-  // Test pagination with after on the last inference id
-  const episodes3 = await queryEpisodeTable({
-    after: episodes[0].last_inference_id,
-    page_size: 10,
-  });
-  expect(episodes3.length).toBe(0);
-
-  // Test that before and after together throws error
-  await expect(
-    queryEpisodeTable({
-      before: episodes[0].last_inference_id,
-      after: episodes[0].last_inference_id,
+test(
+  "queryEpisodeTable",
+  // https://tensorzero.slack.com/archives/C06FDMR1YKF/p1747844085031149?thread_ts=1747793217.140669&cid=C06FDMR1YKF
+  { timeout: 10_000 },
+  async () => {
+    const episodes = await queryEpisodeTable({
       page_size: 10,
-    }),
-  ).rejects.toThrow("Cannot specify both 'before' and 'after' parameters");
+    });
+    expect(episodes.length).toBe(10);
 
-  // Verify each episode has valid data
-  for (const episode of episodes) {
-    expect(typeof episode.episode_id).toBe("string");
-    expect(episode.count).toBeGreaterThan(0);
-    expect(episode.start_time).toBeDefined();
-    expect(episode.end_time).toBeDefined();
-    expect(typeof episode.last_inference_id).toBe("string");
-    // Start time should be before or equal to end time
-    expect(new Date(episode.start_time) <= new Date(episode.end_time)).toBe(
-      true,
-    );
-  }
-});
+    console.log(episodes);
+
+    // Verify episodes are in descending order
+    for (let i = 1; i < episodes.length; i++) {
+      expect(episodes[i - 1].episode_id > episodes[i].episode_id).toBe(true);
+    }
+
+    // Test pagination with before
+    const episodes2 = await queryEpisodeTable({
+      before: episodes[episodes.length - 1].episode_id,
+      page_size: 10,
+    });
+    expect(episodes2.length).toBe(10);
+
+    // Test pagination with after on the last inference id
+    const episodes3 = await queryEpisodeTable({
+      after: episodes[0].episode_id,
+      page_size: 10,
+    });
+    console.log(episodes3);
+    expect(episodes3.length).toBe(0);
+
+    // Test that before and after together throws error
+    await expect(
+      queryEpisodeTable({
+        before: episodes[0].episode_id,
+        after: episodes[0].episode_id,
+        page_size: 10,
+      }),
+    ).rejects.toThrow("Cannot specify both `before` and `after` parameters");
+
+    // Verify each episode has valid data
+    for (const episode of episodes) {
+      expect(typeof episode.episode_id).toBe("string");
+      expect(episode.count).toBeGreaterThan(0);
+      expect(episode.start_time).toBeDefined();
+      expect(episode.end_time).toBeDefined();
+      expect(typeof episode.last_inference_id).toBe("string");
+      // Start time should be before or equal to end time
+      expect(new Date(episode.start_time) <= new Date(episode.end_time)).toBe(
+        true,
+      );
+    }
+  },
+);
 
 test("countInferencesForEpisode", async () => {
   const count = await countInferencesForEpisode(
@@ -474,7 +522,7 @@ test("queryInferenceById for chat inference", async () => {
   );
   expect(inference?.function_type).toBe("chat");
   expect(inference?.input.messages.length).toBeGreaterThan(0);
-  const output = inference?.output as ContentBlockOutput[];
+  const output = inference?.output as ContentBlockChatOutput[];
   const firstOutput = output[0] as TextContent;
   expect(firstOutput.type).toBe("text");
   expect(firstOutput.text).toBe("Yes.");
@@ -516,14 +564,14 @@ test("countInferencesByFunction", async () => {
         max_timestamp: "2025-04-15T02:33:10Z",
       },
       {
-        count: 803,
+        count: 804,
         function_name: "write_haiku",
-        max_timestamp: "2025-04-15T02:33:07Z",
+        max_timestamp: "2025-05-12T21:59:20Z",
       },
       {
-        count: 1,
+        count: 2,
         function_name: "tensorzero::default",
-        max_timestamp: "2025-04-15T02:02:36Z",
+        max_timestamp: "2025-05-23T15:49:52Z",
       },
       {
         count: 1,
@@ -545,4 +593,106 @@ test("queryModelInferencesByInferenceId", async () => {
   expect(firstInference.output.length).toBe(1);
   expect(firstInference.output[0].type).toBe("text");
   expect(!firstInference.cached);
+});
+
+describe("getAdjacentInferenceIds", () => {
+  test("returns adjacent inference ids", async () => {
+    const adjacentInferenceIds = await getAdjacentInferenceIds(
+      "01942e26-910b-7ab1-a645-46bc4463a001",
+    );
+    expect(adjacentInferenceIds.previous_id).toBe(
+      "01942e26-9026-76e0-bf84-27038739ec33",
+    );
+    expect(adjacentInferenceIds.next_id).toBe(
+      "01942e26-9128-71d2-bed6-aee96bb3e181",
+    );
+  });
+
+  test("returns null for previous inference id if current inference is first", async () => {
+    const resultSet = await getClickhouseClient().query({
+      query:
+        "SELECT uint_to_uuid(min(id_uint)) as first_inference_id FROM InferenceById",
+      format: "JSON",
+    });
+    const firstInferenceId = await resultSet.json<{
+      first_inference_id: string;
+    }>();
+    const adjacentInferenceIds = await getAdjacentInferenceIds(
+      firstInferenceId.data[0].first_inference_id,
+    );
+    expect(adjacentInferenceIds.previous_id).toBeNull();
+    expect(adjacentInferenceIds.next_id).toBe(
+      "01934c9a-be70-7d72-a722-744cb572eb49",
+    );
+  });
+
+  test("returns null for next inference id if current inference is last", async () => {
+    const resultSet = await getClickhouseClient().query({
+      query:
+        "SELECT uint_to_uuid(max(id_uint)) as last_inference_id FROM InferenceById",
+      format: "JSON",
+    });
+    const lastInferenceId = await resultSet.json<{
+      last_inference_id: string;
+    }>();
+    const adjacentInferenceIds = await getAdjacentInferenceIds(
+      lastInferenceId.data[0].last_inference_id,
+    );
+    expect(adjacentInferenceIds.previous_id).toBe(
+      "0197177a-7c00-70a2-82a6-72ac87d2ff77",
+    );
+    expect(adjacentInferenceIds.next_id).toBeNull();
+  });
+});
+
+describe("getAdjacentEpisodeIds", () => {
+  test("returns adjacent episode ids", async () => {
+    const adjacentEpisodeIds = await getAdjacentEpisodeIds(
+      "01942e26-549f-7153-ac56-dd1d23d30f8c",
+    );
+    expect(adjacentEpisodeIds.previous_id).toBe(
+      "01942e26-5392-7652-ad59-734198888520",
+    );
+    expect(adjacentEpisodeIds.next_id).toBe(
+      "01942e26-54a2-71d1-ad80-3629b6cb18a3",
+    );
+  });
+
+  test("returns null for previous episode id if current episode is first", async () => {
+    const resultSet = await getClickhouseClient().query({
+      query:
+        "SELECT uint_to_uuid(min(episode_id_uint)) as first_episode_id FROM InferenceByEpisodeId",
+      format: "JSON",
+    });
+    const firstEpisodeId = await resultSet.json<{
+      first_episode_id: string;
+    }>();
+
+    const adjacentEpisodeIds = await getAdjacentEpisodeIds(
+      firstEpisodeId.data[0].first_episode_id,
+    );
+    expect(adjacentEpisodeIds.previous_id).toBeNull();
+    expect(adjacentEpisodeIds.next_id).toBe(
+      "0192ced0-9486-7491-9b60-42dd2ef9194e",
+    );
+  });
+
+  test("returns null for next episode id if current episode is last", async () => {
+    const resultSet = await getClickhouseClient().query({
+      query:
+        "SELECT uint_to_uuid(max(episode_id_uint)) as last_episode_id FROM InferenceByEpisodeId",
+      format: "JSON",
+    });
+    const lastEpisodeId = await resultSet.json<{
+      last_episode_id: string;
+    }>();
+
+    const adjacentEpisodeIds = await getAdjacentEpisodeIds(
+      lastEpisodeId.data[0].last_episode_id,
+    );
+    expect(adjacentEpisodeIds.previous_id).toBe(
+      "0aaeef58-3633-7f27-9393-65bd98491026",
+    );
+    expect(adjacentEpisodeIds.next_id).toBeNull();
+  });
 });

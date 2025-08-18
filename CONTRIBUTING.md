@@ -2,11 +2,13 @@
 
 Thank you for your interest in contributing to TensorZero!
 
-TensorZero aims to power the next generation of AI applications. We'd love to collaborate with you to make this vision a reality.
+TensorZero aims to power the next generation of AI applications.
+We'd love to collaborate with you to make this vision a reality.
 
 > [!TIP]
 >
-> In addition to community contributions, we're also hiring in NYC (in-person only). See our [open roles](https://www.tensorzero.com/jobs).
+> In addition to community contributions, we're also hiring in NYC (in-person only).
+> See our [open roles](https://www.tensorzero.com/jobs).
 
 ## License
 
@@ -21,7 +23,8 @@ Join our community on [Slack](https://www.tensorzero.com/slack) or [Discord](htt
 
 ### GitHub
 
-We use GitHub Issues to track bugs and feature requests. For general questions, technical support, and conversations not directly related to code, please use GitHub Discussions.
+We use GitHub Issues to track bugs and feature requests.
+For general questions, technical support, and conversations not directly related to code, please use GitHub Discussions.
 
 ## Contributions
 
@@ -37,13 +40,17 @@ For larger changes, please communicate with us first to avoid duplicate work or 
 You can start a discussion (GitHub, Slack, or Discord) or open an issue as a starting point.
 The team will be happy to provide feedback and guidance.
 
+At this time, we don't assign issues to new external contributors (in the past, most people we assigned issues to never submitted a PR).
+Please submit a PR directly once you're ready to start working on an issue.
+
 > [!TIP]
 >
 > See the "Technical Guide" section below for more details on building and testing TensorZero.
 
 ### Documentation
 
-We're planning to open-source our documentation pages soon. See [issue #432](https://github.com/tensorzero/tensorzero/issues/432) for more details.
+We're planning to open-source our documentation pages soon.
+See [issue #432](https://github.com/tensorzero/tensorzero/issues/432) for more details.
 
 In the meantime, please open an issue if you have suggestions or find any problems with the documentation.
 
@@ -86,7 +93,24 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Install `uv` [→](https://docs.astral.sh/uv/)
 - Install Python (3.9+) (e.g. `uv python install 3.9` + )
 - Install Node.js (we use v22) and `npm` [→](https://nodejs.org/en)
-- Install pnpm `npm install -g pnpm` [→](https://pnpm.io/installation)
+- Install pnpm `npm install -g pnpm@10` [→](https://pnpm.io/installation)
+
+**macOS users:** If you see Rust build errors about missing dynamic libraries for Python, set up a Python virtual environment at `tensorzero/.venv` (e.g. `uv venv` from the `tensorzero` directory)
+This ensures the correct Python libraries are available for the build.
+
+### Optimization Recipes
+
+We maintain optimization recipes as Jupyter notebooks in `recipes/`.
+These notebooks serve as manual workflows for optimizing (e.g. fine-tuning) TensorZero functions.
+
+Jupyter notebooks are notoriously hard to test, maintain, and review.
+To address these issues, each notebook has an accompanying Python script ending in `_nb.py` that serves the same purpose.
+We automatically keep these two files in sync using [Jupytext](https://jupytext.readthedocs.io/en/latest/).
+
+To convert a notebook to a script, run `ci/compile-notebook-to-script.sh path/to/notebook.ipynb`.
+To convert a script to a notebook, run `ci/compile-script-to-notebook.sh path/to/script_nb.py`.
+
+In `pre-commit` and CI, we check that the notebooks match the relevant scripts using a script `ci/compile-check-notebooks.sh`.
 
 ### Tests
 
@@ -103,7 +127,7 @@ cargo test-unit
 1. Launch the test ClickHouse database
 
    ```bash
-   docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up --wait
+   docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
    ```
 
 2. Set the relevant environment variables. See `examples/production-deployment/.env.example` for the full list.
@@ -167,13 +191,12 @@ We include some fixture data as well in order to exercise some functionality.
 
 It also requires a one-time build of a WebAssembly module from Rust source code that is used to ensure consistent templating of messages across the gateway and UI.
 
-The steps below assume you are in the `ui/` directory.
-
 Here are the steps in order to run or test the UI assuming you have the prerequisites installed and this repository checked out:
 
 1. Install dependencies: `pnpm install`
-2. Build the WebAssembly module following instructions in `ui/app/utils/minijinja/README.md`.
-3. Create a `.env` file and set the following environment variables for the server:
+2. Build the internal N-API client for TensorZero using `pnpm -r build`. If you have changed your Rust code, you may also have to run `pnpm build-bindings` from `internal/tensorzero-node`.
+3. Create a `ui/fixtures/.env` following the `ui/fixtures/.env.example`.
+4. Create a `ui/.env` file and set the following environment variables for the server:
 
 ```bash
 OPENAI_API_KEY=<your-key>
@@ -183,11 +206,12 @@ TENSORZERO_CLICKHOUSE_URL=<your-clickhouse-url> # For testing, set to http://chu
 TENSORZERO_UI_CONFIG_PATH=<path-to-config-file> # For testing, set to ./fixtures/config/tensorzero.toml
 ```
 
-4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up --build --force-recreate`
+5. Run the dependencies: `docker compose -f ui/fixtures/docker-compose.yml up --build --force-recreate`
    (you can omit these last 2 flags to skip the build step, but they ensure you're using the latest gateway)
 
-With the dependencies running, you can run the tests with `pnpm run test` and the Playwright tests with `pnpm run test-e2e`.
-Similarly, you can start a development server with `pnpm run dev`.
+With the dependencies running, you can run the tests with `pnpm ui:test` and the Playwright tests with `pnpm ui:test:e2e`.
+Similarly, you can start a development server with `pnpm ui:dev`.
+
 There may be some Playwright tests in `main` that require feature flags to be on, so be aware of that if they fail for nonobvious reasons.
 
 ---

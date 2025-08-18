@@ -4,17 +4,16 @@ use anyhow::{bail, Result};
 use serde_json::{json, Value};
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    DynamicToolParams, Image, InferenceOutput, InferenceParams, InferenceResponse, Role,
+    DynamicToolParams, File, InferenceOutput, InferenceParams, InferenceResponse, Role,
 };
-use tensorzero_internal::cache::CacheEnabledMode;
-use tensorzero_internal::endpoints::datasets::Datapoint;
-use tensorzero_internal::evaluations::{
+use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero_core::evaluations::{
     get_evaluator_metric_name, get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat,
     LLMJudgeOutputType,
 };
-use tensorzero_internal::inference::types::{
-    ContentBlockChatOutput, JsonInferenceOutput, TextKind,
-};
+use tensorzero_core::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, TextKind};
+use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
 use crate::helpers::{check_static_eval_human_feedback, get_cache_options};
@@ -52,6 +51,7 @@ pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub inference_cache: CacheEnabledMode,
 }
 
+#[instrument(skip(params), fields(datapoint_id = %params.datapoint.id(), evaluator_name = %params.evaluator_name))]
 pub async fn run_llm_judge_evaluator(
     params: RunLLMJudgeEvaluatorParams<'_>,
 ) -> Result<Option<LLMJudgeEvaluationResult>> {
@@ -66,6 +66,7 @@ pub async fn run_llm_judge_evaluator(
         input,
         inference_cache,
     } = params;
+    debug!("Checking for existing human feedback");
     if let Some(human_feedback) = check_static_eval_human_feedback(
         &clients.clickhouse_client,
         &get_evaluator_metric_name(evaluation_name, evaluator_name),
@@ -74,18 +75,27 @@ pub async fn run_llm_judge_evaluator(
     )
     .await?
     {
+        info!("Found existing human feedback, using that instead of LLM judge");
         return Ok(Some(LLMJudgeEvaluationResult {
             evaluator_inference_id: human_feedback.evaluator_inference_id,
             value: human_feedback.value,
             human_feedback: true,
         }));
     }
+    debug!("Preparing LLM judge input");
     let judge_input =
         match prepare_llm_judge_input(llm_judge_config, input, inference_response, datapoint)? {
-            Some(input) => input,
-            None => return Ok(None),
+            Some(input) => {
+                debug!("LLM judge input prepared successfully");
+                input
+            }
+            None => {
+                debug!("Cannot prepare LLM judge input, returning None");
+                return Ok(None);
+            }
         };
 
+    debug!("Making LLM judge inference request");
     let params = ClientInferenceParams {
         function_name: Some(get_llm_judge_function_name(evaluation_name, evaluator_name)),
         model_name: None,
@@ -113,6 +123,7 @@ pub async fn run_llm_judge_evaluator(
         cache_options: get_cache_options(inference_cache),
         extra_body: Default::default(),
         extra_headers: Default::default(),
+        internal_dynamic_variant_config: None,
     };
     let result = clients.tensorzero_client.inference(params).await?;
     let response = match result {
@@ -251,7 +262,7 @@ fn prepare_serialized_input(input: &ClientInput) -> Result<String> {
     for message in &input.messages {
         for content in &message.content {
             match content {
-                ClientInputMessageContent::Image(..) => {
+                ClientInputMessageContent::File(..) => {
                     bail!("Image content not supported for LLM judge evaluations with `serialized` input format. If you want image evaluations, try the `messages` input format.")
                 }
                 ClientInputMessageContent::Unknown { .. } => {
@@ -287,7 +298,7 @@ fn prepare_messages_input(input: &ClientInput) -> Result<Vec<ClientInputMessage>
                     content: vec![ClientInputMessageContent::Text(TextKind::Text {
                         text: system_message,
                     })],
-                })
+                });
             }
             _ => {
                 bail!("System message is not a string or object");
@@ -310,12 +321,12 @@ fn serialize_content_for_messages_input(
     let mut serialized_content = Vec::new();
     for content_block in content {
         match content_block {
-            ClientInputMessageContent::Image(image) => {
+            ClientInputMessageContent::File(image) => {
                 // The image was already converted from a ResolvedImage to a Base64Image before this.
-                if let Image::Url { .. } = image {
+                if let File::Url { .. } = image {
                     bail!("URL images not supported for LLM judge evaluations. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
                 }
-                serialized_content.push(ClientInputMessageContent::Image(image.clone()));
+                serialized_content.push(ClientInputMessageContent::File(image.clone()));
             }
             ClientInputMessageContent::Unknown { .. } => {
                 bail!("Unknown content not supported for LLM judge evaluations")
@@ -398,11 +409,11 @@ fn handle_reference_output(
         return Ok(None);
     }
     match datapoint {
-        Datapoint::ChatInference(chat_datapoint) => match &chat_datapoint.output {
+        Datapoint::Chat(chat_datapoint) => match &chat_datapoint.output {
             Some(output) => prepare_serialized_chat_output(output).map(Some),
             None => bail!("Datapoint does not contain an output when this is expected"),
         },
-        Datapoint::JsonInference(json_datapoint) => match &json_datapoint.output {
+        Datapoint::Json(json_datapoint) => match &json_datapoint.output {
             Some(output) => prepare_serialized_json_output(output).map(Some),
             None => bail!("Datapoint does not contain an output when this is expected"),
         },
@@ -415,18 +426,18 @@ mod tests {
     use super::*;
 
     use serde_json::json;
-    use tensorzero::Image;
+    use tensorzero::File;
     use tensorzero::Role;
-    use tensorzero_internal::endpoints::datasets::ChatInferenceDatapoint;
-    use tensorzero_internal::endpoints::datasets::JsonInferenceDatapoint;
-    use tensorzero_internal::endpoints::inference::ChatInferenceResponse;
-    use tensorzero_internal::endpoints::inference::JsonInferenceResponse;
-    use tensorzero_internal::evaluations::LLMJudgeIncludeConfig;
-    use tensorzero_internal::evaluations::LLMJudgeOptimize;
-    use tensorzero_internal::inference::types::ResolvedInput;
-    use tensorzero_internal::inference::types::Usage;
-    use tensorzero_internal::tool::ToolCallInput;
-    use tensorzero_internal::{
+    use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
+    use tensorzero_core::endpoints::datasets::JsonInferenceDatapoint;
+    use tensorzero_core::endpoints::inference::ChatInferenceResponse;
+    use tensorzero_core::endpoints::inference::JsonInferenceResponse;
+    use tensorzero_core::evaluations::LLMJudgeIncludeConfig;
+    use tensorzero_core::evaluations::LLMJudgeOptimize;
+    use tensorzero_core::inference::types::ResolvedInput;
+    use tensorzero_core::inference::types::Usage;
+    use tensorzero_core::tool::ToolCallInput;
+    use tensorzero_core::{
         inference::types::{ContentBlockChatOutput, Text, Thought},
         tool::{ToolCallOutput, ToolResult},
     };
@@ -478,8 +489,9 @@ mod tests {
             system: None,
             messages: vec![ClientInputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Image(Image::Url {
+                content: vec![ClientInputMessageContent::File(File::Url {
                     url: Url::parse("https://example.com/image.png").unwrap(),
+                    mime_type: None,
                 })],
             }],
         };
@@ -568,7 +580,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::ChatInference(ChatInferenceDatapoint {
+            &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
                 id: Uuid::now_v7(),
@@ -587,6 +599,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                is_custom: true,
             }),
         )
         .unwrap()
@@ -635,7 +648,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::ChatInference(ChatInferenceDatapoint {
+            &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
                 id: Uuid::now_v7(),
@@ -654,6 +667,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                is_custom: true,
             }),
         )
         .unwrap()
@@ -811,8 +825,9 @@ mod tests {
                 value: "raw text".to_string(),
             },
             ClientInputMessageContent::Thought(Thought {
-                text: "thought".to_string(),
+                text: Some("thought".to_string()),
                 signature: None,
+                provider_type: None,
             }),
         ];
         let serialized = serialize_content_for_messages_input(&content).unwrap();
@@ -864,7 +879,7 @@ mod tests {
                 reference_output: false,
             },
         };
-        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
@@ -880,6 +895,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let result = handle_reference_output(&config, &datapoint).unwrap();
         assert_eq!(result, None);
@@ -894,7 +910,7 @@ mod tests {
                 reference_output: true,
             },
         };
-        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
@@ -910,6 +926,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let err = handle_reference_output(&config, &datapoint).unwrap_err();
         assert_eq!(
@@ -918,7 +935,7 @@ mod tests {
         );
 
         // Test with reference output enabled and present (chat)
-        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
@@ -936,6 +953,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let result = handle_reference_output(&config, &datapoint)
             .unwrap()
@@ -943,7 +961,7 @@ mod tests {
         assert_eq!(result, r#"[{"type":"text","text":"Reference text"}]"#);
 
         // Test with reference output enabled and present (json)
-        let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
@@ -962,6 +980,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let result = handle_reference_output(&config, &datapoint)
             .unwrap()
@@ -1046,7 +1065,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::ChatInference(ChatInferenceDatapoint {
+            &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 id: Uuid::now_v7(),
@@ -1064,6 +1083,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                is_custom: true,
             }),
         )
         .unwrap()
@@ -1158,7 +1178,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::JsonInference(JsonInferenceDatapoint {
+            &Datapoint::Json(JsonInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 id: Uuid::now_v7(),
@@ -1177,6 +1197,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                is_custom: true,
             }),
         )
         .unwrap()

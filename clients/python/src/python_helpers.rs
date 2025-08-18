@@ -1,22 +1,15 @@
 //! This module defines several serialization/deserialization helpers that we use to convert
 //! between Python classes and the corresponding Rust types in the Rust `tensorzero` client.
 
-use std::{borrow::Cow, collections::HashMap};
+use std::collections::HashMap;
 
-use pyo3::{
-    exceptions::{PyRuntimeError, PyValueError},
-    intern,
-    prelude::*,
-    sync::GILOnceCell,
-    types::PyDict,
-};
-use tensorzero_internal::endpoints::dynamic_evaluation_run::DynamicEvaluationRunEpisodeResponse;
+use pyo3::{exceptions::PyValueError, prelude::*, sync::GILOnceCell};
+use tensorzero_core::endpoints::dynamic_evaluation_run::DynamicEvaluationRunEpisodeResponse;
+use tensorzero_core::inference::types::pyo3_helpers::{deserialize_from_pyobj, serialize_to_dict};
 use tensorzero_rust::{
     DynamicEvaluationRunResponse, FeedbackResponse, InferenceResponse, InferenceResponseChunk, Tool,
 };
 use uuid::Uuid;
-
-use crate::{tensorzero_internal_error, JSON_DUMPS, JSON_LOADS};
 
 // We lazily lookup the corresponding Python class/method for all of these helpers,
 // since they're not available during module initialization.
@@ -104,56 +97,6 @@ pub fn parse_dynamic_evaluation_run_episode_response(
     let json_data = serialize_to_dict(py, data)?;
     let python_parsed = parse_dynamic_evaluation_run_episode_response.call1(py, (json_data,))?;
     Ok(python_parsed.into_any())
-}
-
-/// Serializes a Rust type to JSON via serde_json, then converts to a Python dictionary
-/// using `json.loads`
-pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> PyResult<Py<PyAny>> {
-    let json_str = serde_json::to_string(&val)
-        .map_err(|e| PyValueError::new_err(format!("Failed to serialize to JSON: {e:?}")))?;
-    JSON_LOADS
-        .get(py)
-        .ok_or_else(|| {
-            PyRuntimeError::new_err(
-                "TensorZero: JSON_LOADS was not initialized. This should never happen",
-            )
-        })?
-        .call1(py, (json_str.into_pyobject(py)?,))
-}
-
-// Converts a Python dictionary/list to json with `json.dumps`,
-/// then deserializes to a Rust type via serde
-pub fn deserialize_from_pyobj<'a, T: serde::de::DeserializeOwned>(
-    py: Python<'a>,
-    obj: &Bound<'a, PyAny>,
-) -> PyResult<T> {
-    let self_module = PyModule::import(py, "tensorzero.types")?;
-    let to_dict_encoder: Bound<'_, PyAny> = self_module.getattr("ToDictEncoder")?;
-    let kwargs = PyDict::new(py);
-    kwargs.set_item(intern!(py, "cls"), to_dict_encoder)?;
-
-    let json_str_obj = JSON_DUMPS
-        .get(py)
-        .ok_or_else(|| {
-            PyRuntimeError::new_err(
-                "TensorZero: JSON_DUMPS was not initialized. This should never happen",
-            )
-        })?
-        .call(py, (obj,), Some(&kwargs))?;
-    let json_str: Cow<'_, str> = json_str_obj.extract(py)?;
-    let mut deserializer = serde_json::Deserializer::from_str(json_str.as_ref());
-    let val: Result<T, _> = serde_path_to_error::deserialize(&mut deserializer);
-    match val {
-        Ok(val) => Ok(val),
-        Err(e) => Err(tensorzero_internal_error(
-            py,
-            &format!(
-                "Failed to deserialize JSON to {}: {}",
-                std::any::type_name::<T>(),
-                e
-            ),
-        )?),
-    }
 }
 
 pub fn python_uuid_to_uuid(param_name: &str, val: Bound<'_, PyAny>) -> PyResult<Uuid> {
