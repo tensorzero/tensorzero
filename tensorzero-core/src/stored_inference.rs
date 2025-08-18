@@ -39,6 +39,7 @@ pub trait StoredSample {
 /// that is just copied over from the StoredSample.
 pub struct SimpleStoredSampleInfo {
     pub function_name: String,
+    pub input: ResolvedInput,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
     pub output: Option<Vec<ContentBlockChatOutput>>,
@@ -367,6 +368,7 @@ impl StoredSample for StoredInference {
         match self {
             StoredInference::Chat(example) => SimpleStoredSampleInfo {
                 function_name: example.function_name,
+                input: example.input,
                 episode_id: Some(example.episode_id),
                 inference_id: Some(example.inference_id),
                 output: Some(example.output),
@@ -384,6 +386,7 @@ impl StoredSample for StoredInference {
                     .collect();
                 SimpleStoredSampleInfo {
                     function_name: example.function_name,
+                    input: example.input,
                     episode_id: Some(example.episode_id),
                     inference_id: Some(example.inference_id),
                     output: Some(output),
@@ -562,15 +565,9 @@ pub fn render_stored_sample<T: StoredSample>(
     config: &Config,
     variants: &HashMap<String, String>,
 ) -> Result<RenderedSample, Error> {
-    let resolved_input = stored_sample.input().clone();
-    let model_input = render_model_input(
-        &resolved_input,
-        stored_sample.function_name(),
-        config,
-        variants,
-    )?;
     let SimpleStoredSampleInfo {
         function_name,
+        input,
         output,
         dispreferred_outputs,
         tool_params,
@@ -579,12 +576,13 @@ pub fn render_stored_sample<T: StoredSample>(
         inference_id,
         tags,
     } = stored_sample.owned_simple_info();
+    let model_input = render_model_input(&input, &function_name, config, variants)?;
     Ok(RenderedSample {
         function_name,
         episode_id,
         inference_id,
         input: model_input,
-        stored_input: resolved_input,
+        stored_input: input,
         output,
         dispreferred_outputs,
         tool_params,

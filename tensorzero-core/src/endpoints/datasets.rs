@@ -1361,6 +1361,7 @@ impl StoredSample for Datapoint {
         match self {
             Datapoint::Chat(datapoint) => SimpleStoredSampleInfo {
                 function_name: datapoint.function_name,
+                input: datapoint.input,
                 output: datapoint.output,
                 dispreferred_outputs: Vec::default(),
                 tool_params: datapoint.tool_params,
@@ -1376,6 +1377,7 @@ impl StoredSample for Datapoint {
                 });
                 SimpleStoredSampleInfo {
                     function_name: datapoint.function_name,
+                    input: datapoint.input,
                     output,
                     dispreferred_outputs: Vec::default(),
                     tool_params: None,
