@@ -99,7 +99,7 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader name="Models" label="Model Usage" />
+      <PageHeader name="Models" />
 
       <SectionsGroup>
         <SectionLayout>
