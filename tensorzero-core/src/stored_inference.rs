@@ -564,7 +564,7 @@ pub fn render_stored_sample<T: StoredSample>(
 ) -> Result<RenderedSample, Error> {
     let resolved_input = stored_sample.input().clone();
     let model_input = render_model_input(
-        stored_sample.input(),
+        &resolved_input,
         stored_sample.function_name(),
         config,
         variants,
