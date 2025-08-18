@@ -39,7 +39,7 @@ test("playground should work for a chat function that sets 2 variants", async ({
     page.getByRole("heading", { name: "Reference Output" }),
   ).toHaveCount(2);
 
-  // Verify that there are 8 text boxes, one for each variant and each input and output
+  // Verify that there are 8 outputs, one for each variant and each datapoint
   await expect(page.getByRole("textbox")).toHaveCount(8, { timeout: 10_000 });
 
   // Verify that there are no errors
