@@ -9,9 +9,9 @@ use tensorzero::{
 };
 use tensorzero_core::{
     cache::CacheOptions,
-    clickhouse::test_helpers::CLICKHOUSE_URL,
-    clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
     config_parser::ProviderTypesConfig,
+    db::clickhouse::test_helpers::CLICKHOUSE_URL,
+    db::clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
     endpoints::inference::InferenceClients,
     inference::types::{
         resolved_input::FileWithPath,
@@ -368,6 +368,7 @@ pub async fn make_embedded_gateway() -> Client {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
         verify_credentials: true,
+        allow_batch_writes: true,
     })
     .with_verbose_errors(true)
     .build()
