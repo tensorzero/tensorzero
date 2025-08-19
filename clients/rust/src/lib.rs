@@ -298,7 +298,14 @@ impl ClientBuilder {
                     tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
                     Arc::new(Config::default())
                 };
-                if !allow_batch_writes && config.gateway.observability.batch_writes.enabled {
+                if !allow_batch_writes
+                    && config.gateway.observability.batch_writes.enabled
+                    && !config
+                        .gateway
+                        .observability
+                        .batch_writes
+                        .__force_allow_embedded_batch_writes
+                {
                     return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
                         source: tensorzero_core::error::Error::new(ErrorDetails::Config {
                             message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode".to_string(),
