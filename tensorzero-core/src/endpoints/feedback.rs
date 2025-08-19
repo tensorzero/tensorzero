@@ -12,8 +12,8 @@ use tokio::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
+use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
@@ -829,7 +829,7 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use crate::config_parser::{Config, MetricConfig, MetricConfigOptimize};
+    use crate::config_parser::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_gateway_handle;
@@ -1233,9 +1233,7 @@ mod tests {
         let function_config_chat_tools =
             Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
                 variants: HashMap::new(),
-                system_schema: None,
-                user_schema: None,
-                assistant_schema: None,
+                schemas: SchemaData::default(),
                 tools: vec!["get_temperature".to_string()],
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
@@ -1362,9 +1360,7 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let function_config = Box::leak(Box::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             output_schema: StaticJSONSchema::from_value(output_schema.clone()).unwrap(),
             implicit_tool_call_config,
             description: None,

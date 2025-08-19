@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::Write;
 
-use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::{Config, TimeoutsConfig};
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::ContentBlock;

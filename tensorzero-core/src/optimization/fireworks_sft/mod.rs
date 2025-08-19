@@ -39,7 +39,7 @@ use crate::providers::helpers::UrlParseErrExt;
 use crate::providers::openai::tensorzero_to_openai_assistant_message;
 use crate::stored_inference::RenderedSample;
 use crate::{
-    clickhouse::ClickHouseConnectionInfo,
+    db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::ContentBlock,

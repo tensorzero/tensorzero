@@ -9,8 +9,8 @@ use tokio::try_join;
 use url::Url;
 
 use crate::{
-    clickhouse::ClickHouseConnectionInfo,
     config_parser::Config,
+    db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model::{build_creds_caching_default, CredentialLocation},

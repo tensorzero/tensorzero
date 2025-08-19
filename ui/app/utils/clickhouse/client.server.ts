@@ -30,7 +30,10 @@ export function getClickhouseClient(): ClickHouseClient {
     // handling. The ClickHouse client itself does not handle some errors
     // internally so the user will see cryptic Node errors unless we intercept.
     const client = new Proxy(
-      createClient({ url: env.TENSORZERO_CLICKHOUSE_URL }),
+      createClient({
+        url: env.TENSORZERO_CLICKHOUSE_URL,
+        request_timeout: 1000 * 60 * 5,
+      }),
       {
         get(target, prop, receiver) {
           const propertyOrMethod = target[prop as keyof ClickHouseClient];

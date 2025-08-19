@@ -140,7 +140,7 @@ async fn test_config_from_toml_table_valid() {
                     assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
                     assert_eq!(chat_config.weight, Some(1.0));
                     assert_eq!(
-                            *chat_config.system_template.as_ref().unwrap(),
+                            chat_config.templates.system.as_ref().unwrap().template,
                             PathWithContents {
                                 // We don't use a real path for programmatically generated templates
                                 // Instead we use this handle and then the same in minijinja
@@ -2156,6 +2156,140 @@ async fn deny_bad_timeouts_non_streaming_field() {
 }
 
 #[tokio::test]
+async fn deny_user_schema_and_input_wrapper() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_str = r#"
+        [functions.basic_test]
+        type = "chat"
+        user_schema = "user_schema.json"
+
+        [functions.basic_test.variants.good_variant]
+        type = "chat_completion"
+        model = "my-model"
+        input_wrappers.user = "user_wrapper.minijinja"
+        "#;
+    let config_path = temp_dir.path().join("config.toml");
+    let user_schema_path = temp_dir.path().join("user_schema.json");
+    let user_wrapper_path = temp_dir.path().join("user_wrapper.minijinja");
+    std::fs::write(&config_path, config_str).unwrap();
+    std::fs::write(&user_schema_path, "{}").unwrap();
+    std::fs::write(&user_wrapper_path, "Plain user wrapper").unwrap();
+
+    let err =
+        Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(&config_path).unwrap())
+            .await
+            .unwrap_err()
+            .to_string();
+
+    assert_eq!(
+            err.to_string(),
+            "functions.basic_test.variants.good_variant: Cannot provide both `input_wrappers.user` and `user_schema`"
+        );
+}
+
+#[tokio::test]
+async fn deny_user_template_and_input_wrapper() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_str = r#"
+        [functions.basic_test]
+        type = "chat"
+
+        [functions.basic_test.variants.good_variant]
+        type = "chat_completion"
+        model = "my-model"
+        user_template = "user_template.minijinja"
+        input_wrappers.user = "user_wrapper.minijinja"
+        "#;
+    let config_path = temp_dir.path().join("config.toml");
+    let user_template_path = temp_dir.path().join("user_template.minijinja");
+    let user_wrapper_path = temp_dir.path().join("user_wrapper.minijinja");
+    std::fs::write(&config_path, config_str).unwrap();
+    std::fs::write(&user_template_path, "Plain user template").unwrap();
+    std::fs::write(&user_wrapper_path, "Plain user wrapper").unwrap();
+
+    let err =
+        Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(&config_path).unwrap())
+            .await
+            .unwrap_err()
+            .to_string();
+
+    assert_eq!(
+            err.to_string(),
+            "functions.basic_test.variants.good_variant: Cannot provide both `input_wrappers.user` and `user` template"
+        );
+}
+
+#[tokio::test]
+async fn deny_fuser_user_template_and_input_wrapper() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_str = r#"
+        [functions.basic_test]
+        type = "chat"
+
+        [functions.basic_test.variants.good_variant]
+        type = "experimental_mixture_of_n"
+        candidates = []
+
+        [functions.basic_test.variants.good_variant.fuser]
+        model = "dummy::echo_request_messages"
+        user_template = "user_template.minijinja"
+        input_wrappers.user = "user_wrapper.minijinja"
+        "#;
+    let config_path = temp_dir.path().join("config.toml");
+    let user_template_path = temp_dir.path().join("user_template.minijinja");
+    let user_wrapper_path = temp_dir.path().join("user_wrapper.minijinja");
+    std::fs::write(&config_path, config_str).unwrap();
+    std::fs::write(&user_template_path, "Plain user template").unwrap();
+    std::fs::write(&user_wrapper_path, "Plain user wrapper").unwrap();
+
+    let err =
+        Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(&config_path).unwrap())
+            .await
+            .unwrap_err()
+            .to_string();
+
+    assert_eq!(
+            err.to_string(),
+            "functions.basic_test.variants.good_variant.fuser: Cannot provide both `input_wrappers.user` and `user` template"
+        );
+}
+
+#[tokio::test]
+async fn deny_evaluator_user_template_and_input_wrapper() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_str = r#"
+        [functions.basic_test]
+        type = "chat"
+
+        [functions.basic_test.variants.good_variant]
+        type = "experimental_best_of_n_sampling"
+        candidates = []
+
+        [functions.basic_test.variants.good_variant.evaluator]
+        model = "dummy::echo_request_messages"
+        user_template = "user_template.minijinja"
+        input_wrappers.user = "user_wrapper.minijinja"
+        "#;
+    let config_path = temp_dir.path().join("config.toml");
+    let user_template_path = temp_dir.path().join("user_template.minijinja");
+    let user_wrapper_path = temp_dir.path().join("user_wrapper.minijinja");
+    std::fs::write(&config_path, config_str).unwrap();
+    std::fs::write(&user_template_path, "Plain user template").unwrap();
+    std::fs::write(&user_wrapper_path, "Plain user wrapper").unwrap();
+
+    let err =
+        Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(&config_path).unwrap())
+            .await
+            .unwrap_err()
+            .to_string();
+
+    assert_eq!(
+            err.to_string(),
+            "functions.basic_test.variants.good_variant.evaluator: Cannot provide both `input_wrappers.user` and `user` template"
+        );
+}
+
+#[tokio::test]
 async fn deny_bad_timeouts_streaming_field() {
     let config = r#"
         [models.slow_with_timeout]
@@ -2232,9 +2366,11 @@ async fn test_glob_relative_path() {
     };
     assert_eq!(
         variant
-            .user_template
+            .templates
+            .user
             .as_ref()
             .unwrap()
+            .template
             .path
             .get_template_key(),
         format!(
@@ -2243,15 +2379,17 @@ async fn test_glob_relative_path() {
         )
     );
     assert_eq!(
-        variant.system_template.as_ref().unwrap().contents,
+        variant.templates.system.as_ref().unwrap().template.contents,
         "Hello, world!"
     );
 
     assert_eq!(
         variant
-            .system_template
+            .templates
+            .system
             .as_ref()
             .unwrap()
+            .template
             .path
             .get_template_key(),
         format!(
@@ -2261,7 +2399,7 @@ async fn test_glob_relative_path() {
     );
 
     assert_eq!(
-        variant.user_template.as_ref().unwrap().contents,
+        variant.templates.user.as_ref().unwrap().template.contents,
         "My second template"
     );
 }

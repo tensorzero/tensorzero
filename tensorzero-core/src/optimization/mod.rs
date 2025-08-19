@@ -1,3 +1,4 @@
+use crate::config_parser::UninitializedVariantConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -7,8 +8,8 @@ use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::model::UninitializedModelConfig;
@@ -28,7 +29,6 @@ use crate::optimization::together_sft::{
     TogetherSFTConfig, TogetherSFTJobHandle, UninitializedTogetherSFTConfig,
 };
 use crate::stored_inference::RenderedSample;
-use crate::variant::VariantConfig;
 
 pub mod dicl;
 pub mod fireworks_sft;
@@ -139,16 +139,16 @@ impl JobHandle for OptimizationJobHandle {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", content = "content", rename_all = "snake_case")]
 pub enum OptimizerOutput {
-    Variant(Box<VariantConfig>),
+    Variant(Box<UninitializedVariantConfig>),
     Model(UninitializedModelConfig),
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum OptimizationJobInfo {

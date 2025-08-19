@@ -21,8 +21,8 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
-use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::config_parser::{Config, ObjectStoreInfo, UninitializedVariantInfo};
+use crate::config_parser::{Config, ObjectStoreInfo, SchemaData, UninitializedVariantInfo};
+use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -281,6 +281,8 @@ pub async fn inference<T: Send + 'static>(
         params.variant_name.as_deref(),
         params.internal_dynamic_variant_config,
         &mut templates,
+        &function,
+        function_name.clone(),
     )?;
     let templates = &*templates;
 
@@ -535,9 +537,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     )]
                     .into_iter()
                     .collect(),
-                    system_schema: None,
-                    user_schema: None,
-                    assistant_schema: None,
+                    schemas: SchemaData::default(),
                     tools: vec![],
                     tool_choice: ToolChoice::Auto,
                     parallel_tool_calls: None,
@@ -1224,6 +1224,8 @@ fn prepare_candidate_variants(
     pinned_variant_name: Option<&str>,
     dynamic_variant_config: Option<UninitializedVariantInfo>,
     template_config: &mut Cow<'_, TemplateConfig>,
+    function: &FunctionConfig,
+    function_name: String,
 ) -> Result<(), Error> {
     match (pinned_variant_name, dynamic_variant_config) {
         // If a variant is pinned, only that variant should be attempted
@@ -1244,7 +1246,11 @@ fn prepare_candidate_variants(
         }
         (None, Some(dynamic_variant_config)) => {
             // Replace the variant config with just the dynamic variant
-            let candidate_variant_info = load_dynamic_variant_info(dynamic_variant_config)?;
+            let candidate_variant_info = load_dynamic_variant_info(
+                dynamic_variant_config,
+                function.schemas(),
+                function_name,
+            )?;
 
             // Replace templates in the template config with the ones passed in
             // We Clone here so that we can still reference the old templates that don't conflict

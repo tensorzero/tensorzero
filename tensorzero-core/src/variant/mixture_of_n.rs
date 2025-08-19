@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
-use crate::config_parser::PathWithContents;
+use crate::config_parser::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
@@ -30,15 +30,14 @@ use crate::{
     variant::chat_completion::ChatCompletionConfig,
 };
 
-use crate::config_parser::LoadableConfig;
-use crate::variant::chat_completion::{TemplateSchemaInfo, UninitializedChatCompletionConfig};
+use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
     InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant,
 };
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct MixtureOfNConfig {
@@ -64,7 +63,7 @@ fn default_timeout() -> f64 {
     300.0
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct FuserConfig {
@@ -80,14 +79,26 @@ pub struct UninitializedFuserConfig {
     pub inner: UninitializedChatCompletionConfig,
 }
 
-impl LoadableConfig<MixtureOfNConfig> for UninitializedMixtureOfNConfig {
-    fn load(self) -> Result<MixtureOfNConfig, Error> {
+impl UninitializedMixtureOfNConfig {
+    pub fn load(
+        self,
+        schemas: &SchemaData,
+        error_context: &ErrorContext,
+    ) -> Result<MixtureOfNConfig, Error> {
         Ok(MixtureOfNConfig {
             weight: self.weight,
             timeout_s: self.timeout_s,
             candidates: self.candidates,
             fuser: FuserConfig {
-                inner: self.fuser.inner.load()?,
+                inner: self.fuser.inner.load(
+                    schemas,
+                    // Our stored fuser is a plain `UninitializedChatCompletionConfig`, so we need
+                    // to explicitly add `fuser` to any error messages it produces.
+                    &ErrorContext {
+                        function_name: error_context.function_name.clone(),
+                        variant_name: format!("{}.fuser", error_context.variant_name),
+                    },
+                )?,
             },
         })
     }
@@ -658,11 +669,8 @@ impl FuserConfig {
         templates: &TemplateConfig,
         system: Option<&Value>,
         max_index: usize,
-        template_schema_info: TemplateSchemaInfo,
     ) -> Result<String, Error> {
-        let inner_system_message =
-            self.inner
-                .prepare_system_message(templates, system, template_schema_info)?;
+        let inner_system_message = self.inner.prepare_system_message(templates, system)?;
         let template_context = match inner_system_message {
             Some(inner_system_message) => {
                 json!({"inner_system_message": inner_system_message, "max_index": max_index})
@@ -775,17 +783,13 @@ impl FuserConfig {
             inference_config.templates,
             input.system.as_ref(),
             max_index,
-            function.template_schema_info(),
         )?);
         let messages = input
             .messages
             .iter()
             .map(|message| {
-                self.inner.prepare_request_message(
-                    inference_config.templates,
-                    message,
-                    function.template_schema_info(),
-                )
+                self.inner
+                    .prepare_request_message(inference_config.templates, message)
             })
             .chain(std::iter::once(Ok(candidate_message)))
             .collect::<Result<Vec<_>, _>>()?;
@@ -846,7 +850,8 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        clickhouse::ClickHouseConnectionInfo,
+        config_parser::SchemaData,
+        db::clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
@@ -854,10 +859,11 @@ mod tests {
             Latency, ModelInferenceResponseWithMetadata, Text, Thought,
         },
         jsonschema_util::StaticJSONSchema,
-        minijinja_util::tests::get_test_template_config,
+        minijinja_util::tests::{get_test_template_config, test_system_template_schema},
         model::{ModelConfig, ModelProvider, ProviderConfig},
         providers::dummy::DummyProvider,
         tool::{ToolCallConfig, ToolCallOutput, ToolChoice},
+        variant::chat_completion::{ChatTemplates, TemplateWithSchema},
     };
 
     use super::*;
@@ -865,12 +871,6 @@ mod tests {
     #[test]
     fn test_prepare_system_message() {
         let templates = get_test_template_config();
-
-        let all_schemas = TemplateSchemaInfo {
-            has_system_schema: true,
-            has_user_schema: true,
-            has_assistant_schema: true,
-        };
 
         // Test without templates, string message
         let fuser_config = FuserConfig {
@@ -882,12 +882,8 @@ mod tests {
         };
         let input_message = Value::String("You are a helpful assistant.".to_string());
         let max_index = 2;
-        let result = fuser_config.prepare_system_message(
-            &templates,
-            Some(&input_message),
-            max_index,
-            all_schemas,
-        );
+        let result =
+            fuser_config.prepare_system_message(&templates, Some(&input_message), max_index);
         let prepared_message = result.unwrap();
         let expected_message = templates
             .template_message(
@@ -907,12 +903,8 @@ mod tests {
         };
         let input_message = json!({"message": "You are a helpful assistant."});
         let max_index = 3;
-        let result = fuser_config.prepare_system_message(
-            &templates,
-            Some(&input_message),
-            max_index,
-            all_schemas,
-        );
+        let result =
+            fuser_config.prepare_system_message(&templates, Some(&input_message), max_index);
         assert!(result.is_err());
         let prepared_message = result.unwrap_err();
         assert_eq!(
@@ -929,7 +921,7 @@ mod tests {
             },
         };
         let max_index = 5;
-        let result = fuser_config.prepare_system_message(&templates, None, max_index, all_schemas);
+        let result = fuser_config.prepare_system_message(&templates, None, max_index);
         let expected_message = templates
             .template_message(
                 "t0:mixture_of_n_fuser_system",
@@ -947,24 +939,25 @@ mod tests {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
-                system_template: Some(PathWithContents {
-                    path: system_template_name.into(),
-                    contents: String::new(),
-                }),
+                templates: ChatTemplates {
+                    system: Some(TemplateWithSchema {
+                        template: PathWithContents {
+                            path: system_template_name.into(),
+                            contents: String::new(),
+                        },
+                        schema: Some(test_system_template_schema()),
+                    }),
+                    ..Default::default()
+                },
                 ..Default::default()
             },
         };
 
         let max_index = 6;
         let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
-        let result = fuser_config.prepare_system_message(
-            &templates,
-            Some(&input_message),
-            max_index,
-            all_schemas,
-        );
-        assert!(result.is_ok());
-        let prepared_message = result.unwrap();
+        let prepared_message = fuser_config
+            .prepare_system_message(&templates, Some(&input_message), max_index)
+            .unwrap();
         let inner_system_message = templates
             .template_message(
                 system_template_name,
@@ -986,16 +979,22 @@ mod tests {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
-                system_template: Some(PathWithContents {
-                    path: system_template_name.into(),
-                    contents: String::new(),
-                }),
+                templates: ChatTemplates {
+                    system: Some(TemplateWithSchema {
+                        template: PathWithContents {
+                            path: system_template_name.into(),
+                            contents: String::new(),
+                        },
+                        schema: None,
+                    }),
+                    ..Default::default()
+                },
                 ..Default::default()
             },
         };
 
         let max_index = 10;
-        let result = fuser_config.prepare_system_message(&templates, None, max_index, all_schemas);
+        let result = fuser_config.prepare_system_message(&templates, None, max_index);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         let inner_system_message = templates
@@ -1204,9 +1203,7 @@ mod tests {
         let templates = get_test_template_config();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
@@ -1485,9 +1482,7 @@ mod tests {
         };
         let chat_function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,

@@ -558,7 +558,7 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        clickhouse::ClickHouseConnectionInfo,
+        db::clickhouse::ClickHouseConnectionInfo,
     };
 
     use super::*;

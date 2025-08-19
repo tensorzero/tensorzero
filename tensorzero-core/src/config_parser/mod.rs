@@ -331,6 +331,10 @@ fn default_max_rows() -> usize {
 #[cfg_attr(test, ts(export))]
 pub struct BatchWritesConfig {
     pub enabled: bool,
+    // An internal flag to allow us to test batch writes in embedded gateway mode.
+    // This can currently cause deadlocks, so we don't want normal embedded clients to use it.
+    #[serde(default)]
+    pub __force_allow_embedded_batch_writes: bool,
     #[serde(default = "default_flush_interval_ms")]
     pub flush_interval_ms: u64,
     #[serde(default = "default_max_rows")]
@@ -341,6 +345,7 @@ impl Default for BatchWritesConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            __force_allow_embedded_batch_writes: false,
             flush_interval_ms: default_flush_interval_ms(),
             max_rows: default_max_rows(),
         }
@@ -855,9 +860,7 @@ impl Config {
             Ok(Cow::Owned(Arc::new(FunctionConfig::Chat(
                 FunctionConfigChat {
                     variants: HashMap::new(),
-                    system_schema: None,
-                    user_schema: None,
-                    assistant_schema: None,
+                    schemas: SchemaData::default(),
                     tools: vec![],
                     tool_choice: ToolChoice::None,
                     parallel_tool_calls: None,
@@ -1115,6 +1118,17 @@ struct UninitializedFunctionConfigJson {
     description: Option<String>,
 }
 
+/// Holds all of the schemas used by a chat completion function.
+/// These are used by variants to construct a `TemplateWithSchema`
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct SchemaData {
+    pub user: Option<StaticJSONSchema>,
+    pub assistant: Option<StaticJSONSchema>,
+    pub system: Option<StaticJSONSchema>,
+}
+
 impl UninitializedFunctionConfig {
     pub fn load(self, function_name: &str) -> Result<FunctionConfig, Error> {
         match self {
@@ -1131,10 +1145,25 @@ impl UninitializedFunctionConfig {
                     .assistant_schema
                     .map(StaticJSONSchema::from_path)
                     .transpose()?;
+                let schema_data = SchemaData {
+                    user: user_schema,
+                    assistant: assistant_schema,
+                    system: system_schema,
+                };
                 let variants = params
                     .variants
                     .into_iter()
-                    .map(|(name, variant)| variant.load().map(|v| (name, Arc::new(v))))
+                    .map(|(name, variant)| {
+                        variant
+                            .load(
+                                &schema_data,
+                                &ErrorContext {
+                                    function_name: function_name.to_string(),
+                                    variant_name: name.to_string(),
+                                },
+                            )
+                            .map(|v| (name, Arc::new(v)))
+                    })
                     .collect::<Result<HashMap<_, _>, Error>>()?;
                 for (name, variant) in &variants {
                     if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
@@ -1150,9 +1179,7 @@ impl UninitializedFunctionConfig {
                 }
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
                     variants,
-                    system_schema,
-                    user_schema,
-                    assistant_schema,
+                    schemas: schema_data,
                     tools: params.tools,
                     tool_choice: params.tool_choice,
                     parallel_tool_calls: params.parallel_tool_calls,
@@ -1172,6 +1199,11 @@ impl UninitializedFunctionConfig {
                     .assistant_schema
                     .map(StaticJSONSchema::from_path)
                     .transpose()?;
+                let schema_data = SchemaData {
+                    user: user_schema,
+                    assistant: assistant_schema,
+                    system: system_schema,
+                };
                 let output_schema = match params.output_schema {
                     Some(path) => StaticJSONSchema::from_path(path)?,
                     None => StaticJSONSchema::default(),
@@ -1181,7 +1213,17 @@ impl UninitializedFunctionConfig {
                 let variants = params
                     .variants
                     .into_iter()
-                    .map(|(name, variant)| variant.load().map(|v| (name, Arc::new(v))))
+                    .map(|(name, variant)| {
+                        variant
+                            .load(
+                                &schema_data,
+                                &ErrorContext {
+                                    function_name: function_name.to_string(),
+                                    variant_name: name.to_string(),
+                                },
+                            )
+                            .map(|v| (name, Arc::new(v)))
+                    })
                     .collect::<Result<HashMap<_, _>, Error>>()?;
 
                 for (name, variant) in &variants {
@@ -1219,9 +1261,7 @@ impl UninitializedFunctionConfig {
                 }
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,
-                    system_schema,
-                    user_schema,
-                    assistant_schema,
+                    schemas: schema_data,
                     output_schema,
                     implicit_tool_call_config,
                     description: params.description,
@@ -1260,21 +1300,31 @@ pub enum UninitializedVariantConfig {
     ChainOfThought(UninitializedChainOfThoughtConfig),
 }
 
+/// Holds extra information used for enriching error messages
+pub struct ErrorContext {
+    pub function_name: String,
+    pub variant_name: String,
+}
+
 impl UninitializedVariantInfo {
-    pub fn load(self) -> Result<VariantInfo, Error> {
+    pub fn load(
+        self,
+        schemas: &SchemaData,
+        error_context: &ErrorContext,
+    ) -> Result<VariantInfo, Error> {
         let inner = match self.inner {
             UninitializedVariantConfig::ChatCompletion(params) => {
-                VariantConfig::ChatCompletion(params.load()?)
+                VariantConfig::ChatCompletion(params.load(schemas, error_context)?)
             }
             UninitializedVariantConfig::BestOfNSampling(params) => {
-                VariantConfig::BestOfNSampling(params.load()?)
+                VariantConfig::BestOfNSampling(params.load(schemas, error_context)?)
             }
             UninitializedVariantConfig::Dicl(params) => VariantConfig::Dicl(params.load()?),
             UninitializedVariantConfig::MixtureOfN(params) => {
-                VariantConfig::MixtureOfN(params.load()?)
+                VariantConfig::MixtureOfN(params.load(schemas, error_context)?)
             }
             UninitializedVariantConfig::ChainOfThought(params) => {
-                VariantConfig::ChainOfThought(params.load()?)
+                VariantConfig::ChainOfThought(params.load(schemas, error_context)?)
             }
         };
         Ok(VariantInfo {

@@ -39,6 +39,7 @@ pub trait StoredSample {
 /// that is just copied over from the StoredSample.
 pub struct SimpleStoredSampleInfo {
     pub function_name: String,
+    pub input: ResolvedInput,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
     pub output: Option<Vec<ContentBlockChatOutput>>,
@@ -367,6 +368,7 @@ impl StoredSample for StoredInference {
         match self {
             StoredInference::Chat(example) => SimpleStoredSampleInfo {
                 function_name: example.function_name,
+                input: example.input,
                 episode_id: Some(example.episode_id),
                 inference_id: Some(example.inference_id),
                 output: Some(example.output),
@@ -384,6 +386,7 @@ impl StoredSample for StoredInference {
                     .collect();
                 SimpleStoredSampleInfo {
                     function_name: example.function_name,
+                    input: example.input,
                     episode_id: Some(example.episode_id),
                     inference_id: Some(example.inference_id),
                     output: Some(output),
@@ -415,6 +418,7 @@ fn json_output_to_content_block_chat_output(
 pub struct RenderedSample {
     pub function_name: String,
     pub input: ModelInput,
+    pub stored_input: ResolvedInput,
     pub output: Option<Vec<ContentBlockChatOutput>>,
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
@@ -498,6 +502,11 @@ impl RenderedSample {
     pub fn get_tags(&self) -> HashMap<String, String> {
         self.tags.clone()
     }
+
+    #[getter]
+    pub fn get_stored_input(&self) -> ResolvedInput {
+        self.stored_input.clone()
+    }
 }
 
 impl std::fmt::Display for RenderedSample {
@@ -538,26 +547,11 @@ fn render_model_input(
             variant_name: variant_name.clone(),
         }));
     };
-    let system_template_name = chat_completion_config
-        .system_template
-        .as_ref()
-        .map(|x| x.path.get_template_key());
-    let user_template_name = chat_completion_config
-        .user_template
-        .as_ref()
-        .map(|x| x.path.get_template_key());
-    let assistant_template_name = chat_completion_config
-        .assistant_template
-        .as_ref()
-        .map(|x| x.path.get_template_key());
     prepare_model_input(
         resolved_input.system.as_ref(),
         &resolved_input.messages,
         &config.templates,
-        system_template_name.as_deref(),
-        user_template_name.as_deref(),
-        assistant_template_name.as_deref(),
-        function_config.template_schema_info(),
+        &chat_completion_config.templates,
     )
 }
 
@@ -571,14 +565,9 @@ pub fn render_stored_sample<T: StoredSample>(
     config: &Config,
     variants: &HashMap<String, String>,
 ) -> Result<RenderedSample, Error> {
-    let model_input = render_model_input(
-        stored_sample.input(),
-        stored_sample.function_name(),
-        config,
-        variants,
-    )?;
     let SimpleStoredSampleInfo {
         function_name,
+        input,
         output,
         dispreferred_outputs,
         tool_params,
@@ -587,11 +576,13 @@ pub fn render_stored_sample<T: StoredSample>(
         inference_id,
         tags,
     } = stored_sample.owned_simple_info();
+    let model_input = render_model_input(&input, &function_name, config, variants)?;
     Ok(RenderedSample {
         function_name,
         episode_id,
         inference_id,
         input: model_input,
+        stored_input: input,
         output,
         dispreferred_outputs,
         tool_params,

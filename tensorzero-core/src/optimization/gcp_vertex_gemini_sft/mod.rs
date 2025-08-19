@@ -8,8 +8,8 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    clickhouse::ClickHouseConnectionInfo,
     config_parser::Config,
+    db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model::CredentialLocation,
