@@ -25,7 +25,7 @@ use python_helpers::{
     python_uuid_to_uuid,
 };
 use tensorzero_core::{
-    config_parser::{ConfigPyClass, FunctionsConfigPyClass},
+    config::{ConfigPyClass, FunctionsConfigPyClass},
     db::clickhouse::{query_builder::OrderBy, ClickhouseFormat},
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{

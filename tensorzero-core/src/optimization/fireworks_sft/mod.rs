@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
 
-use crate::config_parser::TimeoutsConfig;
+use crate::config::TimeoutsConfig;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::model::UninitializedModelConfig;
 use crate::model::UninitializedModelProvider;

@@ -8,7 +8,7 @@ use super::{
     OpenAIRequestMessage, OpenAISFTTool,
 };
 use crate::{
-    config_parser::TimeoutsConfig,
+    config::TimeoutsConfig,
     error::{Error, ErrorDetails},
     inference::types::ContentBlock,
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},

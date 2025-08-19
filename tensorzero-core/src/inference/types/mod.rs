@@ -34,7 +34,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
-use crate::{cache::CacheData, config_parser::ObjectStoreInfo};
+use crate::{cache::CacheData, config::ObjectStoreInfo};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{
     endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceIds},
@@ -1931,7 +1931,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config_parser::SchemaData;
+    use crate::config::SchemaData;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::TemplateConfig;
