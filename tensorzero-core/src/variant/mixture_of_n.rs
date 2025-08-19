@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
-use crate::config_parser::{PathWithContents, SchemaData};
+use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
@@ -80,13 +80,25 @@ pub struct UninitializedFuserConfig {
 }
 
 impl UninitializedMixtureOfNConfig {
-    pub fn load(self, schemas: &SchemaData) -> Result<MixtureOfNConfig, Error> {
+    pub fn load(
+        self,
+        schemas: &SchemaData,
+        error_context: &ErrorContext,
+    ) -> Result<MixtureOfNConfig, Error> {
         Ok(MixtureOfNConfig {
             weight: self.weight,
             timeout_s: self.timeout_s,
             candidates: self.candidates,
             fuser: FuserConfig {
-                inner: self.fuser.inner.load(schemas)?,
+                inner: self.fuser.inner.load(
+                    schemas,
+                    // Our stored fuser is a plain `UninitializedChatCompletionConfig`, so we need
+                    // to explicitly add `fuser` to any error messages it produces.
+                    &ErrorContext {
+                        function_name: error_context.function_name.clone(),
+                        variant_name: format!("{}.fuser", error_context.variant_name),
+                    },
+                )?,
             },
         })
     }
@@ -838,8 +850,8 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        clickhouse::ClickHouseConnectionInfo,
-        config_parser::SchemaData,
+        config::SchemaData,
+        db::clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{

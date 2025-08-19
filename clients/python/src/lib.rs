@@ -25,8 +25,8 @@ use python_helpers::{
     python_uuid_to_uuid,
 };
 use tensorzero_core::{
-    clickhouse::{query_builder::OrderBy, ClickhouseFormat},
-    config_parser::{ConfigPyClass, FunctionsConfigPyClass},
+    config::{ConfigPyClass, FunctionsConfigPyClass},
+    db::clickhouse::{query_builder::OrderBy, ClickhouseFormat},
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
         pyo3_helpers::{
@@ -651,6 +651,7 @@ impl TensorZeroGateway {
             clickhouse_url,
             timeout,
             verify_credentials: true,
+            allow_batch_writes: false,
         })
         .build();
         let client = tokio_block_on_without_gil(cls.py(), client_fut);
@@ -1298,6 +1299,7 @@ impl AsyncTensorZeroGateway {
             clickhouse_url,
             timeout,
             verify_credentials: true,
+            allow_batch_writes: false,
         })
         .build();
         let fut = async move {

@@ -19,6 +19,7 @@ const config: Config = {
       skip_completed_migrations: false,
       batch_writes: {
         enabled: false,
+        __force_allow_embedded_batch_writes: false,
         flush_interval_ms: 100n,
         max_rows: 1000,
       },
