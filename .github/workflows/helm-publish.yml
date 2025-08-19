@@ -10,8 +10,6 @@ jobs:
   publish-helm-chart:
     name: Publish Helm chart to R2
     runs-on: ubuntu-latest
-    # Only run on actual releases, not on pushes to main
-    # if: github.event_name == 'release'
     permissions:
       contents: read
     # Required secrets:
