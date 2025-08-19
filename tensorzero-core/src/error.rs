@@ -417,6 +417,9 @@ pub enum ErrorDetails {
     MissingFileExtension {
         file_name: String,
     },
+    MissingFunctionTypeKey {
+        function_name: String,
+    },
     ModelNotFound {
         model_name: String,
     },
@@ -590,6 +593,7 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
             ErrorDetails::MissingFunctionInVariants { .. } => tracing::Level::ERROR,
+            ErrorDetails::MissingFunctionTypeKey { .. } => tracing::Level::WARN,
             ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
             ErrorDetails::MissingFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
@@ -699,6 +703,7 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFunctionInVariants { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::MissingFunctionTypeKey { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFileExtension { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1112,6 +1117,9 @@ impl std::fmt::Display for ErrorDetails {
             },
             ErrorDetails::MissingFunctionInVariants { function_name } => {
                 write!(f, "Missing function in variants: {function_name}")
+            }
+            ErrorDetails::MissingFunctionTypeKey { function_name } => {
+                write!(f, "Failed to find `functions.{function_name}.type`. Most likely, the function named is not defined in the config.")
             }
             ErrorDetails::MissingFileExtension { file_name } => {
                 write!(

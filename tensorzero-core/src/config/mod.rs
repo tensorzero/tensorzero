@@ -47,6 +47,7 @@ pub mod path;
 mod span_map;
 #[cfg(test)]
 mod tests;
+pub mod write;
 
 tokio::task_local! {
     /// When set, we skip performing credential validation in model providers
