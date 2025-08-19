@@ -69,7 +69,7 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
       "content" in query.data ? query.data.content : query.data.output;
 
     return (
-      <div className="group relative">
+      <div className="group relative" data-testid="datapoint-playground-output">
         {refreshButton}
         <Output output={output} maxHeight={480} />
       </div>
