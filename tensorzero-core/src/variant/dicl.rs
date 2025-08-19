@@ -3,7 +3,7 @@ use std::sync::Arc;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::config_parser::path::TomlRelativePath;
+use crate::config_parser::path::ResolvedTomlPath;
 use crate::config_parser::LoadableConfig;
 use crate::config_parser::PathWithContents;
 use crate::embeddings::EmbeddingEncodingFormat;
@@ -72,7 +72,7 @@ pub struct UninitializedDiclConfig {
     pub embedding_model: String,
     pub k: u32, // k as in k-nearest neighbors
     pub model: String,
-    pub system_instructions: Option<TomlRelativePath>,
+    pub system_instructions: Option<ResolvedTomlPath>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub stop_sequences: Option<Vec<String>>,
