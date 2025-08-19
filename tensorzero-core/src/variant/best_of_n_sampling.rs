@@ -90,6 +90,8 @@ impl UninitializedBestOfNSamplingConfig {
             evaluator: BestOfNEvaluatorConfig {
                 inner: self.evaluator.inner.load(
                     schemas,
+                    // Our stored evaluator is a plain `UninitializedChatCompletionConfig`, so we need
+                    // to explicitly add `evaluator` to any error messages it produces.
                     &ErrorContext {
                         function_name: error_context.function_name.clone(),
                         variant_name: format!("{}.evaluator", error_context.variant_name),

@@ -92,6 +92,8 @@ impl UninitializedMixtureOfNConfig {
             fuser: FuserConfig {
                 inner: self.fuser.inner.load(
                     schemas,
+                    // Our stored fuser is a plain `UninitializedChatCompletionConfig`, so we need
+                    // to explicitly add `fuser` to any error messages it produces.
                     &ErrorContext {
                         function_name: error_context.function_name.clone(),
                         variant_name: format!("{}.fuser", error_context.variant_name),
