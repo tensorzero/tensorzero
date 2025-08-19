@@ -302,12 +302,19 @@ impl Optimizer for DiclOptimizationConfig {
             train_examples.len()
         );
 
-        // Convert RenderedSample inputs to strings for embedding (only messages, not system)
+        // Convert RenderedSample inputs to strings for embedding using stored_input
         let input_texts: Vec<String> = train_examples
             .iter()
             .map(|sample| {
-                serde_json::to_string(&sample.input.messages)
-                    .unwrap_or_else(|_| format!("{:?}", sample.input.messages))
+                serde_json::to_string(&sample.stored_input)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Error in serializing stored_input in DICL optimization: {e}"
+                            ),
+                        })
+                    })
+                    .unwrap_or_else(|_| format!("{:?}", sample.stored_input))
             })
             .collect();
 
