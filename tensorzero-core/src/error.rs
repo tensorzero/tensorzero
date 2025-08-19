@@ -24,7 +24,7 @@ use crate::inference::types::Thought;
 /// WARNING: Setting this to true will expose potentially sensitive request/response
 /// data in logs and error responses. Use with caution.
 static DEBUG: OnceCell<bool> =
-    if cfg!(feature = "e2e_tests") || cfg!(feature = "optimization_tests") {
+    if cfg!(feature = "e2e_tests") {
         OnceCell::const_new_with(true)
     } else {
         OnceCell::const_new()
