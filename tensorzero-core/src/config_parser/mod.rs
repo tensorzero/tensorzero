@@ -1227,36 +1227,41 @@ impl UninitializedFunctionConfig {
                     .collect::<Result<HashMap<_, _>, Error>>()?;
 
                 for (name, variant) in &variants {
-                    let mut warn_variant = None;
+                    let mut variant_missing_mode = None;
                     match &variant.inner {
                         VariantConfig::ChatCompletion(chat_config) => {
                             if chat_config.json_mode.is_none() {
-                                warn_variant = Some(name.clone());
+                                variant_missing_mode = Some(name.clone());
                             }
                         }
                         VariantConfig::BestOfNSampling(best_of_n_config) => {
                             if best_of_n_config.evaluator.inner.json_mode.is_none() {
-                                warn_variant = Some(format!("{name}.evaluator"));
+                                variant_missing_mode = Some(format!("{name}.evaluator"));
                             }
                         }
                         VariantConfig::MixtureOfN(mixture_of_n_config) => {
                             if mixture_of_n_config.fuser.inner.json_mode.is_none() {
-                                warn_variant = Some(format!("{name}.fuser"));
+                                variant_missing_mode = Some(format!("{name}.fuser"));
                             }
                         }
                         VariantConfig::Dicl(best_of_n_config) => {
                             if best_of_n_config.json_mode.is_none() {
-                                warn_variant = Some(name.clone());
+                                variant_missing_mode = Some(name.clone());
                             }
                         }
                         VariantConfig::ChainOfThought(chain_of_thought_config) => {
                             if chain_of_thought_config.inner.json_mode.is_none() {
-                                warn_variant = Some(name.clone());
+                                variant_missing_mode = Some(name.clone());
                             }
                         }
                     }
-                    if let Some(warn_variant) = warn_variant {
-                        tracing::warn!("Deprecation Warning: `json_mode` is not specified for `[functions.{function_name}.variants.{warn_variant}]` (parent function `{function_name}` is a JSON function), defaulting to `strict`. This field will become required in a future release - see https://github.com/tensorzero/tensorzero/issues/1043 on GitHub for details.");
+                    if let Some(variant_name) = variant_missing_mode {
+                        return Err(ErrorDetails::Config {
+                            message: format!(
+                                "`json_mode` must be specified for `[functions.{function_name}.variants.{variant_name}]` (parent function `{function_name}` is a JSON function)"
+                            ),
+                        }
+                        .into());
                     }
                 }
                 Ok(FunctionConfig::Json(FunctionConfigJson {

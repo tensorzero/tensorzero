@@ -57,16 +57,19 @@ description = "Extract named entities from text"
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
 
 [functions.extract_entities.variants.gpt4o_initial_prompt]
 type = "chat_completion"
 model = "openai::gpt-4o"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
 
 [functions.extract_entities.variants.llama_8b_initial_prompt]
 type = "chat_completion"
 model = "llama-3.1-8b-instruct"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
 
 [functions.extract_entities.variants.baseline]
 type = "chat_completion"
@@ -87,6 +90,7 @@ weight = 1
 type = "chat_completion"
 model = "ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"
 system_template = "functions/extract_entities/baseline/system_template.minijinja"
+json_mode = "strict"
 
 [functions.write_haiku]
 type = "chat"
@@ -134,6 +138,7 @@ type = "chat_completion"
 weight = 1
 model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "functions/ask_question/baseline/system_template.minijinja"
+json_mode = "strict"
 
 [functions.ask_question.variants."gpt-4.1-nano"]
 type = "chat_completion"
@@ -239,6 +244,7 @@ model = "openai::gpt-4.1-mini"
 system_template = "functions/judge_answer/gpt-4.1-mini/system_template.minijinja"
 user_template = "functions/judge_answer/gpt-4.1-mini/user_template.minijinja"
 retries = { num_retries = 3, max_delay_s = 10 }
+json_mode = "strict"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   TOOLS                                    │
