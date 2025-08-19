@@ -102,6 +102,7 @@ class StoredInference:
 class RenderedSample:
     function_name: str
     input: ModelInput
+    stored_input: ResolvedInput
     output: Optional[ChatInferenceOutput]
     episode_id: Optional[UUID]
     inference_id: Optional[UUID]

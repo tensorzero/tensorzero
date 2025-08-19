@@ -221,21 +221,13 @@ impl InferenceProvider for AnthropicProvider {
             let response_code = res.status();
             let response_text = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
+                    message: format!("Error fetching response: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
-            let error_body: AnthropicError = serde_json::from_str(&response_text).map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(response_text.clone()),
-                })
-            })?;
-            handle_anthropic_error(response_code, error_body.error, raw_request, response_text)
+            handle_anthropic_error(response_code, raw_request, response_text)
         }
     }
 
@@ -844,17 +836,6 @@ pub(crate) fn prefill_json_chunk_response(chunk: &mut ProviderInferenceResponseC
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct AnthropicError {
-    error: AnthropicErrorBody,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct AnthropicErrorBody {
-    r#type: String,
-    message: String,
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AnthropicContentBlock {
@@ -1034,7 +1015,6 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
 
 fn handle_anthropic_error(
     response_code: StatusCode,
-    response_body: AnthropicErrorBody,
     raw_request: String,
     raw_response: String,
 ) -> Result<ProviderInferenceResponse, Error> {
@@ -1046,15 +1026,15 @@ fn handle_anthropic_error(
             status_code: Some(response_code),
             provider_type: PROVIDER_TYPE.to_string(),
             raw_request: Some(raw_request),
-            raw_response: Some(raw_response),
-            message: response_body.message,
+            raw_response: Some(raw_response.clone()),
+            message: raw_response,
         }
         .into()),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
         // These are all captured in _ since they have the same error behavior
         _ => Err(ErrorDetails::InferenceServer {
-            raw_response: Some(raw_response),
-            message: response_body.message,
+            raw_response: Some(raw_response.clone()),
+            message: raw_response,
             provider_type: PROVIDER_TYPE.to_string(),
             raw_request: Some(raw_request),
         }
@@ -2107,14 +2087,9 @@ mod tests {
 
     #[test]
     fn test_handle_anthropic_error() {
-        let error_body = AnthropicErrorBody {
-            r#type: "error".to_string(),
-            message: "test_message".to_string(),
-        };
         let response_code = StatusCode::BAD_REQUEST;
         let result = handle_anthropic_error(
             response_code,
-            error_body.clone(),
             "raw request".to_string(),
             "raw response".to_string(),
         );
@@ -2122,7 +2097,7 @@ mod tests {
         assert_eq!(
             details,
             ErrorDetails::InferenceClient {
-                message: "test_message".to_string(),
+                message: "raw response".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some("raw request".to_string()),
@@ -2132,7 +2107,6 @@ mod tests {
         let response_code = StatusCode::UNAUTHORIZED;
         let result = handle_anthropic_error(
             response_code,
-            error_body.clone(),
             "raw request".to_string(),
             "raw response".to_string(),
         );
@@ -2140,7 +2114,7 @@ mod tests {
         assert_eq!(
             details,
             ErrorDetails::InferenceClient {
-                message: "test_message".to_string(),
+                message: "raw response".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some("raw request".to_string()),
@@ -2150,7 +2124,6 @@ mod tests {
         let response_code = StatusCode::TOO_MANY_REQUESTS;
         let result = handle_anthropic_error(
             response_code,
-            error_body.clone(),
             "raw request".to_string(),
             "raw response".to_string(),
         );
@@ -2158,7 +2131,7 @@ mod tests {
         assert_eq!(
             details,
             ErrorDetails::InferenceClient {
-                message: "test_message".to_string(),
+                message: "raw response".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some("raw request".to_string()),
@@ -2168,7 +2141,6 @@ mod tests {
         let response_code = StatusCode::NOT_FOUND;
         let result = handle_anthropic_error(
             response_code,
-            error_body.clone(),
             "raw request".to_string(),
             "raw response".to_string(),
         );
@@ -2176,7 +2148,7 @@ mod tests {
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
-                message: "test_message".to_string(),
+                message: "raw response".to_string(),
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
@@ -2185,7 +2157,6 @@ mod tests {
         let response_code = StatusCode::INTERNAL_SERVER_ERROR;
         let result = handle_anthropic_error(
             response_code,
-            error_body.clone(),
             "raw request".to_string(),
             "raw response".to_string(),
         );
@@ -2193,7 +2164,7 @@ mod tests {
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
-                message: "test_message".to_string(),
+                message: "raw response".to_string(),
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
