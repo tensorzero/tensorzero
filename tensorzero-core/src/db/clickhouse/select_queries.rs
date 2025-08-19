@@ -16,7 +16,6 @@ impl SelectQueries for ClickHouseConnectionInfo {
         max_periods: u32,
     ) -> Result<Vec<ModelUsageTimePoint>, Error> {
         // TODO: probably factor this out into common code as other queries will likely need similar logic
-        // TODO: write e2e tests against this query (outside the trait)
         let (time_grouping, time_filter) = match time_window {
             TimeWindow::Hour => (
                 "toStartOfHour(minute)",
