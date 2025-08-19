@@ -10,14 +10,6 @@ This directory contains the code for the **[Multimodal Inference](https://www.te
 export OPENAI_API_KEY="sk-..." # Replace with your OpenAI API key
 ```
 
-> [!WARNING]
->
-> ### API Key Quota
->
-> This example requires a valid OpenAI API key with available funds. If your account does not have a payment method on file or has exceeded its usage limits, the script will fail with an `insufficient_quota` error.
->
-> Please ensure you have [set up billing](https://platform.openai.com/account/billing/overview) in your OpenAI account before running this example.
-
 2. Launch the TensorZero Gateway, ClickHouse, and MinIO (a local S3-compatible object storage service):
 
 ```bash
