@@ -13,8 +13,7 @@ use tensorzero_core::inference::types::stored_input::{
 };
 use tensorzero_core::{
     inference::types::{
-        ContentBlock, ContentBlockChatOutput,
-        JsonInferenceOutput, RequestMessage, Text,
+        ContentBlock, ContentBlockChatOutput, JsonInferenceOutput, RequestMessage, Text,
     },
     tool::{ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
 };

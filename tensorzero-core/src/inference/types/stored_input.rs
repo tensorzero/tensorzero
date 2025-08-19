@@ -2,6 +2,7 @@ use crate::config_parser::Config;
 use crate::endpoints::object_storage::get_object;
 use crate::error::Error;
 use crate::inference::types::file::Base64FileMetadata;
+#[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::stored_input_message_content_to_python;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Base64File;

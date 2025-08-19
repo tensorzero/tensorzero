@@ -17,8 +17,7 @@ use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_core::function::{FunctionConfig, FunctionConfigJson};
 use tensorzero_core::inference::types::{
-    StoredInput, StoredInputMessage,
-    StoredInputMessageContent, Text,
+    StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
 };
 use tokio::time::sleep;
 use url::Url;

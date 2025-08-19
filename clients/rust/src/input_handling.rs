@@ -5,8 +5,7 @@ use tensorzero_core::tool::{ToolCall, ToolCallInput};
 use tensorzero_core::{
     error::ErrorDetails,
     inference::types::{
-        File, ResolvedInput, ResolvedInputMessage,
-        ResolvedInputMessageContent, TextKind,
+        File, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent, TextKind,
     },
 };
 
@@ -95,11 +94,11 @@ mod tests {
     use object_store::path::Path;
 
     use tensorzero_core::inference::types::{
-        resolved_input::FileWithPath, storage::{StorageKind, StoragePath}, Base64File,
+        resolved_input::FileWithPath,
+        storage::{StorageKind, StoragePath},
+        Base64File,
     };
     use url::Url;
-
-    
 
     use super::*;
 
