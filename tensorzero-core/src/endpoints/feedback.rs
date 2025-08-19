@@ -12,7 +12,7 @@ use tokio::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
+use crate::config::{Config, MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -338,8 +338,7 @@ async fn write_float(
         tags,
         ..
     } = params;
-    let metric_config: &crate::config_parser::MetricConfig =
-        config.get_metric_or_err(metric_name)?;
+    let metric_config: &crate::config::MetricConfig = config.get_metric_or_err(metric_name)?;
     if !disable_validation {
         // Verify that the function name exists.
         let _ =
@@ -829,7 +828,7 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use crate::config_parser::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
+    use crate::config::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_gateway_handle;
