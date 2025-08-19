@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use crate::endpoints::object_storage::get_object;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, deserialize_from_pyobj, serialize_to_dict, uuid_to_python,
 };
-use crate::inference::types::{ResolvedInputMessageContent, Text};
+use crate::inference::types::stored_input::StoredInput;
+use crate::inference::types::Text;
 use crate::{
     config_parser::Config,
     error::{Error, ErrorDetails},
@@ -14,7 +14,6 @@ use crate::{
     variant::{chat_completion::prepare_model_input, VariantConfig},
 };
 use chrono::{DateTime, Utc};
-use futures::future::try_join_all;
 #[cfg(feature = "pyo3")]
 use pyo3::types::{PyAny, PyList};
 #[cfg(feature = "pyo3")]
@@ -30,8 +29,9 @@ use uuid::Uuid;
 /// datasets and stored inferences.
 pub trait StoredSample {
     fn function_name(&self) -> &str;
-    fn input(&self) -> &ResolvedInput;
-    fn input_mut(&mut self) -> &mut ResolvedInput;
+    fn into_input(self) -> StoredInput;
+    fn input(&self) -> &StoredInput;
+    fn input_mut(&mut self) -> &mut StoredInput;
     fn owned_simple_info(self) -> SimpleStoredSampleInfo;
 }
 
@@ -39,7 +39,7 @@ pub trait StoredSample {
 /// that is just copied over from the StoredSample.
 pub struct SimpleStoredSampleInfo {
     pub function_name: String,
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
     pub output: Option<Vec<ContentBlockChatOutput>>,
@@ -114,7 +114,7 @@ impl StoredInference {
                 Ok(Self::Chat(StoredChatInference {
                     function_name,
                     variant_name,
-                    input,
+                    input: input.into_stored_input(),
                     output,
                     dispreferred_outputs: dispreferred_outputs.unwrap_or_default(),
                     episode_id,
@@ -139,7 +139,7 @@ impl StoredInference {
                 Ok(Self::Json(StoredJsonInference {
                     function_name,
                     variant_name,
-                    input,
+                    input: input.into_stored_input(),
                     output,
                     dispreferred_outputs: dispreferred_outputs.unwrap_or_default(),
                     episode_id,
@@ -174,7 +174,7 @@ impl StoredInference {
     }
 
     #[getter]
-    pub fn get_input(&self) -> ResolvedInput {
+    pub fn get_input(&self) -> StoredInput {
         match self {
             StoredInference::Chat(example) => example.input.clone(),
             StoredInference::Json(example) => example.input.clone(),
@@ -283,7 +283,7 @@ impl StoredInference {
 pub struct StoredChatInference {
     pub function_name: String,
     pub variant_name: String,
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
@@ -316,7 +316,7 @@ impl StoredChatInference {
 pub struct StoredJsonInference {
     pub function_name: String,
     pub variant_name: String,
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     pub output: JsonInferenceOutput,
     #[serde(default)]
     pub dispreferred_outputs: Vec<JsonInferenceOutput>,
@@ -344,16 +344,23 @@ impl StoredJsonInference {
 }
 
 impl StoredSample for StoredInference {
-    fn input_mut(&mut self) -> &mut ResolvedInput {
+    fn input_mut(&mut self) -> &mut StoredInput {
         match self {
             StoredInference::Chat(example) => &mut example.input,
             StoredInference::Json(example) => &mut example.input,
         }
     }
-    fn input(&self) -> &ResolvedInput {
+    fn input(&self) -> &StoredInput {
         match self {
             StoredInference::Chat(example) => &example.input,
             StoredInference::Json(example) => &example.input,
+        }
+    }
+
+    fn into_input(self) -> StoredInput {
+        match self {
+            StoredInference::Chat(example) => example.input,
+            StoredInference::Json(example) => example.input,
         }
     }
 
@@ -562,12 +569,13 @@ fn render_model_input(
 /// This does not handle resolving network resources (e.g. images).
 pub fn render_stored_sample<T: StoredSample>(
     stored_sample: T,
+    resolved_input: ResolvedInput,
     config: &Config,
     variants: &HashMap<String, String>,
 ) -> Result<RenderedSample, Error> {
     let SimpleStoredSampleInfo {
         function_name,
-        input,
+        input: _,
         output,
         dispreferred_outputs,
         tool_params,
@@ -576,71 +584,17 @@ pub fn render_stored_sample<T: StoredSample>(
         inference_id,
         tags,
     } = stored_sample.owned_simple_info();
-    let model_input = render_model_input(&input, &function_name, config, variants)?;
+    let model_input = render_model_input(&resolved_input, &function_name, config, variants)?;
     Ok(RenderedSample {
         function_name,
         episode_id,
         inference_id,
         input: model_input,
-        stored_input: input,
+        stored_input: resolved_input,
         output,
         dispreferred_outputs,
         tool_params,
         output_schema,
         tags,
     })
-}
-
-/// Since we store the input in the database in the form of ResolvedInput but without e.g. images inside,
-/// we need to reresolve the input when we retrieve it from the database.
-/// Resolves images in place.
-pub async fn reresolve_input_for_fine_tuning(
-    input: &mut ResolvedInput,
-    config: &Config,
-) -> Result<(), Error> {
-    let mut file_fetch_tasks = Vec::new();
-
-    for (message_index, message) in input.messages.iter_mut().enumerate() {
-        // First pass: identify files to fetch and collect tasks
-        for (content_index, content) in message.content.iter_mut().enumerate() {
-            if let ResolvedInputMessageContent::File(file_with_path) = content {
-                if file_with_path.file.data.is_none() {
-                    let storage_path = file_with_path.storage_path.clone();
-                    let fut = async move {
-                        let result = get_object(config, storage_path).await?;
-                        Ok::<_, Error>((message_index, content_index, result.data))
-                    };
-                    file_fetch_tasks.push(fut);
-                }
-            }
-        }
-    }
-
-    // Execute fetch tasks concurrently for the current message
-    if !file_fetch_tasks.is_empty() {
-        let fetched_data_results = try_join_all(file_fetch_tasks).await?;
-
-        // Second pass: update the content with fetched data
-        for (message_index, content_index, fetched_data) in fetched_data_results {
-            if let Some(message) = input.messages.get_mut(message_index) {
-                if let Some(ResolvedInputMessageContent::File(file_with_path)) =
-                    message.content.get_mut(content_index)
-                {
-                    file_with_path.file.data = Some(fetched_data);
-                } else {
-                    return Err(ErrorDetails::Serialization {
-                        message: "Content type changed or index invalid during input reresolution"
-                            .to_string(),
-                    }
-                    .into());
-                }
-            } else {
-                return Err(Error::new(ErrorDetails::Serialization {
-                    message: "Message index invalid during input reresolution".to_string(),
-                }));
-            }
-        }
-    }
-
-    Ok(())
 }

@@ -57,6 +57,9 @@ pub mod file;
 pub mod pyo3_helpers;
 pub mod resolved_input;
 pub mod storage;
+pub mod stored_input;
+
+pub use stored_input::{StoredInput, StoredInputMessage, StoredInputMessageContent};
 
 /*
  * Data flow in TensorZero
@@ -795,7 +798,7 @@ pub struct ChatInferenceDatabaseInsert {
     pub variant_name: String,
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -817,7 +820,7 @@ pub struct JsonInferenceDatabaseInsert {
     pub variant_name: String,
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: JsonInferenceOutput,
     // We at one point wrote empty auxiliary content to the database as "" but now write it as []
@@ -1259,7 +1262,7 @@ impl ChatInferenceDatabaseInsert {
             function_name: metadata.function_name,
             variant_name: metadata.variant_name,
             episode_id: metadata.episode_id,
-            input,
+            input: input.into_stored_input(),
             tool_params,
             inference_params,
             output: chat_result.content,
@@ -1295,7 +1298,7 @@ impl JsonInferenceDatabaseInsert {
             function_name: metadata.function_name,
             variant_name: metadata.variant_name,
             episode_id: metadata.episode_id,
-            input,
+            input: input.into_stored_input(),
             auxiliary_content,
             inference_params,
             output,

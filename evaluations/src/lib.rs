@@ -95,11 +95,13 @@ pub async fn run_evaluation(
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
     info!(config_file = ?args.config_file, "Loading configuration");
-    let config = Config::load_from_path_optional_verify_credentials(
-        &ConfigFileGlob::new_from_path(&args.config_file)?,
-        false,
-    )
-    .await?;
+    let config = Arc::new(
+        Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new_from_path(&args.config_file)?,
+            false,
+        )
+        .await?,
+    );
     debug!("Configuration loaded successfully");
     let evaluation_config = config
         .evaluations
@@ -179,8 +181,9 @@ pub async fn run_evaluation(
         let evaluation_run_id_clone = evaluation_run_id;
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
+        let config = config.clone();
         let abort_handle = join_set.spawn(async move {
-            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone(), &clients_clone.tensorzero_client.client).await?);
+            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&config).await?)?);
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
                     clients: &clients_clone,

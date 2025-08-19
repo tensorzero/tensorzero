@@ -773,7 +773,7 @@ impl TryFrom<ClickHouseStoredChatInference> for StoredChatInference {
         Ok(StoredChatInference {
             function_name: value.function_name,
             variant_name: value.variant_name,
-            input: value.input,
+            input: value.input.into_stored_input(),
             output: value.output,
             dispreferred_outputs,
             episode_id: value.episode_id,
@@ -821,7 +821,7 @@ impl TryFrom<ClickHouseStoredJsonInference> for StoredJsonInference {
         Ok(StoredJsonInference {
             function_name: value.function_name,
             variant_name: value.variant_name,
-            input: value.input,
+            input: value.input.into_stored_input(),
             output: value.output,
             dispreferred_outputs,
             episode_id: value.episode_id,
@@ -861,6 +861,7 @@ mod tests {
     use std::path::Path;
 
     use crate::{config_parser::ConfigFileGlob, inference::types::Text, tool::ToolChoice};
+    use crate::inference::types::StoredInput;
 
     use super::*;
 
@@ -2428,7 +2429,7 @@ FORMAT JSONEachRow";
         assert_eq!(chat_inference.variant_name, "test_variant");
         assert_eq!(
             chat_inference.input,
-            ResolvedInput {
+            StoredInput {
                 system: Some(json!("you are a helpful assistant")),
                 messages: vec![],
             }
@@ -2470,7 +2471,7 @@ FORMAT JSONEachRow";
         assert_eq!(chat_inference.variant_name, "test_variant");
         assert_eq!(
             chat_inference.input,
-            ResolvedInput {
+            StoredInput {
                 system: Some(json!("you are a helpful assistant")),
                 messages: vec![],
             }
@@ -2577,7 +2578,7 @@ FORMAT JSONEachRow";
         assert_eq!(json_inference.variant_name, "test_variant");
         assert_eq!(
             json_inference.input,
-            ResolvedInput {
+            StoredInput {
                 system: Some(json!("you are a helpful assistant")),
                 messages: vec![],
             }
@@ -2626,7 +2627,7 @@ FORMAT JSONEachRow";
         assert_eq!(json_inference.variant_name, "test_variant");
         assert_eq!(
             json_inference.input,
-            ResolvedInput {
+            StoredInput {
                 system: Some(json!("you are a helpful assistant")),
                 messages: vec![],
             }
