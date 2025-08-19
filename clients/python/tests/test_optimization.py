@@ -21,6 +21,13 @@ def test_sync_dicl(
         embedding_model="text-embedding-3-small",
         variant_name="test_dicl",
         function_name="basic_test",
+        dimensions=None,
+        batch_size=None,
+        max_concurrency=None,
+        retries=None,
+        k=None,
+        model=None,
+        credentials=None,
     )
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
         train_samples=mixed_rendered_samples,
@@ -89,6 +96,13 @@ async def test_async_dicl(
         embedding_model="text-embedding-3-small",
         variant_name="test_dicl",
         function_name="basic_test",
+        dimensions=None,
+        batch_size=None,
+        max_concurrency=None,
+        retries=None,
+        k=None,
+        model=None,
+        credentials=None,
     )
     optimization_job_handle = (
         await embedded_async_client.experimental_launch_optimization(
