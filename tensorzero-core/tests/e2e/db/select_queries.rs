@@ -158,3 +158,123 @@ async fn test_clickhouse_query_model_usage() {
         "Should have at least 10 different models across all periods"
     );
 }
+
+#[tokio::test]
+async fn test_clickhouse_query_model_usage_daily() {
+    let clickhouse = get_clickhouse().await;
+    let model_usage = clickhouse
+        .get_model_usage_timeseries(TimeWindow::Day, 7)
+        .await
+        .unwrap();
+
+    for usage in &model_usage {
+        println!("{usage:?}");
+    }
+
+    // Basic structure assertions
+    assert!(
+        !model_usage.is_empty(),
+        "Daily model usage data should not be empty"
+    );
+
+    // Should have data for up to 7 days as requested
+    let unique_periods: std::collections::HashSet<_> =
+        model_usage.iter().map(|usage| usage.period_start).collect();
+    assert!(
+        unique_periods.len() <= 7,
+        "Should have at most 7 unique time periods for daily granularity"
+    );
+    assert!(
+        !unique_periods.is_empty(),
+        "Should have at least one time period"
+    );
+
+    // Verify the date range spans at most 7 days
+    let now = chrono::Utc::now();
+    let dates: Vec<_> = model_usage.iter().map(|usage| usage.period_start).collect();
+    if !dates.is_empty() {
+        let earliest = dates.iter().min().unwrap();
+        let latest = dates.iter().max().unwrap();
+        let date_range_days = latest.signed_duration_since(*earliest).num_days();
+        assert!(
+            date_range_days <= 7,
+            "Date range should be within 7 days, got {date_range_days} days between {earliest} and {latest}",
+        );
+    }
+
+    // Model-specific assertions
+    let model_names: std::collections::HashSet<_> =
+        model_usage.iter().map(|usage| &usage.model_name).collect();
+
+    // Check for expected model families (should be similar to monthly data)
+    let has_openai = model_names
+        .iter()
+        .any(|name| name.contains("openai::gpt") || name.contains("gpt"));
+    let has_anthropic = model_names
+        .iter()
+        .any(|name| name.contains("anthropic::claude") || name.contains("claude"));
+
+    // At least one major model family should be present
+    assert!(
+        has_openai || has_anthropic,
+        "Should contain at least one major model family (OpenAI or Anthropic)"
+    );
+
+    // Data quality assertions
+    for usage in &model_usage {
+        // All usage records should have valid positive values where present
+        if let Some(input_tokens) = usage.input_tokens {
+            assert!(
+                input_tokens > 0,
+                "Input tokens should be positive for model: {}",
+                usage.model_name
+            );
+        }
+        if let Some(output_tokens) = usage.output_tokens {
+            assert!(
+                output_tokens > 0,
+                "Output tokens should be positive for model: {}",
+                usage.model_name
+            );
+        }
+        if let Some(count) = usage.count {
+            assert!(
+                count > 0,
+                "Count should be positive for model: {}",
+                usage.model_name
+            );
+        }
+
+        // Model name should not be empty
+        assert!(
+            !usage.model_name.is_empty(),
+            "Model name should not be empty"
+        );
+
+        // Period start should be a valid date
+        assert!(
+            usage.period_start <= now,
+            "Period start should not be in the future: {}",
+            usage.period_start
+        );
+    }
+
+    // Verify daily granularity - periods should be different days
+    let periods: Vec<_> = model_usage
+        .iter()
+        .map(|usage| usage.period_start.date_naive())
+        .collect();
+    let unique_dates: std::collections::HashSet<_> = periods.iter().collect();
+    assert_eq!(
+        unique_dates.len(),
+        unique_periods.len(),
+        "Each unique period should represent a different day"
+    );
+
+    // Summary assertion
+    let total_models = model_names.len();
+    assert!(
+        total_models >= 1,
+        "Should have at least 1 different model in daily data"
+    );
+}
