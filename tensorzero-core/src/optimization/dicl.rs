@@ -3,7 +3,6 @@ use backon::Retryable;
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use url::Url;
 
 use crate::{
     cache::CacheOptions,
@@ -207,8 +206,6 @@ impl UninitializedDiclOptimizationConfig {
 #[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct DiclOptimizationJobHandle {
-    // TODO: Remove job_url. Currently causes error in UI if not provided because DICL is being loaded as a fine tuning option.
-    pub job_url: Url,
     pub embedding_model: String,
     pub k: usize,
     pub model: String,
@@ -353,11 +350,6 @@ impl Optimizer for DiclOptimizationConfig {
 
         // Create a job handle indicating immediate success
         let job_handle = DiclOptimizationJobHandle {
-            job_url: Url::parse("https://tensorzero.com/dicl").map_err(|e| {
-                Error::new(ErrorDetails::Config {
-                    message: format!("Failed to parse job URL: {e}"),
-                })
-            })?, // TODO: Remove job_url once UI issue is resolved.
             embedding_model: self.embedding_model.clone(),
             k: self.k,
             model: self.model.clone(),
