@@ -1,6 +1,6 @@
 # ========== builder ==========
 
-FROM rust:latest AS builder
+FROM rust:1.88.0 AS builder
 
 WORKDIR /src
 COPY . .
