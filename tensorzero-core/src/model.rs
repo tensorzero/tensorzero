@@ -1947,7 +1947,7 @@ mod tests {
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         cache::CacheOptions,
-        clickhouse::ClickHouseConnectionInfo,
+        db::clickhouse::ClickHouseConnectionInfo,
         inference::types::{
             ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk,
         },
