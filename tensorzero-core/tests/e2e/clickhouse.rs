@@ -20,6 +20,7 @@ use tokio::time::sleep;
 use tracing_test::traced_test;
 use uuid::Uuid;
 
+use tensorzero_core::db::clickhouse::migration_manager::migrations::check_table_exists;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0000::Migration0000;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0002::Migration0002;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0003::Migration0003;
@@ -875,6 +876,42 @@ async fn test_clean_clickhouse_start() {
             assert_eq!(replica_count, 2);
         }
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_startup_without_migration_table() {
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    let is_manual = clickhouse.is_cluster_configured();
+    // Run the migrations so we can get the database into a "dirty" state
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        manual_run: is_manual,
+        skip_completed_migrations: false,
+    })
+    .await
+    .unwrap();
+
+    // Drop the TensorZeroMigration table
+    clickhouse
+        .run_query_synchronous_no_params("DROP TABLE IF EXISTS TensorZeroMigration".to_string())
+        .await
+        .unwrap();
+
+    // Run the migrations again to ensure that they don't panic and that the table is recreated
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        manual_run: is_manual,
+        skip_completed_migrations: false,
+    })
+    .await
+    .unwrap();
+
+    // Make sure the table exists
+    assert!(
+        check_table_exists(&clickhouse, "TensorZeroMigration", "TEST")
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
