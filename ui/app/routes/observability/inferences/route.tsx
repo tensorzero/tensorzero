@@ -5,7 +5,7 @@ import {
 } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import InferencesTable from "./InferencesTable";
-import { data, isRouteErrorResponse, useNavigate } from "react-router";
+import { data, isRouteErrorResponse, useNavigate, Await } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import InferenceSearchBar from "./InferenceSearchBar";
 import {
@@ -14,6 +14,8 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
+import { LoadingIndicator } from "~/components/ui/LoadingIndicator";
+import { Suspense } from "react";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -24,68 +26,92 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
 
-  const [inferences, bounds, countsInfo] = await Promise.all([
-    queryInferenceTable({
-      before: before || undefined,
-      after: after || undefined,
-      page_size: pageSize,
-    }),
-    queryInferenceTableBounds(),
-    countInferencesByFunction(),
-  ]);
+  const inferencesPromise = queryInferenceTable({
+    before: before || undefined,
+    after: after || undefined,
+    page_size: pageSize,
+  });
+  const boundsPromise = queryInferenceTableBounds();
+  const countsInfoPromise = countInferencesByFunction();
 
-  const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
+  const totalInferences = await countsInfoPromise.then((countsInfo) =>
+    countsInfo.reduce((acc, curr) => acc + curr.count, 0),
+  );
 
   return {
-    inferences,
+    inferencesPromise,
     pageSize,
-    bounds,
+    boundsPromise,
     totalInferences,
   };
 }
 
 export default function InferencesPage({ loaderData }: Route.ComponentProps) {
-  const { inferences, pageSize, bounds, totalInferences } = loaderData;
+  const { inferencesPromise, pageSize, boundsPromise, totalInferences } =
+    loaderData;
 
   const navigate = useNavigate();
-
-  const topInference = inferences.at(0);
-  const bottomInference = inferences.at(inferences.length - 1);
-
-  const handleNextPage = () => {
-    if (bottomInference) {
-      navigate(`?before=${bottomInference.id}&pageSize=${pageSize}`, {
-        preventScrollReset: true,
-      });
-    }
-  };
-
-  const handlePreviousPage = () => {
-    if (topInference) {
-      navigate(`?after=${topInference.id}&pageSize=${pageSize}`, {
-        preventScrollReset: true,
-      });
-    }
-  };
-
-  // These are swapped because the table is sorted in descending order
-  const disablePrevious =
-    !bounds?.last_id || bounds.last_id === topInference?.id;
-  const disableNext =
-    !bounds?.first_id || bounds.first_id === bottomInference?.id;
 
   return (
     <PageLayout>
       <PageHeader heading="Inferences" count={totalInferences} />
       <SectionLayout>
         <InferenceSearchBar />
-        <InferencesTable inferences={inferences} />
-        <PageButtons
-          onPreviousPage={handlePreviousPage}
-          onNextPage={handleNextPage}
-          disablePrevious={disablePrevious}
-          disableNext={disableNext}
-        />
+        <Suspense fallback={<LoadingIndicator />}>
+          <Await resolve={inferencesPromise}>
+            {(inferences) => {
+              const topInference = inferences.at(0);
+              const bottomInference = inferences.at(inferences.length - 1);
+
+              const handleNextPage = () => {
+                if (bottomInference) {
+                  navigate(
+                    `?before=${bottomInference.id}&pageSize=${pageSize}`,
+                    {
+                      preventScrollReset: true,
+                    },
+                  );
+                }
+              };
+
+              const handlePreviousPage = () => {
+                if (topInference) {
+                  navigate(`?after=${topInference.id}&pageSize=${pageSize}`, {
+                    preventScrollReset: true,
+                  });
+                }
+              };
+
+              return (
+                <>
+                  <InferencesTable inferences={inferences} />
+                  <Suspense fallback={<div>Loading pagination...</div>}>
+                    <Await resolve={boundsPromise}>
+                      {(bounds) => {
+                        // These are swapped because the table is sorted in descending order
+                        const disablePrevious =
+                          !bounds?.last_id ||
+                          bounds.last_id === topInference?.id;
+                        const disableNext =
+                          !bounds?.first_id ||
+                          bounds.first_id === bottomInference?.id;
+
+                        return (
+                          <PageButtons
+                            onPreviousPage={handlePreviousPage}
+                            onNextPage={handleNextPage}
+                            disablePrevious={disablePrevious}
+                            disableNext={disableNext}
+                          />
+                        );
+                      }}
+                    </Await>
+                  </Suspense>
+                </>
+              );
+            }}
+          </Await>
+        </Suspense>
       </SectionLayout>
     </PageLayout>
   );

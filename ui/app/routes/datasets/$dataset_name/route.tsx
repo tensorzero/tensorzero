@@ -4,7 +4,7 @@ import {
 } from "~/utils/clickhouse/datasets.server";
 import type { Route } from "./+types/route";
 import DatasetRowTable from "./DatasetRowTable";
-import { data, isRouteErrorResponse } from "react-router";
+import { data, isRouteErrorResponse, Await } from "react-router";
 import { useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import DatasetRowSearchBar from "./DatasetRowSearchBar";
@@ -15,8 +15,9 @@ import {
 } from "~/components/layout/PageLayout";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
-import { useEffect } from "react";
+import { useEffect, Suspense } from "react";
 import { logger } from "~/utils/logger";
+import { LoadingIndicator } from "~/components/ui/LoadingIndicator";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
@@ -33,23 +34,22 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
 
-  const [counts, rows] = await Promise.all([
-    getDatasetCounts({}),
-    getDatasetRows(dataset_name, pageSize, offset),
-  ]);
-  const count_info = counts.find(
-    (count) => count.dataset_name === dataset_name,
+  const countsPromise = getDatasetCounts({});
+  const rowsPromise = getDatasetRows(dataset_name, pageSize, offset);
+
+  const count_info = await countsPromise.then((counts) =>
+    counts.find((count) => count.dataset_name === dataset_name),
   );
   if (!count_info) {
     throw data("Dataset not found", { status: 404 });
   }
-  return { rows, count_info, pageSize, offset, rowsAdded, rowsSkipped };
+  return { rowsPromise, count_info, pageSize, offset, rowsAdded, rowsSkipped };
 }
 
 export default function DatasetDetailPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { rows, count_info, pageSize, offset, rowsAdded, rowsSkipped } =
+  const { rowsPromise, count_info, pageSize, offset, rowsAdded, rowsSkipped } =
     loaderData;
   const { toast } = useToast();
 
@@ -86,13 +86,24 @@ export default function DatasetDetailPage({
       />
       <SectionLayout>
         <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
-        <DatasetRowTable rows={rows} dataset_name={count_info.dataset_name} />
-        <PageButtons
-          onPreviousPage={handlePreviousPage}
-          onNextPage={handleNextPage}
-          disablePrevious={offset === 0}
-          disableNext={offset + pageSize >= count_info.count}
-        />
+        <Suspense fallback={<LoadingIndicator />}>
+          <Await resolve={rowsPromise}>
+            {(rows) => (
+              <>
+                <DatasetRowTable
+                  rows={rows}
+                  dataset_name={count_info.dataset_name}
+                />
+                <PageButtons
+                  onPreviousPage={handlePreviousPage}
+                  onNextPage={handleNextPage}
+                  disablePrevious={offset === 0}
+                  disableNext={offset + pageSize >= count_info.count}
+                />
+              </>
+            )}
+          </Await>
+        </Suspense>
       </SectionLayout>
       <Toaster />
     </PageLayout>
