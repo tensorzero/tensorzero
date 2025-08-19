@@ -120,6 +120,10 @@ pub async fn test_capture_simple_inference_spans() {
                     })],
                 }],
             },
+            tags: HashMap::from([
+                ("first_tag".to_string(), "first_value".to_string()),
+                ("second_tag".to_string(), "second_value".to_string()),
+            ]),
             ..Default::default()
         })
         .await
@@ -150,6 +154,14 @@ pub async fn test_capture_simple_inference_spans() {
     );
     assert_eq!(root_attr_map.get("function_name"), None);
     assert_eq!(root_attr_map.get("variant_name"), None);
+    assert_eq!(
+        root_attr_map.get("tag.first_tag").cloned(),
+        Some("first_value".to_string().into())
+    );
+    assert_eq!(
+        root_attr_map.get("tag.second_tag").cloned(),
+        Some("second_value".to_string().into())
+    );
 
     let root_children = &spans.span_children[&root_span.span_context.span_id()];
     let [variant_span] = root_children.as_slice() else {
