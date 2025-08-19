@@ -18,6 +18,7 @@ use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
 use tracing::instrument;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
@@ -223,6 +224,9 @@ pub async fn inference<T: Send + 'static>(
     }
     if let Some(episode_id) = &params.episode_id {
         span.record("episode_id", episode_id.to_string());
+    }
+    for (tag_key, tag_value) in &params.tags {
+        span.set_attribute(format!("tags.{tag_key}"), tag_value.clone());
     }
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
