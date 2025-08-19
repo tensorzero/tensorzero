@@ -1,4 +1,3 @@
-import { Loader2 } from "lucide-react";
 import { Refresh } from "~/components/icons/Icons";
 import { Output } from "~/components/inference/Output";
 import { Button } from "~/components/ui/button";
@@ -11,6 +10,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { isErrorLike } from "~/utils/common";
 import { memo } from "react";
+import { LoadingIndicator } from "~/components/ui/LoadingIndicator";
 
 const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
   function DatapointPlaygroundOutput(props) {
@@ -22,12 +22,6 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
       refetchInterval: false,
       retry: false,
     });
-
-    const loadingIndicator = (
-      <div className="flex min-h-[8rem] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
-      </div>
-    );
 
     const refreshButton = (
       <Button
@@ -42,7 +36,7 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
     );
 
     if (query.isLoading || query.isRefetching) {
-      return loadingIndicator;
+      return <LoadingIndicator />;
     }
 
     if (query.isError) {

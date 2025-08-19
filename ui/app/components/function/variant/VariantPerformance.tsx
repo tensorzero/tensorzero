@@ -4,6 +4,7 @@ import type {
 } from "~/utils/clickhouse/function";
 // import { TrendingUp } from "lucide-react";
 import { Bar, BarChart, ErrorBar, CartesianGrid, XAxis, YAxis } from "recharts";
+import { formatChartNumber, formatDetailedNumber } from "~/utils/chart";
 
 import {
   Card,
@@ -98,7 +99,12 @@ export function VariantPerformance({
                 axisLine={true}
                 tickFormatter={(value) => new Date(value).toLocaleDateString()}
               />
-              <YAxis tickLine={false} tickMargin={10} axisLine={true} />
+              <YAxis
+                tickLine={false}
+                tickMargin={10}
+                axisLine={true}
+                tickFormatter={formatChartNumber}
+              />
               <ChartTooltip
                 content={
                   <ChartTooltipContent
@@ -113,10 +119,10 @@ export function VariantPerformance({
                           <span className="text-muted-foreground">{name}</span>
                           <div className="grid text-right">
                             <span className="text-foreground font-mono font-medium tabular-nums">
-                              {value.toLocaleString()}
+                              {formatDetailedNumber(value as number)}
                             </span>
                             <span className="text-muted-foreground text-[10px]">
-                              n={numInferences.toLocaleString()}
+                              n={formatDetailedNumber(numInferences)}
                             </span>
                           </div>
                         </div>
