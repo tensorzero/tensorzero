@@ -18,6 +18,7 @@ use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
 use tracing::instrument;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
@@ -224,6 +225,9 @@ pub async fn inference<T: Send + 'static>(
     if let Some(episode_id) = &params.episode_id {
         span.record("episode_id", episode_id.to_string());
     }
+    for (tag_key, tag_value) in &params.tags {
+        span.set_attribute(format!("tags.{tag_key}"), tag_value.clone());
+    }
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
     let inference_id = Uuid::now_v7();
@@ -282,6 +286,7 @@ pub async fn inference<T: Send + 'static>(
         params.internal_dynamic_variant_config,
         &mut templates,
         &function,
+        function_name.clone(),
     )?;
     let templates = &*templates;
 
@@ -1224,6 +1229,7 @@ fn prepare_candidate_variants(
     dynamic_variant_config: Option<UninitializedVariantInfo>,
     template_config: &mut Cow<'_, TemplateConfig>,
     function: &FunctionConfig,
+    function_name: String,
 ) -> Result<(), Error> {
     match (pinned_variant_name, dynamic_variant_config) {
         // If a variant is pinned, only that variant should be attempted
@@ -1244,8 +1250,11 @@ fn prepare_candidate_variants(
         }
         (None, Some(dynamic_variant_config)) => {
             // Replace the variant config with just the dynamic variant
-            let candidate_variant_info =
-                load_dynamic_variant_info(dynamic_variant_config, function.schemas())?;
+            let candidate_variant_info = load_dynamic_variant_info(
+                dynamic_variant_config,
+                function.schemas(),
+                function_name,
+            )?;
 
             // Replace templates in the template config with the ones passed in
             // We Clone here so that we can still reference the old templates that don't conflict
