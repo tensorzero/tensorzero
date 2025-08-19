@@ -39,4 +39,4 @@ fi
 cd /app/ui
 
 # Launch React Router
-./node_modules/.bin/react-router-serve ./build/server/index.js
+exec ./node_modules/.bin/react-router-serve ./build/server/index.js

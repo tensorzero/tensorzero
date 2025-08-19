@@ -298,7 +298,10 @@ pub enum OpenAIFineTuningJobStatus {
 #[cfg(test)]
 mod tests {
     use crate::{
-        inference::types::{ContentBlockChatOutput, ModelInput, RequestMessage, Role, Text},
+        inference::types::{
+            ContentBlockChatOutput, ModelInput, RequestMessage, ResolvedInput,
+            ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
+        },
         providers::openai::OpenAIContentBlock,
     };
     use serde_json::json;
@@ -316,6 +319,15 @@ mod tests {
                     content: vec![ContentBlock::Text(Text {
                         text: "What is the capital of France?".to_string(),
                     })],
+                }],
+            },
+            stored_input: ResolvedInput {
+                system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("What is the capital of France?"),
+                    }],
                 }],
             },
             output: Some(vec![ContentBlockChatOutput::Text(Text {

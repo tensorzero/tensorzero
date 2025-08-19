@@ -1,6 +1,6 @@
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     select_feedback_clickhouse, select_feedback_tags_clickhouse,
     select_human_static_evaluation_feedback_clickhouse,
 };
@@ -8,7 +8,7 @@ use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use tensorzero_core::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 
 // NOTE: for now human static evaluation feedback is not supported on episodes
 // or for demonstrations or comments as we don't have static evals that do this yet.
