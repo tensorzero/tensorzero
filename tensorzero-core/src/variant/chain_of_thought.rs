@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::config_parser::{PathWithContents, SchemaData};
+use crate::config_parser::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
@@ -35,9 +35,13 @@ pub struct UninitializedChainOfThoughtConfig {
 }
 
 impl UninitializedChainOfThoughtConfig {
-    pub fn load(self, schemas: &SchemaData) -> Result<ChainOfThoughtConfig, Error> {
+    pub fn load(
+        self,
+        schemas: &SchemaData,
+        error_context: &ErrorContext,
+    ) -> Result<ChainOfThoughtConfig, Error> {
         Ok(ChainOfThoughtConfig {
-            inner: self.inner.load(schemas)?,
+            inner: self.inner.load(schemas, error_context)?,
         })
     }
 }
