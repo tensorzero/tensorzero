@@ -117,18 +117,9 @@ jobs:
             echo "$NEW_ROWS"
             exit 1
           fi
-          # Check that long_cache_key entries match between old and new files
-          OLD_KEYS=$(jq -r '.long_cache_key' ./fixtures/model_inference_cache_e2e.jsonl.old | sort)
-          NEW_KEYS=$(jq -r '.long_cache_key' ./fixtures/model_inference_cache_e2e.jsonl | sort)
-          if [ "$OLD_KEYS" != "$NEW_KEYS" ]; then
-            echo "ERROR: long_cache_key entries do not match between old and new cache files"
-            echo "Old keys:"
-            echo "$OLD_KEYS"
-            echo "New keys:"
-            echo "$NEW_KEYS"
-            exit 1
-          fi
-          echo "Cache file validation passed: same number of rows and matching long_cache_key entries"
+          # Note that we cannot check the file contents - we will legitimately get some different cache keys when
+          # regenerating, since the output from some cache entries get fed into judge models (affecting the cache key)
+          echo "Cache file validation passed: same number of rows"
           # Take down and destroy the containers, so that our subsequent test run starts with a fresh ClickHouse
           # server, and inserts our regenerated fixtures from scratch
           docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml down
