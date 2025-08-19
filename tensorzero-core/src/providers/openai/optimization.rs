@@ -643,6 +643,15 @@ mod tests {
                     })],
                 }],
             },
+            stored_input: ResolvedInput {
+                system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("What is the capital of France?"),
+                    }],
+                }],
+            },
             output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "The capital of France is Paris.".to_string(),
             })]),
@@ -693,6 +702,15 @@ mod tests {
                     content: vec![ContentBlock::Text(Text {
                         text: "What's the weather like?".to_string(),
                     })],
+                }],
+            },
+            stored_input: ResolvedInput {
+                system: Some(json!("You are a helpful assistant.")),
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("What's the weather like?"),
+                    }],
                 }],
             },
             output: Some(vec![
