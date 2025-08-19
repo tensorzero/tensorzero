@@ -1,72 +1,292 @@
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
+  "title": "RenderedSample",
+  "required": ["function_name", "input"],
+  "additionalProperties": false,
   "properties": {
-    "system_message": {
+    "function_name": {
       "type": "string",
-      "description": "The system-level prompt that frames the entire analysis task."
+      "description": "The name of the function being called"
     },
-    "tools_available": {
-      "type": "array",
-      "description": "Optional list of available tools and their descriptions.",
+    "input": {
+      "type": "object",
+      "description": "The model input",
+      "required": ["messages"],
+      "properties": {
+        "system": {
+          "type": ["string", "null"],
+          "description": "Optional system message (templated from original JSON value)"
+        },
+        "messages": {
+          "type": "array",
+          "description": "Array of request messages",
+          "items": {
+            "type": "object",
+            "required": ["role", "content"],
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": ["user", "assistant"],
+                "description": "The role of the message sender"
+              },
+              "content": {
+                "type": "array",
+                "description": "Array of content blocks",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": ["type", "text"],
+                      "properties": {
+                        "type": {
+                          "const": "text"
+                        },
+                        "text": {
+                          "type": "string",
+                          "description": "Text content (may be templated from original JSON value)"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": ["type", "name", "arguments", "id"],
+                      "properties": {
+                        "type": {
+                          "const": "tool_call"
+                        },
+                        "name": {
+                          "type": "string",
+                          "description": "Tool name"
+                        },
+                        "arguments": {
+                          "type": "string",
+                          "description": "Tool arguments as a JSON string"
+                        },
+                        "id": {
+                          "type": "string",
+                          "description": "Tool call ID"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": ["type", "name", "result", "id"],
+                      "properties": {
+                        "type": {
+                          "const": "tool_result"
+                        },
+                        "name": {
+                          "type": "string",
+                          "description": "Tool name"
+                        },
+                        "result": {
+                          "type": "string",
+                          "description": "Result of the tool execution"
+                        },
+                        "id": {
+                          "type": "string",
+                          "description": "Tool call ID"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": ["type"],
+                      "properties": {
+                        "type": {
+                          "const": "thought"
+                        },
+                        "text": {
+                          "type": ["string", "null"],
+                          "description": "Thought text"
+                        },
+                        "signature": {
+                          "type": ["string", "null"],
+                          "description": "Optional signature (used with Anthropic)"
+                        },
+                        "_internal_provider_type": {
+                          "type": ["string", "null"],
+                          "description": "Provider type restriction"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "output": {
+      "type": ["array", "null"],
+      "description": "The model output",
       "items": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "The tool's identifier."
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["type", "text"],
+            "properties": {
+              "type": {
+                "const": "text"
+              },
+              "text": {
+                "type": "string",
+                "description": "Output text"
+              }
+            }
           },
-          "description": {
-            "type": "string",
-            "description": "A brief description of what the tool does."
+          {
+            "type": "object",
+            "required": ["type", "id", "raw_name", "raw_arguments"],
+            "properties": {
+              "type": {
+                "const": "tool_call"
+              },
+              "name": {
+                "type": ["string", "null"],
+                "description": "Tool name (parsed)"
+              },
+              "arguments": {
+                "type": ["object", "null"],
+                "description": "Tool arguments (parsed from JSON)"
+              },
+              "raw_name": {
+                "type": "string",
+                "description": "Raw tool name"
+              },
+              "raw_arguments": {
+                "type": "string",
+                "description": "Raw string arguments before parsing"
+              },
+              "id": {
+                "type": "string",
+                "description": "Tool call ID"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "thought"
+              },
+              "text": {
+                "type": ["string", "null"],
+                "description": "Thought text"
+              },
+              "signature": {
+                "type": ["string", "null"],
+                "description": "Optional signature (used with Anthropic)"
+              },
+              "_internal_provider_type": {
+                "type": ["string", "null"],
+                "description": "Provider type restriction"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": {
+                "const": "unknown"
+              },
+              "data": {
+                "type": "object",
+                "description": "Unknown provider-specific data"
+              },
+              "model_provider_name": {
+                "type": ["string", "null"],
+                "description": "Model provider name"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "dispreferred_outputs": {
+      "type": "array",
+      "description": "Array of dispreferred output options",
+      "items": {
+        "type": "array",
+        "items": {
+          "$ref": "#/properties/output/items"
+        }
+      }
+    },
+    "episode_id": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "UUID of the episode"
+    },
+    "inference_id": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "UUID of the inference"
+    },
+    "tool_params": {
+      "type": ["object", "null"],
+      "description": "Tool call configuration",
+      "required": ["tools_available", "tool_choice"],
+      "properties": {
+        "tools_available": {
+          "type": "array",
+          "description": "Available tools",
+          "items": {
+            "type": "object",
+            "required": ["name", "description", "parameters"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Tool name"
+              },
+              "description": {
+                "type": "string",
+                "description": "Tool description"
+              },
+              "parameters": {
+                "type": "object",
+                "description": "JSON schema for tool parameters"
+              },
+              "strict": {
+                "type": "boolean",
+                "default": false,
+                "description": "Whether to use strict mode for this tool"
+              }
+            }
           }
         },
-        "required": ["name", "description"],
-        "additionalProperties": false
-      },
-      "minItems": 0
-    },
-    "messages": {
-      "type": "array",
-      "description": "The complete message history, excluding the system prompt.",
-      "items": {
-        "type": "object",
-        "properties": {
-          "role": {
-            "type": "string",
-            "enum": ["user", "assistant"],
-            "description": "The role of the message sender."
-          },
-          "content": {
-            "type": "string",
-            "description": "The textual content of the message."
-          }
+        "tool_choice": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": ["auto", "none", "required"]
+            },
+            {
+              "type": "string",
+              "description": "Specific tool name to use"
+            }
+          ],
+          "description": "Tool choice configuration"
         },
-        "required": ["role", "content"],
-        "additionalProperties": false
-      },
-      "minItems": 1
+        "parallel_tool_calls": {
+          "type": ["boolean", "null"],
+          "description": "Whether parallel tool calls are allowed"
+        }
+      }
     },
-    "feedback": {
-      "type": "array",
-      "description": "List of feedback metrics, each with a name and value.",
-      "items": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "The name of a feedback metric."
-          },
-          "value": {
-            "type": ["string", "number", "boolean"],
-            "description": "The value of that metric."
-          }
-        },
-        "required": ["name", "value"],
-        "additionalProperties": false
-      },
-      "minItems": 1
+    "output_schema": {
+      "description": "JSON schema for structured output (can be any valid JSON value)"
+    },
+    "tags": {
+      "type": "object",
+      "description": "Key-value pairs of tags",
+      "additionalProperties": {
+        "type": "string"
+      }
     }
-  },
-  "required": ["system_message", "messages", "feedback"],
-  "additionalProperties": false
+  }
 }

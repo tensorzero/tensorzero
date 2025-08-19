@@ -1,33 +1,46 @@
 import asyncio
+import json
 from typing import Any, Dict, List
 
-from tensorzero import AsyncTensorZeroGateway, JsonInferenceResponse
+from tensorzero import AsyncTensorZeroGateway, JsonInferenceResponse, RenderedSample
 
 
 async def generate_root_causes(
     gateway: AsyncTensorZeroGateway,
-    row: Dict[str, Any],
+    rendered_sample: RenderedSample,
     variant_name: str,
-    metric_name: str,
-    tools_available: List[Dict[str, str]],
     semaphore: asyncio.Semaphore,
     dryrun: bool = False,
 ) -> List[str]:
+    """
+    Generate root causes for LLM failures using a RenderedSample.
+
+    Args:
+        gateway: TensorZero gateway instance
+        rendered_sample: The rendered sample containing the complete inference data
+        variant_name: Name of the variant to use for root cause analysis
+        semaphore: Semaphore for rate limiting
+        dryrun: Whether to run in dryrun mode
+
+    Returns:
+        List of root cause strings
+    """
     try:
-        arguments = {
-            "messages": row["rendered_input"]["messages"],
-            "feedback": [{"name": metric_name, "value": row["value"]}],
-        }
-        if row["rendered_input"].get("system"):
-            arguments["system_message"] = row["rendered_input"]["system"]
-        if len(tools_available) > 0:
-            arguments["tools_available"] = tools_available
+        # Use the built-in JSON serialization through __repr__
+        # This leverages the Rust serde serialization which is guaranteed to be complete
+        sample_json = str(rendered_sample)  # This calls __repr__ which uses serde_json
+        sample_dict = json.loads(sample_json)
+
         gateway_input: Dict[str, Any] = {
             "system": {},
             "messages": [
-                {"role": "user", "content": [{"type": "text", "arguments": arguments}]}
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": sample_dict}],
+                }
             ],
         }
+
         async with semaphore:
             response = await gateway.inference(
                 input=gateway_input,
@@ -35,9 +48,10 @@ async def generate_root_causes(
                 variant_name=variant_name,
                 dryrun=dryrun,
             )
-            assert isinstance(response, JsonInferenceResponse)
-            assert response.output.parsed is not None
-            return response.output.parsed["root_causes"]
+
+        assert isinstance(response, JsonInferenceResponse)
+        assert response.output.parsed is not None
+        return response.output.parsed["root_causes"]
     except Exception as e:
         print(f"Error generating root causes: {e}")
         return [""]

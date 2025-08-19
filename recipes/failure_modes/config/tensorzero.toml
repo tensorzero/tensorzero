@@ -16,6 +16,14 @@ user_template = "functions/root_cause_analysis/baseline/user_template.minijinja"
 retries = { num_retries = 3, max_delay_s = 10 }
 json_mode = "on"
 
+[functions.root_cause_analysis.variants.gpt-5]
+type = "chat_completion"
+model = "openai::gpt-5-2025-08-07"
+system_template = "functions/root_cause_analysis/baseline/system_template.minijinja"
+user_template = "functions/root_cause_analysis/baseline/user_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+json_mode = "on"
+
 [functions.summarize_failure_modes]
 type = "json"
 user_schema = "functions/summarize_failure_modes/user_schema.json"
@@ -24,6 +32,14 @@ output_schema = "functions/summarize_failure_modes/output_schema.json"
 [functions.summarize_failure_modes.variants.o4-mini]
 type = "chat_completion"
 model = "openai::o4-mini"
+system_template = "functions/summarize_failure_modes/baseline/system_template.minijinja"
+user_template = "functions/summarize_failure_modes/baseline/user_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+json_mode = "on"
+
+[functions.summarize_failure_modes.variants.gpt-5]
+type = "chat_completion"
+model = "openai::gpt-5-2025-08-07"
 system_template = "functions/summarize_failure_modes/baseline/system_template.minijinja"
 user_template = "functions/summarize_failure_modes/baseline/user_template.minijinja"
 retries = { num_retries = 3, max_delay_s = 10 }

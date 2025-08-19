@@ -1,29 +1,136 @@
-# Root Cause Analysis Input
+# Function Name: {{function_name}}
+{%- if episode_id %}
+Episode ID: {{episode_id}}
+{%- endif %}
+{%- if inference_id %}
+Inference ID: {{inference_id}}
+{%- endif %}
+
+{%- if tags and tags | length > 0 %}
+## Tags
+{%- for key in tags %}
+- {{key}}: {{tags[key]}}
+{%- endfor %}
+{%- endif %}
+
+## Input
+
+{%- if input.system %}
+### System Message
+{{input.system}}
+{%- endif %}
+
+### Message History
+{%- for message in input.messages %}
+
+**{{message.role | upper}}**:
+{%- for content in message.content %}
+{%- if content.type == "text" %}
+{{content.text}}
+{%- elif content.type == "tool_call" %}
+Tool Call: {{content.name}}({{content.arguments}})
+{%- elif content.type == "tool_result" %}
+Tool Result for {{content.id}} ({{content.name}}): {{content.result}}
+{%- elif content.type == "thought" %}
+<thought>{{content.text}}</thought>
+{%- elif content.type == "unknown" %}
+[Unknown content{% if content.model_provider_name %} from {{content.model_provider_name}}{% endif %}: {{content.data | tojson}}]
+{%- else %}
+[Unexpected content type: {{content.type}}]
+{%- endif %}
+{%- endfor %}
+{%- endfor %}
+
+{%- if output %}
+## Output
+{%- for content in output %}
+{%- if content.type == "text" %}
+{{content.text}}
+{%- elif content.type == "tool_call" %}
+Tool Call: {{content.raw_name}}
+{%- if content.name %}
+Parsed Name: {{content.name}}
+{%- endif %}
+Raw Arguments: {{content.raw_arguments}}
+{%- if content.arguments %}
+Parsed Arguments: {{content.arguments | tojson}}
+{%- endif %}
+{%- elif content.type == "thought" %}
+<thought>{{content.text}}</thought>
+{%- elif content.type == "unknown" %}
+[Unknown content{% if content.model_provider_name %} from {{content.model_provider_name}}{% endif %}: {{content.data | tojson}}]
+{%- else %}
+[Unexpected output type: {{content.type}}]
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+
+{%- if dispreferred_outputs and dispreferred_outputs | length > 0 %}
+## Dispreferred Outputs
+{%- for output_option in dispreferred_outputs %}
+
+### Option {{loop.index}}
+{%- for content in output_option %}
+{%- if content.type == "text" %}
+{{content.text}}
+{%- elif content.type == "tool_call" %}
+Tool Call: {{content.raw_name}}({{content.raw_arguments}})
+{%- elif content.type == "thought" %}
+<thought>{{content.text}}</thought>
+{%- elif content.type == "unknown" %}
+[Unknown content{% if content.model_provider_name %} from {{content.model_provider_name}}{% endif %}: {{content.data | tojson}}]
+{%- else %}
+[Unexpected output type: {{content.type}}]
+{%- endif %}
+{%- endfor %}
+{%- endfor %}
+{%- endif %}
+
+{%- if tool_params %}
+## Tool Configuration
+{%- if tool_params.tools_available and tool_params.tools_available | length > 0 %}
+### Available Tools
+{%- for tool in tool_params.tools_available %}
+- {{tool.name}}: {{tool.description}}
+{%- endfor %}
+{%- endif %}
+{%- if tool_params.tool_choice %}
+Tool Choice: {{tool_params.tool_choice}}
+{%- endif %}
+{%- if tool_params.parallel_tool_calls is defined %}
+Parallel Tool Calls: {{tool_params.parallel_tool_calls}}
+{%- endif %}
+{%- endif %}
+
+{%- if output_schema %}
+## Output Schema
+```json
+{{output_schema | tojson(indent=2)}}
+```
+{%- endif %}
 
 ---
 
-## System Message:
-{{ system_message }}
+Please diagnose the why the LLM failed on this task.
+- Provide multiple plausible root causes if relevant.
+- Root causes should be specific and actionable when possible (e.g., "the information in the prompt did not specify
+whether the temperature was given in Imperial or Metric units," or "the human wanted the agent to take an action that
+conflicted with its instruction not to release funds" rather than just "Bad prompt").
+- Consider the specific function being called and its intended purpose.
+- If tool calls were made, analyze whether they were appropriate and correctly executed.
+- Even if uncertain, it is better to list hypotheses than to omit possibilities.
 
----
-{% if tools_available is defined and tools_available %}
-## Available Tools:
-{% for tool in tools_available %}
-- **{{ tool.name }}**: {{ tool.description }}
-{% endfor %}
----
-{% endif %}
-## Message History:
-{% for msg in messages %}
-**{{ msg.role | capitalize }}:**
-{{ msg.content }}
-{% endfor %}
----
+Your output must be a JSON object formatted exactly as follows:
 
-## Feedback Metrics:
-{% for item in feedback %}
-- **{{ item.name }}:** {{ item.value }}
-{% endfor %}
----
+```json
+{
+"root_causes": [
+    "<cause 1>",
+    "<cause 2>",
+    "<cause 3>",
+    ...
+]
+}
+```
 
-Please analyze the failure of the LLM on this task based on the information above.
+Only output the JSON object. Do not include any explanations outside of it.
