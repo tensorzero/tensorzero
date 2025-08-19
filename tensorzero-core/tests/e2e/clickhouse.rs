@@ -893,7 +893,10 @@ async fn test_startup_without_migration_table() {
 
     // Drop the TensorZeroMigration table
     clickhouse
-        .run_query_synchronous_no_params("DROP TABLE IF EXISTS TensorZeroMigration".to_string())
+        .run_query_synchronous_no_params(format!(
+            "DROP TABLE TensorZeroMigration {} SYNC",
+            clickhouse.get_on_cluster_name()
+        ))
         .await
         .unwrap();
 
