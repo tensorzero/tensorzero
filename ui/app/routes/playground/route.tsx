@@ -17,12 +17,8 @@ import { listDatapoints } from "~/utils/tensorzero.server";
 import { tensorZeroResolvedInputToInput } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
-import type {
-  FunctionConfig,
-  Datapoint as TensorZeroDatapoint,
-} from "tensorzero-node";
-import type { DisplayInput } from "~/utils/clickhouse/common";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
+import { useMemo, useState } from "react";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
 import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.server";
@@ -30,20 +26,25 @@ import InputSnippet from "~/components/inference/InputSnippet";
 import { Output } from "~/components/inference/Output";
 import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
-import { safeParseInt } from "~/utils/common";
-import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
-import type { InferenceResponse } from "tensorzero-node";
+import { safeParseInt, symmetricDifference } from "~/utils/common";
 import { EditButton } from "~/components/utils/EditButton";
 import { VariantEditor } from "~/components/function/variant/VariantEditor";
 import { Badge } from "~/components/ui/badge";
 import {
   extractOriginalVariantNameFromEdited,
+  getClientInferenceQueryFunction,
+  getClientInferenceQueryKey,
   getNewVariantName,
   getVariants,
-  preparePlaygroundInferenceRequest,
+  type ClientInferenceInputArgs,
   type PlaygroundVariantInfo,
 } from "./utils";
 import { BuiltinVariantFilter } from "./BuiltInVariantSelector";
+import {
+  dehydrate,
+  HydrationBoundary,
+  QueryClient,
+} from "@tanstack/react-query";
 
 const DEFAULT_LIMIT = 5;
 
@@ -77,40 +78,46 @@ function getDisplayVariantName(variant: PlaygroundVariantInfo) {
   }
 }
 
-/**
- * We will skip revalidation on navigation in the case where:
- * - The previous route was the same as the current route
- * - The previous route shared the same functionName, datasetName, limit, and offset
- */
 export function shouldRevalidate(arg: ShouldRevalidateFunctionArgs) {
   const { currentUrl, nextUrl } = arg;
   // First check that the base route is the same
   if (currentUrl.pathname !== nextUrl.pathname) {
     return true;
   }
-  // Then check that the search params are the same
-  const currentSearchParams = new URLSearchParams(currentUrl.search);
-  const nextSearchParams = new URLSearchParams(nextUrl.search);
-  const currentFunctionName = currentSearchParams.get("functionName");
-  const nextFunctionName = nextSearchParams.get("functionName");
-  const currentDatasetName = currentSearchParams.get("datasetName");
-  const nextDatasetName = nextSearchParams.get("datasetName");
-  const currentLimit = safeParseInt(
-    currentSearchParams.get("limit"),
-    DEFAULT_LIMIT,
-  );
-  const nextLimit = safeParseInt(nextSearchParams.get("limit"), DEFAULT_LIMIT);
-  const currentOffset = safeParseInt(currentSearchParams.get("offset"), 0);
-  const nextOffset = safeParseInt(nextSearchParams.get("offset"), 0);
-  if (
-    currentFunctionName === nextFunctionName &&
-    currentDatasetName === nextDatasetName &&
-    currentLimit === nextLimit &&
-    currentOffset === nextOffset
-  ) {
-    return false;
+
+  // Copy search params for comparison
+  const currentSearchParams = new URLSearchParams(currentUrl.searchParams);
+  const nextSearchParams = new URLSearchParams(nextUrl.searchParams);
+
+  // Remove variants from comparison since we want to skip revalidation if only
+  // the variants changed
+  currentSearchParams.delete("variants");
+  nextSearchParams.delete("variants");
+
+  // Then manually compare the remaining search params and revalidate if
+  // anything else changed
+  if (currentSearchParams.size !== nextSearchParams.size) {
+    // number of search params has changed; revalidate
+    return true;
   }
-  return true;
+
+  const currentKeys = new Set(currentSearchParams.keys());
+  const nextKeys = new Set(nextSearchParams.keys());
+  if (symmetricDifference(currentKeys, nextKeys).size > 0) {
+    // search param keys have changed; revalidate
+    return true;
+  }
+
+  for (const [key, value] of currentSearchParams.entries()) {
+    const nextValue = nextSearchParams.get(key);
+    if (nextValue !== value) {
+      // search param values have changed; revalidate
+      return true;
+    }
+  }
+
+  // No other changes detected; skip revalidation
+  return false;
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -136,7 +143,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     });
   }
   const datasetName = searchParams.get("datasetName");
-  const variants = getVariants(searchParams);
 
   let datapoints, totalDatapoints;
   try {
@@ -176,66 +182,46 @@ export async function loader({ request }: Route.LoaderArgs) {
     );
   }
 
-  // Create a closure we can apply to each datapoint x variant pair
-  // and return the promises from the loader
-  const serverInference = async (
-    input: DisplayInput,
-    datapoint: TensorZeroDatapoint,
-    functionName: string,
-    variantInfo: PlaygroundVariantInfo,
-    functionConfig: FunctionConfig,
-  ) => {
-    const request = preparePlaygroundInferenceRequest(
-      variantInfo,
-      functionName,
-      datapoint,
-      input,
-      functionConfig,
+  const queryClient = new QueryClient();
+  const variants = getVariants(searchParams);
+  if (
+    variants.length > 0 &&
+    datapoints &&
+    datapoints.length > 0 &&
+    datasetName &&
+    inputs &&
+    functionName &&
+    functionConfig
+  ) {
+    await Promise.all(
+      datapoints.flatMap((datapoint, index) =>
+        variants.map(async (variant) => {
+          const input = inputs[index];
+          const args: ClientInferenceInputArgs = {
+            datapoint,
+            functionConfig,
+            functionName,
+            input,
+            variant,
+          };
+          return queryClient.prefetchQuery({
+            queryKey: getClientInferenceQueryKey(args),
+            queryFn: getClientInferenceQueryFunction(args),
+          });
+        }),
+      ),
     );
-    const nativeClient = await getNativeTensorZeroClient();
-    const inferenceResponse = await nativeClient.inference(request);
-    return inferenceResponse;
-  };
-  // Do not block on all the server inferences, just return the promises
-  // Create a map of maps of promises, one for each datapoint/variant combination
-  // The structure should be: serverInferences[variantName][datapointId] = promise
-  // We can use this to avoid re-running the same inference multiple times
-  const serverInferences = new Map<
-    string,
-    Map<string, Promise<InferenceResponse>>
-  >();
-  for (const variant of variants) {
-    serverInferences.set(variant.name, new Map());
   }
-  if (datapoints && inputs && functionName && functionConfig) {
-    for (let index = 0; index < datapoints.length; index++) {
-      const datapoint = datapoints[index];
-      const input = inputs[index];
-      for (const variant of variants) {
-        serverInferences
-          .get(variant.name)
-          ?.set(
-            datapoint.id,
-            serverInference(
-              input,
-              datapoint,
-              functionName,
-              variant,
-              functionConfig,
-            ),
-          );
-      }
-    }
-  }
+
   return {
     functionName,
     datasetName,
     datapoints,
     inputs,
-    serverInferences,
     totalDatapoints,
     offset,
     limit,
+    dehydratedState: dehydrate(queryClient),
   };
 }
 
@@ -244,9 +230,10 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const [currentSearchParams, setSearchParams] = useSearchParams();
   const [editingVariant, setEditingVariant] =
     useState<PlaygroundVariantInfo | null>(null);
-  const { searchParams, loadingVariants } = useMemo(() => {
+  const { variants, searchParams } = useMemo(() => {
     if (navigation.state !== "loading") {
       return {
+        variants: getVariants(currentSearchParams),
         searchParams: currentSearchParams,
         loadingVariants: new Set<string>(),
       };
@@ -267,21 +254,21 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     }
 
     return {
+      variants: getVariants(nextSearchParams),
       searchParams: nextSearchParams,
       loadingVariants,
     };
   }, [navigation, currentSearchParams]);
-  const variants = getVariants(searchParams);
 
   const {
     functionName,
     datasetName,
     datapoints,
     inputs,
-    serverInferences,
     totalDatapoints,
     offset,
     limit,
+    dehydratedState,
   } = loaderData;
   const functionConfig = useFunctionConfig(functionName);
   if (functionName && !functionConfig) {
@@ -290,14 +277,6 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     });
   }
   const configuredVariants = functionConfig?.variants ?? undefined;
-  const { map, setPromise } = useClientInferences(
-    functionName,
-    datapoints,
-    inputs,
-    variants,
-    serverInferences,
-    functionConfig,
-  );
 
   const updateSearchParams = (
     updates: Record<string, string | string[] | null>,
@@ -438,68 +417,65 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                   </div>
                 </div>
 
-                {datapoints.map(
-                  (datapoint: TensorZeroDatapoint, index: number) => (
-                    <div
-                      key={datapoint.id}
-                      className="grid grid-cols-[400px_1fr] border-b last:border-b-0"
-                    >
-                      <div className="bg-background sticky left-0 z-10 flex flex-col gap-2 border-r p-4 text-sm">
-                        <div className="text-xs font-medium text-gray-500">
-                          Datapoint:{" "}
-                          <Link
-                            to={`/datasets/${encodeURIComponent(datasetName)}/datapoint/${datapoint.id}`}
-                            className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                          >
-                            {datapoint.id}
-                          </Link>
-                        </div>
-                        <div>
-                          <h3 className="mb-2 text-sm font-medium text-gray-500">
-                            Input
-                          </h3>
-                          <InputSnippet
-                            messages={inputs[index].messages}
-                            system={inputs[index].system}
-                          />
-                        </div>
-                        <div>
-                          <h3 className="mb-2 text-sm font-medium text-gray-500">
-                            Reference Output
-                          </h3>
-                          {datapoint.output ? (
-                            <Output output={datapoint.output} />
-                          ) : (
-                            <div className="text-sm text-gray-500">None</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
-                        {variants.map((variant) => {
-                          return (
-                            <div
-                              key={`${datapoint.id}-${variant}`}
-                              className="border-r p-4 last:border-r-0"
+                <HydrationBoundary state={dehydratedState}>
+                  {datapoints.map(
+                    (datapoint: TensorZeroDatapoint, index: number) => (
+                      <div
+                        key={datapoint.id}
+                        className="grid grid-cols-[400px_1fr] border-b last:border-b-0"
+                      >
+                        <div className="bg-background sticky left-0 z-10 flex flex-col gap-2 border-r p-4 text-sm">
+                          <div className="text-xs font-medium text-gray-500">
+                            Datapoint:{" "}
+                            <Link
+                              to={`/datasets/${encodeURIComponent(datasetName)}/datapoint/${datapoint.id}`}
+                              className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline"
                             >
-                              <DatapointPlaygroundOutput
-                                datapoint={datapoint}
-                                variant={variant}
-                                isLoading={loadingVariants.has(variant.name)}
-                                inferencePromise={map
-                                  .get(variant.name)
-                                  ?.get(datapoint.id)}
-                                setPromise={setPromise}
-                                input={inputs[index]}
-                                functionName={functionName}
-                                functionConfig={functionConfig}
-                              />
-                            </div>
-                          );
-                        })}
+                              {datapoint.id}
+                            </Link>
+                          </div>
+                          <div>
+                            <h3 className="mb-2 text-sm font-medium text-gray-500">
+                              Input
+                            </h3>
+                            <InputSnippet
+                              messages={inputs[index].messages}
+                              system={inputs[index].system}
+                            />
+                          </div>
+                          <div>
+                            <h3 className="mb-2 text-sm font-medium text-gray-500">
+                              Reference Output
+                            </h3>
+                            {datapoint.output ? (
+                              <Output output={datapoint.output} />
+                            ) : (
+                              <div className="text-sm text-gray-500">None</div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
+                          {variants.map((variant) => {
+                            return (
+                              <div
+                                key={`${datapoint.id}-${variant.name}`}
+                                className="border-r p-4 last:border-r-0"
+                              >
+                                <DatapointPlaygroundOutput
+                                  datapoint={datapoint}
+                                  variant={variant}
+                                  input={inputs[index]}
+                                  functionName={functionName}
+                                  functionConfig={functionConfig}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ),
-                )}
+                    ),
+                  )}
+                </HydrationBoundary>
               </div>
             </div>
             <PageButtons
@@ -569,111 +545,6 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
         })()}
     </PageLayout>
   );
-}
-
-type NestedPromiseMap<T> = Map<string, Map<string, Promise<T>>>;
-
-function useNestedPromiseMap<T>(initialMap: NestedPromiseMap<T>) {
-  const [map, setMap] = useState<NestedPromiseMap<T>>(initialMap);
-  const setPromise = useCallback(
-    (outerKey: string, innerKey: string, promise: Promise<T>) => {
-      setMap((prevMap) => {
-        const newMap = new Map(prevMap);
-        const innerMap = newMap.get(outerKey) || new Map();
-        const newInnerMap = new Map(innerMap);
-        newInnerMap.set(innerKey, promise);
-        newMap.set(outerKey, newInnerMap);
-        return newMap;
-      });
-    },
-    [],
-  );
-  return { map, setPromise, setMap };
-}
-
-function useClientInferences(
-  functionName: string | null,
-  datapoints: TensorZeroDatapoint[] | undefined,
-  inputs: DisplayInput[] | undefined,
-  variants: PlaygroundVariantInfo[],
-  serverInferences: NestedPromiseMap<InferenceResponse>,
-  functionConfig: FunctionConfig | null,
-) {
-  const { map, setPromise, setMap } =
-    useNestedPromiseMap<InferenceResponse>(serverInferences);
-
-  // Single combined effect to handle both server inferences and client inferences
-  useEffect(() => {
-    if (!functionName || !datapoints || !inputs || !functionConfig) return;
-
-    // First check if we need any updates
-    let needsUpdate = false;
-    const updates: Array<{
-      variant: PlaygroundVariantInfo;
-      datapoint: TensorZeroDatapoint;
-      input: DisplayInput;
-    }> = [];
-
-    // Use a ref to access the current map without including it in dependencies
-    setMap((prevMap) => {
-      // Check each required combination
-      variants.forEach((variant) => {
-        const variantMap = prevMap.get(variant.name);
-
-        datapoints.forEach((datapoint, index) => {
-          const existingPromise = variantMap?.get(datapoint.id);
-          if (!existingPromise) {
-            needsUpdate = true;
-            updates.push({
-              variant,
-              datapoint,
-              input: inputs[index],
-            });
-          }
-        });
-      });
-
-      // Only create a new map if we have updates
-      if (!needsUpdate) {
-        return prevMap; // Return the same reference to avoid re-render
-      }
-
-      const newMap = new Map(prevMap);
-
-      // Apply updates
-      updates.forEach(({ variant, datapoint, input }) => {
-        let variantMap = newMap.get(variant.name);
-        if (!variantMap) {
-          variantMap = new Map();
-          newMap.set(variant.name, variantMap);
-        }
-        const inferenceRequest = preparePlaygroundInferenceRequest(
-          variant,
-          functionName,
-          datapoint,
-          input,
-          functionConfig,
-        );
-        const formData = new FormData();
-        formData.append("data", JSON.stringify(inferenceRequest));
-        const responsePromise = fetch("/api/tensorzero/inference", {
-          method: "POST",
-          body: formData,
-        }).then(async (response) => {
-          const data = await response.json();
-          if (data.error) {
-            throw new Error(data.error);
-          }
-          return data;
-        });
-        variantMap.set(datapoint.id, responsePromise);
-      });
-
-      return newMap;
-    });
-  }, [functionName, datapoints, inputs, variants, setMap, functionConfig]);
-
-  return { map, setPromise, setMap };
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

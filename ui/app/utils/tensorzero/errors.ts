@@ -5,8 +5,8 @@ export class TensorZeroServerError extends Error {
   readonly status: number;
   readonly statusText: string | null;
   constructor(
-    message: string,
-    args: {
+    error: unknown,
+    args?: {
       status:
         | HttpStatusCode
         | keyof typeof HttpStatusCode
@@ -14,13 +14,17 @@ export class TensorZeroServerError extends Error {
       statusText?: string;
     },
   ) {
-    super(message);
+    if (isErrorLike(error)) {
+      super(error.message, { cause: error.cause });
+    } else {
+      super(typeof error === "string" ? error : "Unknown server error");
+    }
+
+    const { status = HttpStatusCode.INTERNAL_SERVER_ERROR, statusText = null } =
+      args ?? {};
     this.name = "TensorZeroServerError";
-    this.status =
-      typeof args.status === "string"
-        ? HttpStatusCode[args.status]
-        : args.status;
-    this.statusText = args.statusText ?? null;
+    this.status = typeof status === "string" ? HttpStatusCode[status] : status;
+    this.statusText = statusText;
   }
 
   // TODO: These are all copied from error.rs internal errors since we want to
@@ -471,6 +475,7 @@ export class TensorZeroServerError extends Error {
       super(message, { status: HttpStatusCode.NOT_FOUND });
     }
   };
+  static NativeClient = class NativeClient extends TensorZeroServerError {};
 }
 
 export function isTensorZeroServerError(

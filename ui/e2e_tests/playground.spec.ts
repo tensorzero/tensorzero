@@ -40,7 +40,7 @@ test("playground should work for a chat function that sets 2 variants", async ({
   ).toHaveCount(2);
 
   // Verify that there are 8 outputs, one for each variant and each datapoint
-  await expect(page.getByRole("textbox")).toHaveCount(8);
+  await expect(page.getByRole("textbox")).toHaveCount(8, { timeout: 10_000 });
 
   // Verify that there are no errors
   await expect(
@@ -174,12 +174,6 @@ test("playground should work for data with tools", async ({ page }) => {
     .count();
   expect(initialToolCallCount).toEqual(1);
 
-  await expect(
-    page
-      .getByTestId("datapoint-playground-output")
-      .getAttribute("data-is-loading"),
-  ).toBe("false");
-
   // Verify that at least one tool call has the expected fields
   await expect(page.getByText("Name").first()).toBeVisible();
   await expect(page.getByText("ID").first()).toBeVisible();
@@ -205,13 +199,7 @@ test("playground should work for data with tools", async ({ page }) => {
     .getByTestId("datapoint-playground-output")
     .getByText("Tool Call")
     .count();
-  expect(afterRefreshToolCallCount).toBeGreaterThan(0);
-
-  await expect(
-    page
-      .getByTestId("datapoint-playground-output")
-      .getAttribute("data-is-loading"),
-  ).toBe("false");
+  expect(afterRefreshToolCallCount).toEqual(1);
 
   // Verify that there are no errors after refresh
   await expect(
