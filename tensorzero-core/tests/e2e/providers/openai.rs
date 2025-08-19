@@ -5,8 +5,8 @@ use std::sync::Arc;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
-use tensorzero_core::config_parser::ProviderTypesConfig;
-use tensorzero_core::config_parser::TimeoutsConfig;
+use tensorzero_core::config::ProviderTypesConfig;
+use tensorzero_core::config::TimeoutsConfig;
 use tensorzero_core::embeddings::{
     Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProvider,
     EmbeddingProviderConfig, EmbeddingRequest, UninitializedEmbeddingProviderConfig,

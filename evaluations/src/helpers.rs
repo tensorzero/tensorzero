@@ -133,9 +133,7 @@ mod tests {
 
     use serde_json::json;
     use tensorzero::Tool;
-    use tensorzero_core::{
-        config_parser::SchemaData, function::FunctionConfigChat, tool::ToolChoice,
-    };
+    use tensorzero_core::{config::SchemaData, function::FunctionConfigChat, tool::ToolChoice};
 
     use super::*;
 

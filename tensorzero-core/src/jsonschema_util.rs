@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::sync::OnceCell;
 use tracing::instrument;
 
-use crate::config_parser::path::TomlRelativePath;
+use crate::config::path::TomlRelativePath;
 use crate::error::{Error, ErrorDetails};
 
 #[derive(Debug, Serialize)]

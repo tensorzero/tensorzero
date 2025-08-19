@@ -3,8 +3,8 @@ use std::{cmp::Ordering, ops::Range};
 use toml::de::DeTable;
 use toml::Table;
 
-use crate::config_parser::path::{merge_tomls, resolve_toml_relative_paths};
-use crate::config_parser::ConfigFileGlob;
+use crate::config::path::{merge_tomls, resolve_toml_relative_paths};
+use crate::config::ConfigFileGlob;
 use crate::error::{Error, ErrorDetails};
 
 /// Holds range information for a merged config file.

@@ -11,7 +11,7 @@ use tensorzero::FeedbackParams;
 use tensorzero::InferenceOutput;
 use tensorzero::Role;
 use tensorzero::{ClientInferenceParams, ClientInput};
-use tensorzero_core::config_parser::{Config, ConfigFileGlob};
+use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager;
 use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
