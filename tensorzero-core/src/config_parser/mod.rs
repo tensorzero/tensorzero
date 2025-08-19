@@ -333,6 +333,7 @@ pub struct BatchWritesConfig {
     pub enabled: bool,
     // An internal flag to allow us to test batch writes in embedded gateway mode.
     // This can currently cause deadlocks, so we don't want normal embedded clients to use it.
+    #[serde(default)]
     pub __force_allow_embedded_batch_writes: bool,
     #[serde(default = "default_flush_interval_ms")]
     pub flush_interval_ms: u64,
