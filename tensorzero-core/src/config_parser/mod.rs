@@ -331,6 +331,10 @@ fn default_max_rows() -> usize {
 #[cfg_attr(test, ts(export))]
 pub struct BatchWritesConfig {
     pub enabled: bool,
+    // An internal flag to allow us to test batch writes in embedded gateway mode.
+    // This can currently cause deadlocks, so we don't want normal embedded clients to use it.
+    #[serde(default)]
+    pub __force_allow_embedded_batch_writes: bool,
     #[serde(default = "default_flush_interval_ms")]
     pub flush_interval_ms: u64,
     #[serde(default = "default_max_rows")]
@@ -341,6 +345,7 @@ impl Default for BatchWritesConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            __force_allow_embedded_batch_writes: false,
             flush_interval_ms: default_flush_interval_ms(),
             max_rows: default_max_rows(),
         }

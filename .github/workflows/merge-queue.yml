@@ -145,6 +145,7 @@ jobs:
           echo "[gateway.observability.batch_writes]" >> tensorzero-core/tests/e2e/tensorzero.toml
           echo "enabled = true" >> tensorzero-core/tests/e2e/tensorzero.toml
           echo "flush_interval_ms = 80" >> tensorzero-core/tests/e2e/tensorzero.toml
+          echo "__force_allow_embedded_batch_writes = true" >> tensorzero-core/tests/e2e/tensorzero.toml
 
       - name: Download provider-proxy cache
         # When running as a cron job, don't use the provider-proxy cache.
@@ -191,10 +192,6 @@ jobs:
 
       - name: "Python: PyO3 Client: pytest"
         working-directory: clients/python
-        # We skip Python tests with a batch-writes config for now, since
-        # we don't allow embedded clients to have batch writes until we fix
-        # the deadlocks.
-        if: matrix.batch_writes == false
         run: |
           # Start the test in background and capture its PID
           bash ./test.sh --verbose &
