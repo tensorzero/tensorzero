@@ -1,5 +1,6 @@
 #![expect(clippy::unwrap_used, clippy::panic, clippy::print_stdout)]
 use base64::Engine;
+use serde_json::json;
 use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
@@ -17,7 +18,8 @@ use tensorzero_core::{
         resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
         Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
-        ModelInput, RequestMessage, Text,
+        ModelInput, RequestMessage, ResolvedInput, ResolvedInputMessage,
+        ResolvedInputMessageContent, Text,
     },
     optimization::JobHandle,
     optimization::{OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo},
@@ -190,17 +192,26 @@ fn get_examples(test_case: &impl OptimizationTestCase, num_examples: usize) -> V
 fn generate_text_example() -> RenderedSample {
     // So the examples are different
     let id = Uuid::now_v7().to_string();
+    let system_prompt =
+        format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
     RenderedSample {
         function_name: "test".to_string(),
         input: ModelInput {
-            system: Some(format!(
-                "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
-            )),
+            system: Some(system_prompt.clone()),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec![ContentBlock::Text(Text {
                     text: "What is the capital of France?".to_string(),
                 })],
+            }],
+        },
+        stored_input: ResolvedInput {
+            system: Some(json!(system_prompt)),
+            messages: vec![ResolvedInputMessage {
+                role: Role::User,
+                content: vec![ResolvedInputMessageContent::Text {
+                    value: json!("What is the capital of France?"),
+                }],
             }],
         },
         output: Some(vec![ContentBlockChatOutput::Text(Text {
@@ -220,12 +231,12 @@ fn generate_text_example() -> RenderedSample {
 fn generate_tool_call_example() -> RenderedSample {
     // So the examples are different
     let id = Uuid::now_v7().to_string();
+    let system_prompt =
+        format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
     RenderedSample {
         function_name: "test".to_string(),
         input: ModelInput {
-            system: Some(format!(
-                "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
-            )),
+            system: Some(system_prompt.clone()),
             messages: vec![
                 RequestMessage {
                     role: Role::User,
@@ -274,6 +285,56 @@ fn generate_tool_call_example() -> RenderedSample {
                 },
             ],
         },
+        stored_input: ResolvedInput {
+            system: Some(json!(system_prompt)),
+            messages: vec![
+                ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("What is the weather in Paris?"),
+                    }],
+                },
+                ResolvedInputMessage {
+                    role: Role::Assistant,
+                    content: vec![
+                        ResolvedInputMessageContent::Text {
+                            value: json!("Let me look that up for you."),
+                        },
+                        ResolvedInputMessageContent::ToolCall(ToolCall {
+                            name: "get_weather".to_string(),
+                            arguments: serde_json::json!({
+                                "location": "Paris"
+                            })
+                            .to_string(),
+                            id: "call_1".to_string(),
+                        }),
+                    ],
+                },
+                ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::ToolResult(ToolResult {
+                        name: "get_weather".to_string(),
+                        result: serde_json::json!({
+                            "weather": "sunny, 25 degrees Celsius",
+                        })
+                        .to_string(),
+                        id: "call_1".to_string(),
+                    })],
+                },
+                ResolvedInputMessage {
+                    role: Role::Assistant,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("The weather in Paris is sunny, 25 degrees Celsius."),
+                    }],
+                },
+                ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("What is the weather in London?"),
+                    }],
+                },
+            ],
+        },
         output: Some(vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
             name: Some("get_weather".to_string()),
             arguments: Some(serde_json::json!({
@@ -316,12 +377,12 @@ fn generate_tool_call_example() -> RenderedSample {
 fn generate_image_example() -> RenderedSample {
     // So the examples are different
     let id = Uuid::now_v7().to_string();
+    let system_prompt =
+        format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
     RenderedSample {
         function_name: "test".to_string(),
         input: ModelInput {
-            system: Some(format!(
-                "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
-            )),
+            system: Some(system_prompt.clone()),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec![
@@ -329,6 +390,30 @@ fn generate_image_example() -> RenderedSample {
                         text: "What is the main color of this image?".to_string(),
                     }),
                     ContentBlock::File(Box::new(FileWithPath {
+                        file: Base64File {
+                            url: None,
+                            mime_type: mime::IMAGE_PNG,
+                            data: Some(base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG)),
+                        },
+                        storage_path: StoragePath {
+                            kind: StorageKind::Disabled,
+                            path: object_store::path::Path::parse(
+                                "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                            ).unwrap(),
+                        },
+                    })),
+                ],
+            }],
+        },
+        stored_input: ResolvedInput {
+            system: Some(json!(system_prompt)),
+            messages: vec![ResolvedInputMessage {
+                role: Role::User,
+                content: vec![
+                    ResolvedInputMessageContent::Text {
+                        value: json!("What is the main color of this image?"),
+                    },
+                    ResolvedInputMessageContent::File(Box::new(FileWithPath {
                         file: Base64File {
                             url: None,
                             mime_type: mime::IMAGE_PNG,
@@ -367,6 +452,7 @@ pub async fn make_embedded_gateway() -> Client {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
         verify_credentials: true,
+        allow_batch_writes: true,
     })
     .with_verbose_errors(true)
     .build()
