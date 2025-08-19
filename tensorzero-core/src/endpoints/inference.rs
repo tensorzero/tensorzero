@@ -226,7 +226,7 @@ pub async fn inference<T: Send + 'static>(
         span.record("episode_id", episode_id.to_string());
     }
     for (tag_key, tag_value) in &params.tags {
-        span.set_attribute(format!("tag.{tag_key}"), tag_value.clone());
+        span.set_attribute(format!("tags.{tag_key}"), tag_value.clone());
     }
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
