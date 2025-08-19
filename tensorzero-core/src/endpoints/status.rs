@@ -1,3 +1,4 @@
+use crate::db::DatabaseConnection;
 use crate::gateway_util::{AppState, AppStateData};
 use axum::debug_handler;
 use axum::extract::State;
