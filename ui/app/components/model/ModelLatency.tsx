@@ -118,7 +118,7 @@ function LatencyTimeWindowSelector({
   );
 }
 
-export function LatencyECDFChart({
+export function LatencyQuantileChart({
   latencyData,
   selectedMetric,
   quantiles,
@@ -201,8 +201,7 @@ export function LatencyECDFChart({
   );
 }
 
-/* --- Transposed transform: percentile on X, latency on Y --- */
-type ECDFDataPoint = {
+type QuantileDataPoint = {
   percentile: number;
   [modelName: string]: number | null;
 };
@@ -211,13 +210,13 @@ function transformLatencyData(
   latencyData: ModelLatencyDatapoint[],
   selectedMetric: LatencyMetric,
   quantiles: number[],
-): { data: ECDFDataPoint[]; modelNames: string[] } {
+): { data: QuantileDataPoint[]; modelNames: string[] } {
   const modelNames = latencyData.map((d) => d.model_name);
-  const data: ECDFDataPoint[] = [];
+  const data: QuantileDataPoint[] = [];
 
   // Create data points for each quantile/percentile
   quantiles.forEach((percentile) => {
-    const dp: ECDFDataPoint = { percentile };
+    const dp: QuantileDataPoint = { percentile };
 
     modelNames.forEach((name) => {
       const md = latencyData.find((d) => d.model_name === name)!;
@@ -288,7 +287,7 @@ export function ModelLatency({
         <React.Suspense fallback={<div>Loading latency data...</div>}>
           <Await resolve={modelLatencyDataPromise}>
             {(latencyData) => (
-              <LatencyECDFChart
+              <LatencyQuantileChart
                 latencyData={latencyData}
                 selectedMetric={selectedMetric}
                 quantiles={quantiles}
