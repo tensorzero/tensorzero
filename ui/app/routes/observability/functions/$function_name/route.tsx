@@ -37,6 +37,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
+import { LoadingIndicator } from "~/components/ui/LoadingIndicator";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -183,7 +184,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Metrics" />
-          <Suspense fallback={<div>Loading metrics...</div>}>
+          <Suspense fallback={<LoadingIndicator />}>
             <Await resolve={metricsWithFeedbackPromise}>
               {(metricsWithFeedback) => {
                 const metricsExcludingDemonstrations = {
@@ -239,7 +240,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
               )}
             </Await>
           </Suspense>
-          <Suspense fallback={<div>Loading inferences...</div>}>
+          <Suspense fallback={<LoadingIndicator />}>
             <Await resolve={inferencePromise}>
               {(inferences) => (
                 <>

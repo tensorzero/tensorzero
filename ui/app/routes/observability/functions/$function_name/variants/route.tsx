@@ -24,6 +24,7 @@ import {
 } from "~/utils/clickhouse/function";
 import { useState, Suspense } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
+import { LoadingIndicator } from "~/components/ui/LoadingIndicator";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { getInferenceTableName } from "~/utils/clickhouse/common";
 import { queryMetricsWithFeedback } from "~/utils/clickhouse/feedback";
@@ -194,9 +195,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
                       onMetricChange={handleMetricChange}
                     />
                     {variantPerformancesPromise && (
-                      <Suspense
-                        fallback={<div>Loading performance data...</div>}
-                      >
+                      <Suspense fallback={<LoadingIndicator />}>
                         <Await resolve={variantPerformancesPromise}>
                           {(variant_performances) =>
                             variant_performances && (
@@ -233,7 +232,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
               )}
             </Await>
           </Suspense>
-          <Suspense fallback={<div>Loading inferences...</div>}>
+          <Suspense fallback={<LoadingIndicator />}>
             <Await resolve={inferencePromise}>
               {(inferences) => (
                 <>
