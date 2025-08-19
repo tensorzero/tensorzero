@@ -77,7 +77,11 @@ const DatapointPlaygroundOutput = memo(
     }
 
     return (
-      <div className="group relative">
+      <div
+        className="group relative"
+        data-testid="datapoint-playground-output"
+        data-is-loading={isLoading}
+      >
         <Suspense fallback={loadingIndicator}>
           <Await
             resolve={inferencePromise}

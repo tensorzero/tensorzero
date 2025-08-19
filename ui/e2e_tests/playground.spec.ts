@@ -168,8 +168,17 @@ test("playground should work for data with tools", async ({ page }) => {
   // Verify that tool calls are displayed correctly
   // The datapoint has multiple tool calls in the input history
   // plus the output from the variant, so we expect multiple "Tool Call" labels
-  const initialToolCallCount = await page.getByText("Tool Call").count();
-  expect(initialToolCallCount).toBeGreaterThan(0);
+  const initialToolCallCount = await page
+    .getByTestId("datapoint-playground-output")
+    .getByText("Tool Call")
+    .count();
+  expect(initialToolCallCount).toEqual(1);
+
+  await expect(
+    page
+      .getByTestId("datapoint-playground-output")
+      .getAttribute("data-is-loading"),
+  ).toBe("false");
 
   // Verify that at least one tool call has the expected fields
   await expect(page.getByText("Name").first()).toBeVisible();
@@ -192,8 +201,17 @@ test("playground should work for data with tools", async ({ page }) => {
   await page.waitForTimeout(1000);
 
   // Verify tool calls are still displayed after refresh
-  const afterRefreshToolCallCount = await page.getByText("Tool Call").count();
+  const afterRefreshToolCallCount = await page
+    .getByTestId("datapoint-playground-output")
+    .getByText("Tool Call")
+    .count();
   expect(afterRefreshToolCallCount).toBeGreaterThan(0);
+
+  await expect(
+    page
+      .getByTestId("datapoint-playground-output")
+      .getAttribute("data-is-loading"),
+  ).toBe("false");
 
   // Verify that there are no errors after refresh
   await expect(
