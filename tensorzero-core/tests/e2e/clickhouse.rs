@@ -20,6 +20,7 @@ use tokio::time::sleep;
 use tracing_test::traced_test;
 use uuid::Uuid;
 
+use tensorzero_core::db::clickhouse::migration_manager::migrations::check_table_exists;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0000::Migration0000;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0002::Migration0002;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0003::Migration0003;
@@ -468,7 +469,10 @@ async fn run_rollback_instructions(
 }
 async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bool) {
     let (fresh_clickhouse, _cleanup_fresh_clickhouse) = get_clean_clickhouse(true);
-    fresh_clickhouse.create_database().await.unwrap();
+    fresh_clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
     let migrations = make_all_migrations(&fresh_clickhouse);
     println!(
         "Running migrations up to {}",
@@ -503,7 +507,10 @@ async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bo
     // to try to run commands on a non-existent database.
     // We make sure that the database exists at the end of the rollback to prevent '_cleanup_fresh_clickhouse' from
     // panicking on drop.
-    fresh_clickhouse.create_database().await.unwrap();
+    fresh_clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
 }
 
 // Generate tests named 'test_rollback_up_to_migration_index_n' for each migration index `n``
@@ -522,7 +529,10 @@ invoke_all_separate_tests!(
 #[traced_test]
 async fn test_rollback_apply_rollback() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    clickhouse.create_database().await.unwrap();
+    clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
     let migrations = make_all_migrations(&clickhouse);
     for migration in migrations {
         let name = migration.name();
@@ -552,7 +562,10 @@ async fn test_rollback_apply_rollback() {
         // This migration drops the entire database during rollback, so we need to re-create it
         if migration.name() == "Migration0000" {
             sleep(Duration::from_millis(500)).await;
-            clickhouse.create_database().await.unwrap();
+            clickhouse
+                .create_database_and_migrations_table()
+                .await
+                .unwrap();
         }
 
         println!("Re-apply migration: {name}");
@@ -577,9 +590,15 @@ async fn test_rollback_apply_rollback() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clickhouse_migration_manager() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    clickhouse.create_database().await.unwrap();
+    clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
     // Run it twice to test that it is a no-op the second time
-    clickhouse.create_database().await.unwrap();
+    clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
     let migrations = make_all_migrations(&clickhouse);
     let initial_clean_start = Cell::new(true);
     let manual_run = clickhouse.is_cluster_configured();
@@ -860,6 +879,45 @@ async fn test_clean_clickhouse_start() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_startup_without_migration_table() {
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    let is_manual = clickhouse.is_cluster_configured();
+    // Run the migrations so we can get the database into a "dirty" state
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        manual_run: is_manual,
+        skip_completed_migrations: false,
+    })
+    .await
+    .unwrap();
+
+    // Drop the TensorZeroMigration table
+    clickhouse
+        .run_query_synchronous_no_params(format!(
+            "DROP TABLE TensorZeroMigration {} SYNC",
+            clickhouse.get_on_cluster_name()
+        ))
+        .await
+        .unwrap();
+
+    // Run the migrations again to ensure that they don't panic and that the table is recreated
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        manual_run: is_manual,
+        skip_completed_migrations: false,
+    })
+    .await
+    .unwrap();
+
+    // Make sure the table exists
+    assert!(
+        check_table_exists(&clickhouse, "TensorZeroMigration", "TEST")
+            .await
+            .unwrap()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_deployment_id_oldest() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
     migration_manager::run(RunMigrationManagerArgs {
@@ -950,7 +1008,10 @@ async fn test_concurrent_clickhouse_migrations() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_migration_0013_old_table() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    clickhouse.create_database().await.unwrap();
+    clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
 
     // When creating a new migration, add it to the end of this array,
     // and adjust the call to `invoke_all!` to include the new array index.
@@ -1036,7 +1097,10 @@ async fn test_migration_0013_old_table() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_migration_0013_data_no_table() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    clickhouse.create_database().await.unwrap();
+    clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
 
     // When creating a new migration, add it to the end of this array,
     // and adjust the call to `invoke_all!` to include the new array index.
@@ -1137,7 +1201,10 @@ async fn test_run_migrations_clean() {
 #[traced_test]
 async fn test_run_migrations_fake_row() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
-    clickhouse.create_database().await.unwrap();
+    clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
 
     struct Migration99999;
 

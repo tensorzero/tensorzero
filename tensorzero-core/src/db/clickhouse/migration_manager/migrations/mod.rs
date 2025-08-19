@@ -37,7 +37,7 @@ pub mod migration_0035;
 /// Returns true if the table exists, false if it does not
 /// Errors if the query fails
 /// This function also works to check for materialized views
-async fn check_table_exists(
+pub async fn check_table_exists(
     clickhouse: &ClickHouseConnectionInfo,
     table: &str,
     migration_id: &str,
