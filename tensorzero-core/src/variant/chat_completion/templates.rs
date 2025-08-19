@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 use crate::{
-    config_parser::{path::TomlRelativePath, PathWithContents, SchemaData},
+    config_parser::{path::ResolvedTomlPath, PathWithContents, SchemaData},
     error::{Error, ErrorDetails},
     jsonschema_util::StaticJSONSchema,
     variant::chat_completion::{TemplateWithSchema, UninitializedInputWrappers},
@@ -28,7 +28,7 @@ impl ChatTemplates {
     fn validate_wrapper(
         template_and_schema: Option<TemplateWithSchema>,
         schema: Option<&StaticJSONSchema>,
-        wrapper: Option<TomlRelativePath>,
+        wrapper: Option<ResolvedTomlPath>,
         error_prefix: &str,
         name: &str,
     ) -> Result<Option<TemplateWithSchema>, Error> {

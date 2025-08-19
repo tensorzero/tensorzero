@@ -144,7 +144,7 @@ async fn test_config_from_toml_table_valid() {
                             PathWithContents {
                                 // We don't use a real path for programmatically generated templates
                                 // Instead we use this handle and then the same in minijinja
-                                path: TomlRelativePath::new_for_tests(
+                                path: ResolvedTomlPath::new_for_tests(
                                     PathBuf::from(
                                         "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
                                     ),
