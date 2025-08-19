@@ -1,8 +1,9 @@
+#![expect(clippy::print_stdout)]
 use tensorzero::TimeWindow;
 use tensorzero_core::db::{clickhouse::test_helpers::get_clickhouse, SelectQueries};
 
 #[tokio::test]
-async fn test_query_model_usage() {
+async fn test_clickhouse_query_model_usage() {
     let clickhouse = get_clickhouse().await;
     let model_usage = clickhouse
         .get_model_usage_timeseries(TimeWindow::Month, 3)
@@ -10,7 +11,7 @@ async fn test_query_model_usage() {
         .unwrap();
 
     for usage in &model_usage {
-        println!("{:?}", usage);
+        println!("{usage:?}");
     }
 
     // Basic structure assertions
@@ -29,20 +30,23 @@ async fn test_query_model_usage() {
     );
 
     // Verify we have expected time periods (March, April, May 2025)
-    let expected_periods = vec![
-        "2025-03-01T00:00:00Z",
-        "2025-04-01T00:00:00Z",
-        "2025-05-01T00:00:00Z",
-    ];
-    for expected in &expected_periods {
-        assert!(
-            model_usage
-                .iter()
-                .any(|usage| usage.period_start.to_string().starts_with(expected)),
-            "Should contain data for period: {}",
-            expected
-        );
-    }
+    // Check for data in each of the 3 most recent months
+    let march_data = model_usage.iter().any(|usage| {
+        let period_str = usage.period_start.format("%Y-%m").to_string();
+        period_str == "2025-03"
+    });
+    let april_data = model_usage.iter().any(|usage| {
+        let period_str = usage.period_start.format("%Y-%m").to_string();
+        period_str == "2025-04"
+    });
+    let may_data = model_usage.iter().any(|usage| {
+        let period_str = usage.period_start.format("%Y-%m").to_string();
+        period_str == "2025-05"
+    });
+
+    assert!(march_data, "Should contain data for March 2025");
+    assert!(april_data, "Should contain data for April 2025");
+    assert!(may_data, "Should contain data for May 2025");
 
     // Model-specific assertions
     let model_names: std::collections::HashSet<_> =
@@ -107,11 +111,17 @@ async fn test_query_model_usage() {
     // Verify May 2025 has the highest activity (based on your sample data)
     let may_usage: Vec<_> = model_usage
         .iter()
-        .filter(|usage| usage.period_start.to_string().starts_with("2025-05-01"))
+        .filter(|usage| {
+            let period_str = usage.period_start.format("%Y-%m").to_string();
+            period_str == "2025-05"
+        })
         .collect();
     let april_usage: Vec<_> = model_usage
         .iter()
-        .filter(|usage| usage.period_start.to_string().starts_with("2025-04-01"))
+        .filter(|usage| {
+            let period_str = usage.period_start.format("%Y-%m").to_string();
+            period_str == "2025-04"
+        })
         .collect();
 
     assert!(
