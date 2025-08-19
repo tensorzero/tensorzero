@@ -1,4 +1,5 @@
 use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::Map;
 use serde_json::Value;
 use serde_untagged::UntaggedEnumVisitor;
 use tensorzero_core::{
@@ -38,6 +39,10 @@ pub struct ClientInputMessage {
 #[ts(export)]
 pub enum ClientInputMessageContent {
     Text(TextKind),
+    Template {
+        name: String,
+        arguments: Map<String, Value>,
+    },
     ToolCall(ToolCallInput),
     ToolResult(ToolResult),
     RawText {
@@ -63,6 +68,9 @@ impl TryFrom<ClientInputMessageContent> for InputMessageContent {
     fn try_from(this: ClientInputMessageContent) -> Result<Self, Error> {
         Ok(match this {
             ClientInputMessageContent::Text(text) => InputMessageContent::Text(text),
+            ClientInputMessageContent::Template { name, arguments } => {
+                InputMessageContent::Template { name, arguments }
+            }
             ClientInputMessageContent::ToolCall(tool_call) => {
                 InputMessageContent::ToolCall(tool_call)
             }
@@ -132,6 +140,9 @@ pub(super) fn test_client_to_message_content(
 ) -> InputMessageContent {
     match content {
         ClientInputMessageContent::Text(text) => InputMessageContent::Text(text),
+        ClientInputMessageContent::Template { name, arguments } => {
+            InputMessageContent::Template { name, arguments }
+        }
         ClientInputMessageContent::ToolCall(ToolCallInput {
             id,
             name,

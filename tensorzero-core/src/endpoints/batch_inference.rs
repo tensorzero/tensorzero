@@ -31,9 +31,9 @@ use crate::inference::types::batch::{
 };
 use crate::inference::types::{batch::StartBatchModelInferenceWithMetadata, Input};
 use crate::inference::types::{
-    current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext,
-    FinishReason, InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert,
-    JsonInferenceOutput, Latency, ModelInferenceResponseWithMetadata, Usage,
+    current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FinishReason,
+    InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput,
+    Latency, ModelInferenceResponseWithMetadata, ResolveContext, Usage,
 };
 use crate::inference::types::{RequestMessage, ResolvedInput};
 use crate::jsonschema_util::DynamicJSONSchema;
@@ -214,7 +214,7 @@ pub async fn start_batch_inference_handler(
     let inference_params: Vec<InferenceParams> =
         BatchInferenceParamsWithSize(params.params, num_inferences).try_into()?;
 
-    let context = FetchContext {
+    let context = ResolveContext {
         client: &http_client,
         object_store_info: &config.object_store_info,
     };
@@ -615,7 +615,7 @@ async fn write_start_batch_inference<'a>(
             function_name: metadata.function_name.into(),
             variant_name: metadata.variant_name.into(),
             episode_id: metadata.episode_ids[rows.len()],
-            input: row.input,
+            input: row.input.into_stored_input(),
             input_messages: row.input_messages,
             system: row.system.map(Cow::Borrowed),
             tool_params,

@@ -35,7 +35,7 @@ use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
     collect_chunks, Base64File, ChatInferenceDatabaseInsert, ChatInferenceResultChunk,
-    CollectChunksArgs, ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason,
+    CollectChunksArgs, ContentBlockChatOutput, ContentBlockChunk, ResolveContext, FinishReason,
     InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
     InternalJsonInferenceOutput, JsonInferenceDatabaseInsert, JsonInferenceOutput,
     JsonInferenceResultChunk, ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput,
@@ -325,7 +325,7 @@ pub async fn inference<T: Send + 'static>(
     };
     let resolved_input = params
         .input
-        .resolve(&FetchContext {
+        .resolve(&ResolveContext {
             client: http_client,
             object_store_info: &config.object_store_info,
         })
@@ -876,14 +876,14 @@ async fn write_inference(
         match result {
             InferenceResult::Chat(result) => {
                 let chat_inference =
-                    ChatInferenceDatabaseInsert::new(result, input.clone(), metadata);
+                    ChatInferenceDatabaseInsert::new(result, input.clone().into_stored_input(), metadata);
                 let _ = clickhouse_connection_info
                     .write_batched(&[chat_inference], TableName::ChatInference)
                     .await;
             }
             InferenceResult::Json(result) => {
                 let json_inference =
-                    JsonInferenceDatabaseInsert::new(result, input.clone(), metadata);
+                    JsonInferenceDatabaseInsert::new(result, input.clone().into_stored_input(), metadata);
                 let _ = clickhouse_connection_info
                     .write_batched(&[json_inference], TableName::JsonInference)
                     .await;

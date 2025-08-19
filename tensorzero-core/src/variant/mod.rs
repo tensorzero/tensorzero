@@ -31,6 +31,7 @@ use crate::inference::types::extra_headers::{
     FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
 };
 use crate::inference::types::ResolvedInput;
+use crate::inference::types::Role;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
@@ -816,7 +817,7 @@ impl ChatCompletionConfigPyClass {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
             .templates
-            .system
+            .get_implicit_system_template()
             .as_ref()
             .map(|t| t.template.contents.clone()))
     }
@@ -826,17 +827,19 @@ impl ChatCompletionConfigPyClass {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
             .templates
-            .user
+            .get_implicit_template(Role::User)
             .as_ref()
             .map(|t| t.template.contents.clone()))
     }
 
     #[getter]
     fn get_assistant_template(&self) -> PyResult<Option<String>> {
+        use crate::inference::types::Role;
+
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
             .templates
-            .assistant
+            .get_implicit_template(Role::Assistant)
             .as_ref()
             .map(|t| t.template.contents.clone()))
     }

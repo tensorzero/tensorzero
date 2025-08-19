@@ -768,10 +768,9 @@ mod tests {
         inference::types::{
             ChatInferenceResult, FinishReason, JsonInferenceResult, Latency, Usage,
         },
-        minijinja_util::tests::get_test_template_config,
+        minijinja_util::tests::{get_system_filled_template, get_system_template, get_test_template_config},
         model::{ModelConfig, ModelProvider, ProviderConfig},
         providers::dummy::DummyProvider,
-        variant::chat_completion::{ChatTemplates, TemplateWithSchema},
     };
 
     use super::*;
@@ -862,25 +861,30 @@ mod tests {
         let prepared_message = result.unwrap();
         assert_eq!(prepared_message, expected_message);
 
-        // Test with templates that need new info
-        let system_template_name = "system";
+        let system_template = get_system_template();
 
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
-                templates: ChatTemplates {
-                    system: Some(TemplateWithSchema {
-                        template: PathWithContents {
-                            path: system_template_name.into(),
-                            contents: String::new(),
-                        },
-                        schema: Some(system_schema),
-                    }),
-                    ..Default::default()
-                },
+                system_template: Some(system_template),
+                user_template: None,
+                assistant_template: None,
+                input_wrappers: None,
                 ..Default::default()
-            },
+            }
+            .load(
+                &SchemaData {
+                    system: Some(system_schema),
+                    user: None,
+                    assistant: None,
+                },
+                &ErrorContext {
+                    function_name: "test".to_string(),
+                    variant_name: "test".to_string(),
+                },
+            )
+            .unwrap(),
         };
 
         let max_index = 6;
@@ -890,7 +894,7 @@ mod tests {
         let prepared_message = result.unwrap();
         let inner_system_message = templates
             .template_message(
-                system_template_name,
+                "system",
                 &json!({"assistant_name": "ChatGPT", "max_index": max_index}),
             )
             .unwrap();
@@ -904,29 +908,36 @@ mod tests {
 
         // Test with template that is complete as is (string)
         let system_template_name = "system_filled";
+        let system_template = get_system_filled_template();
 
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
-                templates: ChatTemplates {
-                    system: Some(TemplateWithSchema {
-                        template: PathWithContents {
-                            path: system_template_name.into(),
-                            contents: String::new(),
-                        },
-                        schema: None,
-                    }),
-                    ..Default::default()
-                },
+                system_template: Some(system_template),
+                user_template: None,
+                assistant_template: None,
+                input_wrappers: None,
                 ..Default::default()
-            },
+            }
+            .load(
+                &SchemaData {
+                    system: None,
+                    user: None,
+                    assistant: None,
+                },
+                &ErrorContext {
+                    function_name: "test".to_string(),
+                    variant_name: "test".to_string(),
+                },
+            )
+            .unwrap(),
         };
 
         let max_index = 10;
-        let result = evaluator_config.prepare_system_message(&templates, None, max_index);
-        assert!(result.is_ok());
-        let prepared_message = result.unwrap();
+        let prepared_message = evaluator_config
+            .prepare_system_message(&templates, None, max_index)
+            .unwrap();
         let inner_system_message = templates
             .template_message(system_template_name, &json!({}))
             .unwrap();

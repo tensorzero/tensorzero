@@ -16,7 +16,9 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_core::function::{FunctionConfig, FunctionConfigJson};
-use tensorzero_core::inference::types::{ResolvedInputMessage, ResolvedInputMessageContent, Text};
+use tensorzero_core::inference::types::{
+    StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+};
 use tokio::time::sleep;
 use url::Url;
 
@@ -33,7 +35,7 @@ use tensorzero_core::{
         clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
         select_feedback_by_target_id_clickhouse, select_json_inference_clickhouse,
     },
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, Usage},
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Usage},
 };
 use tensorzero_core::{
     endpoints::{
@@ -106,7 +108,7 @@ async fn run_evaluations_json() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -373,7 +375,7 @@ async fn run_exact_match_evaluation_chat() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -496,7 +498,7 @@ async fn run_llm_judge_evaluation_chat() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -715,8 +717,8 @@ async fn run_image_evaluation() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        // Check the input to the inference parses as ResolvedInput
-        let _clickhouse_input: ResolvedInput =
+        // Check the input to the inference parses as StoredInput
+        let _clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // assert_eq!(&clickhouse_input, parsed.datapoint.input());
         let clickhouse_output: Vec<ContentBlockChatOutput> =
@@ -927,8 +929,8 @@ async fn check_invalid_image_evaluation() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        // Check the input to the inference parses as ResolvedInput
-        let _clickhouse_input: ResolvedInput =
+        // Check the input to the inference parses as StoredInput
+        let _clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // assert_eq!(&clickhouse_input, parsed.datapoint.input());
         let clickhouse_output: Vec<ContentBlockChatOutput> =
@@ -1252,11 +1254,11 @@ async fn test_run_llm_judge_evaluator_chat() {
         variant_name: "test_variant".to_string(),
     });
     let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -1285,12 +1287,15 @@ async fn test_run_llm_judge_evaluator_chat() {
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
     };
+
     let input = resolved_input_to_client_input(
-        datapoint.input().clone(),
-        &clients.tensorzero_client.client,
-    )
-    .await
-    .unwrap();
+        datapoint
+            .input()
+            .clone()
+            .reresolve(&clients.tensorzero_client)
+            .await
+            .unwrap(),
+    );
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
@@ -1357,11 +1362,11 @@ async fn test_run_llm_judge_evaluator_chat() {
 
     // Try without output
     let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -1420,11 +1425,11 @@ async fn test_run_llm_judge_evaluator_json() {
         variant_name: "test_variant".to_string(),
     });
     let datapoint = Datapoint::Json(JsonInferenceDatapoint {
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -1454,12 +1459,15 @@ async fn test_run_llm_judge_evaluator_json() {
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
     };
+
     let input = resolved_input_to_client_input(
-        datapoint.input().clone(),
-        &clients.tensorzero_client.client,
-    )
-    .await
-    .unwrap();
+        datapoint
+            .input()
+            .clone()
+            .reresolve(&clients.tensorzero_client)
+            .await
+            .unwrap(),
+    );
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
@@ -1526,11 +1534,11 @@ async fn test_run_llm_judge_evaluator_json() {
 
     // Try without output
     let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -1620,7 +1628,7 @@ async fn run_evaluations_best_of_3() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -1806,7 +1814,7 @@ async fn run_evaluations_mixture_of_3() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -1995,7 +2003,7 @@ async fn run_evaluations_dicl() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
