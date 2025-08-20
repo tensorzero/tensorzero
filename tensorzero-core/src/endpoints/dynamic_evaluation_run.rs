@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    config_parser::Config,
+    config::Config,
     db::clickhouse::{escape_string_for_clickhouse_literal, ClickHouseConnectionInfo},
     endpoints::validate_tags,
     error::{Error, ErrorDetails},

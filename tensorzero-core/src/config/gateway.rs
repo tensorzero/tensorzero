@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config_parser::{ExportConfig, ObservabilityConfig, TemplateFilesystemAccess},
+    config::{ExportConfig, ObservabilityConfig, TemplateFilesystemAccess},
     error::{Error, ErrorDetails},
 };
 

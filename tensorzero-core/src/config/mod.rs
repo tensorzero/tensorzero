@@ -16,9 +16,9 @@ use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 
-use crate::config_parser::gateway::{GatewayConfig, UninitializedGatewayConfig};
-use crate::config_parser::path::TomlRelativePath;
-use crate::config_parser::span_map::SpanMap;
+use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
+use crate::config::path::TomlRelativePath;
+use crate::config::span_map::SpanMap;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
@@ -331,6 +331,10 @@ fn default_max_rows() -> usize {
 #[cfg_attr(test, ts(export))]
 pub struct BatchWritesConfig {
     pub enabled: bool,
+    // An internal flag to allow us to test batch writes in embedded gateway mode.
+    // This can currently cause deadlocks, so we don't want normal embedded clients to use it.
+    #[serde(default)]
+    pub __force_allow_embedded_batch_writes: bool,
     #[serde(default = "default_flush_interval_ms")]
     pub flush_interval_ms: u64,
     #[serde(default = "default_max_rows")]
@@ -341,6 +345,7 @@ impl Default for BatchWritesConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            __force_allow_embedded_batch_writes: false,
             flush_interval_ms: default_flush_interval_ms(),
             max_rows: default_max_rows(),
         }
@@ -1148,7 +1153,17 @@ impl UninitializedFunctionConfig {
                 let variants = params
                     .variants
                     .into_iter()
-                    .map(|(name, variant)| variant.load(&schema_data).map(|v| (name, Arc::new(v))))
+                    .map(|(name, variant)| {
+                        variant
+                            .load(
+                                &schema_data,
+                                &ErrorContext {
+                                    function_name: function_name.to_string(),
+                                    variant_name: name.to_string(),
+                                },
+                            )
+                            .map(|v| (name, Arc::new(v)))
+                    })
                     .collect::<Result<HashMap<_, _>, Error>>()?;
                 for (name, variant) in &variants {
                     if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
@@ -1198,7 +1213,17 @@ impl UninitializedFunctionConfig {
                 let variants = params
                     .variants
                     .into_iter()
-                    .map(|(name, variant)| variant.load(&schema_data).map(|v| (name, Arc::new(v))))
+                    .map(|(name, variant)| {
+                        variant
+                            .load(
+                                &schema_data,
+                                &ErrorContext {
+                                    function_name: function_name.to_string(),
+                                    variant_name: name.to_string(),
+                                },
+                            )
+                            .map(|v| (name, Arc::new(v)))
+                    })
                     .collect::<Result<HashMap<_, _>, Error>>()?;
 
                 for (name, variant) in &variants {
@@ -1275,21 +1300,31 @@ pub enum UninitializedVariantConfig {
     ChainOfThought(UninitializedChainOfThoughtConfig),
 }
 
+/// Holds extra information used for enriching error messages
+pub struct ErrorContext {
+    pub function_name: String,
+    pub variant_name: String,
+}
+
 impl UninitializedVariantInfo {
-    pub fn load(self, schemas: &SchemaData) -> Result<VariantInfo, Error> {
+    pub fn load(
+        self,
+        schemas: &SchemaData,
+        error_context: &ErrorContext,
+    ) -> Result<VariantInfo, Error> {
         let inner = match self.inner {
             UninitializedVariantConfig::ChatCompletion(params) => {
-                VariantConfig::ChatCompletion(params.load(schemas)?)
+                VariantConfig::ChatCompletion(params.load(schemas, error_context)?)
             }
             UninitializedVariantConfig::BestOfNSampling(params) => {
-                VariantConfig::BestOfNSampling(params.load(schemas)?)
+                VariantConfig::BestOfNSampling(params.load(schemas, error_context)?)
             }
             UninitializedVariantConfig::Dicl(params) => VariantConfig::Dicl(params.load()?),
             UninitializedVariantConfig::MixtureOfN(params) => {
-                VariantConfig::MixtureOfN(params.load(schemas)?)
+                VariantConfig::MixtureOfN(params.load(schemas, error_context)?)
             }
             UninitializedVariantConfig::ChainOfThought(params) => {
-                VariantConfig::ChainOfThought(params.load(schemas)?)
+                VariantConfig::ChainOfThought(params.load(schemas, error_context)?)
             }
         };
         Ok(VariantInfo {
