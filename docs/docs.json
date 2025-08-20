@@ -131,6 +131,10 @@
                 ]
               }
             ]
+          },
+          {
+            "group": "UI",
+            "pages": ["ui/deployment"]
           }
         ]
       }
