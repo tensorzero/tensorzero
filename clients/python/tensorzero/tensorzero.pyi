@@ -203,6 +203,16 @@ class GCPVertexGeminiSFTConfig:
     ) -> None: ...
 
 @final
+class TogetherSFTConfig:
+    def __init__(
+        self,
+        *,
+        model: str,
+        credentials: Optional[str] = None,
+        api_base: Optional[str] = None,
+    ) -> None: ...
+
+@final
 class Datapoint:
     Chat: Type["Datapoint"]
     Json: Type["Datapoint"]
@@ -1023,6 +1033,7 @@ __all__ = [
     "OptimizationJobInfo",
     "OptimizationJobStatus",
     "RenderedSample",
+    "TogetherSFTConfig",
     "StoredInference",
     "ResolvedInput",
     "ResolvedInputMessage",
