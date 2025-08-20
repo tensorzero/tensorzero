@@ -149,12 +149,11 @@ class DiclOptimizationConfig:
         embedding_model: str,
         variant_name: str,
         function_name: str,
-        dimensions: Optional[int],
-        batch_size: Optional[int],
-        max_concurrency: Optional[int],
-        retries: Optional[Dict[str, Any]],
-        k: Optional[int],
-        model: Optional[str],
+        dimensions: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        max_concurrency: Optional[int] = None,
+        k: Optional[int] = None,
+        model: Optional[str] = None,
         credentials: Optional[str] = None,
     ) -> None: ...
 
