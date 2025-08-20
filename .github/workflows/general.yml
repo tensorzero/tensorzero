@@ -381,9 +381,6 @@ jobs:
           - tag: "24.12-alpine"
             prefix: "24.12"
             allow_failure: false
-          - tag: "25.2-alpine"
-            prefix: "25.2"
-            allow_failure: false
           - tag: "latest-alpine"
             prefix: ""
             # ClickHouse can make new releases at any time, which might break our tests.
