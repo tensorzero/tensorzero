@@ -249,6 +249,10 @@ pub enum ErrorDetails {
         message: String,
         file_path: String,
     },
+    FileWrite {
+        message: String,
+        file_path: String,
+    },
     GCPCredentials {
         message: String,
     },
@@ -393,6 +397,9 @@ pub enum ErrorDetails {
         messages: Vec<String>,
         data: Box<Value>,
         schema: Box<Value>,
+    },
+    Lock {
+        message: String,
     },
     MissingFunctionInVariants {
         function_name: String,
@@ -547,6 +554,7 @@ impl ErrorDetails {
             ErrorDetails::DuplicateTool { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
+            ErrorDetails::FileWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
             ErrorDetails::Inference { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceClient { .. } => tracing::Level::ERROR,
@@ -588,6 +596,7 @@ impl ErrorDetails {
             ErrorDetails::JsonRequest { .. } => tracing::Level::WARN,
             ErrorDetails::JsonSchema { .. } => tracing::Level::ERROR,
             ErrorDetails::JsonSchemaValidation { .. } => tracing::Level::ERROR,
+            ErrorDetails::Lock { message } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaEnvironment { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplate { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
@@ -650,6 +659,7 @@ impl ErrorDetails {
             ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::FileWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceTarget { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -662,6 +672,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            ErrorDetails::Lock { message } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelProviderTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::ModelTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::VariantTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
@@ -906,6 +917,10 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::FileRead { message, file_path } => {
                 write!(f, "Error reading file {file_path}: {message}")
             }
+            ErrorDetails::FileWrite { message, file_path } => {
+                write!(f, "Error writing file {file_path}: {message}")
+            }
+
             ErrorDetails::GCPCredentials { message } => {
                 write!(f, "Error in acquiring GCP credentials: {message}")
             }
@@ -1089,6 +1104,9 @@ impl std::fmt::Display for ErrorDetails {
                     "\n\nSchema:\n{}",
                     serde_json::to_string(schema).map_err(|_| std::fmt::Error)?
                 )
+            }
+            ErrorDetails::Lock { message } => {
+                write!(f, "Error acquiring lock: {message}")
             }
             ErrorDetails::MiniJinjaEnvironment { message } => {
                 write!(f, "Error initializing MiniJinja environment: {message}")

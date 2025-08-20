@@ -131,6 +131,7 @@ tokio-util = "0.7.15"
 tempfile = "3.20.0"
 ts-rs = { workspace = true }
 toml_edit = "0.23.3"
+fs2 = "0.4.3"
 
 
 [dev-dependencies]
