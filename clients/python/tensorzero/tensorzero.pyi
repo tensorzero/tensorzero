@@ -178,6 +178,21 @@ class FireworksSFTConfig:
         self,
         *,
         model: str,
+        early_stop: Optional[bool] = None,
+        epochs: Optional[int] = None,
+        learning_rate: Optional[float] = None,
+        max_context_length: Optional[int] = None,
+        lora_rank: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        display_name: Optional[str] = None,
+        output_model: Optional[str] = None,
+        warm_start_from: Optional[str] = None,
+        is_turbo: Optional[bool] = None,
+        eval_auto_carveout: Optional[bool] = None,
+        nodes: Optional[int] = None,
+        mtp_enabled: Optional[bool] = None,
+        mtp_num_draft_tokens: Optional[int] = None,
+        mtp_freeze_base_model: Optional[bool] = None,
         credentials: Optional[str] = None,
         account_id: str,
         api_base: Optional[str] = None,
@@ -203,6 +218,16 @@ class GCPVertexGeminiSFTConfig:
         kms_key_name: Optional[str] = None,
         tuned_model_display_name: Optional[str] = None,
         bucket_path_prefix: Optional[str] = None,
+    ) -> None: ...
+
+@final
+class TogetherSFTConfig:
+    def __init__(
+        self,
+        *,
+        model: str,
+        credentials: Optional[str] = None,
+        api_base: Optional[str] = None,
     ) -> None: ...
 
 @final
@@ -1027,6 +1052,7 @@ __all__ = [
     "OptimizationJobInfo",
     "OptimizationJobStatus",
     "RenderedSample",
+    "TogetherSFTConfig",
     "StoredInference",
     "ResolvedInput",
     "ResolvedInputMessage",

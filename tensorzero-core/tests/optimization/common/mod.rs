@@ -12,7 +12,7 @@ use tensorzero::{
 };
 use tensorzero_core::{
     cache::CacheOptions,
-    config_parser::{Config, ConfigFileGlob, ProviderTypesConfig},
+    config::{Config, ConfigFileGlob, ProviderTypesConfig},
     db::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL},
     db::clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
     endpoints::inference::InferenceClients,

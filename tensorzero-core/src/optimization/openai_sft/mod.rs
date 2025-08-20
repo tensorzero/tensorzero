@@ -9,7 +9,7 @@ use tokio::try_join;
 use url::Url;
 
 use crate::{
-    config_parser::Config,
+    config::Config,
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
@@ -92,8 +92,11 @@ impl UninitializedOpenAISFTConfig {
         suffix: Option<String>,
     ) -> PyResult<Self> {
         // Use Deserialize to convert the string to a CredentialLocation
-        let credentials =
-            credentials.map(|s| serde_json::from_str(&s).unwrap_or(CredentialLocation::Env(s)));
+        let credentials = credentials
+            .map(|s| serde_json::from_str(&s))
+            .transpose()
+            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?
+            .or_else(|| Some(default_api_key_location()));
         let api_base = api_base
             .map(|s| {
                 Url::parse(&s)

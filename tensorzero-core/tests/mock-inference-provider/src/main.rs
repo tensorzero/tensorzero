@@ -3,6 +3,7 @@
 
 mod error;
 mod fireworks;
+mod together;
 
 use async_stream::try_stream;
 use axum::http::StatusCode;
@@ -155,6 +156,18 @@ fn make_router() -> axum::Router {
         .route(
             "/fireworks/v1/accounts/{account_id}/deployedModels",
             axum::routing::post(fireworks::create_deployed_model),
+        )
+        .route(
+            "/together/files/upload",
+            axum::routing::post(together::upload_file),
+        )
+        .route(
+            "/together/fine-tunes",
+            axum::routing::post(together::create_fine_tuning_job),
+        )
+        .route(
+            "/together/fine-tunes/{job_id}",
+            axum::routing::get(together::get_fine_tuning_job),
         )
         .route("/status", axum::routing::get(status_handler))
         .layer(TraceLayer::new_for_http())

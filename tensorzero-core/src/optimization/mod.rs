@@ -1,4 +1,4 @@
-use crate::config_parser::UninitializedVariantConfig;
+use crate::config::UninitializedVariantConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::config_parser::Config;
+use crate::config::Config;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};

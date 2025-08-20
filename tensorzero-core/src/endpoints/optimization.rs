@@ -11,7 +11,7 @@ use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config_parser::Config,
+    config::Config,
     db::clickhouse::{
         query_builder::{
             InferenceFilterTreeNode, InferenceOutputSource, ListInferencesParams, OrderBy,

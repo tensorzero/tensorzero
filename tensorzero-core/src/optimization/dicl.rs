@@ -6,8 +6,7 @@ use serde_json::json;
 
 use crate::{
     cache::CacheOptions,
-    config_parser::Config,
-    config_parser::UninitializedVariantConfig,
+    config::{Config, UninitializedVariantConfig},
     db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     embeddings::{
         Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModelConfig, EmbeddingRequest,
@@ -665,7 +664,7 @@ pub async fn insert_dicl_examples_with_batching(
 mod tests {
     use super::*;
     use crate::{
-        config_parser::TimeoutsConfig,
+        config::TimeoutsConfig,
         embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo},
         endpoints::inference::InferenceCredentials,
         variant::RetryConfig,
