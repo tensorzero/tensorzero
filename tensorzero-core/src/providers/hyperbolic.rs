@@ -40,7 +40,7 @@ pub fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "Hyperbolic";
-const PROVIDER_TYPE: &str = "hyperbolic";
+pub const PROVIDER_TYPE: &str = "hyperbolic";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -516,6 +516,7 @@ mod tests {
                 finish_reason: OpenAIFinishReason::Stop,
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
             }],

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useCopy } from "~/hooks/use-copy";
 import CodeMirror from "@uiw/react-codemirror";
 import { json } from "@codemirror/lang-json";
@@ -21,9 +21,42 @@ import {
   WrapTextIcon,
   CheckCheckIcon,
   ClipboardIcon,
+  X,
 } from "lucide-react";
+import type { JsonValue } from "tensorzero-node";
 
 export type Language = "json" | "markdown" | "jinja2" | "text";
+
+/** Try to format the given string/object if it's JSON. Passthrough gracefully if it's not JSON. */
+export function useFormattedJson(initialValue: string | JsonValue): string {
+  return useMemo(() => {
+    // If it's already a string
+    if (typeof initialValue === "string") {
+      try {
+        // Only attempt to parse/format if it looks like JSON
+        const trimmed = initialValue.trim();
+        if (
+          (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+          (trimmed.startsWith("[") && trimmed.endsWith("]"))
+        ) {
+          const parsed = JSON.parse(trimmed);
+          return JSON.stringify(parsed, null, 2);
+        }
+      } catch {
+        // Not valid JSON, return as-is
+      }
+      return initialValue;
+    }
+
+    // If it's an object/array/other JSON value, format it
+    try {
+      return JSON.stringify(initialValue, null, 2);
+    } catch {
+      // Fallback for circular references or other stringify errors
+      return String(initialValue);
+    }
+  }, [initialValue]);
+}
 
 export interface CodeEditorProps {
   value?: string;
@@ -124,12 +157,17 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     DEFAULT_WORD_WRAP_LANGUAGES.includes(language),
   );
   const { copy, didCopy, isCopyAvailable } = useCopy();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // Custom theme to remove dotted border and add focus styles
   const extensions = useMemo(() => {
     const customTheme = EditorView.theme({
       "&.cm-focused": {
         outline: "none !important",
+      },
+      ".cm-gutters": {
+        fontFamily: "var(--font-mono) !important",
       },
     });
 
@@ -149,33 +187,40 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   }, [language, wordWrap, readOnly]);
 
   return (
-    <div className={cn("group relative", className)}>
+    // `min-width: 0` If within a grid parent, prevent editor from overflowing its grid cell and force horizontal scrolling
+    <div className={cn("group relative isolate min-w-0 rounded-sm", className)}>
       <div className="absolute top-1 right-1 z-10 flex gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
-        {isCopyAvailable && (
-          <Button
-            variant="secondary"
-            size="iconSm"
-            onClick={() => copy(value)}
-            className="h-6 w-6 p-3 text-xs"
-            title={didCopy ? "Copied!" : "Copy to clipboard"}
-          >
-            {didCopy ? (
-              <CheckCheckIcon className="h-2 w-2" />
-            ) : (
-              <ClipboardIcon className="h-2 w-2" />
-            )}
-          </Button>
-        )}
-
         <Button
-          variant={wordWrap ? "default" : "secondary"}
+          variant="secondary"
+          size="iconSm"
+          onClick={() => copy(value)}
+          disabled={!mounted || !isCopyAvailable}
+          title={didCopy ? "Copied!" : "Copy to clipboard"}
+        >
+          {didCopy ? (
+            <CheckCheckIcon className="h-2 w-2" />
+          ) : (
+            <ClipboardIcon className="h-2 w-2" />
+          )}
+        </Button>
+        <Button
+          variant={"secondary"}
           size="iconSm"
           onClick={() => setWordWrap((wrap) => !wrap)}
           aria-pressed={wordWrap}
-          className="h-6 w-6 p-3 text-xs"
+          className="flex h-6 w-6 cursor-pointer items-center justify-center p-3 text-xs"
           title="Toggle word wrap"
         >
-          <WrapTextIcon className="h-2 w-2" />
+          <span className="relative flex h-full w-full items-center justify-center">
+            <WrapTextIcon className="absolute top-1/2 left-1/2 z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2" />
+            {/* If disabled, show an X icon, larger and on top of the wrap icon */}
+            {wordWrap ? null : (
+              <X
+                className="absolute top-1/2 left-1/2 z-20 !h-7 !w-7 -translate-x-1/2 -translate-y-1/2"
+                strokeWidth={1}
+              />
+            )}
+          </span>
         </Button>
 
         {allowedLanguages.length > 1 && (
@@ -235,7 +280,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             highlightActiveLine: !readOnly,
             highlightActiveLineGutter: !readOnly,
           }}
-          className="min-h-8"
+          className="min-h-9 overflow-auto"
         />
       </div>
     </div>

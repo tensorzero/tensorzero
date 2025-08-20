@@ -16,11 +16,18 @@ test-optimization = [
     "nextest",
     "run",
     "--features",
-    "optimization_tests",
+    "optimization_tests,e2e_tests",
     "--profile",
     "optimization",
 ]
-
+test-optimization-mock = [
+    "nextest",
+    "run",
+    "--features",
+    "e2e_tests",
+    "--profile",
+    "optimization-mock",
+]
 # Runs e2e tests that don't require any credentials available.
 # This is useful for both running on PR CI (where we don't have creds at all),
 # and for testing against several different ClickHouse versions (to avoid spending lots of money on inference).
@@ -37,5 +44,11 @@ build-e2e = "build --bin gateway --features e2e_tests"
 run-e2e = "run --bin gateway --features e2e_tests -- --config-file tensorzero-core/tests/e2e/tensorzero.toml"
 watch-e2e = "watch -x run-e2e"
 
-# Export Typescript bindings for TensorZero
-tsbuild = ["test", "export_bindings", "-p", "tensorzero-core"]
+tsbuild = [
+    "test",
+    "export_bindings",
+    "-p",
+    "tensorzero-core",
+    "-p",
+    "tensorzero",
+] # Export Typescript bindings for TensorZero

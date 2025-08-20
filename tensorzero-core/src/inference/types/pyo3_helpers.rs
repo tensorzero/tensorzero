@@ -12,6 +12,7 @@ use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, ResolvedInput, ResolvedInputMessageContent};
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
 use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
+use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
 use crate::optimization::UninitializedOptimizerConfig;
 use crate::stored_inference::{
     RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredSample,
@@ -109,7 +110,7 @@ pub fn content_block_to_python(
             file_content_block.call1(
                 py,
                 (
-                    file.file.data.clone().unwrap_or("".to_string()),
+                    file.file.data.clone().unwrap_or(String::new()),
                     file.file.mime_type.to_string(),
                 ),
             )
@@ -249,7 +250,7 @@ pub fn resolved_input_message_content_to_python(
             file_content_block.call1(
                 py,
                 (
-                    file.file.data.clone().unwrap_or("".to_string()),
+                    file.file.data.clone().unwrap_or(String::new()),
                     file.file.mime_type.to_string(),
                 ),
             )
@@ -323,9 +324,11 @@ pub fn deserialize_optimization_config(
         Ok(UninitializedOptimizerConfig::OpenAISFT(obj.extract()?))
     } else if obj.is_instance_of::<UninitializedFireworksSFTConfig>() {
         Ok(UninitializedOptimizerConfig::FireworksSFT(obj.extract()?))
+    } else if obj.is_instance_of::<UninitializedTogetherSFTConfig>() {
+        Ok(UninitializedOptimizerConfig::TogetherSFT(obj.extract()?))
     } else {
         Err(PyValueError::new_err(
-            "Invalid optimization config. Expected OpenAISFTConfig or FireworksSFTConfig",
+            "Invalid optimization config. Expected OpenAISFTConfig, FireworksSFTConfig, or TogetherSFTConfig",
         ))
     }
 }

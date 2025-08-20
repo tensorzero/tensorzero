@@ -15,7 +15,7 @@ use crate::{
     providers::common::{make_embedded_gateway, make_embedded_gateway_no_config},
 };
 use tensorzero_core::{
-    clickhouse::test_helpers::{
+    db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
         select_model_inference_clickhouse,
     },
@@ -482,9 +482,14 @@ async fn test_openai_compatible_route_bad_model_name() {
     assert_eq!(
         response_json,
         json!({
-            "error": "Invalid inference target: Invalid model name: Model name 'my_missing_model' not found in model table"
+            "error": "Invalid inference target: Invalid model name: Model name 'my_missing_model' not found in model table",
+            "error_json": {
+                "InvalidInferenceTarget": {
+                    "message": "Invalid model name: Model name 'my_missing_model' not found in model table"
+                }
+            }
         })
-    )
+    );
 }
 
 #[tokio::test]

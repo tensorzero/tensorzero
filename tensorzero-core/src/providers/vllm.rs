@@ -17,6 +17,7 @@ use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::Thought;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -30,7 +31,7 @@ use crate::providers::helpers::{
 use crate::providers::openai::check_api_base_suffix;
 
 const PROVIDER_NAME: &str = "vLLM";
-const PROVIDER_TYPE: &str = "vllm";
+pub const PROVIDER_TYPE: &str = "vllm";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -330,11 +331,12 @@ impl<'a> VLLMRequest<'a> {
             ) => Some(schema),
             _ => None,
         };
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
         let messages = prepare_vllm_messages(request)?;
 
@@ -406,6 +408,13 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        if let Some(reasoning) = message.reasoning_content {
+            content.push(ContentBlockOutput::Thought(Thought {
+                text: Some(reasoning),
+                signature: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+            }));
+        }
         if let Some(text) = message.content {
             content.push(text.into());
         }
@@ -435,7 +444,7 @@ pub(super) fn prepare_vllm_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
-    for message in request.messages.iter() {
+    for message in &request.messages {
         messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
     }
     if let Some(system_msg) = tensorzero_to_vllm_system_message(request.system.as_deref()) {
@@ -596,6 +605,7 @@ mod tests {
                 index: 0,
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: OpenAIFinishReason::Stop,

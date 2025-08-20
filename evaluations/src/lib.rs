@@ -17,10 +17,10 @@ use tensorzero::{
     InferenceResponse,
 };
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::config_parser::MetricConfigOptimize;
+use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::{
-    clickhouse::ClickHouseConnectionInfo, config_parser::Config, endpoints::datasets::Datapoint,
+    config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
     function::FunctionConfig,
 };
 use tokio::{sync::Semaphore, task::JoinSet};
@@ -95,8 +95,11 @@ pub async fn run_evaluation(
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
     info!(config_file = ?args.config_file, "Loading configuration");
-    let config =
-        Config::load_from_path_optional_verify_credentials(&args.config_file, false).await?;
+    let config = Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new_from_path(&args.config_file)?,
+        false,
+    )
+    .await?;
     debug!("Configuration loaded successfully");
     let evaluation_config = config
         .evaluations
@@ -123,6 +126,7 @@ pub async fn run_evaluation(
             clickhouse_url: Some(clickhouse_url.clone()),
             timeout: None,
             verify_credentials: true,
+            allow_batch_writes: true,
         }),
     }
     .build()
@@ -130,7 +134,11 @@ pub async fn run_evaluation(
     .map_err(|e| anyhow!("Failed to build client: {}", e))?;
     let clients = Arc::new(Clients {
         tensorzero_client: ThrottledTensorZeroClient::new(tensorzero_client, semaphore),
-        clickhouse_client: ClickHouseConnectionInfo::new(&clickhouse_url).await?,
+        clickhouse_client: ClickHouseConnectionInfo::new(
+            &clickhouse_url,
+            config.gateway.observability.batch_writes.clone(),
+        )
+        .await?,
     });
 
     let mut join_set = JoinSet::new();
@@ -365,7 +373,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
     let output_schema = match (datapoint.output_schema(), function_config) {
         // If the datapoint has an output schema, use it only in the case where it is not the same as the output schema of the function
         (Some(output_schema), FunctionConfig::Json(json_function_config)) => {
-            if output_schema == json_function_config.output_schema.value {
+            if output_schema == &json_function_config.output_schema.value {
                 debug!("Output schema matches function schema, using function default");
                 None
             } else {
@@ -416,6 +424,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         internal: true,
         extra_body: Default::default(),
         extra_headers: Default::default(),
+        internal_dynamic_variant_config: None,
     };
     debug!("Making inference request");
     let inference_result = clients.tensorzero_client.inference(params).await?;
@@ -465,7 +474,7 @@ impl ThrottledTensorZeroClient {
     }
 
     async fn inference(&self, params: ClientInferenceParams) -> Result<InferenceOutput> {
-        let _permit = self.semaphore.acquire().await;
+        let _permit = self.semaphore.acquire().await?;
         let inference_output = self.client.inference(params).await?;
         Ok(inference_output)
     }

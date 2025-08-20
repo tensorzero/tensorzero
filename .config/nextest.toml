@@ -31,7 +31,11 @@ default-filter = 'test(batch)'
 default-filter = 'test(test_dummy_only) | test(clickhouse)'
 
 [profile.optimization]
-default-filter = 'test(slow_optimization)'
+default-filter = 'binary(optimization-live)'
+
+[profile.optimization-mock]
+default-filter = 'binary(optimization-mock)'
+
 
 [[profile.optimization.overrides]]
 # Settings for running optimization tests
@@ -52,6 +56,13 @@ e2e_aws_sagemaker_tgi = { max-threads = 1 }
 # Our Sagemaker instance seems to be able to handle 2 concurrent requests
 e2e_aws_sagemaker_openai = { max-threads = 2 }
 e2e_groq = { max-threads = 1 }
+
+# Require that nothing else runs at the same time as a Jaeger test,
+# so that we can find our Jaeger traces (without other tests
+# flushing our target spans out of the Jaeger buffer).
+[[profile.default.overrides]]
+filter = 'test(test_jaeger)'
+threads-required = 'num-test-threads'
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::aws_bedrock::)'
@@ -77,6 +88,8 @@ slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::sglang::)'
+# The model we run on SGLang often fails to emit valid tool calls, so we need many retries
+retries = { backoff = "fixed", count = 8, delay = "10s", jitter = true }
 slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]

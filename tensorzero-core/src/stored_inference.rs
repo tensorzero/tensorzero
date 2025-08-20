@@ -7,12 +7,13 @@ use crate::inference::types::pyo3_helpers::{
 };
 use crate::inference::types::{ResolvedInputMessageContent, Text};
 use crate::{
-    config_parser::Config,
+    config::Config,
     error::{Error, ErrorDetails},
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ModelInput, ResolvedInput},
     tool::ToolCallConfigDatabaseInsert,
     variant::{chat_completion::prepare_model_input, VariantConfig},
 };
+use chrono::{DateTime, Utc};
 use futures::future::try_join_all;
 #[cfg(feature = "pyo3")]
 use pyo3::types::{PyAny, PyList};
@@ -38,12 +39,14 @@ pub trait StoredSample {
 /// that is just copied over from the StoredSample.
 pub struct SimpleStoredSampleInfo {
     pub function_name: String,
+    pub input: ResolvedInput,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
     pub output: Option<Vec<ContentBlockChatOutput>>,
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
+    pub tags: HashMap<String, String>,
 }
 
 /// Represents an stored inference to be used for optimization.
@@ -69,8 +72,8 @@ impl std::fmt::Display for StoredInference {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl StoredInference {
-    #[new]
     #[expect(clippy::too_many_arguments)]
+    #[new]
     pub fn new<'py>(
         py: Python<'py>,
         r#type: String,
@@ -83,10 +86,18 @@ impl StoredInference {
         dispreferred_outputs: Option<Bound<'py, PyAny>>,
         tool_params: Option<Bound<'py, PyAny>>,
         output_schema: Option<Bound<'py, PyAny>>,
+        tags: Option<Bound<'py, PyAny>>,
+        timestamp: Bound<'py, PyAny>,
     ) -> PyResult<Self> {
         let input: ResolvedInput = deserialize_from_pyobj(py, &input)?;
         let episode_id: Uuid = deserialize_from_pyobj(py, &episode_id)?;
         let inference_id: Uuid = deserialize_from_pyobj(py, &inference_id)?;
+        let timestamp: DateTime<Utc> = deserialize_from_pyobj(py, &timestamp)?;
+        let tags: HashMap<String, String> = tags
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(py, x))
+            .transpose()?
+            .unwrap_or_default();
         match r#type.as_str() {
             "chat" => {
                 let output: Vec<ContentBlockChatOutput> = deserialize_from_pyobj(py, &output)?;
@@ -109,6 +120,8 @@ impl StoredInference {
                     episode_id,
                     inference_id,
                     tool_params,
+                    tags,
+                    timestamp,
                 }))
             }
             "json" => {
@@ -132,6 +145,8 @@ impl StoredInference {
                     episode_id,
                     inference_id,
                     output_schema,
+                    tags,
+                    timestamp,
                 }))
             }
             _ => Err(PyValueError::new_err(format!("Invalid type: {type}"))),
@@ -245,6 +260,22 @@ impl StoredInference {
             StoredInference::Json(_) => "json".to_string(),
         }
     }
+
+    #[getter]
+    pub fn get_tags(&self) -> HashMap<String, String> {
+        match self {
+            StoredInference::Chat(example) => example.tags.clone(),
+            StoredInference::Json(example) => example.tags.clone(),
+        }
+    }
+
+    #[getter]
+    pub fn get_timestamp(&self) -> String {
+        match self {
+            StoredInference::Chat(example) => example.timestamp.to_rfc3339(),
+            StoredInference::Json(example) => example.timestamp.to_rfc3339(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -256,10 +287,13 @@ pub struct StoredChatInference {
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
+    pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
     #[serde(default)]
     pub tool_params: ToolCallConfigDatabaseInsert,
+    #[serde(default)]
+    pub tags: HashMap<String, String>,
 }
 
 impl std::fmt::Display for StoredChatInference {
@@ -286,9 +320,12 @@ pub struct StoredJsonInference {
     pub output: JsonInferenceOutput,
     #[serde(default)]
     pub dispreferred_outputs: Vec<JsonInferenceOutput>,
+    pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
     pub output_schema: Value,
+    #[serde(default)]
+    pub tags: HashMap<String, String>,
 }
 
 impl std::fmt::Display for StoredJsonInference {
@@ -331,12 +368,14 @@ impl StoredSample for StoredInference {
         match self {
             StoredInference::Chat(example) => SimpleStoredSampleInfo {
                 function_name: example.function_name,
+                input: example.input,
                 episode_id: Some(example.episode_id),
                 inference_id: Some(example.inference_id),
                 output: Some(example.output),
                 dispreferred_outputs: example.dispreferred_outputs,
                 tool_params: Some(example.tool_params),
                 output_schema: None,
+                tags: example.tags,
             },
             StoredInference::Json(example) => {
                 let output = json_output_to_content_block_chat_output(example.output);
@@ -347,12 +386,14 @@ impl StoredSample for StoredInference {
                     .collect();
                 SimpleStoredSampleInfo {
                     function_name: example.function_name,
+                    input: example.input,
                     episode_id: Some(example.episode_id),
                     inference_id: Some(example.inference_id),
                     output: Some(output),
                     dispreferred_outputs,
                     tool_params: None,
                     output_schema: Some(example.output_schema),
+                    tags: example.tags,
                 }
             }
         }
@@ -377,12 +418,14 @@ fn json_output_to_content_block_chat_output(
 pub struct RenderedSample {
     pub function_name: String,
     pub input: ModelInput,
+    pub stored_input: ResolvedInput,
     pub output: Option<Vec<ContentBlockChatOutput>>,
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
+    pub tags: HashMap<String, String>,
 }
 
 #[cfg(feature = "pyo3")]
@@ -405,7 +448,7 @@ impl RenderedSample {
                 .iter()
                 .map(|x| content_block_chat_output_to_python(py, x.clone()))
                 .collect::<PyResult<Vec<_>>>()?;
-            PyList::new(py, output).map(|list| list.into_any())
+            PyList::new(py, output).map(Bound::into_any)
         } else {
             Ok(py.None().into_bound(py))
         }
@@ -422,7 +465,7 @@ impl RenderedSample {
                     .collect::<PyResult<Vec<_>>>()
             })
             .collect::<PyResult<Vec<_>>>()?;
-        PyList::new(py, dispreferred_outputs).map(|list| list.into_any())
+        PyList::new(py, dispreferred_outputs).map(Bound::into_any)
     }
 
     #[getter]
@@ -453,6 +496,16 @@ impl RenderedSample {
 
     pub fn __repr__(&self) -> String {
         self.to_string()
+    }
+
+    #[getter]
+    pub fn get_tags(&self) -> HashMap<String, String> {
+        self.tags.clone()
+    }
+
+    #[getter]
+    pub fn get_stored_input(&self) -> ResolvedInput {
+        self.stored_input.clone()
     }
 }
 
@@ -494,41 +547,11 @@ fn render_model_input(
             variant_name: variant_name.clone(),
         }));
     };
-    let system_template_name = chat_completion_config
-        .system_template
-        .as_ref()
-        .map(|x| {
-            x.path
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
-        })
-        .transpose()?;
-    let user_template_name = chat_completion_config
-        .user_template
-        .as_ref()
-        .map(|x| {
-            x.path
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
-        })
-        .transpose()?;
-    let assistant_template_name = chat_completion_config
-        .assistant_template
-        .as_ref()
-        .map(|x| {
-            x.path
-                .to_str()
-                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
-        })
-        .transpose()?;
     prepare_model_input(
         resolved_input.system.as_ref(),
         &resolved_input.messages,
         &config.templates,
-        system_template_name,
-        user_template_name,
-        assistant_template_name,
-        function_config.template_schema_info(),
+        &chat_completion_config.templates,
     )
 }
 
@@ -542,30 +565,29 @@ pub fn render_stored_sample<T: StoredSample>(
     config: &Config,
     variants: &HashMap<String, String>,
 ) -> Result<RenderedSample, Error> {
-    let model_input = render_model_input(
-        stored_sample.input(),
-        stored_sample.function_name(),
-        config,
-        variants,
-    )?;
     let SimpleStoredSampleInfo {
         function_name,
+        input,
         output,
         dispreferred_outputs,
         tool_params,
         output_schema,
         episode_id,
         inference_id,
+        tags,
     } = stored_sample.owned_simple_info();
+    let model_input = render_model_input(&input, &function_name, config, variants)?;
     Ok(RenderedSample {
         function_name,
         episode_id,
         inference_id,
         input: model_input,
+        stored_input: input,
         output,
         dispreferred_outputs,
         tool_params,
         output_schema,
+        tags,
     })
 }
 

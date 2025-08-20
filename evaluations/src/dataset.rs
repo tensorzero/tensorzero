@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use tensorzero::{ChatInferenceDatapoint, JsonInferenceDatapoint};
 use tensorzero_core::endpoints::datasets::Datapoint;
-use tensorzero_core::{clickhouse::ClickHouseConnectionInfo, function::FunctionConfig};
+use tensorzero_core::{db::clickhouse::ClickHouseConnectionInfo, function::FunctionConfig};
 use tracing::{debug, info, instrument};
 
 #[instrument(skip(clickhouse_client), fields(dataset_name = %dataset_name, function_name = %function_name))]
@@ -20,11 +20,11 @@ pub async fn query_dataset(
     debug!(table_name = %table_name, "Determined table name for function type");
 
     // Construct the query to fetch datapoints from the appropriate table
-    let query = r#"SELECT * FROM {table_name: Identifier} FINAL
+    let query = r"SELECT * FROM {table_name: Identifier} FINAL
          WHERE dataset_name = {dataset_name: String}
          AND function_name = {function_name: String}
          AND staled_at IS NULL
-         FORMAT JSON"#;
+         FORMAT JSON";
 
     let params = HashMap::from([
         ("table_name", table_name),

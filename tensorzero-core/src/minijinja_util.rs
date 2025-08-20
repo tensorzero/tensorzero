@@ -2,12 +2,12 @@ use minijinja::{Environment, UndefinedBehavior};
 use serde_json::Value;
 use std::{
     collections::{HashMap, HashSet},
-    path::PathBuf,
+    path::Path,
 };
 
 use crate::error::{Error, ErrorDetails};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TemplateConfig<'c> {
     env: minijinja::Environment<'c>,
 }
@@ -25,7 +25,7 @@ impl TemplateConfig<'_> {
     pub fn initialize(
         &mut self,
         template_paths: HashMap<String, String>,
-        filesystem_path: Option<PathBuf>,
+        filesystem_path: Option<&Path>,
     ) -> Result<(), Error> {
         self.env.set_undefined_behavior(UndefinedBehavior::Strict);
 
@@ -46,7 +46,7 @@ impl TemplateConfig<'_> {
             self.env.set_loader(|name| {
                 Err(minijinja::Error::new(
                     minijinja::ErrorKind::InvalidOperation,
-                    format!("Could not load template '{name}' - if this a dynamic template included from the filesystem, please set [gateway.enable_template_filesystem_access] to `true`")
+                    format!("Could not load template '{name}' - if this a dynamic template included from the filesystem, please set `gateway.template_filesystem_access.enabled` to `true`")
                 ))
             });
         }
@@ -55,11 +55,11 @@ impl TemplateConfig<'_> {
 
     pub fn add_template(
         &mut self,
-        template_name: &str,
-        template_content: &str,
+        template_name: String,
+        template_content: String,
     ) -> Result<(), Error> {
         self.env
-            .add_template_owned(template_name.to_string(), template_content.to_string())
+            .add_template_owned(template_name.clone(), template_content)
             .map_err(|e| {
                 Error::new(ErrorDetails::MiniJinjaTemplate {
                     template_name: template_name.to_string(),
@@ -106,6 +106,10 @@ impl TemplateConfig<'_> {
     // Checks if a template needs any variables (i.e. needs a schema)
     pub fn template_needs_variables(&self, template_name: &str) -> Result<bool, Error> {
         Ok(!self.get_undeclared_variables(template_name)?.is_empty())
+    }
+
+    pub fn contains_template(&self, template_name: &str) -> bool {
+        self.env.get_template(template_name).is_ok()
     }
 
     pub fn add_hardcoded_templates(&mut self) -> Result<(), Error> {
@@ -176,14 +180,14 @@ First, you should analyze each response itself against the conversation history 
 Then you should think out loud about which is best and most faithful to instructions.
 In the "answer_choice" block: you should output the index of the best response."#;
 
-const BEST_OF_N_EVALUATOR_CANDIDATES: &str = r#"Here are the candidate answers (with the index and a row of ------ separating):{% for candidate in candidates %}
+const BEST_OF_N_EVALUATOR_CANDIDATES: &str = r"Here are the candidate answers (with the index and a row of ------ separating):{% for candidate in candidates %}
 {{ loop.index0 }}: {{ candidate }}
 ------
 {%- endfor %}
-Please evaluate these candidates and provide the index of the best one."#;
+Please evaluate these candidates and provide the index of the best one.";
 
 // Lightly edited from Table 6 in the [Archon paper](https://arxiv.org/abs/2409.15254).
-const MIXTURE_OF_N_FUSER_SYSTEM: &str = r#"{%- if inner_system_message is defined -%}You have been provided with a set of responses from various models to the following problem:
+const MIXTURE_OF_N_FUSER_SYSTEM: &str = r"{%- if inner_system_message is defined -%}You have been provided with a set of responses from various models to the following problem:
 ------
 {{ inner_system_message }}
 ------
@@ -192,16 +196,18 @@ You have been provided with a set of responses from various models to the latest
 query.
 
 {%- endif %}
-Your task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses."#;
+Your task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses.";
 
-const MIXTURE_OF_N_FUSER_CANDIDATES: &str = r#"Here are the candidate answers (with the index and a row of ------ separating):{% for candidate in candidates %}
+const MIXTURE_OF_N_FUSER_CANDIDATES: &str = r"Here are the candidate answers (with the index and a row of ------ separating):{% for candidate in candidates %}
 {{ loop.index0 }}:
 {{ candidate }}
 ------
-{%- endfor %}"#;
+{%- endfor %}";
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::jsonschema_util::StaticJSONSchema;
+
     use super::*;
     use serde_json::json;
 
@@ -283,6 +289,48 @@ pub(crate) mod tests {
         let result = templates.template_message("user_with_join", &context);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Hello, hello, hello, world!");
+    }
+
+    pub fn test_system_template_schema() -> StaticJSONSchema {
+        StaticJSONSchema::from_value(json!({
+            "type": "object",
+            "properties": {
+                "assistant_name": {
+                    "type": "string"
+                }
+            },
+            "required": ["assistant_name"]
+        }))
+        .unwrap()
+    }
+
+    pub fn test_user_template_schema() -> StaticJSONSchema {
+        StaticJSONSchema::from_value(json!({
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "age": {
+                    "type": "number"
+                }
+            },
+            "required": ["name", "age"]
+        }))
+        .unwrap()
+    }
+
+    pub fn test_assistant_template_schema() -> StaticJSONSchema {
+        StaticJSONSchema::from_value(json!({
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                }
+            },
+            "required": ["reason"]
+        }))
+        .unwrap()
     }
 
     pub fn get_test_template_config<'a>() -> TemplateConfig<'a> {
@@ -435,12 +483,12 @@ In the "answer_choice" block: you should output the index of the best response."
         //   ------"
 
         // Because there's no extra text beyond that, the exact text should be:
-        let expected = r#"Here are the candidate answers (with the index and a row of ------ separating):
+        let expected = r"Here are the candidate answers (with the index and a row of ------ separating):
 0: Candidate A
 ------
 1: Candidate B
 ------
-Please evaluate these candidates and provide the index of the best one."#;
+Please evaluate these candidates and provide the index of the best one.";
 
         assert_eq!(
             output, expected,
@@ -459,11 +507,11 @@ Please evaluate these candidates and provide the index of the best one."#;
             .template_message("t0:mixture_of_n_fuser_system", &context_with_message)
             .expect("Should render mixture_of_n_fuser_system with inner_system_message");
 
-        let expected_with_message = r#"You have been provided with a set of responses from various models to the following problem:
+        let expected_with_message = r"You have been provided with a set of responses from various models to the following problem:
 ------
 some system message
 ------
-Your task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses."#;
+Your task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses.";
 
         assert_eq!(
             output_with_message, expected_with_message,
@@ -476,9 +524,9 @@ Your task is to synthesize these responses into a single, high-quality response.
             .template_message("t0:mixture_of_n_fuser_system", &context_no_message)
             .expect("Should render mixture_of_n_fuser_system without inner_system_message");
 
-        let expected_no_message = r#"You have been provided with a set of responses from various models to the latest user
+        let expected_no_message = r"You have been provided with a set of responses from various models to the latest user
 query.
-Your task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses."#;
+Your task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses.";
 
         assert_eq!(
             output_no_message, expected_no_message,
@@ -509,13 +557,13 @@ Your task is to synthesize these responses into a single, high-quality response.
         //  ------
         //  {%- endfor %}"
 
-        let expected = r#"Here are the candidate answers (with the index and a row of ------ separating):
+        let expected = r"Here are the candidate answers (with the index and a row of ------ separating):
 0:
 Candidate response #1
 ------
 1:
 Candidate response #2
-------"#;
+------";
 
         assert_eq!(
             output, expected,

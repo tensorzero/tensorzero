@@ -53,7 +53,7 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "OpenRouter";
-const PROVIDER_TYPE: &str = "openrouter";
+pub const PROVIDER_TYPE: &str = "openrouter";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -586,12 +586,12 @@ pub(super) fn prepare_openrouter_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
 ) -> Result<Vec<OpenRouterRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
-    for message in request.messages.iter() {
+    for message in &request.messages {
         messages.extend(tensorzero_to_openrouter_messages(message)?);
     }
     if let Some(system_msg) = tensorzero_to_openrouter_system_message(
         request.system.as_deref(),
-        &request.json_mode,
+        request.json_mode,
         &messages,
     ) {
         messages.insert(0, system_msg);
@@ -614,13 +614,7 @@ pub(super) fn prepare_openrouter_tools<'a>(
             if tool_config.tools_available.is_empty() {
                 return (None, None, None);
             }
-            let tools = Some(
-                tool_config
-                    .tools_available
-                    .iter()
-                    .map(|tool| tool.into())
-                    .collect(),
-            );
+            let tools = Some(tool_config.tools_available.iter().map(Into::into).collect());
             let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
             (tools, tool_choice, parallel_tool_calls)
@@ -636,7 +630,7 @@ pub(super) fn prepare_openrouter_tools<'a>(
 /// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
 pub(super) fn tensorzero_to_openrouter_system_message<'a>(
     system: Option<&'a str>,
-    json_mode: &ModelInferenceRequestJsonMode,
+    json_mode: ModelInferenceRequestJsonMode,
     messages: &[OpenRouterRequestMessage<'a>],
 ) -> Option<OpenRouterRequestMessage<'a>> {
     match system {
@@ -666,7 +660,7 @@ pub(super) fn tensorzero_to_openrouter_system_message<'a>(
             }
             .into()
         }
-        None => match *json_mode {
+        None => match json_mode {
             ModelInferenceRequestJsonMode::On => Some(OpenRouterRequestMessage::System(
                 OpenRouterSystemRequestMessage {
                     content: Cow::Owned("Respond using JSON.".to_string()),
@@ -694,7 +688,7 @@ fn tensorzero_to_openrouter_user_messages(
     let mut messages = Vec::new();
     let mut user_content_blocks = Vec::new();
 
-    for block in content_blocks.iter() {
+    for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
                 user_content_blocks.push(OpenRouterContentBlock::Text {
@@ -761,7 +755,7 @@ fn tensorzero_to_openrouter_assistant_messages(
     let mut assistant_content_blocks = Vec::new();
     let mut assistant_tool_calls = Vec::new();
 
-    for block in content_blocks.iter() {
+    for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
                 assistant_content_blocks.push(OpenRouterContentBlock::Text {
@@ -849,11 +843,11 @@ enum OpenRouterResponseFormat {
 
 impl OpenRouterResponseFormat {
     fn new(
-        json_mode: &ModelInferenceRequestJsonMode,
+        json_mode: ModelInferenceRequestJsonMode,
         output_schema: Option<&Value>,
         model: &str,
     ) -> Option<Self> {
-        if model.contains("3.5") && *json_mode == ModelInferenceRequestJsonMode::Strict {
+        if model.contains("3.5") && json_mode == ModelInferenceRequestJsonMode::Strict {
             return Some(OpenRouterResponseFormat::JsonObject);
         }
 
@@ -1003,12 +997,13 @@ impl<'a> OpenRouterRequest<'a> {
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<OpenRouterRequest<'a>, Error> {
         let response_format =
-            OpenRouterResponseFormat::new(&request.json_mode, request.output_schema, model);
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+            OpenRouterResponseFormat::new(request.json_mode, request.output_schema, model);
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
         let mut messages = prepare_openrouter_messages(request)?;
 
@@ -1288,7 +1283,7 @@ fn openrouter_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
@@ -2361,17 +2356,17 @@ mod tests {
         // Test JSON mode On
         let json_mode = ModelInferenceRequestJsonMode::On;
         let output_schema = None;
-        let format = OpenRouterResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = OpenRouterResponseFormat::new(json_mode, output_schema, "gpt-4o");
         assert_eq!(format, Some(OpenRouterResponseFormat::JsonObject));
 
         // Test JSON mode Off
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let format = OpenRouterResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = OpenRouterResponseFormat::new(json_mode, output_schema, "gpt-4o");
         assert_eq!(format, None);
 
         // Test JSON mode Strict with no schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let format = OpenRouterResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = OpenRouterResponseFormat::new(json_mode, output_schema, "gpt-4o");
         assert_eq!(format, Some(OpenRouterResponseFormat::JsonObject));
 
         // Test JSON mode Strict with schema
@@ -2383,7 +2378,7 @@ mod tests {
             }
         });
         let output_schema = Some(&schema);
-        let format = OpenRouterResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = OpenRouterResponseFormat::new(json_mode, output_schema, "gpt-4o");
         match format {
             Some(OpenRouterResponseFormat::JsonSchema { json_schema }) => {
                 assert_eq!(json_schema["schema"], schema);
@@ -2402,7 +2397,7 @@ mod tests {
             }
         });
         let output_schema = Some(&schema);
-        let format = OpenRouterResponseFormat::new(&json_mode, output_schema, "gpt-3.5-turbo");
+        let format = OpenRouterResponseFormat::new(json_mode, output_schema, "gpt-3.5-turbo");
         assert_eq!(format, Some(OpenRouterResponseFormat::JsonObject));
     }
 
@@ -2420,7 +2415,7 @@ mod tests {
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages: Vec<OpenRouterRequestMessage> = vec![];
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_openrouter_system_message(system, json_mode, &messages);
         assert_eq!(result, None);
 
         // Test Case 2: system is Some, json_mode is On, messages contain "json"
@@ -2444,7 +2439,7 @@ mod tests {
                 content: Cow::Borrowed("System instructions"),
             },
         ));
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_openrouter_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 3: system is Some, json_mode is On, messages do not contain "json"
@@ -2469,7 +2464,7 @@ mod tests {
                 content: Cow::Owned(expected_content),
             },
         ));
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_openrouter_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 4: system is Some, json_mode is Off
@@ -2493,7 +2488,7 @@ mod tests {
                 content: Cow::Borrowed("System instructions"),
             },
         ));
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_openrouter_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 5: system is Some, json_mode is Strict
@@ -2517,7 +2512,7 @@ mod tests {
                 content: Cow::Borrowed("System instructions"),
             },
         ));
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_openrouter_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 6: system contains "json", json_mode is On
@@ -2535,7 +2530,7 @@ mod tests {
                 content: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
             },
         ));
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_openrouter_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 7: system is None, json_mode is On
@@ -2559,7 +2554,7 @@ mod tests {
                 content: Cow::Owned("Respond using JSON.".to_string()),
             },
         ));
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_openrouter_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 8: system is None, json_mode is Strict
@@ -2579,7 +2574,7 @@ mod tests {
             }),
         ];
 
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_openrouter_system_message(system, json_mode, &messages);
         assert!(result.is_none());
 
         // Test Case 9: system is None, json_mode is On, with empty messages
@@ -2591,7 +2586,7 @@ mod tests {
                 content: Cow::Owned("Respond using JSON.".to_string()),
             },
         ));
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_openrouter_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 10: system is None, json_mode is Off, with messages containing "json"
@@ -2605,7 +2600,7 @@ mod tests {
             },
         )];
         let expected = None;
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_openrouter_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
     }
 

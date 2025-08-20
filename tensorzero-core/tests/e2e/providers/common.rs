@@ -1,4 +1,6 @@
 #![expect(clippy::print_stdout)]
+use std::io::Cursor;
+use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr};
 
 use aws_config::Region;
@@ -13,6 +15,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{routing::get, Router};
 use base64::prelude::*;
 use futures::StreamExt;
+use image::{ImageFormat, ImageReader};
 use object_store::path::Path;
 
 use rand::Rng;
@@ -44,7 +47,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
     select_json_inference_clickhouse, select_model_inference_clickhouse, CLICKHOUSE_URL,
 };
@@ -60,6 +63,11 @@ pub struct E2ETestProvider {
     pub credentials: HashMap<String, String>,
 
     pub supports_batch_inference: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct EmbeddingTestProvider {
+    pub model_name: String,
 }
 
 /// Enforce that every provider implements a common set of tests.
@@ -91,6 +99,7 @@ pub struct E2ETestProviders {
     pub pdf_inference: Vec<E2ETestProvider>,
 
     pub shorthand_inference: Vec<E2ETestProvider>,
+    pub embeddings: Vec<EmbeddingTestProvider>,
 }
 
 pub async fn make_http_gateway() -> tensorzero::Client {
@@ -110,6 +119,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
         verify_credentials: true,
+        allow_batch_writes: true,
     })
     .build()
     .await
@@ -122,6 +132,7 @@ pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
         verify_credentials: true,
+        allow_batch_writes: true,
     })
     .build()
     .await
@@ -136,12 +147,12 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
         verify_credentials: true,
+        allow_batch_writes: true,
     })
     .build()
     .await
     .unwrap()
 }
-
 // We use a multi-threaded runtime so that the embedded gateway can use 'block_on'.
 // For consistency, we also use a multi-threaded runtime for the http gateway test.
 
@@ -212,6 +223,14 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_pdf_inference_with_provider_filesystem;
         use $crate::providers::common::test_stop_sequences_inference_request_with_provider;
         use $crate::providers::common::test_warn_ignored_thought_block_with_provider;
+        use $crate::providers::embeddings::test_basic_embedding_with_provider;
+        use $crate::providers::embeddings::test_batch_embedding_with_provider;
+        use $crate::providers::embeddings::test_embedding_with_dimensions_with_provider;
+        use $crate::providers::embeddings::test_embedding_with_encoding_format_with_provider;
+        use $crate::providers::embeddings::test_embedding_with_user_parameter_with_provider;
+        use $crate::providers::embeddings::test_embedding_invalid_model_error_with_provider;
+        use $crate::providers::embeddings::test_embedding_large_batch_with_provider;
+        use $crate::providers::embeddings::test_embedding_consistency_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -613,6 +632,71 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test]
+        async fn test_basic_embedding() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_basic_embedding_with_provider(provider).await;
+            }
+        }
+
+
+        #[tokio::test]
+        async fn test_batch_embedding() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_batch_embedding_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_with_dimensions() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_with_dimensions_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_with_encoding_format() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_with_encoding_format_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_with_user_parameter() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_with_user_parameter_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_invalid_model_error() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_invalid_model_error_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_large_batch() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_large_batch_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_consistency() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_consistency_with_provider(provider).await;
+            }
+        }
+
     };
 }
 
@@ -666,14 +750,14 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.image_test.variants.gcp_vertex]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-06-05"
+model = "gcp-gemini-2.5-pro"
 
-[models."gemini-2.5-pro-preview-06-05"]
+[models."gcp-gemini-2.5-pro"]
 routing = ["gcp_vertex_gemini"]
 
-[models."gemini-2.5-pro-preview-06-05".providers.gcp_vertex_gemini]
+[models."gcp-gemini-2.5-pro".providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
-model_id = "gemini-2.5-pro-preview-06-05"
+model_id = "gemini-2.5-pro"
 location = "global"
 project_id = "tensorzero-public"
 
@@ -1133,35 +1217,34 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     let client = make_embedded_gateway_with_config(config_toml).await;
     let mut storage_path = None;
 
+    let mut params = ClientInferenceParams {
+        function_name: Some("image_test".to_string()),
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![
+                    ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Describe the contents of the image".to_string(),
+                    }),
+                    ClientInputMessageContent::File(File::Base64 {
+                        mime_type: mime::IMAGE_PNG,
+                        data: image_data.clone(),
+                    }),
+                ],
+            }],
+        },
+        cache_options: CacheParamsOptions {
+            enabled: CacheEnabledMode::On,
+            max_age_s: Some(10),
+        },
+        ..Default::default()
+    };
+
     for should_be_cached in [false, true] {
-        let response = client
-            .inference(ClientInferenceParams {
-                function_name: Some("image_test".to_string()),
-                variant_name: Some(provider.variant_name.clone()),
-                episode_id: Some(episode_id),
-                input: ClientInput {
-                    system: None,
-                    messages: vec![ClientInputMessage {
-                        role: Role::User,
-                        content: vec![
-                            ClientInputMessageContent::Text(TextKind::Text {
-                                text: "Describe the contents of the image".to_string(),
-                            }),
-                            ClientInputMessageContent::File(File::Base64 {
-                                mime_type: mime::IMAGE_PNG,
-                                data: image_data.clone(),
-                            }),
-                        ],
-                    }],
-                },
-                cache_options: CacheParamsOptions {
-                    enabled: CacheEnabledMode::On,
-                    max_age_s: Some(10),
-                },
-                ..Default::default()
-            })
-            .await
-            .unwrap();
+        let response = client.inference(params.clone()).await.unwrap();
 
         let InferenceOutput::NonStreaming(response) = response else {
             panic!("Expected non-streaming inference response");
@@ -1179,6 +1262,52 @@ pub async fn test_base64_image_inference_with_provider_and_store(
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         storage_path = Some(latest_storage_path);
     }
+
+    let mut image_png = ImageReader::new(Cursor::new(FERRIS_PNG))
+        .with_guessed_format()
+        .unwrap()
+        .decode()
+        .unwrap();
+
+    // Get 32 random bytes, and write then to the image. This should force a cache miss
+    let mut rng = rand::rng();
+    let random_bytes: Vec<u8> = (0..32)
+        .map(|_| rng.sample(rand::distr::StandardUniform))
+        .collect();
+    image_png
+        .as_mut_rgba8()
+        .unwrap()
+        .as_flat_samples_mut()
+        .samples[0..(random_bytes.len())]
+        .copy_from_slice(&random_bytes);
+
+    let mut updated_image = Cursor::new(Vec::new());
+    image_png
+        .write_to(&mut updated_image, ImageFormat::Png)
+        .unwrap();
+
+    let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
+
+    params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64 {
+        mime_type: mime::IMAGE_PNG,
+        data: updated_base64,
+    });
+
+    let response = client.inference(params.clone()).await.unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    let inference_id = response.inference_id();
+
+    let clickhouse = get_clickhouse().await;
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    assert_eq!(result["cached"], false);
+    // Should be a cache miss since the image data was changed
     (client, storage_path.unwrap())
 }
 
@@ -1210,7 +1339,7 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
             ]},
         "stream": stream,
         "tags": {"foo": "bar"},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let inference_id = if stream {
@@ -1259,7 +1388,7 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
     };
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -1402,7 +1531,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
         "extra_body": extra_body,
         "stream": stream,
         "tags": {"foo": "bar"},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let inference_id = if stream {
@@ -1451,7 +1580,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
     };
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -1558,7 +1687,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                 }
             ]},
         "stream": stream,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -1683,24 +1812,24 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                     .as_str()
                     .is_some_and(|e| e.contains("401 Authorization")),
                 "Unexpected error: {res}"
-            )
+            );
         }
         "together" => {
             assert!(
                 res["error"].as_str().unwrap().contains("Invalid API key"),
                 "Unexpected error: {res}"
-            )
+            );
         }
         "vllm" => {
             // vLLM returns different errors if you mess with the request headers,
             // so we just check that an error occurs
-            assert!(res["error"].as_str().is_some(), "Unexpected error: {res}")
+            assert!(res["error"].as_str().is_some(), "Unexpected error: {res}");
         }
         "xai" => {
             assert!(
                 res["error"].as_str().unwrap().contains("Incorrect"),
                 "Unexpected error: {res}"
-            )
+            );
         }
         "gcp_vertex_gemini" => {
             // We produce an error by setting a bad 'Content-Length', so just
@@ -1717,6 +1846,13 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
 
 #[traced_test]
 pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProvider) {
+    // Bedrock rejects input thoughts for these models
+    if provider.model_name == "claude-3-haiku-20240307-aws-bedrock"
+        || provider.model_name == "deepseek-r1-aws-bedrock"
+    {
+        return;
+    }
+
     let client = make_embedded_gateway().await;
     client
         .inference(ClientInferenceParams {
@@ -1728,8 +1864,9 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
                     ClientInputMessage {
                         role: Role::Assistant,
                         content: vec![ClientInputMessageContent::Thought(Thought {
-                            text: "My TensorZero thought".to_string(),
+                            text: Some("My TensorZero thought".to_string()),
                             signature: Some("My TensorZero signature".to_string()),
+                            provider_type: None,
                         })],
                     },
                     ClientInputMessage {
@@ -1746,7 +1883,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
         .await
         .unwrap();
 
-    if ["anthropic"].contains(&provider.model_provider_name.as_str()) {
+    if ["anthropic", "aws-bedrock"].contains(&provider.model_provider_name.as_str()) {
         assert!(
             !logs_contain("does not support input thought blocks"),
             "Should not have warned about dropping thought blocks"
@@ -1777,7 +1914,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -1794,7 +1931,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     println!("API response: {response_json:#?}");
 
     check_simple_inference_response(response_json, Some(episode_id), &provider, false, false).await;
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     let episode_id = Uuid::now_v7();
 
@@ -1814,7 +1951,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
         "stream": false,
         "tags": {"foo": "bar"},
         "cache_options": {"enabled": "on", "lookback_s": 10},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -2317,7 +2454,14 @@ pub async fn check_simple_inference_response(
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let content = response_json.get("content").unwrap().as_array().unwrap();
+    let mut content = response_json
+        .get("content")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .clone();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    content.retain(|c| c.get("type").unwrap().as_str().unwrap() != "thought");
     assert_eq!(content.len(), 1);
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -2344,7 +2488,7 @@ pub async fn check_simple_inference_response(
     assert!(finish_reason == "stop" || finish_reason == "length");
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -2384,7 +2528,9 @@ pub async fn check_simple_inference_response(
     assert_eq!(input, correct_input);
 
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    let mut content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    content_blocks.retain(|c| c.get("type").unwrap().as_str().unwrap() != "thought");
     assert_eq!(content_blocks.len(), 1);
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -2473,7 +2619,9 @@ pub async fn check_simple_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    output.retain(|c| !matches!(c, ContentBlock::Thought(_)));
     assert_eq!(output.len(), 1);
 
     if !is_batch {
@@ -2544,7 +2692,7 @@ pub async fn check_simple_image_inference_response(
     assert!(finish_reason == "stop" || finish_reason == "length");
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -2721,7 +2869,7 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
                 "value": 123,
             },
         ],
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -2764,7 +2912,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
         &provider, episode_id, seed, &tag_value, false, false,
     )
     .await;
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
         &provider, episode_id, seed, &tag_value, true, false,
     )
@@ -2786,7 +2934,7 @@ pub async fn test_streaming_include_original_response_with_provider(provider: E2
         &provider, episode_id, seed, &tag_value, false, true,
     )
     .await;
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
         &provider, episode_id, seed, &tag_value, true, true,
     )
@@ -2820,7 +2968,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         "include_original_response": include_original_response,
         "tags": {"key": tag_value},
         "cache_options": {"enabled": "on", "lookback_s": 10},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -2884,9 +3032,12 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 
         let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
         if !content_blocks.is_empty() {
-            let content_block = content_blocks.first().unwrap();
-            let content = content_block.get("text").unwrap().as_str().unwrap();
-            full_content.push_str(content);
+            for block in content_blocks {
+                if block["type"] == "text" {
+                    let content = block.get("text").unwrap().as_str().unwrap();
+                    full_content.push_str(content);
+                }
+            }
         }
 
         // When we get a cache hit, the usage should be explicitly set to 0
@@ -2922,7 +3073,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert!(finish_reason.is_some());
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -2960,8 +3111,9 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert_eq!(input, correct_input);
 
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    let mut output: Vec<Value> = serde_json::from_str(output).unwrap();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    output.retain(|c| c.get("type").unwrap().as_str().unwrap() != "thought");
     let content_block = output.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -3057,7 +3209,9 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    output.retain(|c| !matches!(c, ContentBlock::Thought(_)));
     assert_eq!(output.len(), 1);
 
     // Check the InferenceTag Table
@@ -3073,8 +3227,8 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 }
 
 pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
-    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-06-05'
-    if provider.model_name.starts_with("gemini-2.5-pro") {
+    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
+    if provider.model_name.contains("gemini-2.5-pro") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -3104,7 +3258,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
         },
         "stream": false,
         "credentials": provider.credentials,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -3161,7 +3315,7 @@ pub async fn check_inference_params_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -3244,11 +3398,11 @@ pub async fn check_inference_params_response(
         .unwrap();
     assert_eq!(frequency_penalty, 0.2);
 
-    if !is_batch {
+    if is_batch {
+        assert!(result.get("processing_time_ms").unwrap().is_null());
+    } else {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
         assert!(processing_time_ms > 0);
-    } else {
-        assert!(result.get("processing_time_ms").unwrap().is_null());
     }
 
     // Check the ModelInference Table
@@ -3285,12 +3439,12 @@ pub async fn check_inference_params_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -3315,8 +3469,8 @@ pub async fn check_inference_params_response(
 pub async fn test_inference_params_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-06-05'
-    if provider.model_name.starts_with("gemini-2.5-pro") {
+    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
+    if provider.model_name.contains("gemini-2.5-pro") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -3346,7 +3500,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         },
         "stream": true,
         "credentials": provider.credentials,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -3422,7 +3576,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -3596,7 +3750,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
         "stream": false,
         "variant_name": provider.variant_name,
         "tags": {"test_type": "auto_used"},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -3683,7 +3837,7 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -3933,7 +4087,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         assert_eq!(chunk_episode_id, episode_id);
 
         let blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        for block in blocks.iter() {
+        for block in blocks {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -4001,7 +4155,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     assert!(serde_json::from_str::<Value>(&arguments).is_ok());
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -4237,7 +4391,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
             ]},
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -4297,7 +4451,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -4375,11 +4529,11 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
         location["description"],
         "The location to get the temperature for (e.g. \"New York\")"
     );
-    if !is_batch {
+    if is_batch {
+        assert!(result.get("processing_time_ms").unwrap().is_null());
+    } else {
         let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
         assert!(processing_time_ms > 0);
-    } else {
-        assert!(result.get("processing_time_ms").unwrap().is_null());
     }
 
     let units = properties["units"].as_object().unwrap();
@@ -4421,12 +4575,12 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
 
@@ -4437,12 +4591,12 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
 
@@ -4497,7 +4651,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
             ]},
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -4585,7 +4739,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     assert!(full_text.to_lowercase().contains("mehta"));
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -4799,7 +4953,7 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
         "tool_choice": "required",
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -4874,16 +5028,16 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
         assert!(units == "celsius" || units == "fahrenheit");
     }
 
-    let arguments = content_block.get("arguments").unwrap();
-    let arguments = arguments.as_object().unwrap();
-    // OpenAI occasionally emits a tool call with an empty object for `arguments`
-    assert!(arguments.len() <= 2);
-    if let Some(location) = arguments.get("location") {
-        assert!(location.as_str().is_some())
-    }
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "celsius" || units == "fahrenheit");
+    if let Some(arguments) = content_block["arguments"].as_object() {
+        // OpenAI occasionally emits a tool call with an empty object for `arguments`
+        assert!(arguments.len() <= 2);
+        if let Some(location) = arguments.get("location") {
+            assert!(location.as_str().is_some());
+        }
+        if arguments.len() == 2 {
+            let units = arguments.get("units").unwrap().as_str().unwrap();
+            assert!(units == "celsius" || units == "fahrenheit");
+        }
     }
 
     let usage = response_json.get("usage").unwrap();
@@ -4894,7 +5048,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -5020,12 +5174,12 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
+    if is_batch {
+        assert!(result.get("response_time_ms").unwrap().is_null());
         assert!(result.get("ttft_ms").unwrap().is_null());
     } else {
-        assert!(result.get("response_time_ms").unwrap().is_null());
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
     }
 
@@ -5090,7 +5244,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         "tool_choice": "required",
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -5205,7 +5359,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     assert!(serde_json::from_str::<Value>(&arguments).is_ok());
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -5426,7 +5580,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
 
     // NOTE - Gemini 2.5 produces 'UNEXPECTED_TOOL_CALL' here
     // See https://github.com/tensorzero/tensorzero/issues/2329
-    if provider.model_name == "gemini-2.5-pro-preview-06-05" {
+    if provider.model_name == "gcp-gemini-2.5-pro" {
         return;
     }
 
@@ -5446,7 +5600,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
         "tool_choice": "none",
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -5511,7 +5665,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -5675,7 +5829,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
 ) {
     // Gemini 2.5 Pro will produce 'executableCode' blocks for this test, which we don't support
     // in streaming mode (since we don't have "unknown" streaming chunks)
-    if provider.model_name.starts_with("gemini-2.5-pro") {
+    if provider.model_name.contains("gemini-2.5-pro") {
         return;
     }
 
@@ -5704,7 +5858,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         "tool_choice": "none",
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -5790,7 +5944,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     let inference_id = inference_id.unwrap();
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -6022,7 +6176,7 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
         ],
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -6102,7 +6256,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -6363,7 +6517,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         "tool_choice": {"specific": "self_destruct"},
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -6469,7 +6623,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     );
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -6738,7 +6892,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
         "allowed_tools": ["get_humidity"],
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -6819,7 +6973,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -7005,7 +7159,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         "allowed_tools": ["get_humidity"],
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -7124,7 +7278,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     assert!(serde_json::from_str::<Value>(&arguments).is_ok());
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -7421,7 +7575,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -7719,7 +7873,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -7946,7 +8100,7 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             };
 
             // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
             // Check ClickHouse - ChatInference Table
             let clickhouse = get_clickhouse().await;
@@ -7995,14 +8149,13 @@ pub async fn test_stop_sequences_inference_request_with_provider(
                 "deepseek",
                 "openrouter",
                 "openai",
-                "sglang",
-                "mistral",
                 "azure",
                 "groq",
                 "hyperbolic",
             ];
             if MISSING_STOP_SEQUENCE_PROVIDERS.contains(&provider.model_provider_name.as_str())
                 || provider.model_name == "gemma-3-1b-aws-sagemaker-openai"
+                || provider.model_name == "deepseek-r1-aws-bedrock"
             {
                 assert_eq!(response.finish_reason, Some(FinishReason::Stop));
             } else {
@@ -8163,7 +8316,7 @@ pub async fn check_dynamic_tool_use_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -8412,7 +8565,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         assert_eq!(chunk_episode_id, episode_id);
 
         let blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        for block in blocks.iter() {
+        for block in blocks {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -8481,7 +8634,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     serde_json::from_str::<Value>(&arguments).unwrap();
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -8827,7 +8980,7 @@ pub async fn check_parallel_tool_use_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -9212,7 +9365,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert!(serde_json::from_str::<Value>(&get_humidity_arguments).is_ok());
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse - Inference Table
     let clickhouse = get_clickhouse().await;
@@ -9503,7 +9656,7 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
                 }
             ]},
         "stream": false,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -9560,7 +9713,7 @@ pub async fn check_json_mode_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - JsonInference Table
     let clickhouse = get_clickhouse().await;
@@ -9762,7 +9915,7 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
             ]},
         "stream": false,
         "output_schema": output_schema.clone(),
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -9827,7 +9980,7 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - JsonInference Table
     let clickhouse = get_clickhouse().await;
@@ -10019,7 +10172,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
                 }
             ]},
         "stream": true,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -10093,7 +10246,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse - JsonInference Table
     let clickhouse = get_clickhouse().await;
@@ -10146,7 +10299,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let max_tokens = if provider.model_name.starts_with("gemini-2.5-pro") {
+    let max_tokens = if provider.model_name.contains("gemini-2.5-pro") {
         500
     } else if provider.model_name.starts_with("o1") {
         1000
@@ -10279,14 +10432,20 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     // The 2.5 Pro model always seems to think before responding, even with
     // {"generationConfig": {"thinkingConfig": {"thinkingBudget": 0 }}
+    // This also happens for DeepSeek R1
     // This prevents us from setting a low max_tokens, since the thinking tokens will
     // use up all of the output tokens before an actual response is generated.
-    if provider.model_name.starts_with("gemini-2.5-pro") {
+    if provider.model_name.contains("gemini-2.5-pro")
+        || provider.model_name.contains("deepseek-r1-aws-bedrock")
+    {
         return;
     }
 
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
+
+    // Include randomness in the prompt to force a cache miss for the first request
+    let randomness = Uuid::now_v7();
 
     let payload = json!({
         "function_name": "basic_test",
@@ -10294,7 +10453,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         "episode_id": episode_id,
         "input":
             {
-               "system": {"assistant_name": "Dr. Mehta"},
+               "system": {"assistant_name": format!("Dr. Mehta: {randomness}")},
                "messages": [
                 {
                     "role": "user",
@@ -10303,12 +10462,13 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
+        "cache_options": {"enabled": "on", "lookback_s": 10},
         "params": {
             "chat_completion": {
                 "max_tokens": 1
             }
         },
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
     if provider.variant_name.contains("openai") && provider.variant_name.contains("o1") {
         // Can't pin a single token for o1
@@ -10328,34 +10488,15 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     println!("API response: {response_json:#?}");
 
-    check_short_inference_response(response_json, Some(episode_id), &provider, false).await;
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-    let episode_id = Uuid::now_v7();
-
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input":
-            {
-               "system": {"assistant_name": "Dr. Mehta"},
-               "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the name of the capital city of Japan?"
-                }
-            ]},
-        "stream": false,
-        "tags": {"foo": "bar"},
-        "cache_options": {"enabled": "on", "lookback_s": 10},
-        "params": {
-            "chat_completion": {
-                "max_tokens": 1
-            }
-        },
-        "extra_headers": extra_headers.headers,
-    });
+    check_short_inference_response(
+        randomness,
+        response_json,
+        Some(episode_id),
+        &provider,
+        false,
+    )
+    .await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
@@ -10370,10 +10511,12 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     println!("API response: {response_json:#?}");
 
-    check_short_inference_response(response_json, Some(episode_id), &provider, true).await;
+    check_short_inference_response(randomness, response_json, Some(episode_id), &provider, true)
+        .await;
 }
 
 async fn check_short_inference_response(
+    randomness: Uuid,
     response_json: Value,
     episode_id: Option<Uuid>,
     provider: &E2ETestProvider,
@@ -10418,7 +10561,7 @@ async fn check_short_inference_response(
     assert_eq!(finish_reason, "length");
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -10447,7 +10590,7 @@ async fn check_short_inference_response(
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input = json!({
-        "system": {"assistant_name": "Dr. Mehta"},
+        "system": {"assistant_name": format!("Dr. Mehta: {randomness}")},
         "messages": [
             {
                 "role": "user",
@@ -10530,7 +10673,7 @@ async fn check_short_inference_response(
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
-        "You are a helpful and friendly assistant named Dr. Mehta"
+        format!("You are a helpful and friendly assistant named Dr. Mehta: {randomness}")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
@@ -10564,6 +10707,32 @@ async fn check_short_inference_response(
         result.get("cached").unwrap().as_bool().unwrap(),
         should_be_cached
     );
+
+    // Check that our cache entry was only written once
+    if should_be_cached {
+        // Allow some time for an incorrect second cache write to happen
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        // Count the number of cache entries for this raw_request
+        // Note that this can have false negatives (ClickHouse might decide to merge parts
+        // immediately after a duplicate insert)
+        let count = clickhouse
+            .run_query_synchronous(
+                "SELECT COUNT(*) FROM ModelInferenceCache WHERE raw_request = {raw_request:String} "
+                    .to_string(),
+                &[("raw_request", result["raw_request"].as_str().unwrap())]
+                    .into_iter()
+                    .collect(),
+            )
+            .await
+            .unwrap()
+            .response
+            .trim()
+            .parse::<u64>()
+            .unwrap();
+
+        assert_eq!(count, 1);
+    }
 }
 
 pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
@@ -10638,7 +10807,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
                     "name": "get_temperature",
                     "result": "70",
                 }
-            ))
+            ));
         } else if content_block.get("name").unwrap().as_str().unwrap() == "get_humidity" {
             tool_results.push(json!(
                 {
@@ -10647,7 +10816,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
                     "name": "get_humidity",
                     "result": "30",
                 }
-            ))
+            ));
         } else {
             panic!(
                 "Unknown tool call: {}",
@@ -10732,7 +10901,7 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
     assert!(content_text.to_lowercase().contains("30"));
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -10930,7 +11099,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
                     "name": "get_temperature",
                     "result": "70",
                 }
-            ))
+            ));
         } else if content_block.get("name").unwrap().as_str().unwrap() == "get_humidity" {
             tool_results.push(json!(
                 {
@@ -10939,7 +11108,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
                     "name": "get_humidity",
                     "result": "30",
                 }
-            ))
+            ));
         } else {
             panic!(
                 "Unknown tool call: {}",
@@ -11062,7 +11231,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
     let inference_id = inference_id.unwrap();
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse - Inference Table
     let clickhouse = get_clickhouse().await;
@@ -11221,7 +11390,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
             }
         },
         "stream": false,
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -11380,7 +11549,7 @@ pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETes
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
-        "extra_headers": extra_headers.headers,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -11403,7 +11572,14 @@ pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETes
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let content = response_json.get("content").unwrap().as_array().unwrap();
+    // Some providers always produce thought blocks - we don't care about them in this test
+    let mut content = response_json
+        .get("content")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .clone();
+    content.retain(|c| c.get("type").unwrap().as_str().unwrap() != "thought");
     assert_eq!(content.len(), 1);
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();

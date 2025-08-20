@@ -71,7 +71,7 @@ impl Base64File {
 impl Base64File {
     #[getter(url)]
     pub fn url_string(&self) -> Option<String> {
-        self.url.as_ref().map(|u| u.to_string())
+        self.url.as_ref().map(Url::to_string)
     }
 
     #[getter(mime_type)]
@@ -94,15 +94,18 @@ pub fn serialize_with_file_data<T: Serialize>(value: &T) -> Result<Value, Error>
     })
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum File {
     Url {
         url: Url,
         #[serde(default)]
+        #[ts(type = "string | null")]
         mime_type: Option<MediaType>,
     },
     Base64 {
+        #[ts(type = "string")]
         mime_type: MediaType,
         data: String,
     },
@@ -371,7 +374,7 @@ mod tests {
             filename_to_mime_type("test.pdf").unwrap(),
             mime::APPLICATION_PDF
         );
-        assert!(!logs_contain("Guessed"))
+        assert!(!logs_contain("Guessed"));
     }
 
     #[test]
@@ -381,6 +384,6 @@ mod tests {
             filename_to_mime_type("my_file.txt").unwrap(),
             mime::TEXT_PLAIN
         );
-        assert!(logs_contain("Guessed"))
+        assert!(logs_contain("Guessed"));
     }
 }

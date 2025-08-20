@@ -1,6 +1,4 @@
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
-import { SFTJob, type SFTJobStatus } from "./common";
-import { TensorZeroClient } from "tensorzero-node";
 import type {
   InferenceFilterTreeNode,
   InferenceOutputSource,
@@ -9,110 +7,23 @@ import type {
   UninitializedOptimizerInfo,
 } from "tensorzero-node";
 import { getConfig } from "~/utils/config/index.server";
+import { getNativeTensorZeroClient } from "../tensorzero/native_client.server";
 import { getEnv } from "../env.server";
 
-let _tensorZeroClient: TensorZeroClient | undefined;
-export async function getNativeTensorZeroClient(): Promise<TensorZeroClient> {
-  if (_tensorZeroClient) {
-    return _tensorZeroClient;
+export async function poll_sft_job(
+  jobHandle: OptimizationJobHandle,
+): Promise<OptimizationJobInfo> {
+  const client = await getNativeTensorZeroClient();
+  const status = await client.experimentalPollOptimization(jobHandle);
+  if (status.status === "pending" && status.estimated_finish) {
+    status.estimated_finish = new Date(status.estimated_finish);
   }
-
-  const env = getEnv();
-  _tensorZeroClient = await TensorZeroClient.build(
-    env.TENSORZERO_UI_CONFIG_PATH,
-    env.TENSORZERO_CLICKHOUSE_URL,
-  );
-  return _tensorZeroClient;
+  return status;
 }
 
-export function launch_sft_job(data: SFTFormValues): Promise<SFTJob> {
-  return launch_sft_job_native(data);
-}
-
-class NativeSFTJob extends SFTJob {
-  private jobStatus: OptimizationJobInfo | "created";
-  private provider: "openai" | "fireworks" | "mistral";
-  constructor(
-    public jobHandle: OptimizationJobHandle,
-    public formData: SFTFormValues,
-  ) {
-    super();
-    this.jobHandle = jobHandle;
-    this.formData = formData;
-    this.jobStatus = "created";
-    this.provider = formData.model.provider;
-  }
-
-  static from_job_handle_with_form_data(
-    jobHandle: OptimizationJobHandle,
-    formData: SFTFormValues,
-  ): NativeSFTJob {
-    return new NativeSFTJob(jobHandle, formData);
-  }
-
-  status(): SFTJobStatus {
-    if (this.jobStatus === "created") {
-      return {
-        status: "idle",
-      };
-    }
-    switch (this.jobStatus.status) {
-      case "pending":
-        return {
-          status: "running",
-          modelProvider: this.provider,
-          jobUrl: this.jobHandle.job_url,
-          formData: this.formData,
-          rawData: {
-            status: "ok",
-            info: this.jobStatus,
-          },
-        };
-      case "failed":
-        return {
-          status: "error",
-          modelProvider: this.provider,
-          formData: this.formData,
-          jobUrl: this.jobHandle.job_url,
-          rawData: {
-            status: "error",
-            message: "Job failed",
-          },
-          error: "Job failed",
-        };
-      case "completed": {
-        // NOTE: the native SFT backend actually returns a model provider that is all we need
-        // and guaranteed to match the Rust type.
-        // For now we squeeze it through the existing interface.
-        // In the future we should just rip all this code and render it directly
-        const provider = Object.keys(this.jobStatus.output.providers)[0];
-        if (!provider) {
-          throw new Error("No provider found");
-        }
-        return {
-          status: "completed",
-          modelProvider: this.provider,
-          formData: this.formData,
-          jobUrl: this.jobHandle.job_url,
-          rawData: {
-            status: "ok",
-            info: this.jobStatus,
-          },
-          result: provider,
-        };
-      }
-    }
-  }
-
-  async poll(): Promise<SFTJob> {
-    const client = await getNativeTensorZeroClient();
-    const status = await client.experimentalPollOptimization(this.jobHandle);
-    this.jobStatus = status;
-    return this;
-  }
-}
-
-async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
+export async function launch_sft_job(
+  data: SFTFormValues,
+): Promise<OptimizationJobHandle> {
   const openAINativeSFTBase = getEnv().OPENAI_BASE_URL;
   const fireworksNativeSFTBase = getEnv().FIREWORKS_BASE_URL;
   let filters: InferenceFilterTreeNode | null = null;
@@ -144,6 +55,21 @@ async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
     optimizerConfig = {
       type: "fireworks_sft",
       model: data.model.name,
+      early_stop: null,
+      epochs: null,
+      learning_rate: null,
+      max_context_length: null,
+      lora_rank: null,
+      batch_size: null,
+      display_name: null,
+      output_model: null,
+      warm_start_from: null,
+      is_turbo: null,
+      eval_auto_carveout: null,
+      nodes: null,
+      mtp_enabled: null,
+      mtp_num_draft_tokens: null,
+      mtp_freeze_base_model: null,
       credentials: null,
       api_base: fireworksNativeSFTBase,
       account_id: accountId,
@@ -165,8 +91,9 @@ async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
     val_fraction: data.validationSplitPercent / 100,
     format: "JsonEachRow",
     optimizer_config: optimizerConfig,
+    order_by: null,
   });
-  return NativeSFTJob.from_job_handle_with_form_data(job, data);
+  return job;
 }
 
 export async function createFilters(

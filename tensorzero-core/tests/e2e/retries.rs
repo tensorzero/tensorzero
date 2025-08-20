@@ -12,7 +12,7 @@ use tensorzero_core::{
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
     select_model_inferences_clickhouse,
 };
@@ -481,7 +481,7 @@ async fn e2e_test_best_of_n_dummy_candidates_flaky_judge() {
     let expected_model_names: std::collections::HashSet<String> =
         ["test", "json", "flaky_best_of_n_judge"]
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
     assert_eq!(model_names, expected_model_names);
 }

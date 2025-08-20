@@ -69,13 +69,6 @@ function getClickhouseUrl() {
     return url;
   }
 
-  if (process.env.CLICKHOUSE_URL) {
-    console.warn(
-      'Deprecation Warning: The environment variable "CLICKHOUSE_URL" has been renamed to "TENSORZERO_CLICKHOUSE_URL" and will be removed in a future version. Please update your environment to use "TENSORZERO_CLICKHOUSE_URL" instead.',
-    );
-    return process.env.CLICKHOUSE_URL;
-  }
-
   throw new EnvironmentVariableError(
     "The environment variable `TENSORZERO_CLICKHOUSE_URL` is not set.",
   );

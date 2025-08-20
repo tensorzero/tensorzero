@@ -3,6 +3,7 @@
 
 mod error;
 mod fireworks;
+mod together;
 
 use async_stream::try_stream;
 use axum::http::StatusCode;
@@ -81,13 +82,13 @@ pub async fn shutdown_signal() {
     let hangup = std::future::pending::<()>();
 
     tokio::select! {
-        _ = ctrl_c => {
+        () = ctrl_c => {
             tracing::info!("Received Ctrl+C signal");
         }
-        _ = terminate => {
+        () = terminate => {
             tracing::info!("Received SIGTERM signal");
         }
-        _ = hangup => {
+        () = hangup => {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             tracing::info!("Received SIGHUP signal");
         }
@@ -152,6 +153,18 @@ fn make_router() -> axum::Router {
             "/fireworks/v1/accounts/{account_id}/deployedModels",
             axum::routing::post(fireworks::create_deployed_model),
         )
+        .route(
+            "/together/files/upload",
+            axum::routing::post(together::upload_file),
+        )
+        .route(
+            "/together/fine-tunes",
+            axum::routing::post(together::create_fine_tuning_job),
+        )
+        .route(
+            "/together/fine-tunes/{job_id}",
+            axum::routing::get(together::get_fine_tuning_job),
+        )
         .route("/status", axum::routing::get(status_handler))
         .layer(TraceLayer::new_for_http())
 }
@@ -180,6 +193,12 @@ async fn get_openai_fine_tuning_job(
             job.val["estimated_finish"] = finish_at.timestamp().into();
         }
         if let Some(finish_at) = job.finish_at {
+            if job.val["model"].as_str().unwrap().contains("error") {
+                job.val["status"] = "failed".into();
+                job.val["error"] = json!({
+                    "unexpected_error": "failed because the model is an error model"
+                });
+            }
             if chrono::Utc::now() >= finish_at {
                 job.val["status"] = "succeeded".into();
                 job.val["fine_tuned_model"] = "mock-inference-finetune-1234".into();
@@ -255,13 +274,13 @@ async fn create_openai_file(mut form: Multipart) -> Result<Json<serde_json::Valu
                     let result = serde_json::from_str::<OpenAIFineTuningRow>(line);
                     match result {
                         Ok(row) => {
-                            for message in row.messages.iter() {
+                            for message in &row.messages {
                                 let Some(content_array) =
                                     message.content.as_ref().and_then(|v| v.as_array())
                                 else {
                                     continue;
                                 };
-                                for content in content_array.iter() {
+                                for content in content_array {
                                     let object = content.as_object().unwrap();
                                     let content_type = object.get("type").unwrap();
                                     if content_type == "image_url" {

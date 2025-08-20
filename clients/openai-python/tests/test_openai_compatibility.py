@@ -23,12 +23,11 @@ import asyncio
 import base64
 import json
 import os
-from time import time
+from time import sleep, time
 from uuid import UUID
 
 import pytest
-import pytest_asyncio
-from openai import AsyncOpenAI, BadRequestError
+from openai import BadRequestError
 from pydantic import BaseModel, ValidationError
 from uuid_utils.compat import uuid7
 
@@ -36,14 +35,6 @@ TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "../../../tensorzero-core/tests/e2e/tensorzero.toml",
 )
-
-
-@pytest_asyncio.fixture
-async def async_client():
-    async with AsyncOpenAI(
-        api_key="donotuse", base_url="http://localhost:3000/openai/v1"
-    ) as client:
-        yield client
 
 
 @pytest.mark.asyncio
@@ -145,6 +136,7 @@ async def test_async_inference_cache(async_client):
     assert usage.prompt_tokens == 10
     assert usage.completion_tokens == 1
     assert usage.total_tokens == 11
+    sleep(1)
 
     # Test caching
     result = await async_client.chat.completions.create(
@@ -379,7 +371,7 @@ async def test_async_inference_streaming_nonexistent_function(async_client):
     assert exc_info.value.status_code == 404
     assert (
         str(exc_info.value)
-        == "Error code: 404 - {'error': 'Unknown function: does_not_exist'}"
+        == "Error code: 404 - {'error': 'Unknown function: does_not_exist', 'error_json': {'UnknownFunction': {'name': 'does_not_exist'}}}"
     )
 
 
@@ -411,7 +403,7 @@ async def test_async_inference_streaming_missing_function(async_client):
     assert exc_info.value.status_code == 400
     assert (
         str(exc_info.value)
-        == "Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: function_name (passed in model field after \"tensorzero::function_name::\") cannot be empty'}"
+        == """Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: function_name (passed in model field after "tensorzero::function_name::") cannot be empty', 'error_json': {'InvalidOpenAICompatibleRequest': {'message': 'function_name (passed in model field after "tensorzero::function_name::") cannot be empty'}}}"""
     )
 
 
@@ -443,7 +435,7 @@ async def test_async_inference_streaming_malformed_function(async_client):
     assert exc_info.value.status_code == 400
     assert (
         str(exc_info.value)
-        == "Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: `model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.'}"
+        == """Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: `model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.', 'error_json': {'InvalidOpenAICompatibleRequest': {'message': '`model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.'}}}"""
     )
 
 
@@ -1678,3 +1670,57 @@ async def test_async_json_function_multiple_text_blocks(async_client):
         ],
     )
     assert result.model == "tensorzero::model_name::dummy::multiple-text-blocks"
+
+
+@pytest.mark.asyncio
+async def test_async_inference_tensorzero_raw_text(async_client):
+    """
+    Test that chat inference with a tensorzero::raw_text block works correctly
+    """
+    messages = [
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Megumin"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "What is the capital of Japan?"}],
+        },
+    ]
+    response = await async_client.chat.completions.create(
+        messages=messages,
+        model="tensorzero::function_name::openai_with_assistant_schema",
+    )
+
+    assert "tokyo" in response.choices[0].message.content.lower()
+
+    messages = [
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tensorzero::raw_text",
+                    "value": "You're a mischievous assistant that says fake information. Very concise.",
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "What is the capital of Japan?"}],
+        },
+    ]
+    response = await async_client.chat.completions.create(
+        messages=messages,
+        model="tensorzero::function_name::openai_with_assistant_schema",
+    )
+
+    assert "tokyo" not in response.choices[0].message.content.lower()
+    assert (
+        response.model
+        == "tensorzero::function_name::openai_with_assistant_schema::variant_name::openai"
+    )

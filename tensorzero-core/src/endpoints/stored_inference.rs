@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use futures::future::join_all;
 
-use crate::config_parser::Config;
+use crate::config::Config;
 use crate::endpoints::dynamic_evaluation_run::validate_variant_pins;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::stored_inference::{
@@ -48,7 +48,7 @@ pub async fn render_samples<T: StoredSample>(
             // Filter out examples where reresolve_input_for_fine_tuning failed.
             // If resolution_result is Ok, map Some(()) to Some(example).
             // If resolution_result is Err, .ok() yields None, so filter_map drops it.
-            resolution_result.ok().map(|_| example)
+            resolution_result.ok().map(|()| example)
         })
         .filter_map(|resolved_example| {
             // resolved_example is a StoredInference that was successfully processed by reresolve.

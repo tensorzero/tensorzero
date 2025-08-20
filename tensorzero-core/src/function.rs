@@ -1,4 +1,4 @@
-#[cfg(feature = "pyo3")]
+use crate::config::SchemaData;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -17,7 +17,7 @@ use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
@@ -33,7 +33,6 @@ use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
-use crate::variant::chat_completion::TemplateSchemaInfo;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
 #[derive(Debug, Serialize)]
@@ -99,7 +98,7 @@ impl FunctionConfigChatPyClass {
     fn get_system_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
         self.inner
             .system_schema()
-            .map(|s| serialize_to_dict(py, s.value))
+            .map(|s| serialize_to_dict(py, &s.value))
             .transpose()?
             .into_py_any(py)
     }
@@ -107,7 +106,7 @@ impl FunctionConfigChatPyClass {
     fn get_user_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
         self.inner
             .user_schema()
-            .map(|s| serialize_to_dict(py, s.value))
+            .map(|s| serialize_to_dict(py, &s.value))
             .transpose()?
             .into_py_any(py)
     }
@@ -116,7 +115,7 @@ impl FunctionConfigChatPyClass {
     fn get_assistant_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
         self.inner
             .assistant_schema()
-            .map(|s| serialize_to_dict(py, s.value))
+            .map(|s| serialize_to_dict(py, &s.value))
             .transpose()?
             .into_py_any(py)
     }
@@ -141,7 +140,7 @@ impl FunctionConfigJsonPyClass {
     fn get_system_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
         self.inner
             .system_schema()
-            .map(|s| serialize_to_dict(py, s.value))
+            .map(|s| serialize_to_dict(py, &s.value))
             .transpose()?
             .into_py_any(py)
     }
@@ -150,7 +149,7 @@ impl FunctionConfigJsonPyClass {
     fn get_user_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
         self.inner
             .user_schema()
-            .map(|s| serialize_to_dict(py, s.value))
+            .map(|s| serialize_to_dict(py, &s.value))
             .transpose()?
             .into_py_any(py)
     }
@@ -159,7 +158,7 @@ impl FunctionConfigJsonPyClass {
     fn get_assistant_schema(&self, py: Python) -> PyResult<Py<PyAny>> {
         self.inner
             .assistant_schema()
-            .map(|s| serialize_to_dict(py, s.value))
+            .map(|s| serialize_to_dict(py, &s.value))
             .transpose()?
             .into_py_any(py)
     }
@@ -171,7 +170,7 @@ impl FunctionConfigJsonPyClass {
                 "FunctionConfig is not a JSON function: {IMPOSSIBLE_ERROR_MESSAGE}"
             )));
         };
-        serialize_to_dict(py, params.output_schema.value)
+        serialize_to_dict(py, &params.output_schema.value)
     }
 }
 
@@ -217,9 +216,7 @@ impl VariantsConfigPyClass {
 #[cfg_attr(test, ts(export))]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
-    pub system_schema: Option<StaticJSONSchema>,
-    pub user_schema: Option<StaticJSONSchema>,
-    pub assistant_schema: Option<StaticJSONSchema>,
+    pub schemas: SchemaData,
     pub tools: Vec<String>, // tool names
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
@@ -231,9 +228,7 @@ pub struct FunctionConfigChat {
 #[cfg_attr(test, ts(export))]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
-    pub system_schema: Option<StaticJSONSchema>,
-    pub user_schema: Option<StaticJSONSchema>,
-    pub assistant_schema: Option<StaticJSONSchema>,
+    pub schemas: SchemaData,
     pub output_schema: StaticJSONSchema, // schema is mandatory for JSON functions
     pub implicit_tool_call_config: ToolCallConfig,
     pub description: Option<String>,
@@ -272,17 +267,17 @@ impl FunctionConfig {
         match &self {
             FunctionConfig::Chat(params) => {
                 validate_all_text_input(
-                    params.system_schema.as_ref(),
-                    params.user_schema.as_ref(),
-                    params.assistant_schema.as_ref(),
+                    params.schemas.system.as_ref(),
+                    params.schemas.user.as_ref(),
+                    params.schemas.assistant.as_ref(),
                     input,
                 )?;
             }
             FunctionConfig::Json(params) => {
                 validate_all_text_input(
-                    params.system_schema.as_ref(),
-                    params.user_schema.as_ref(),
-                    params.assistant_schema.as_ref(),
+                    params.schemas.system.as_ref(),
+                    params.schemas.user.as_ref(),
+                    params.schemas.assistant.as_ref(),
                     input,
                 )?;
             }
@@ -343,7 +338,7 @@ impl FunctionConfig {
         inference_id: Uuid,
         content_blocks: Vec<ContentBlockOutput>,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
-        inference_config: &'request InferenceConfig<'_, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         inference_params: InferenceParams,
         original_response: Option<String>,
     ) -> Result<InferenceResult, Error> {
@@ -388,7 +383,7 @@ impl FunctionConfig {
                 // If the parsed output fails validation, we log the error and set `parsed_output` to None
                 let parsed_output = match parsed_output {
                     Some(parsed_output) => match output_schema.validate(&parsed_output).await {
-                        Ok(_) => Some(parsed_output),
+                        Ok(()) => Some(parsed_output),
                         Err(_) => None,
                     },
                     None => None,
@@ -408,32 +403,31 @@ impl FunctionConfig {
         }
     }
 
-    pub fn template_schema_info(&self) -> TemplateSchemaInfo {
-        TemplateSchemaInfo {
-            has_system_schema: self.system_schema().is_some(),
-            has_user_schema: self.user_schema().is_some(),
-            has_assistant_schema: self.assistant_schema().is_some(),
+    pub fn schemas(&self) -> &SchemaData {
+        match self {
+            FunctionConfig::Chat(params) => &params.schemas,
+            FunctionConfig::Json(params) => &params.schemas,
         }
     }
 
     pub fn system_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
-            FunctionConfig::Chat(params) => params.system_schema.as_ref(),
-            FunctionConfig::Json(params) => params.system_schema.as_ref(),
+            FunctionConfig::Chat(params) => params.schemas.system.as_ref(),
+            FunctionConfig::Json(params) => params.schemas.system.as_ref(),
         }
     }
 
     pub fn user_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
-            FunctionConfig::Chat(params) => params.user_schema.as_ref(),
-            FunctionConfig::Json(params) => params.user_schema.as_ref(),
+            FunctionConfig::Chat(params) => params.schemas.user.as_ref(),
+            FunctionConfig::Json(params) => params.schemas.user.as_ref(),
         }
     }
 
     pub fn assistant_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
-            FunctionConfig::Chat(params) => params.assistant_schema.as_ref(),
-            FunctionConfig::Json(params) => params.assistant_schema.as_ref(),
+            FunctionConfig::Chat(params) => params.schemas.assistant.as_ref(),
+            FunctionConfig::Json(params) => params.schemas.assistant.as_ref(),
         }
     }
 
@@ -478,7 +472,7 @@ impl FunctionConfig {
         }
         match self {
             FunctionConfig::Chat(params) => {
-                for tool in params.tools.iter() {
+                for tool in &params.tools {
                     static_tools.get(tool).ok_or_else(|| Error::new(ErrorDetails::Config {
                         message: format!("`functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
                     }))?;
@@ -547,7 +541,7 @@ fn validate_all_text_input(
     }?;
     for (index, message) in input.messages.iter().enumerate() {
         // Only for Text blocks, not RawText blocks since we don't validate those
-        for block in message.content.iter() {
+        for block in &message.content {
             if let InputMessageContent::Text(kind) = block {
                 let content = match kind {
                     TextKind::Arguments { arguments } => {
@@ -595,16 +589,22 @@ fn validate_single_message(
 }
 
 /// Sample a variant from the function based on variant weights (uniform random selection)
-pub fn sample_variant<'a>(
-    candidate_variant_names: &mut Vec<&'a str>,
-    variants: &'a HashMap<String, Arc<VariantInfo>>,
+/// This function pops the sampled variant from the candidate variants map.
+/// NOTE: We use a BTreeMap to ensure that the variants are sorted by their names and the
+/// sampling choices are deterministic given an episode ID.
+pub fn sample_variant(
+    candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     function_name: &str,
     episode_id: &Uuid,
-) -> Result<(&'a str, &'a Arc<VariantInfo>), Error> {
+) -> Result<(String, Arc<VariantInfo>), Error> {
+    if candidate_variants.is_empty() {
+        return Err(Error::new(ErrorDetails::InvalidFunctionVariants {
+            message: format!("Function `{function_name}` has no variants"),
+        }));
+    }
     // Compute the total weight of variants present in variant_names
-    let total_weight = candidate_variant_names
-        .iter()
-        .filter_map(|name| variants.get(*name))
+    let total_weight = candidate_variants
+        .values()
         .map(|variant| variant.inner.weight().unwrap_or(0.0))
         .sum::<f64>();
 
@@ -613,71 +613,62 @@ pub fn sample_variant<'a>(
     //       but there's a chance we pin a weight-zero variant in the config.
     //       This check also ensures that we catch any regressions we might introduce in the future.
     if total_weight <= 0. {
-        if candidate_variant_names.is_empty() {
-            return Err(Error::new(ErrorDetails::InvalidFunctionVariants {
-                message: format!("Function `{function_name}` has no variants"),
-            }));
-        }
         // Perform uniform sampling if total weight is non-positive
         let random_index = (get_uniform_value(function_name, episode_id)
-            * candidate_variant_names.len() as f64)
+            * candidate_variants.len() as f64)
             .floor() as usize;
-        // Reorders this list (in place) by swapping the element at index with the last element.
-        // This should not matter and is more efficient than `remove`
-        let sampled_variant_name = if random_index < candidate_variant_names.len() {
-            // could panic if random_index is out of bounds
-            candidate_variant_names.swap_remove(random_index)
-        } else {
+        let Some(sampled_variant_name) = candidate_variants.keys().nth(random_index).cloned()
+        else {
             return Err(Error::new(ErrorDetails::InvalidFunctionVariants {
                 message: format!(
-                    "Invalid index {} for function `{}` with {} variants",
-                    random_index,
-                    function_name,
-                    candidate_variant_names.len()
+                    "Invalid index {random_index} for function `{function_name}` with {} variants. {IMPOSSIBLE_ERROR_MESSAGE}",
+                    candidate_variants.len()
                 ),
             }));
         };
-        let variant = variants.get(sampled_variant_name).ok_or_else(|| {
+        return candidate_variants.remove_entry(&sampled_variant_name).ok_or_else(|| {
             Error::new(ErrorDetails::InvalidFunctionVariants {
                 message: format!(
-                    "Function `{function_name}` has no variant `{sampled_variant_name}`"
-                ),
+                    "Function `{function_name}` has no variant for the sampled variant `{sampled_variant_name}`. {IMPOSSIBLE_ERROR_MESSAGE}"
+                )
             })
-        })?;
-        return Ok((sampled_variant_name, variant));
+        });
     }
 
     // Sample a random threshold between 0 and the total weight
     let random_threshold = get_uniform_value(function_name, episode_id) * total_weight;
 
     // Iterate over the variants to find the one that corresponds to the sampled threshold
-    let mut cumulative_weight = 0.;
-    let mut sampled_variant_name = "";
-    for (i, variant_name) in candidate_variant_names.iter().enumerate() {
-        let variant = variants.get(*variant_name).ok_or_else(|| {
-            Error::new(ErrorDetails::InvalidFunctionVariants {
-                message: format!("Function `{function_name}` has no variant `{variant_name}`"),
+    let variant_to_remove = {
+        let mut cumulative_weight = 0.0;
+        candidate_variants
+            .iter()
+            .find(|(_, variant)| {
+                cumulative_weight += variant.inner.weight().unwrap_or(0.0);
+                cumulative_weight > random_threshold
             })
-        })?;
-        cumulative_weight += variant.inner.weight().unwrap_or(0.0);
-        if cumulative_weight > random_threshold {
-            sampled_variant_name = candidate_variant_names.swap_remove(i);
-            break;
-        }
+            .map(|(name, _)| name.clone()) // Clone the key
+    };
+
+    if let Some(variant_name) = variant_to_remove {
+        return candidate_variants.remove_entry(&variant_name).ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidFunctionVariants {
+                message: format!(
+                    "Function `{function_name}` has no variant for the sampled variant `{variant_name}`. {IMPOSSIBLE_ERROR_MESSAGE}"
+                )
+            })
+        });
     }
 
     // If we didn't find a variant (which should only happen due to rare numerical precision issues),
-    // use the last variant as a fallback
-    if sampled_variant_name.is_empty() {
-        sampled_variant_name = candidate_variant_names.swap_remove(variants.len() - 1);
-    }
-
-    let variant = variants.get(sampled_variant_name).ok_or_else(|| {
+    // pop an arbitrary variant as a fallback
+    candidate_variants.pop_first().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidFunctionVariants {
-            message: format!("Function `{function_name}` has no variant `{sampled_variant_name}`"),
+            message: format!(
+                "Function `{function_name}` has no variants. {IMPOSSIBLE_ERROR_MESSAGE}"
+            ),
         })
-    })?;
-    Ok((sampled_variant_name, variant))
+    })
 }
 
 /// Implements a uniform distribution over the interval [0, 1) using a hash function.
@@ -708,10 +699,11 @@ mod tests {
     use crate::variant::VariantConfig;
 
     use super::*;
+    use crate::config::path::TomlRelativePath;
     use serde_json::json;
+    use std::io::Write;
     use std::time::Duration;
     use std::time::Instant;
-    use std::{io::Write, path::PathBuf};
     use tempfile::NamedTempFile;
     use tracing_test::traced_test;
 
@@ -730,17 +722,18 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        StaticJSONSchema::from_path(temp_file.path().to_owned(), PathBuf::new())
-            .expect("Failed to create schema")
+        StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+            temp_file.path().to_owned(),
+            None,
+        ))
+        .expect("Failed to create schema")
     }
 
     #[test]
     fn test_validate_input_chat_no_schema() {
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             ..Default::default()
         };
@@ -821,9 +814,10 @@ mod tests {
         let system_value = system_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: Some(system_schema),
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData {
+                system: Some(system_schema),
+                ..Default::default()
+            },
             tools: vec![],
             ..Default::default()
         };
@@ -878,9 +872,10 @@ mod tests {
         let user_value = user_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: Some(user_schema),
-            assistant_schema: None,
+            schemas: SchemaData {
+                user: Some(user_schema),
+                ..Default::default()
+            },
             tools: vec![],
             ..Default::default()
         };
@@ -937,9 +932,10 @@ mod tests {
         let assistant_value = assistant_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: Some(assistant_schema),
+            schemas: SchemaData {
+                assistant: Some(assistant_schema),
+                ..Default::default()
+            },
             tools: vec![],
             ..Default::default()
         };
@@ -1001,9 +997,11 @@ mod tests {
         let system_value = system_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: Some(system_schema),
-            user_schema: Some(user_schema),
-            assistant_schema: Some(assistant_schema),
+            schemas: SchemaData {
+                system: Some(system_schema),
+                user: Some(user_schema),
+                assistant: Some(assistant_schema),
+            },
             tools: vec![],
             ..Default::default()
         };
@@ -1075,9 +1073,11 @@ mod tests {
         let assistant_schema = create_test_schema();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: Some(system_schema),
-            user_schema: Some(user_schema),
-            assistant_schema: Some(assistant_schema),
+            schemas: SchemaData {
+                system: Some(system_schema),
+                user: Some(user_schema),
+                assistant: Some(assistant_schema),
+            },
             tools: vec![],
             ..Default::default()
         };
@@ -1118,9 +1118,7 @@ mod tests {
         // We test that we allow multiple text blocks in a message as long as they pass the schema if present
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             ..Default::default()
         };
@@ -1156,9 +1154,11 @@ mod tests {
         let assistant_schema = create_test_schema();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: Some(user_schema),
-            assistant_schema: Some(assistant_schema),
+            schemas: SchemaData {
+                system: None,
+                user: Some(user_schema),
+                assistant: Some(assistant_schema),
+            },
             tools: vec![],
             ..Default::default()
         };
@@ -1204,10 +1204,8 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
-            output_schema: StaticJSONSchema::from_value(&json!({})).unwrap(),
+            schemas: SchemaData::default(),
+            output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config,
             description: None,
         };
@@ -1277,10 +1275,11 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: Some(system_schema),
-            user_schema: None,
-            assistant_schema: None,
-            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
+            schemas: SchemaData {
+                system: Some(system_schema),
+                ..Default::default()
+            },
+            output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
         };
@@ -1340,10 +1339,11 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: Some(user_schema),
-            assistant_schema: None,
-            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
+            schemas: SchemaData {
+                user: Some(user_schema),
+                ..Default::default()
+            },
+            output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
         };
@@ -1404,10 +1404,11 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: Some(assistant_schema),
-            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
+            schemas: SchemaData {
+                assistant: Some(assistant_schema),
+                ..Default::default()
+            },
+            output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
         };
@@ -1472,10 +1473,12 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: Some(system_schema),
-            user_schema: Some(user_schema),
-            assistant_schema: Some(assistant_schema),
-            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
+            schemas: SchemaData {
+                system: Some(system_schema),
+                user: Some(user_schema),
+                assistant: Some(assistant_schema),
+            },
+            output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
         };
@@ -1540,7 +1543,7 @@ mod tests {
     #[test]
     fn test_sample_variant() {
         // Helper function to create a HashMap of variant names to their weights
-        fn create_variants(variant_weights: &[(&str, f64)]) -> HashMap<String, Arc<VariantInfo>> {
+        fn create_variants(variant_weights: &[(&str, f64)]) -> BTreeMap<String, Arc<VariantInfo>> {
             variant_weights
                 .iter()
                 .map(|&(name, weight)| {
@@ -1562,7 +1565,7 @@ mod tests {
         // Helper function to test the distribution of variant weights by sampling them many times
         // and checking if the observed distribution is close to the expected distribution
         fn test_variant_distribution(
-            variants: &HashMap<String, Arc<VariantInfo>>,
+            variants: &BTreeMap<String, Arc<VariantInfo>>,
             sample_size: usize,
             tolerance: f64,
         ) {
@@ -1573,14 +1576,9 @@ mod tests {
             let mut counts: HashMap<String, usize> = HashMap::new();
 
             for _ in 0..sample_size {
-                let mut variant_names = variants.keys().map(AsRef::as_ref).collect();
-                let (variant_name, _) = sample_variant(
-                    &mut variant_names,
-                    variants,
-                    "test_function",
-                    &Uuid::now_v7(),
-                )
-                .unwrap();
+                let mut variants = variants.clone();
+                let (variant_name, _) =
+                    sample_variant(&mut variants, "test_function", &Uuid::now_v7()).unwrap();
                 *counts.entry(variant_name.to_string()).or_insert(0) += 1;
             }
 
@@ -1619,14 +1617,9 @@ mod tests {
         let mut counts: HashMap<String, usize> = HashMap::new();
 
         for _ in 0..sample_size {
-            let mut variant_names = variants.keys().map(AsRef::as_ref).collect();
-            let (variant_name, _) = sample_variant(
-                &mut variant_names,
-                &variants,
-                "test_function",
-                &Uuid::now_v7(),
-            )
-            .unwrap();
+            let mut variants = variants.clone();
+            let (variant_name, _) =
+                sample_variant(&mut variants, "test_function", &Uuid::now_v7()).unwrap();
             *counts.entry(variant_name.to_string()).or_insert(0) += 1;
         }
 
@@ -1671,9 +1664,7 @@ mod tests {
         // Test for Chat function with description
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
@@ -1686,13 +1677,11 @@ mod tests {
         );
 
         // Test for JSON function with description
-        let output_schema = StaticJSONSchema::from_value(&json!({})).unwrap();
+        let output_schema = StaticJSONSchema::from_value(json!({})).unwrap();
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&json!({}));
         let json_config = FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             output_schema,
             implicit_tool_call_config,
             description: Some("A JSON function description".to_string()),
@@ -1706,9 +1695,7 @@ mod tests {
         // Test for None description
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
@@ -1739,12 +1726,10 @@ mod tests {
           "additionalProperties": false
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             output_schema,
             implicit_tool_call_config,
             description: None,
@@ -1784,7 +1769,7 @@ mod tests {
             },
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             templates: &templates,
             dynamic_output_schema: None,
             extra_body: Default::default(),
@@ -2095,7 +2080,7 @@ mod tests {
             },
             tool_config: None,
             function_name: "",
-            variant_name: Some(""),
+            variant_name: "",
             templates: &templates,
             dynamic_output_schema: Some(&dynamic_output_schema),
             extra_body: Default::default(),
@@ -2305,12 +2290,10 @@ mod tests {
         // Test with an empty output schema
         let output_schema = json!({});
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             output_schema,
             implicit_tool_call_config,
             description: None,
@@ -2389,12 +2372,14 @@ mod tests {
         // Case 2: Only Thought blocks
         let content_blocks = vec![
             ContentBlockOutput::Thought(Thought {
-                text: "thinking...".to_string(),
+                text: Some("thinking...".to_string()),
                 signature: None,
+                provider_type: None,
             }),
             ContentBlockOutput::Thought(Thought {
-                text: "still thinking".to_string(),
+                text: Some("still thinking".to_string()),
                 signature: Some("sig".to_string()),
+                provider_type: None,
             }),
         ];
         let (raw_output, auxiliary_content, json_block_index) =
@@ -2406,15 +2391,17 @@ mod tests {
         // Case 3: Mixed Text, Thought, ToolCall
         let content_blocks = vec![
             ContentBlockOutput::Thought(Thought {
-                text: "first thought".to_string(),
+                text: Some("first thought".to_string()),
                 signature: None,
+                provider_type: None,
             }),
             ContentBlockOutput::Text(Text {
                 text: "Some text".to_string(),
             }),
             ContentBlockOutput::Thought(Thought {
-                text: "second thought".to_string(),
+                text: Some("second thought".to_string()),
                 signature: Some("sig2".to_string()),
+                provider_type: None,
             }),
             ContentBlockOutput::ToolCall(ToolCall {
                 id: "id2".to_string(),
@@ -2464,8 +2451,9 @@ mod tests {
                 text: "A".to_string(),
             }),
             ContentBlockOutput::Thought(Thought {
-                text: "final thought".to_string(),
+                text: Some("final thought".to_string()),
                 signature: None,
+                provider_type: None,
             }),
         ];
         let (raw_output, auxiliary_content, json_block_index) =
@@ -2474,7 +2462,9 @@ mod tests {
         assert_eq!(auxiliary_content.len(), 1);
         assert_eq!(json_block_index, Some(0));
         match &auxiliary_content[0] {
-            ContentBlockOutput::Thought(t) => assert_eq!(t.text, "final thought"),
+            ContentBlockOutput::Thought(t) => {
+                assert_eq!(t.text, Some("final thought".to_string()));
+            }
             _ => panic!("Expected Thought block"),
         }
     }

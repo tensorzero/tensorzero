@@ -3,11 +3,10 @@ import {
   OptimizationJobHandle,
   OptimizationJobInfo,
   LaunchOptimizationWorkflowParams,
-  FunctionConfig,
-  MetricConfig,
-  EvaluationConfig,
-  Config,
   StaleDatasetResponse,
+  Config,
+  ClientInferenceParams,
+  InferenceResponse,
 } from "./bindings";
 import type { TensorZeroClient as NativeTensorZeroClientType } from "../index";
 
@@ -16,7 +15,7 @@ export * from "./bindings";
 
 // Use createRequire to load CommonJS module
 const require = createRequire(import.meta.url);
-const { TensorZeroClient: NativeTensorZeroClient } =
+const { TensorZeroClient: NativeTensorZeroClient, getConfig: nativeGetConfig } =
   require("../index.cjs") as typeof import("../index");
 
 // Wrapper class for type safety and convenience
@@ -32,12 +31,12 @@ export class TensorZeroClient {
     this.nativeClient = client;
   }
 
-  static async build(
+  static async buildEmbedded(
     configPath: string,
     clickhouseUrl?: string | undefined | null,
     timeout?: number | undefined | null,
   ): Promise<TensorZeroClient> {
-    const nativeClient = await NativeTensorZeroClient.build(
+    const nativeClient = await NativeTensorZeroClient.buildEmbedded(
       configPath,
       clickhouseUrl,
       timeout,
@@ -45,12 +44,21 @@ export class TensorZeroClient {
     return new TensorZeroClient(nativeClient);
   }
 
+  static async buildHttp(gatewayUrl: string): Promise<TensorZeroClient> {
+    const nativeClient = await NativeTensorZeroClient.buildHttp(gatewayUrl);
+    return new TensorZeroClient(nativeClient);
+  }
+
+  async inference(params: ClientInferenceParams): Promise<InferenceResponse> {
+    const paramsString = safeStringify(params);
+    const responseString = await this.nativeClient.inference(paramsString);
+    return JSON.parse(responseString) as InferenceResponse;
+  }
+
   async experimentalLaunchOptimizationWorkflow(
     params: LaunchOptimizationWorkflowParams,
   ): Promise<OptimizationJobHandle> {
-    const paramsString = JSON.stringify(params, (_key, value) =>
-      typeof value === "bigint" ? value.toString() : value,
-    );
+    const paramsString = safeStringify(params);
     const jobHandleString =
       await this.nativeClient.experimentalLaunchOptimizationWorkflow(
         paramsString,
@@ -61,44 +69,10 @@ export class TensorZeroClient {
   async experimentalPollOptimization(
     jobHandle: OptimizationJobHandle,
   ): Promise<OptimizationJobInfo> {
-    const jobHandleString = JSON.stringify(jobHandle);
+    const jobHandleString = safeStringify(jobHandle);
     const statusString =
       await this.nativeClient.experimentalPollOptimization(jobHandleString);
     return JSON.parse(statusString) as OptimizationJobInfo;
-  }
-
-  listFunctions(): string[] {
-    return this.nativeClient.listFunctions();
-  }
-
-  getFunctionConfig(functionName: string): FunctionConfig {
-    const functionConfigString =
-      this.nativeClient.getFunctionConfig(functionName);
-    return JSON.parse(functionConfigString) as FunctionConfig;
-  }
-
-  listMetrics(): string[] {
-    return this.nativeClient.listMetrics();
-  }
-
-  getMetricConfig(metricName: string): MetricConfig {
-    const metricConfigString = this.nativeClient.getMetricConfig(metricName);
-    return JSON.parse(metricConfigString) as MetricConfig;
-  }
-
-  listEvaluations(): string[] {
-    return this.nativeClient.listEvaluations();
-  }
-
-  getEvaluationConfig(evaluationName: string): EvaluationConfig {
-    const evaluationConfigString =
-      this.nativeClient.getEvaluationConfig(evaluationName);
-    return JSON.parse(evaluationConfigString) as EvaluationConfig;
-  }
-
-  getConfig(): Config {
-    const configString = this.nativeClient.getConfig();
-    return JSON.parse(configString) as Config;
   }
 
   async staleDataset(datasetName: string): Promise<StaleDatasetResponse> {
@@ -109,3 +83,18 @@ export class TensorZeroClient {
 }
 
 export default TensorZeroClient;
+
+export async function getConfig(configPath: string): Promise<Config> {
+  const configString = await nativeGetConfig(configPath);
+  return JSON.parse(configString) as Config;
+}
+
+function safeStringify(obj: unknown) {
+  try {
+    return JSON.stringify(obj, (_key, value) =>
+      typeof value === "bigint" ? value.toString() : value,
+    );
+  } catch {
+    return "null";
+  }
+}

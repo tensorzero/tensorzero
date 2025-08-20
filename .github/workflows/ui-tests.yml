@@ -5,14 +5,20 @@ on:
 
 jobs:
   ui-tests:
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: ubuntu-latest
 
     strategy:
       matrix:
         clickhouse_version: ["24.12-alpine", "25.2-alpine", "latest-alpine"]
 
     steps:
-      - uses: namespacelabs/nscloud-checkout-action@953fed31a6113cc2347ca69c9d823743c65bc84b
+      - name: Set DNS
+        run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Cleanup disk space
+        run: ./ci/free-disk-space.sh
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -27,25 +33,12 @@ jobs:
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Setup the Namespace cache for `s3-fixtures`
-        uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
-        with:
-          path: |
-            ./ui/fixtures/s3-fixtures
-
-      - name: Setup `wasm-pack`
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
-      - name: Build minijinja WASM bindings
-        working-directory: ui/app/utils/minijinja
-        run: wasm-pack build --features console_error_panic_hook
-
       - name: Build `tensorzero-node`
         working-directory: internal/tensorzero-node
         run: pnpm build
 
       - name: Download `gateway` container
-        uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
         with:
           name: build-gateway-container
           path: .
@@ -56,12 +49,17 @@ jobs:
       - name: Start Docker containers and apply fixtures
         working-directory: ui
         run: |
-          echo "OPENAI_API_KEY=not_used" >> fixtures/.env
-          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
+
+          # Environment variables only used by the gateway container
+          # We deliberately leave these unset when starting the UI container, to ensure
+          # that it doesn't depend on them being set
+          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env-gateway
+          echo "OPENAI_API_KEY=not_used" >> fixtures/.env-gateway
+
           TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up -d
           docker compose -f fixtures/docker-compose.yml wait fixtures
 

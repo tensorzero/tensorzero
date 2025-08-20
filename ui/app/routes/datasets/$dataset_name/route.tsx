@@ -34,7 +34,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   const [counts, rows] = await Promise.all([
-    getDatasetCounts(),
+    getDatasetCounts({}),
     getDatasetRows(dataset_name, pageSize, offset),
   ]);
   const count_info = counts.find(
@@ -79,7 +79,11 @@ export default function DatasetDetailPage({
 
   return (
     <PageLayout>
-      <PageHeader heading="Dataset" name={count_info.dataset_name} />
+      <PageHeader
+        heading={`Dataset`}
+        name={count_info.dataset_name}
+        count={count_info.count}
+      />
       <SectionLayout>
         <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
         <DatasetRowTable rows={rows} dataset_name={count_info.dataset_name} />

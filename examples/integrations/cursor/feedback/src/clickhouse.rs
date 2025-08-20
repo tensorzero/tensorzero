@@ -6,7 +6,7 @@ use chrono::Utc;
 use serde::Deserialize;
 use tensorzero_core::serde_util::deserialize_json_string;
 use tensorzero_core::{
-    clickhouse::ClickHouseConnectionInfo,
+    db::clickhouse::ClickHouseConnectionInfo,
     inference::types::{ContentBlockChatOutput, ResolvedInput},
 };
 use uuid::Uuid;
@@ -53,11 +53,10 @@ pub async fn get_inferences_in_time_range(
         parameters.insert("user", user);
         "AND ci.tags['user'] = {user:String}".to_string()
     } else {
-        "".to_string()
+        String::new()
     };
 
-    let mut query = r#"
-    WITH inference_ids AS (
+    let mut query = r"WITH inference_ids AS (
         SELECT uint_to_uuid(id_uint) as id
         FROM InferenceById
         WHERE id_uint >= toUInt128({lower_bound:UUID})
@@ -71,9 +70,8 @@ pub async fn get_inferences_in_time_range(
     LEFT ANTI JOIN FloatMetricFeedbackByTargetId AS fmf ON fmf.target_id = ci.id
     WHERE
         ci.function_name = 'cursorzero'
-        AND ci.id IN (SELECT id FROM inference_ids)
-        "#
-    .to_string();
+        AND ci.id IN (SELECT id FROM inference_ids)"
+        .to_string();
     query.push_str(&user_where_clause);
     query.push_str(" FORMAT JSONEachRow");
 

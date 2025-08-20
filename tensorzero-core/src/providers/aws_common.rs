@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use aws_config::{meta::region::RegionProviderChain, Region};
+use aws_smithy_runtime_api::client::interceptors::context::AfterDeserializationInterceptorContextRef;
 use aws_smithy_runtime_api::client::interceptors::context::BeforeTransmitInterceptorContextMut;
 use aws_smithy_runtime_api::client::interceptors::Intercept;
 use aws_smithy_runtime_api::client::runtime_components::RuntimeComponents;
@@ -63,15 +64,20 @@ pub struct TensorZeroInterceptor {
     /// Captures the raw request from `modify_before_signing`.
     /// After the request is executed, we use this to retrieve the raw request.
     raw_request: Arc<Mutex<Option<String>>>,
+    /// Captures the raw response from `read_after_deserialization`.
+    /// After the request is executed, we use this to retrieve the raw response.
+    raw_response: Arc<Mutex<Option<String>>>,
     extra_body: FullExtraBodyConfig,
     extra_headers: FullExtraHeadersConfig,
     model_provider_info: ModelProviderRequestInfo,
     model_name: String,
 }
 
-pub struct InterceptorAndRawBody<F: Fn() -> Result<String, Error>> {
+pub struct InterceptorAndRawBody<P: Fn() -> Result<String, Error>, Q: Fn() -> Result<String, Error>>
+{
     pub interceptor: TensorZeroInterceptor,
-    pub get_raw_request: F,
+    pub get_raw_request: P,
+    pub get_raw_response: Q,
 }
 
 impl Intercept for TensorZeroInterceptor {
@@ -147,6 +153,25 @@ impl Intercept for TensorZeroInterceptor {
         }
         Ok(())
     }
+
+    fn read_after_deserialization(
+        &self,
+        context: &AfterDeserializationInterceptorContextRef<'_>,
+        _runtime_components: &RuntimeComponents,
+        _cfg: &mut ConfigBag,
+    ) -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
+        let bytes = context.response().body().bytes();
+        if let Some(bytes) = bytes {
+            let raw_response = self.raw_response.lock();
+            // Ignore poisoned lock, since we're overwriting it.
+            let mut body = match raw_response {
+                Ok(body) => body,
+                Err(e) => e.into_inner(),
+            };
+            *body = Some(String::from_utf8_lossy(bytes).into_owned());
+        }
+        Ok(())
+    }
 }
 
 /// Builds our custom interceptor to the request builder, which injects our 'extra_body' parameters into
@@ -158,13 +183,15 @@ pub fn build_interceptor(
     request: &ModelInferenceRequest<'_>,
     model_provider: &ModelProvider,
     model_name: String,
-) -> InterceptorAndRawBody<impl Fn() -> Result<String, Error>> {
+) -> InterceptorAndRawBody<impl Fn() -> Result<String, Error>, impl Fn() -> Result<String, Error>> {
     let raw_request = Arc::new(Mutex::new(None));
+    let raw_response = Arc::new(Mutex::new(None));
     let extra_body = request.extra_body.clone();
     let extra_headers = request.extra_headers.clone();
 
     let interceptor = TensorZeroInterceptor {
         raw_request: raw_request.clone(),
+        raw_response: raw_response.clone(),
         extra_body,
         extra_headers,
         model_provider_info: model_provider.into(),
@@ -188,6 +215,22 @@ pub fn build_interceptor(
                     })
                 })?;
             Ok(raw_request)
+        },
+        get_raw_response: move || {
+            let raw_response = raw_response
+                .lock()
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Poisoned raw_response mutex for AWS request: {e:?}"),
+                    })
+                })?
+                .clone()
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: "Failed to get serialized AWS response".to_string(),
+                    })
+                })?;
+            Ok(raw_response)
         },
     }
 }

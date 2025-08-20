@@ -35,7 +35,7 @@ pub struct AWSSagemakerProvider {
     #[serde(skip)]
     client: aws_sdk_sagemakerruntime::Client,
     #[serde(skip)] // TODO: add a way to Serialize the WrappedProvider
-    hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
+    pub hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
     #[serde(skip)]
     base_config: aws_sdk_sagemakerruntime::config::Builder,
 }
@@ -70,6 +70,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         let InterceptorAndRawBody {
             interceptor,
             get_raw_request,
+            get_raw_response,
         } = build_interceptor(
             request.request,
             model_provider,
@@ -102,7 +103,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                         DisplayErrorContext(&e)
                     ),
                     raw_request: get_raw_request().ok(),
-                    raw_response: None,
+                    raw_response: get_raw_response().ok(),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -148,6 +149,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         let InterceptorAndRawBody {
             interceptor,
             get_raw_request,
+            get_raw_response,
         } = build_interceptor(
             request.request,
             model_provider,
@@ -178,7 +180,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                         DisplayErrorContext(&e)
                     ),
                     raw_request: get_raw_request().ok(),
-                    raw_response: None,
+                    raw_response: get_raw_response().ok(),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;

@@ -1,5 +1,5 @@
 import { data, type LoaderFunctionArgs } from "react-router";
-import { getConfig } from "~/utils/config/index.server";
+import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { getInferenceTableName } from "~/utils/clickhouse/common";
 import {
   queryMetricsWithFeedback,
@@ -18,7 +18,7 @@ export async function loader({
 
   try {
     const config = await getConfig();
-    const functionConfig = config.functions[functionName];
+    const functionConfig = await getFunctionConfig(functionName, config);
     if (!functionConfig) {
       throw data(`Function ${functionName} not found in config`, {
         status: 404,

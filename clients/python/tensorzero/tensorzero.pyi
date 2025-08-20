@@ -34,6 +34,7 @@ from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
     InferenceFilterTreeNode,
     JsonInferenceOutput,
+    OrderBy,
 )
 
 @final
@@ -60,12 +61,14 @@ class StoredInference:
         output: Any,
         episode_id: UUID,
         inference_id: UUID,
+        timestamp: str,
         tool_params: Optional[Any] = None,
         output_schema: Optional[Any] = None,
         # Dispreferred outputs are lists because there may be several of them in the future.
         dispreferred_outputs: Union[
             List[ChatInferenceOutput], List[JsonInferenceOutput]
         ] = [],
+        tags: Dict[str, str] = {},
     ) -> None: ...
     def __repr__(self) -> str: ...
     @property
@@ -87,25 +90,33 @@ class StoredInference:
     @property
     def type(self) -> str: ...
     @property
+    def timestamp(self) -> str: ...
+    @property
     def dispreferred_outputs(
         self,
     ) -> Union[List[ChatInferenceOutput], List[JsonInferenceOutput]]: ...
+    @property
+    def tags(self) -> Dict[str, str]: ...
 
 @final
 class RenderedSample:
     function_name: str
     input: ModelInput
+    stored_input: ResolvedInput
     output: Optional[ChatInferenceOutput]
     episode_id: Optional[UUID]
     inference_id: Optional[UUID]
     tool_params: Optional[ToolCallConfigDatabaseInsert]
     output_schema: Optional[Dict[str, Any]]
     dispreferred_outputs: List[ChatInferenceOutput] = []
+    tags: Dict[str, str]
 
 @final
 class OptimizationJobHandle:
     OpenAISFT: Type["OptimizationJobHandle"]
     FireworksSFT: Type["OptimizationJobHandle"]
+    GCPVertexGeminiSFT: Type["OptimizationJobHandle"]
+    TogetherSFT: Type["OptimizationJobHandle"]
 
 @final
 class OptimizationJobStatus:
@@ -117,6 +128,8 @@ class OptimizationJobStatus:
 class OptimizationJobInfo:
     OpenAISFT: Type["OptimizationJobInfo"]
     FireworksSFT: Type["OptimizationJobInfo"]
+    GCPVertexGeminiSFT: Type["OptimizationJobInfo"]
+    TogetherSFT: Type["OptimizationJobInfo"]
     @property
     def message(self) -> str: ...
     @property
@@ -147,8 +160,55 @@ class FireworksSFTConfig:
         self,
         *,
         model: str,
+        early_stop: Optional[bool] = None,
+        epochs: Optional[int] = None,
+        learning_rate: Optional[float] = None,
+        max_context_length: Optional[int] = None,
+        lora_rank: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        display_name: Optional[str] = None,
+        output_model: Optional[str] = None,
+        warm_start_from: Optional[str] = None,
+        is_turbo: Optional[bool] = None,
+        eval_auto_carveout: Optional[bool] = None,
+        nodes: Optional[int] = None,
+        mtp_enabled: Optional[bool] = None,
+        mtp_num_draft_tokens: Optional[int] = None,
+        mtp_freeze_base_model: Optional[bool] = None,
         credentials: Optional[str] = None,
         account_id: str,
+        api_base: Optional[str] = None,
+    ) -> None: ...
+
+@final
+class GCPVertexGeminiSFTConfig:
+    def __init__(
+        self,
+        *,
+        model: str,
+        bucket_name: str,
+        project_id: str,
+        region: str,
+        learning_rate_multiplier: Optional[float] = None,
+        adapter_size: Optional[int] = None,
+        n_epochs: Optional[int] = None,
+        export_last_checkpoint_only: Optional[bool] = None,
+        credentials: Optional[str] = None,
+        api_base: Optional[str] = None,
+        seed: Optional[int] = None,
+        service_account: Optional[str] = None,
+        kms_key_name: Optional[str] = None,
+        tuned_model_display_name: Optional[str] = None,
+        bucket_path_prefix: Optional[str] = None,
+    ) -> None: ...
+
+@final
+class TogetherSFTConfig:
+    def __init__(
+        self,
+        *,
+        model: str,
+        credentials: Optional[str] = None,
         api_base: Optional[str] = None,
     ) -> None: ...
 
@@ -171,6 +231,8 @@ class Datapoint:
     def tool_params(self) -> Optional[Any]: ...
     @property
     def output_schema(self) -> Optional[Any]: ...
+    @property
+    def is_custom(self) -> bool: ...
 
 @final
 class ChatCompletionConfig:
@@ -180,6 +242,8 @@ class ChatCompletionConfig:
     def user_template(self) -> Optional[str]: ...
     @property
     def assistant_template(self) -> Optional[str]: ...
+    @property
+    def model(self) -> str: ...
 
 @final
 class BestOfNSamplingConfig:
@@ -483,6 +547,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         variant_name: Optional[str] = None,
         filters: Optional[InferenceFilterTreeNode] = None,
         output_source: str = "inference",
+        order_by: Optional[List[OrderBy]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> List[StoredInference]:
@@ -824,6 +889,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         variant_name: Optional[str] = None,
         filters: Optional[InferenceFilterTreeNode] = None,
         output_source: str = "inference",
+        order_by: Optional[List[OrderBy]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> List[StoredInference]:
@@ -957,6 +1023,7 @@ __all__ = [
     "FunctionConfigJson",
     "FunctionsConfig",
     "FireworksSFTConfig",
+    "GCPVertexGeminiSFTConfig",
     "TensorZeroGateway",
     "LocalHttpGateway",
     "MixtureOfNConfig",
@@ -966,6 +1033,7 @@ __all__ = [
     "OptimizationJobInfo",
     "OptimizationJobStatus",
     "RenderedSample",
+    "TogetherSFTConfig",
     "StoredInference",
     "ResolvedInput",
     "ResolvedInputMessage",

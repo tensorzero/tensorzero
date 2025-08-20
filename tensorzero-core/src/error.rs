@@ -3,8 +3,10 @@ use std::time::Duration;
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
+use serde::{Serialize, Serializer};
 use serde_json::{json, Value};
 use std::fmt::{Debug, Display};
+use thiserror::Error;
 use tokio::sync::OnceCell;
 use url::Url;
 use uuid::Uuid;
@@ -21,12 +23,11 @@ use crate::inference::types::Thought;
 ///
 /// WARNING: Setting this to true will expose potentially sensitive request/response
 /// data in logs and error responses. Use with caution.
-static DEBUG: OnceCell<bool> =
-    if cfg!(feature = "e2e_tests") || cfg!(feature = "optimization_tests") {
-        OnceCell::const_new_with(true)
-    } else {
-        OnceCell::const_new()
-    };
+static DEBUG: OnceCell<bool> = if cfg!(feature = "e2e_tests") {
+    OnceCell::const_new_with(true)
+} else {
+    OnceCell::const_new()
+};
 
 pub fn set_debug(debug: bool) -> Result<(), Error> {
     // We already initialized `DEBUG`, so do nothing
@@ -40,9 +41,27 @@ pub fn set_debug(debug: bool) -> Result<(), Error> {
     })
 }
 
+static UNSTABLE_ERROR_JSON: OnceCell<bool> = OnceCell::const_new();
+
+pub fn set_unstable_error_json(unstable_error_json: bool) -> Result<(), Error> {
+    UNSTABLE_ERROR_JSON.set(unstable_error_json).map_err(|_| {
+        Error::new(ErrorDetails::Config {
+            message: "Failed to set unstable error JSON".to_string(),
+        })
+    })
+}
+
+pub fn warn_discarded_cache_write(raw_response: &str) {
+    if *DEBUG.get().unwrap_or(&false) {
+        tracing::warn!("Skipping cache write due to invalid output:\nRaw response: {raw_response}");
+    } else {
+        tracing::warn!("Skipping cache write due to invalid output");
+    }
+}
+
 pub fn warn_discarded_thought_block(provider_type: &str, thought: &Thought) {
     if *DEBUG.get().unwrap_or(&false) {
-        tracing::warn!("Provider type `{provider_type}` does not support input thought blocks, discarding: {thought}");
+        tracing::warn!("Provider type `{provider_type}` does not support input thought blocks, discarding: {thought:?}");
     } else {
         tracing::warn!(
             "Provider type `{provider_type}` does not support input thought blocks, discarding"
@@ -81,7 +100,9 @@ impl<T: Debug + Display> Display for DisplayOrDebugGateway<T> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Error, Serialize)]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
+#[error(transparent)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
 // We box `ErrorDetails` per the `clippy::result_large_err` lint
 pub struct Error(Box<ErrorDetails>);
@@ -89,6 +110,13 @@ pub struct Error(Box<ErrorDetails>);
 impl Error {
     pub fn new(details: ErrorDetails) -> Self {
         details.log();
+        Error(Box::new(details))
+    }
+
+    pub fn new_with_err_logging(details: ErrorDetails, err_logging: bool) -> Self {
+        if err_logging {
+            details.log();
+        }
         Error(Box::new(details))
     }
 
@@ -113,10 +141,27 @@ impl Error {
     }
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
+// Expect for derive Serialize
+#[expect(clippy::trivially_copy_pass_by_ref)]
+fn serialize_status<S>(code: &Option<StatusCode>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match code {
+        Some(c) => serializer.serialize_u16(c.as_u16()),
+        None => serializer.serialize_none(),
     }
+}
+
+fn serialize_if_debug<T, S>(data: T, serializer: S) -> Result<S::Ok, S::Error>
+where
+    T: Serialize,
+    S: Serializer,
+{
+    if *DEBUG.get().unwrap_or(&false) {
+        return data.serialize(serializer);
+    }
+    serializer.serialize_none()
 }
 
 impl From<ErrorDetails> for Error {
@@ -125,7 +170,8 @@ impl From<ErrorDetails> for Error {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Error, Serialize)]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
 pub enum ErrorDetails {
     AllVariantsFailed {
         errors: HashMap<String, Error>,
@@ -142,6 +188,9 @@ pub enum ErrorDetails {
     BadCredentialsPreInference {
         provider_name: String,
     },
+    Base64 {
+        message: String,
+    },
     BatchInputValidation {
         index: usize,
         message: String,
@@ -156,7 +205,14 @@ pub enum ErrorDetails {
     Cache {
         message: String,
     },
+    Glob {
+        glob: String,
+        message: String,
+    },
     ChannelWrite {
+        message: String,
+    },
+    ClickHouseConfiguration {
         message: String,
     },
     ClickHouseConnection {
@@ -200,9 +256,12 @@ pub enum ErrorDetails {
     },
     InferenceClient {
         message: String,
+        #[serde(serialize_with = "serialize_status")]
         status_code: Option<StatusCode>,
         provider_type: String,
+        #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
+        #[serde(serialize_with = "serialize_if_debug")]
         raw_response: Option<String>,
     },
     InferenceNotFound {
@@ -211,15 +270,24 @@ pub enum ErrorDetails {
     InferenceServer {
         message: String,
         provider_type: String,
+        #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
+        #[serde(serialize_with = "serialize_if_debug")]
         raw_response: Option<String>,
     },
     InvalidClientMode {
         mode: String,
         message: String,
     },
+    InvalidDynamicTemplatePath {
+        name: String,
+    },
+    InvalidEncodedJobHandle,
+    InvalidJobHandle {
+        message: String,
+    },
     InvalidInferenceOutputSource {
-        source: String,
+        source_kind: String,
     },
     ObjectStoreWrite {
         message: String,
@@ -232,7 +300,7 @@ pub enum ErrorDetails {
         variant_name: String,
     },
     VariantTimeout {
-        variant_name: Option<String>,
+        variant_name: String,
         timeout: Duration,
         streaming: bool,
     },
@@ -348,6 +416,9 @@ pub enum ErrorDetails {
     MissingFileExtension {
         file_name: String,
     },
+    ModelNotFound {
+        model_name: String,
+    },
     ModelProvidersExhausted {
         provider_errors: HashMap<String, Error>,
     },
@@ -454,6 +525,7 @@ impl ErrorDetails {
             ErrorDetails::ExtraBodyReplacement { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidInferenceTarget { .. } => tracing::Level::WARN,
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
+            ErrorDetails::Base64 { .. } => tracing::Level::ERROR,
             ErrorDetails::UnsupportedContentBlockType { .. } => tracing::Level::WARN,
             ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
@@ -461,6 +533,7 @@ impl ErrorDetails {
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
             ErrorDetails::BadImageFetch { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseConfiguration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
@@ -484,6 +557,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidBatchParams { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
+            ErrorDetails::Glob { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidClientMode { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDatasetName { .. } => tracing::Level::WARN,
@@ -492,6 +566,9 @@ impl ErrorDetails {
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidDynamicTemplatePath { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidEncodedJobHandle => tracing::Level::WARN,
+            ErrorDetails::InvalidJobHandle { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidRenderedStoredInference { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidMetricName { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
@@ -515,6 +592,7 @@ impl ErrorDetails {
             ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
             ErrorDetails::MissingFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
+            ErrorDetails::ModelNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
             ErrorDetails::Observability { .. } => tracing::Level::WARN,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
@@ -548,6 +626,7 @@ impl ErrorDetails {
         match self {
             ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
             ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::Glob { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ExtraBodyReplacement { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -555,6 +634,7 @@ impl ErrorDetails {
             ErrorDetails::BatchNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Cache { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseConfiguration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -572,6 +652,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceClient { status_code, .. } => {
                 status_code.unwrap_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)
             }
+            ErrorDetails::Base64 { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadImageFetch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -580,6 +661,8 @@ impl ErrorDetails {
             ErrorDetails::ModelTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::VariantTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::InvalidClientMode { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidEncodedJobHandle => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidJobHandle { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidTensorzeroUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
@@ -592,6 +675,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicEvaluationRun { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidDynamicTemplatePath { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceOutputSource { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
@@ -615,6 +699,7 @@ impl ErrorDetails {
             ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFunctionInVariants { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFileExtension { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -709,11 +794,7 @@ impl std::fmt::Display for ErrorDetails {
                 timeout,
                 streaming,
             } => {
-                let variant_description = if let Some(variant_name) = variant_name {
-                    format!("Variant `{variant_name}`")
-                } else {
-                    "Unknown variant".to_string()
-                };
+                let variant_description = format!("Variant `{variant_name}`");
                 if *streaming {
                     write!(f, "{variant_description} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})")
                 } else {
@@ -750,6 +831,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Error replacing extra body: `{message}` with pointer: `{pointer}`"
                 )
             }
+            ErrorDetails::Glob { glob, message } => {
+                write!(f, "Error using glob: `{glob}`: {message}")
+            }
             ErrorDetails::ApiKeyMissing { provider_name } => {
                 write!(f, "API key missing for provider: {provider_name}")
             }
@@ -762,6 +846,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Bad credentials at inference time for provider: {provider_name}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                 )
             }
+            ErrorDetails::Base64 { message } => {
+                write!(f, "Error decoding base64: {message}")
+            }
             ErrorDetails::BatchInputValidation { index, message } => {
                 write!(f, "Input at index {index} failed validation: {message}",)
             }
@@ -773,6 +860,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {message}")
+            }
+            ErrorDetails::ClickHouseConfiguration { message } => {
+                write!(f, "Error in ClickHouse configuration: {message}")
             }
             ErrorDetails::ClickHouseConnection { message } => {
                 write!(f, "Error connecting to ClickHouse: {message}")
@@ -830,16 +920,16 @@ impl std::fmt::Display for ErrorDetails {
                         message,
                         raw_request
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw request: {r}")),
+                            .map_or(String::new(), |r| format!("\nRaw request: {r}")),
                         raw_response
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw response: {r}"))
+                            .map_or(String::new(), |r| format!("\nRaw response: {r}"))
                     )
                 } else {
                     write!(
                         f,
                         "Error{} from {} client: {}",
-                        status_code.map_or("".to_string(), |s| format!(" {s}")),
+                        status_code.map_or(String::new(), |s| format!(" {s}")),
                         provider_type,
                         message
                     )
@@ -863,10 +953,10 @@ impl std::fmt::Display for ErrorDetails {
                         message,
                         raw_request
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw request: {r}")),
+                            .map_or(String::new(), |r| format!("\nRaw request: {r}")),
                         raw_response
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw response: {r}"))
+                            .map_or(String::new(), |r| format!("\nRaw response: {r}"))
                     )
                 } else {
                     write!(f, "Error from {provider_type} server: {message}")
@@ -909,12 +999,24 @@ impl std::fmt::Display for ErrorDetails {
                     "Dynamic evaluation run not found for episode id: {episode_id}",
                 )
             }
+            ErrorDetails::InvalidDynamicTemplatePath { name } => {
+                write!(f, "Invalid dynamic template path: {name}. There is likely a duplicate template in the config.")
+            }
+            ErrorDetails::InvalidEncodedJobHandle => {
+                write!(
+                    f,
+                    "Invalid encoded job handle. Failed to decode using URL-safe Base64."
+                )
+            }
+            ErrorDetails::InvalidJobHandle { message } => {
+                write!(f, "Failed to deserialize job handle: {message}")
+            }
             ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{message}"),
             ErrorDetails::InvalidTensorzeroUuid { message, kind } => {
                 write!(f, "Invalid {kind} ID: {message}")
             }
-            ErrorDetails::InvalidInferenceOutputSource { source } => {
-                write!(f, "Invalid inference output source: {source}. Should be one of: \"inference\" or \"demonstration\".")
+            ErrorDetails::InvalidInferenceOutputSource { source_kind } => {
+                write!(f, "Invalid inference output source: {source_kind}. Should be one of: \"inference\" or \"demonstration\".")
             }
             ErrorDetails::InvalidMetricName { metric_name } => {
                 write!(f, "Invalid metric name: {metric_name}")
@@ -1015,6 +1117,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Could not determine file extension for file: {file_name}"
                 )
+            }
+            ErrorDetails::ModelNotFound { model_name } => {
+                write!(f, "Model not found: {model_name}")
             }
             ErrorDetails::ModelProvidersExhausted { provider_errors } => {
                 write!(
@@ -1124,12 +1229,16 @@ impl std::fmt::Display for ErrorDetails {
     }
 }
 
-impl std::error::Error for Error {}
-
 impl IntoResponse for Error {
     /// Log the error and convert it into an Axum response
     fn into_response(self) -> Response {
-        let body = json!({"error": self.to_string()});
+        let mut body = json!({
+            "error": self.to_string(),
+        });
+        if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
+            body["error_json"] =
+                serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
+        }
         (self.status_code(), Json(body)).into_response()
     }
 }

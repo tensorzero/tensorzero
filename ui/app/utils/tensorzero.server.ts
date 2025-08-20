@@ -4,10 +4,11 @@ import {
   TensorZeroClient,
   TensorZeroServerError,
   type FeedbackResponse,
-  type JSONValue,
 } from "~/utils/tensorzero";
+import type { JsonValue } from "tensorzero-node";
 import { getEnv } from "./env.server";
 import { getFeedbackConfig } from "./config/feedback";
+import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 
 let _tensorZeroClient: TensorZeroClient | undefined;
 
@@ -41,7 +42,7 @@ export async function addHumanFeedback(formData: FormData) {
   if (!formValue || typeof formValue !== "string") {
     throw new TensorZeroServerError.InputValidation("Value is required");
   }
-  let value: JSONValue;
+  let value: JsonValue;
   if (metricType === "boolean") {
     value = formValue === "true";
   } else if (metricType === "float") {
@@ -141,7 +142,7 @@ export async function addJudgeDemonstration(formData: FormData) {
     throw new Error(`Metric ${metricName} not found`);
   }
   const metricType = metric.type;
-  let parsedValue: JSONValue;
+  let parsedValue: JsonValue;
   if (metricType === "float") {
     parsedValue = parseFloat(value);
   } else if (metricType === "boolean") {
@@ -159,5 +160,20 @@ export async function addJudgeDemonstration(formData: FormData) {
     internal: true,
   });
   const response = await getTensorZeroClient().feedback(feedbackRequest);
+  return response;
+}
+
+export async function listDatapoints(
+  datasetName: string,
+  functionName?: string,
+  limit?: number,
+  offset?: number,
+): Promise<TensorZeroDatapoint[]> {
+  const response = await getTensorZeroClient().listDatapoints(
+    datasetName,
+    functionName,
+    limit,
+    offset,
+  );
   return response;
 }

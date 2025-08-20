@@ -1,6 +1,6 @@
 use std::{borrow::Cow, sync::OnceLock};
 
-use crate::tool::Tool;
+use crate::{providers::helpers_thinking_block::THINK_CHUNK_ID, tool::Tool};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_eventsource::{Event, EventSource};
@@ -371,7 +371,7 @@ impl<'a> FireworksRequest<'a> {
         };
         let messages = prepare_fireworks_messages(request.system.as_deref(), &request.messages)?;
         let (tools, tool_choice, _) = prepare_openai_tools(request);
-        let tools = tools.map(|t| t.into_iter().map(|tool| tool.into()).collect());
+        let tools = tools.map(|t| t.into_iter().map(OpenAITool::into).collect());
 
         Ok(FireworksRequest {
             messages,
@@ -395,7 +395,7 @@ pub fn prepare_fireworks_messages<'a>(
     messages: &'a [RequestMessage],
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut output_messages = Vec::with_capacity(messages.len());
-    for message in messages.iter() {
+    for message in messages {
         output_messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
     }
     if let Some(system_msg) = tensorzero_to_fireworks_system_message(system) {
@@ -470,6 +470,8 @@ struct FireworksResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<FireworksResponseToolCall>>,
 }
 
@@ -530,6 +532,8 @@ struct FireworksToolCallChunk {
 struct FireworksDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<FireworksToolCallChunk>>,
 }
@@ -623,12 +627,20 @@ fn fireworks_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(OpenAIUsage::into);
     let mut finish_reason = None;
     let mut content = vec![];
     if let Some(choice) = chunk.choices.pop() {
         if let Some(reason) = choice.finish_reason {
             finish_reason = Some(reason.into());
+        }
+        if let Some(reasoning) = choice.delta.reasoning_content {
+            content.push(ContentBlockChunk::Thought(ThoughtChunk {
+                text: Some(reasoning),
+                signature: None,
+                id: THINK_CHUNK_ID.to_string(),
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+            }));
         }
         if let Some(text) = choice.delta.content {
             if parse_think_blocks {
@@ -645,6 +657,7 @@ fn fireworks_to_tensorzero_chunk(
                                 text: Some(text.to_string()),
                                 signature: None,
                                 id: thinking_state.get_id(),
+                                provider_type: Some(PROVIDER_TYPE.to_string()),
                             }));
                         }
                     }
@@ -744,13 +757,21 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             }
             ))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        if let Some(reasoning) = message.reasoning_content {
+            content.push(ContentBlockOutput::Thought(Thought {
+                text: Some(reasoning),
+                signature: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+            }));
+        }
         if let Some(raw_text) = message.content {
             let (clean_text, extracted_reasoning) =
                 process_think_blocks(&raw_text, parse_think_blocks, PROVIDER_TYPE)?;
             if let Some(reasoning) = extracted_reasoning {
                 content.push(ContentBlockOutput::Thought(Thought {
-                    text: reasoning,
+                    text: Some(reasoning),
                     signature: None,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
             if !clean_text.is_empty() {
@@ -773,7 +794,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 raw_response,
                 usage,
                 latency,
-                finish_reason: finish_reason.map(|r| r.into()),
+                finish_reason: finish_reason.map(FireworksFinishReason::into),
             },
         ))
     }
@@ -824,6 +845,7 @@ mod tests {
                 index: 0,
                 finish_reason: Some(FireworksFinishReason::Stop),
                 message: FireworksResponseMessage {
+                    reasoning_content: None,
                     content: Some(test_response_with_thinking.to_string()),
                     tool_calls: None,
                 },
@@ -859,7 +881,7 @@ mod tests {
         // First block should be a thought
         match &inference_response.output[0] {
             ContentBlockOutput::Thought(thought) => {
-                assert_eq!(thought.text, "This is reasoning");
+                assert_eq!(thought.text, Some("This is reasoning".to_string()));
                 assert_eq!(thought.signature, None);
             }
             _ => panic!("Expected a thought block"),
@@ -868,7 +890,7 @@ mod tests {
         // Second block should be text
         match &inference_response.output[1] {
             ContentBlockOutput::Text(text) => {
-                assert_eq!(text.text, "Hello  world");
+                assert_eq!(text.text, "Hello  world".to_string());
             }
             _ => panic!("Expected a text block"),
         }
@@ -1006,6 +1028,7 @@ mod tests {
                 index: 0,
                 finish_reason: Some(FireworksFinishReason::Stop),
                 message: FireworksResponseMessage {
+                    reasoning_content: None,
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
@@ -1075,6 +1098,7 @@ mod tests {
             choices: vec![FireworksChatChunkChoice {
                 delta: FireworksDelta {
                     content: Some("Hello".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: Some(FireworksFinishReason::Stop),
@@ -1107,6 +1131,7 @@ mod tests {
             choices: vec![FireworksChatChunkChoice {
                 delta: FireworksDelta {
                     content: None,
+                    reasoning_content: None,
                     tool_calls: Some(vec![FireworksToolCallChunk {
                         index: 0,
                         id: None,
@@ -1176,6 +1201,7 @@ mod tests {
             choices: vec![FireworksChatChunkChoice {
                 delta: FireworksDelta {
                     content: Some("<think>".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: None,
@@ -1207,6 +1233,7 @@ mod tests {
             choices: vec![FireworksChatChunkChoice {
                 delta: FireworksDelta {
                     content: Some("reasoning".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: None,
@@ -1239,6 +1266,7 @@ mod tests {
             choices: vec![FireworksChatChunkChoice {
                 delta: FireworksDelta {
                     content: Some("</think>".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: None,
@@ -1266,6 +1294,7 @@ mod tests {
             choices: vec![FireworksChatChunkChoice {
                 delta: FireworksDelta {
                     content: Some("Final answer".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: None,
@@ -1300,6 +1329,7 @@ mod tests {
             choices: vec![FireworksChatChunkChoice {
                 delta: FireworksDelta {
                     content: Some("Hello <think>should not parse</think>".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: Some(FireworksFinishReason::Stop),
@@ -1333,6 +1363,7 @@ mod tests {
             choices: vec![FireworksChatChunkChoice {
                 delta: FireworksDelta {
                     content: None,
+                    reasoning_content: None,
                     tool_calls: Some(vec![FireworksToolCallChunk {
                         index: 0,
                         id: Some("new_id".to_string()),
@@ -1377,6 +1408,7 @@ mod tests {
             choices: vec![FireworksChatChunkChoice {
                 delta: FireworksDelta {
                     content: None,
+                    reasoning_content: None,
                     tool_calls: Some(vec![FireworksToolCallChunk {
                         index: 0,
                         id: None,

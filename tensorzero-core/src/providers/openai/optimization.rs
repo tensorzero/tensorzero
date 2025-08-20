@@ -8,7 +8,7 @@ use super::{
     OpenAIRequestMessage, OpenAISFTTool,
 };
 use crate::{
-    config_parser::TimeoutsConfig,
+    config::TimeoutsConfig,
     error::{Error, ErrorDetails},
     inference::types::ContentBlock,
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
@@ -159,11 +159,7 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAISupervisedRow<'a> {
         let (parallel_tool_calls, tools) = match &inference.tool_params {
             Some(tool_params) => (
                 tool_params.parallel_tool_calls.unwrap_or_default(),
-                tool_params
-                    .tools_available
-                    .iter()
-                    .map(|t| t.into())
-                    .collect(),
+                tool_params.tools_available.iter().map(Into::into).collect(),
             ),
             None => (false, vec![]),
         };
@@ -266,7 +262,7 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizat
                 },
                 extra_headers: None,
                 extra_body: None,
-                timeouts: None,
+                timeouts: TimeoutsConfig::default(),
                 discard_unknown_chunks: false,
             };
             OptimizationJobInfo::Completed {
@@ -302,7 +298,10 @@ pub enum OpenAIFineTuningJobStatus {
 #[cfg(test)]
 mod tests {
     use crate::{
-        inference::types::{ContentBlockChatOutput, ModelInput, RequestMessage, Role, Text},
+        inference::types::{
+            ContentBlockChatOutput, ModelInput, RequestMessage, ResolvedInput,
+            ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
+        },
         providers::openai::OpenAIContentBlock,
     };
     use serde_json::json;
@@ -322,6 +321,15 @@ mod tests {
                     })],
                 }],
             },
+            stored_input: ResolvedInput {
+                system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("What is the capital of France?"),
+                    }],
+                }],
+            },
             output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "The capital of France is Paris.".to_string(),
             })]),
@@ -330,6 +338,7 @@ mod tests {
             tool_params: None,
             output_schema: None,
             dispreferred_outputs: vec![],
+            tags: HashMap::new(),
         };
         let row = OpenAISupervisedRow::try_from(&inference).unwrap();
         assert_eq!(row.messages.len(), 3);

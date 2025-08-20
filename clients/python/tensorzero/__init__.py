@@ -15,6 +15,7 @@ from .tensorzero import (
     FunctionConfigChat,
     FunctionConfigJson,
     FunctionsConfig,
+    GCPVertexGeminiSFTConfig,
     MixtureOfNConfig,
     OpenAISFTConfig,
     OptimizationJobHandle,
@@ -24,6 +25,7 @@ from .tensorzero import (
     ResolvedInput,
     ResolvedInputMessage,
     StoredInference,
+    TogetherSFTConfig,
     VariantsConfig,
 )
 from .tensorzero import (
@@ -60,16 +62,19 @@ from .types import (
     Message,
     NotFilter,
     NotNode,  # DEPRECATED
+    OrderBy,
     OrFilter,
     OrNode,  # DEPRECATED
     RawText,
     System,
+    TagFilter,
     TensorZeroError,
     TensorZeroInternalError,
     Text,
     TextChunk,
     Thought,
     ThoughtChunk,
+    TimeFilter,
     Tool,
     ToolCall,
     ToolCallChunk,
@@ -85,7 +90,7 @@ RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample inste
 ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
-OptimizationConfig = t.Union[OpenAISFTConfig, FireworksSFTConfig]
+OptimizationConfig = t.Union[OpenAISFTConfig, FireworksSFTConfig, TogetherSFTConfig]
 ChatInferenceOutput = t.List[ContentBlock]
 
 
@@ -138,19 +143,22 @@ __all__ = [
     "Message",
     "NotFilter",
     "NotNode",  # DEPRECATED
+    "OrderBy",
     "OrFilter",
     "OrNode",  # DEPRECATED
     "OptimizationJobHandle",
     "OptimizationJobInfo",
     "OptimizationJobStatus",
-    "OpenAISFTConfig",
     "FireworksSFTConfig",
+    "GCPVertexGeminiSFTConfig",
+    "OpenAISFTConfig",
     "OptimizationConfig",
     "patch_openai_client",
     "RawText",
     "RenderedStoredInference",  # DEPRECATED
     "RenderedSample",
     "System",
+    "TagFilter",
     "TensorZeroError",
     "TensorZeroGateway",
     "TensorZeroInternalError",
@@ -158,6 +166,8 @@ __all__ = [
     "TextChunk",
     "Thought",
     "ThoughtChunk",
+    "TimeFilter",
+    "TogetherSFTConfig",
     "Tool",
     "ToolChoice",
     "ToolParams",

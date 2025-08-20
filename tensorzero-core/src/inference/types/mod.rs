@@ -34,7 +34,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
-use crate::{cache::CacheData, config_parser::ObjectStoreInfo};
+use crate::{cache::CacheData, config::ObjectStoreInfo};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{
     endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceIds},
@@ -209,6 +209,8 @@ pub enum InputMessageContent {
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(untagged, deny_unknown_fields)]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum TextKind {
     Text { text: String },
     Arguments { arguments: Map<String, Value> },
@@ -249,9 +251,8 @@ impl<'de> Deserialize<'de> for TextKind {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum Role {
@@ -284,10 +285,8 @@ impl Role {
 /// These RequestMessages are collected into a ModelInferenceRequest,
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
-
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct Text {
     pub text: String,
@@ -308,30 +307,23 @@ impl Text {
 }
 
 /// Struct that represents Chain of Thought reasoning
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[ts(export)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
-    pub text: String,
+    pub text: Option<String>,
     /// An optional signature - currently, this is only used with Anthropic,
     /// and is ignored by other providers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
-}
-
-impl std::fmt::Display for Thought {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.text)
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl Thought {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
+    /// When set, this 'Thought' block will only be used for providers
+    /// matching this type (e.g. `anthropic`). Other providers will emit
+    /// a warning and discard the block.
+    #[serde(
+        rename = "_internal_provider_type",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub provider_type: Option<String>,
 }
 
 /// Core representation of the types of content that could go into a model provider
@@ -403,9 +395,8 @@ pub enum ContentBlockOutput {
 }
 
 /// Defines the types of content block that can come from a `chat` function
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockChatOutput {
     Text(Text),
@@ -444,7 +435,7 @@ impl RequestMessage {
             .iter()
             .map(|c| content_block_to_python(py, c))
             .collect::<PyResult<Vec<_>>>()?;
-        PyList::new(py, content).map(|list| list.into_any())
+        PyList::new(py, content).map(Bound::into_any)
     }
 
     #[getter]
@@ -536,7 +527,8 @@ impl ModelInput {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum FinishReason {
     Stop,
@@ -568,7 +560,8 @@ pub struct ProviderInferenceResponse {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Usage {
     pub input_tokens: u32,
     pub output_tokens: u32,
@@ -678,7 +671,8 @@ pub struct JsonInferenceResult {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonInferenceOutput {
     pub raw: Option<String>,
@@ -752,6 +746,12 @@ pub struct ThoughtChunk {
     pub id: String,
     pub text: Option<String>,
     pub signature: Option<String>,
+    /// See `Thought.provider_type`
+    #[serde(
+        rename = "_internal_provider_type",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub provider_type: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -892,6 +892,7 @@ impl From<Value> for ResolvedInputMessageContent {
 fn deserialize_content<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<InputMessageContent>, D::Error> {
+    #[expect(clippy::redundant_closure_for_method_calls)]
     UntaggedEnumVisitor::new()
         .string(|text| {
             Ok(vec![InputMessageContent::Text(TextKind::Text {
@@ -1108,7 +1109,7 @@ impl InferenceResult {
     pub fn usage_considering_cached(&self) -> Usage {
         self.model_inference_results()
             .iter()
-            .map(|r| r.usage_considering_cached())
+            .map(ModelInferenceResponseWithMetadata::usage_considering_cached)
             .sum()
     }
 
@@ -1446,7 +1447,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
         for content in chunk.content.into_iter() {
             match content {
                 ContentBlockChunk::ToolCall(tool_call) => {
-                    raw = Some(tool_call.raw_arguments.to_owned())
+                    raw = Some(tool_call.raw_arguments.to_owned());
                 }
                 ContentBlockChunk::Text(text_chunk) => raw = Some(text_chunk.text.to_owned()),
                 ContentBlockChunk::Thought(thought_chunk) => {
@@ -1487,7 +1488,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub function_name: &'b str,
     pub variant_name: &'b str,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
-    pub templates: &'a TemplateConfig<'a>,
+    pub templates: &'b TemplateConfig<'a>,
     pub tool_config: Option<&'b ToolCallConfig>,
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
@@ -1537,7 +1538,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
     let raw_response = raw_response.unwrap_or_else(|| {
         value
             .iter()
-            .map(|chunk| chunk.raw_response())
+            .map(InferenceResultChunk::raw_response)
             .collect::<Vec<&str>>()
             .join("\n")
     });
@@ -1576,7 +1577,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                 text.text,
                                 &mut ttft,
                                 chunk.latency,
-                                |text| text.into(),
+                                Into::into,
                                 |block, text| {
                                     if let ContentBlockOutput::Text(Text {
                                         text: existing_text,
@@ -1602,13 +1603,14 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                     chunk.latency,
                                     |text| {
                                         ContentBlockOutput::Thought(Thought {
-                                            text,
+                                            text: Some(text),
                                             signature: None,
+                                            provider_type: thought.provider_type.clone(),
                                         })
                                     },
                                     |block, text| {
                                         if let ContentBlockOutput::Thought(thought) = block {
-                                            thought.text.push_str(text);
+                                            thought.text.get_or_insert_default().push_str(text);
                                         }
                                     },
                                 );
@@ -1622,8 +1624,9 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                     chunk.latency,
                                     |signature| {
                                         ContentBlockOutput::Thought(Thought {
-                                            text: String::new(),
+                                            text: None,
                                             signature: Some(signature),
+                                            provider_type: thought.provider_type,
                                         })
                                     },
                                     |block, signature| {
@@ -1675,7 +1678,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                 if let Some(chunk_finish_reason) = chunk.finish_reason {
                     finish_reason = Some(chunk_finish_reason);
                 }
-                match blocks.get_mut(&(ContentBlockOutputType::Text, "".to_string())) {
+                match blocks.get_mut(&(ContentBlockOutputType::Text, String::new())) {
                     // If there is already a text block, append to it
                     Some(ContentBlockOutput::Text(Text {
                         text: existing_text,
@@ -1693,23 +1696,27 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                         }
                         if let Some(raw) = chunk.raw {
                             blocks
-                                .insert((ContentBlockOutputType::Text, "".to_string()), raw.into());
+                                .insert((ContentBlockOutputType::Text, String::new()), raw.into());
                         }
                     }
                 }
                 if let Some(thought) = chunk.thought {
-                    match blocks.get_mut(&(ContentBlockOutputType::Thought, "".to_string())) {
+                    match blocks.get_mut(&(ContentBlockOutputType::Thought, String::new())) {
                         // If there is already a thought block, append to it
                         Some(ContentBlockOutput::Thought(existing_thought)) => {
-                            existing_thought.text.push_str(&thought);
+                            existing_thought
+                                .text
+                                .get_or_insert_default()
+                                .push_str(&thought);
                         }
                         // If there is no thought block, create one
                         _ => {
                             blocks.insert(
-                                (ContentBlockOutputType::Thought, "".to_string()),
+                                (ContentBlockOutputType::Thought, String::new()),
                                 ContentBlockOutput::Thought(Thought {
-                                    text: thought,
+                                    text: Some(thought),
                                     signature: None,
+                                    provider_type: None,
                                 }),
                             );
                         }
@@ -1749,12 +1756,12 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
             episode_id,
         },
         function_name,
-        variant_name: Some(variant_name),
+        variant_name,
         tool_config,
         templates,
         dynamic_output_schema: dynamic_output_schema.as_ref(),
-        extra_body,
-        extra_headers,
+        extra_body: Cow::Borrowed(&extra_body),
+        extra_headers: Cow::Borrowed(&extra_headers),
         extra_cache_key: None,
     };
     function
@@ -1924,6 +1931,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::SchemaData;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::TemplateConfig;
@@ -1950,7 +1958,7 @@ mod tests {
             input_messages: vec![],
             output: content.clone(),
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -1998,7 +2006,7 @@ mod tests {
             input_messages: vec![],
             output: content.clone(),
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2049,7 +2057,7 @@ mod tests {
             input_messages: vec![],
             output: content.clone(),
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             finish_reason: Some(FinishReason::Stop),
             usage,
             latency: Latency::NonStreaming {
@@ -2096,7 +2104,7 @@ mod tests {
             input_messages: vec![],
             output: content.clone(),
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2164,7 +2172,7 @@ mod tests {
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2249,7 +2257,7 @@ mod tests {
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2341,7 +2349,7 @@ mod tests {
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2391,7 +2399,7 @@ mod tests {
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2462,7 +2470,7 @@ mod tests {
             input_messages: vec![],
             output: content.clone(),
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             finish_reason: None,
             latency: Latency::NonStreaming {
@@ -2519,7 +2527,7 @@ mod tests {
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
-            raw_response: "".to_string(),
+            raw_response: String::new(),
             usage,
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
@@ -2680,12 +2688,10 @@ mod tests {
             "required": ["name", "age"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             implicit_tool_call_config,
             output_schema,
             description: None,
@@ -2861,11 +2867,11 @@ mod tests {
                 finish_reason: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                raw: Some("".to_string()),
+                raw: Some(String::new()),
                 thought: Some("Thought 2".to_string()),
                 created,
                 usage: None,
-                raw_response: "".to_string(),
+                raw_response: String::new(),
                 latency: Duration::from_millis(200),
                 finish_reason: None,
             }),
@@ -2913,8 +2919,9 @@ mod tests {
                             text: "{\"name\":\"John\",\"age\":30}".to_string()
                         }),
                         ContentBlockChatOutput::Thought(Thought {
-                            text: "Thought 2".to_string(),
+                            text: Some("Thought 2".to_string()),
                             signature: None,
+                            provider_type: None,
                         }),
                     ]
                 );
@@ -2947,12 +2954,10 @@ mod tests {
             "required": ["name", "age"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             implicit_tool_call_config,
             output_schema,
             description: None,
@@ -3047,12 +3052,10 @@ mod tests {
             "required": ["name"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&static_output_schema);
-        let output_schema = StaticJSONSchema::from_value(&static_output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(static_output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             implicit_tool_call_config,
             output_schema,
             description: None,
@@ -3187,11 +3190,13 @@ mod tests {
                         text: Some("Some thou".to_string()),
                         id: "0".to_string(),
                         signature: None,
+                        provider_type: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         text: Some("My other interleaved thought".to_string()),
                         id: "1".to_string(),
                         signature: None,
+                        provider_type: None,
                     }),
                 ],
                 created,
@@ -3219,6 +3224,7 @@ mod tests {
                     text: Some("ght".to_string()),
                     id: "0".to_string(),
                     signature: None,
+                    provider_type: None,
                 })],
                 created,
                 usage: None,
@@ -3276,12 +3282,14 @@ mod tests {
                 id: "0".to_string(),
             }),
             ContentBlockChatOutput::Thought(Thought {
-                text: "Some thought".to_string(),
+                text: Some("Some thought".to_string()),
                 signature: None,
+                provider_type: None,
             }),
             ContentBlockChatOutput::Thought(Thought {
-                text: "My other interleaved thought".to_string(),
+                text: Some("My other interleaved thought".to_string()),
                 signature: None,
+                provider_type: None,
             }),
         ];
         assert_eq!(chat_result.content, expected_content);
@@ -3832,7 +3840,7 @@ mod tests {
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
             InputMessageContent::Text(TextKind::Text { text }) => {
-                assert_eq!(text, "Hello, world!")
+                assert_eq!(text, "Hello, world!");
             }
             _ => panic!("Expected Text content: {message:?}"),
         }
@@ -3847,7 +3855,7 @@ mod tests {
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
             InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                assert_eq!(arguments, json!({"key": "value"}).as_object().unwrap())
+                assert_eq!(arguments, json!({"key": "value"}).as_object().unwrap());
             }
             _ => panic!("Expected Text content"),
         }
@@ -3865,7 +3873,7 @@ mod tests {
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
             InputMessageContent::Text(TextKind::LegacyValue { value }) => {
-                assert_eq!(value, "Hello")
+                assert_eq!(value, "Hello");
             }
             _ => panic!("Expected Text content"),
         }
@@ -3895,7 +3903,7 @@ mod tests {
                 assert_eq!(
                     value,
                     &json!({"complex": "json", "with": ["nested", "array"]})
-                )
+                );
             }
             _ => panic!("Expected Text content with JSON object"),
         }
@@ -4004,6 +4012,7 @@ mod tests {
                 id: "123".to_string(),
                 text: Some("thinking...".to_string()),
                 signature: None,
+                provider_type: None,
             })],
             created: 1234567890,
             usage: None,
@@ -4032,6 +4041,7 @@ mod tests {
                     id: "789".to_string(),
                     text: Some("final thought".to_string()),
                     signature: None,
+                    provider_type: None,
                 }),
             ],
             created: 1234567890,
@@ -4127,7 +4137,7 @@ mod tests {
         handle_textual_content_block(
             &mut blocks,
             (ContentBlockOutputType::Text, "2".to_string()),
-            "".to_string(),
+            String::new(),
             &mut ttft,
             chunk_latency,
             |text| ContentBlockOutput::Text(Text { text }),
@@ -4152,13 +4162,14 @@ mod tests {
             chunk_latency,
             |text| {
                 ContentBlockOutput::Thought(Thought {
-                    text,
+                    text: Some(text),
                     signature: None,
+                    provider_type: None,
                 })
             },
             |block, text| {
                 if let ContentBlockOutput::Thought(thought) = block {
-                    thought.text.push_str(text);
+                    thought.text.get_or_insert_default().push_str(text);
                 }
             },
         );
@@ -4168,8 +4179,12 @@ mod tests {
             .get(&(ContentBlockOutputType::Thought, "3".to_string()))
             .unwrap()
         {
-            ContentBlockOutput::Thought(Thought { text, signature: _ }) => {
-                assert_eq!(text, "Thinking...")
+            ContentBlockOutput::Thought(Thought {
+                text,
+                signature: _,
+                provider_type: _,
+            }) => {
+                assert_eq!(text, &Some("Thinking...".to_string()));
             }
             _ => panic!("Expected thought block"),
         }

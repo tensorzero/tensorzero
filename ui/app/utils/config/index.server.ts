@@ -1,5 +1,6 @@
-import { getNativeTensorZeroClient } from "../supervised_fine_tuning/client";
-import type { Config } from "tensorzero-node";
+import type { Config, FunctionConfig } from "tensorzero-node";
+import { getConfig as getConfigNative } from "tensorzero-node";
+import { getEnv } from "../env.server";
 
 const CACHE_TTL_MS = 1000 * 60; // 1 minute
 
@@ -28,8 +29,8 @@ We will likely address this with some form of query library down the line.
 */
 
 export async function loadConfig(): Promise<Config> {
-  const tensorZeroClient = await getNativeTensorZeroClient();
-  const config = await tensorZeroClient.getConfig();
+  const env = getEnv();
+  const config = await getConfigNative(env.TENSORZERO_UI_CONFIG_PATH);
   return config;
 }
 
@@ -40,6 +41,21 @@ interface ConfigCache {
 
 let configCache: ConfigCache | null = null;
 
+const defaultFunctionConfig: FunctionConfig = {
+  type: "chat",
+  variants: {},
+  schemas: {
+    system: null,
+    user: null,
+    assistant: null,
+  },
+  tools: [],
+  tool_choice: "auto",
+  parallel_tool_calls: null,
+  description:
+    "This is the default function for TensorZero. This function is used when you call a model directly without specifying a function name. It has no variants preconfigured because they are generated dynamically at inference time based on the model being called.",
+};
+
 export async function getConfig() {
   const now = Date.now();
 
@@ -49,7 +65,32 @@ export async function getConfig() {
 
   // Cache is invalid or doesn't exist, reload it
   const freshConfig = await loadConfig();
+  // eslint-disable-next-line no-restricted-syntax
+  freshConfig.functions["tensorzero::default"] = defaultFunctionConfig;
 
   configCache = { data: freshConfig, timestamp: now };
   return freshConfig;
+}
+
+/**
+ * Helper function to get a specific function configuration by name (server-side only)
+ * @param functionName - The name of the function to retrieve
+ * @param config - The config object (optional, will fetch if not provided)
+ * @returns The function configuration object or null if not found
+ */
+export async function getFunctionConfig(functionName: string, config?: Config) {
+  const cfg = config || (await getConfig());
+  // eslint-disable-next-line no-restricted-syntax
+  return cfg.functions[functionName] || null;
+}
+
+/**
+ * Helper function to get all function configurations (server-side only)
+ * @param config - The config object (optional, will fetch if not provided)
+ * @returns The function configuration object or null if not found
+ */
+export async function getAllFunctionConfigs(config?: Config) {
+  const cfg = config || (await getConfig());
+
+  return cfg.functions;
 }

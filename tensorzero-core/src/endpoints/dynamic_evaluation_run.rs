@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    clickhouse::{escape_string_for_clickhouse_literal, ClickHouseConnectionInfo},
-    config_parser::Config,
+    config::Config,
+    db::clickhouse::{escape_string_for_clickhouse_literal, ClickHouseConnectionInfo},
     endpoints::validate_tags,
     error::{Error, ErrorDetails},
     gateway_util::{AppState, AppStateData, StructuredJson},
@@ -141,7 +141,7 @@ pub fn validate_variant_pins(
     variant_pins: &HashMap<String, String>,
     config: &Config,
 ) -> Result<(), Error> {
-    for (function_name, variant_name) in variant_pins.iter() {
+    for (function_name, variant_name) in variant_pins {
         let function_config = config.get_function(function_name)?;
         function_config
             .variants()
@@ -188,7 +188,7 @@ async fn write_dynamic_evaluation_run(
     project_name: Option<String>,
     run_display_name: Option<String>,
 ) -> Result<(), Error> {
-    let query = r#"
+    let query = r"
     INSERT INTO DynamicEvaluationRun (
         run_id_uint,
         variant_pins,
@@ -203,7 +203,7 @@ async fn write_dynamic_evaluation_run(
         {project_name:Nullable(String)},
         {run_display_name:Nullable(String)}
     )
-    "#;
+    ";
     let mut params = HashMap::new();
     let variant_pins_str = to_map_literal(&variant_pins);
     let tags_str = to_map_literal(&tags);
@@ -238,7 +238,7 @@ async fn write_dynamic_evaluation_run_episode(
     run_id: Uuid,
     episode_id: Uuid,
 ) -> Result<(), Error> {
-    let query = r#"
+    let query = r"
     INSERT INTO DynamicEvaluationRunEpisode
     (
         run_id,
@@ -255,7 +255,7 @@ async fn write_dynamic_evaluation_run_episode(
         mapUpdate(tags, {tags:Map(String, String)}) as tags -- merge the tags in the params on top of tags in the dynamic evaluation run
     FROM DynamicEvaluationRun
     WHERE run_id_uint = toUInt128({run_id:UUID})
-    "#;
+    ";
     let mut query_params = HashMap::new();
     let run_id_str = run_id.to_string();
     let episode_id_str = episode_id.to_string();
@@ -330,9 +330,9 @@ async fn lookup_dynamic_evaluation_run(
     clickhouse: &ClickHouseConnectionInfo,
     episode_id: Uuid,
 ) -> Result<Option<DynamicEvaluationRunInfo>, Error> {
-    let query = r#"
+    let query = r"
     SELECT variant_pins, tags FROM DynamicEvaluationRunEpisode WHERE episode_id_uint = toUInt128({episode_id:UUID}) FORMAT JSONEachRow
-    "#;
+    ";
     let episode_id_str = episode_id.to_string();
     let params = HashMap::from([("episode_id", episode_id_str.as_str())]);
     let result = clickhouse
