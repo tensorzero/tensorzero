@@ -1,8 +1,6 @@
 ---
 title: Configuration Reference
 description: Learn how to configure the TensorZero Gateway.
-tableOfContents:
-  maxHeadingLevel: 5
 ---
 
 The configuration file is the backbone of TensorZero.
@@ -359,17 +357,7 @@ type = "azure"
 # ...
 ```
 
-<Accordion title="
-<code dir="auto">type: "anthropic"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "anthropic"`
-
-</span>
-">
+<Accordion title='type: "anthropic"'>
 
 ##### `model_name`
 
@@ -407,17 +395,7 @@ api_key_location = "dynamic::anthropic_api_key"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "aws_bedrock"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "aws_bedrock"`
-
-</span>
-">
+<Accordion title='type: "aws_bedrock"'>
 
 ##### `allow_auto_detect_region`
 
@@ -471,17 +449,7 @@ region = "us-east-2"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "aws_sagemaker"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "aws_sagemaker"`
-
-</span>
-">
+<Accordion title='type: "aws_sagemaker"'>
 
 ##### `allow_auto_detect_region`
 
@@ -557,17 +525,7 @@ region = "us-east-2"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "azure"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "azure"`
-
-</span>
-">
+<Accordion title='type: "azure"'>
 
 The TensorZero Gateway handles the API version under the hood (currently `2024-06-01`).
 You only need to set the `deployment_id` and `endpoint` fields.
@@ -625,17 +583,7 @@ api_key_location = "dynamic::azure_openai_api_key"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "deepseek"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "deepseek"`
-
-</span>
-">
+<Accordion title='type: "deepseek"'>
 
 ##### `model_name`
 
@@ -673,17 +621,7 @@ api_key_location = "dynamic::deepseek_api_key"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "fireworks"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "fireworks"`
-
-</span>
-">
+<Accordion title='type: "fireworks"'>
 
 ##### `model_name`
 
@@ -723,17 +661,7 @@ api_key_location = "dynamic::fireworks_api_key"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "gcp_vertex_anthropic"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "gcp_vertex_anthropic"`
-
-</span>
-">
+<Accordion title='type: "gcp_vertex_anthropic"'>
 
 ##### `endpoint_id`
 
@@ -816,17 +744,7 @@ credential_location = "dynamic::gcp_credentials_path"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "gcp_vertex_gemini"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "gcp_vertex_gemini"`
-
-</span>
-">
+<Accordion title='type: "gcp_vertex_gemini"'>
 
 ##### `endpoint_id`
 
@@ -907,17 +825,7 @@ credential_location = "dynamic::gcp_credentials_path"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "google_ai_studio_gemini"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "google_ai_studio_gemini"`
-
-</span>
-">
+<Accordion title='type: "google_ai_studio_gemini"'>
 
 ##### `model_name`
 
@@ -955,17 +863,7 @@ api_key_location = "dynamic::google_ai_studio_api_key"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "groq"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "groq"`
-
-</span>
-">
+<Accordion title='type: "groq"'>
 
 ##### `model_name`
 
@@ -1004,17 +902,7 @@ api_key_location = "dynamic::groq_api_key"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "hyperbolic"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "hyperbolic"`
-
-</span>
-">
+<Accordion title='type: "hyperbolic"'>
 
 ##### `model_name`
 
@@ -1053,17 +941,7 @@ api_key_location = "dynamic::hyperbolic_api_key"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "mistral"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "mistral"`
-
-</span>
-">
+<Accordion title='type: "mistral"'>
 
 ##### `model_name`
 
@@ -1102,17 +980,7 @@ api_key_location = "dynamic::mistral_api_key"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "openai"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "openai"`
-
-</span>
-">
+<Accordion title='type: "openai"'>
 
 ##### `api_base`
 
@@ -1171,17 +1039,7 @@ api_key_location = "dynamic::openai_api_key"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "openrouter"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "openrouter"`
-
-</span>
-">
+<Accordion title='type: "openrouter"'>
 
 ##### `model_name`
 
@@ -1220,17 +1078,7 @@ api_key_location = "dynamic::openrouter_api_key"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "sglang"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "sglang"`
-
-</span>
-">
+<Accordion title='type: "sglang"'>
 
 ##### `api_base`
 
@@ -1268,17 +1116,7 @@ api_key_location = "dynamic::sglang_api_key"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "together"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "together"`
-
-</span>
-">
+<Accordion title='type: "together"'>
 
 ##### `model_name`
 
@@ -1318,17 +1156,7 @@ api_key_location = "dynamic::together_api_key"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "vllm"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "vllm"`
-
-</span>
-">
+<Accordion title='type: "vllm"'>
 
 ##### `api_base`
 
@@ -1382,17 +1210,7 @@ api_key_location = "dynamic::vllm_api_key"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "xai"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "xai"`
-
-</span>
-">
+<Accordion title='type: "xai"'>
 
 ##### `model_name`
 
@@ -1432,17 +1250,7 @@ api_key_location = "dynamic::xai_api_key"
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "tgi"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "tgi"`
-
-</span>
-">
+<Accordion title='type: "tgi"'>
 
 ##### `api_base`
 
@@ -1568,17 +1376,7 @@ type = "openai"
 # ...
 ```
 
-<Accordion title="
-<code dir="auto">type: "openai"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "openai"`
-
-</span>
-">
+<Accordion title='type: "openai"'>
 
 ##### `api_base`
 
@@ -1747,17 +1545,7 @@ type = "chat"
 # ...
 ```
 
-<Accordion title="
-<code dir="auto">type: "chat"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "chat"`
-
-</span>
-">
+<Accordion title='type: "chat"'>
 
 ##### `parallel_tool_calls`
 
@@ -1855,17 +1643,7 @@ tools = [
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "json"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "json"`
-
-</span>
-">
+<Accordion title='type: "json"'>
 
 ##### `output_schema`
 
@@ -1958,17 +1736,7 @@ type = "chat_completion"
 # ...
 ```
 
-<Accordion title="
-<code dir="auto">type: "chat_completion"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "chat_completion"`
-
-</span>
-">
+<Accordion title='type: "chat_completion"'>
 
 ##### `assistant_template`
 
@@ -2405,17 +2173,7 @@ weight = 1.0
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "experimental_best_of_n"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "experimental_best_of_n"`
-
-</span>
-">
+<Accordion title='type: "experimental_best_of_n"'>
 
 ##### `candidates`
 
@@ -2528,17 +2286,7 @@ weight = 1.0
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "experimental_chain_of_thought"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden" aria-hidden="true">
-
-#### `type: "experimental_chain_of_thought"`
-
-</span>
-">
+<Accordion title='type: "experimental_chain_of_thought"'>
 
 The `experimental_chain_of_thought` variant type uses the same configuration as a `chat_completion` variant.
 
@@ -2550,17 +2298,7 @@ This variant type is only available for non-streaming requests to JSON functions
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "experimental_mixture_of_n"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "experimental_mixture_of_n"`
-
-</span>
-">
+<Accordion title='type: "experimental_mixture_of_n"'>
 
 ##### `candidates`
 
@@ -2672,17 +2410,7 @@ weight = 1.0
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "experimental_dynamic_in_context_learning"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "experimental_dynamic_in_context_learning"`
-
-</span>
-">
+<Accordion title='type: "experimental_dynamic_in_context_learning"'>
 
 ##### `embedding_model`
 
@@ -3310,17 +3038,7 @@ The supported types are:
 
 See the following sections for more details on each type.
 
-<Accordion title="
-<code dir="auto">type: "s3_compatible"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "s3_compatible"`
-
-</span>
-">
+<Accordion title='type: "s3_compatible"'>
 
 If you set `type = "s3_compatible"`, TensorZero will use an S3-compatible object storage service to store and retrieve images.
 
@@ -3375,17 +3093,7 @@ For production environments, we strongly recommend you disable the `allow_http` 
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "filesystem"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "filesystem"`
-
-</span>
-">
+<Accordion title='type: "filesystem"'>
 
 ##### `path`
 
@@ -3396,17 +3104,7 @@ Defines the path to the directory to use for object storage.
 
 </Accordion>
 
-<Accordion title="
-<code dir="auto">type: "disabled"</code>
-
-{/* for the table of contents */}
-
-<span class="hidden">
-
-#### `type: "disabled"`
-
-</span>
-">
+<Accordion title='type: "disabled"'>
 
 If you set `type = "disabled"`, the TensorZero Gateway will not store or retrieve images.
 There are no additional fields available for this type.

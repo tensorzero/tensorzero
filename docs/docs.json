@@ -46,6 +46,7 @@
               "gateway/tutorial",
               {
                 "group": "Guides",
+                "hidden": false,
                 "pages": [
                   {
                     "group": "Model Providers",
@@ -71,9 +72,30 @@
                       "gateway/guides/providers/vllm",
                       "gateway/guides/providers/xai"
                     ]
-                  }
+                  },
+                  "gateway/guides/batch-inference",
+                  "gateway/guides/credential-management",
+                  "gateway/guides/episodes",
+                  "gateway/guides/experimentation",
+                  "gateway/guides/extending-tensorzero",
+                  "gateway/guides/inference-caching",
+                  "gateway/guides/inference-time-optimizations",
+                  "gateway/guides/metrics-feedback",
+                  "gateway/guides/multimodal-inference",
+                  "gateway/guides/opentelemetry-otlp",
+                  "gateway/guides/performance-latency",
+                  "gateway/guides/prompt-templates-schemas",
+                  "gateway/guides/retries-fallbacks",
+                  "gateway/guides/streaming-inference",
+                  "gateway/guides/tool-use"
                 ]
-              }
+              },
+              "gateway/benchmarks",
+              "gateway/clients",
+              "gateway/configuration-reference",
+              "gateway/data-model",
+              "gateway/deployment",
+              "gateway/integrations"
             ]
           }
         ]
