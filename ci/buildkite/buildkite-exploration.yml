@@ -1,3 +1,3 @@
 steps:
   - label: ":buildkite: Upload steps"
-    command: "echo 'Hello!"
+    command: "echo 'Hello!'"
