@@ -8,14 +8,14 @@ The TensorZero Gateway can export traces to an external OpenTelemetry-compatible
 Exporting traces via OpenTelemetry allows you to monitor the TensorZero Gateway in external observability platforms such as Jaeger, Datadog, or Grafana.
 This integration enables you to correlate gateway activity with the rest of your infrastructure, providing deeper insights and unified monitoring across your systems.
 
-:::caution
+<Warning>
 
 Exporting traces via OpenTelemetry does not replace the core observability features built into TensorZero.
 
 Many key TensorZero features (including optimization) require richer observability data that TensorZero collects and stores in your ClickHouse database.
 Traces exported through OpenTelemetry are for external observability only and are not sufficient for these built-in TensorZero capabilities.
 
-:::
+</Warning>
 
 <Tip>
 

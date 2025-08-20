@@ -62,12 +62,12 @@ When this field is set to `true`, the gateway will log more verbose errors to as
 Enabling this setting will allow MiniJinja templates to load sub-templates from the file system (using the `include` directive).
 Paths must be relative to `tensorzero.toml`, and can only access files in that directory or its sub-directories.
 
-:::caution
+<Warning>
 
 Make sure to sanitize all user-provided template data before using this setting.
 Otherwise, a malicious input could read unintended files in the file system.
 
-:::
+</Warning>
 
 ### `observability.async_writes`
 
@@ -76,12 +76,12 @@ Otherwise, a malicious input could read unintended files in the file system.
 
 Enabling this setting will improve the latency of the gateway by offloading the responsibility of writing inference responses to ClickHouse to a background task, instead of waiting for ClickHouse to return the inference response.
 
-:::caution
+<Warning>
 
 If you enable this setting, make sure that the gateway lives long enough to complete the writes.
 This can be problematic in serverless environments that terminate the gateway instance after the response is returned but before the writes are completed.
 
-:::
+</Warning>
 
 ### `observability.enabled`
 
@@ -2542,11 +2542,11 @@ weight = 1.0
 
 The `experimental_chain_of_thought` variant type uses the same configuration as a `chat_completion` variant.
 
-:::caution
+<Warning>
 
 This variant type is only available for non-streaming requests to JSON functions.
 
-:::
+</Warning>
 
 </Accordion>
 
@@ -3367,11 +3367,11 @@ Normally, the TensorZero Gateway will require HTTPS to access the object storage
 If set to `true`, the TensorZero Gateway will instead use HTTP to access the object storage service.
 This is useful for local development (e.g. a local MinIO deployment), but not recommended for production environments.
 
-:::caution
+<Warning>
 
 For production environments, we strongly recommend you disable the `allow_http` setting and use a secure method of authentication in combination with a production-grade object storage service.
 
-:::
+</Warning>
 
 </Accordion>
 

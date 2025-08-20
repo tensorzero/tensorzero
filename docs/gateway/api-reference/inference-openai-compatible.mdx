@@ -25,14 +25,14 @@ The OpenAI-compatible inference endpoints translate the OpenAI request parameter
 TensorZero-specific parameters are prefixed with `tensorzero::` (e.g. `tensorzero::episode_id`).
 These fields should be provided as extra body parameters in the request body.
 
-:::caution
+<Warning>
 
 The gateway will use the credentials specified in the `tensorzero.toml` file.
 In most cases, these credentials will be environment variables available to the TensorZero gateway &mdash; _not_ your OpenAI client.
 
 API keys sent from the OpenAI client will be ignored.
 
-:::
+</Warning>
 
 #### `tensorzero::credentials`
 
@@ -101,14 +101,14 @@ This field should be provided as an extra body parameter in the request body.
 The `tensorzero::extra_body` field allows you to modify the request body that TensorZero sends to a model provider.
 This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
 
-:::caution
+<Warning>
 
 The OpenAI SDKs generally also support such functionality.
 
 If you use the OpenAI SDK's `extra_body` field, it will override the request from the client to the gateway.
 If you use `tensorzero::extra_body`, it will override the request from the gateway to the model provider.
 
-:::
+</Warning>
 
 Each object in the array must have three fields:
 
@@ -190,14 +190,14 @@ If TensorZero would normally send this request body to the provider...
 The `tensorzero::extra_headers` field allows you to modify the request headers that TensorZero sends to a model provider.
 This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
 
-:::caution
+<Warning>
 
 The OpenAI SDKs generally also support such functionality.
 
 If you use the OpenAI SDK's `extra_headers` field, it will override the request from the client to the gateway.
 If you use `tensorzero::extra_headers`, it will override the request from the gateway to the model provider.
 
-:::
+</Warning>
 
 Each object in the array must have three fields:
 
@@ -317,12 +317,12 @@ If a content block has type `image_url`, it must have the following additional f
 - `"image_url"`: A JSON object with the following field:
   - `url`: The URL for a remote image (e.g. `"https://example.com/image.png"`) or base64-encoded data for an embedded image (e.g. `"data:image/png;base64,..."`).
 
-:::caution
+<Warning>
 
 Currently, the OpenAI-compatible inference endpoint does not accept other content blocks like `raw_text` or `unknown`.
 See the [Inference API Reference](/docs/gateway/api-reference/inference/) for details on how to provide such content blocks as input.
 
-:::
+</Warning>
 
 #### `model`
 
@@ -395,11 +395,11 @@ Then:
 - `tensorzero::model_name::gpt-4o` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/docs/gateway/guides/retries-fallbacks/) for details.
 - `tensorzero::model_name::openai::gpt-4o` calls the OpenAI API directly for the `gpt-4o` model, ignoring the `gpt-4o` model defined above.
 
-:::caution
+<Warning>
 
 Be careful about the different prefixes: `tensorzero::model_name::gpt-4o` will use the `[models.gpt-4o]` model defined in the `tensorzero.toml` file, whereas `tensorzero::model_name::openai::gpt-4o` will call the OpenAI API directly for the `gpt-4o` model.
 
-:::
+</Warning>
 
 #### `parallel_tool_calls`
 
@@ -556,7 +556,7 @@ In regular (non-streaming) mode, the response is a JSON object with the followin
     - **`tool_calls`**: List of tool calls made by the model (optional). The format is the same as in the request.
     - **`role`**: The role of the message sender (always `"assistant"`).
 
-:::caution
+<Warning>
 
 The OpenAI-compatible inference endpoint can't handle unknown content blocks in the response.
 If the model provider returns an unknown content block, the gateway will drop the content block from the response and log a warning.
@@ -564,7 +564,7 @@ If the model provider returns an unknown content block, the gateway will drop th
 If you need to access unknown content blocks, use the native TensorZero API.
 See the [Inference API Reference](/docs/gateway/api-reference/inference/) for details.
 
-:::
+</Warning>
 
 #### `created`
 
