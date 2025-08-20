@@ -188,7 +188,7 @@ async def async_openai_client(request: FixtureRequest):
             yield client
     else:
         async with AsyncOpenAI(api_key="donotuse") as client:
-            await patch_openai_client(
+            await patch_openai_client(  # type: ignore[reportGeneralTypeIssues]
                 client,
                 config_file=TEST_CONFIG_FILE,
                 clickhouse_url=CLICKHOUSE_URL,
