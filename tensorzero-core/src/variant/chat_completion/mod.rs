@@ -838,10 +838,6 @@ mod tests {
             }
             _ => panic!("Expected MiniJinjaTemplateRender error"),
         }
-        // Part 3: test with filled out templates
-        let system_template_name = "system";
-        let user_template_name = "user_filled";
-        let assistant_template_name = "assistant_filled";
     }
 
     #[test]
