@@ -4,7 +4,7 @@ steps:
       # Install cargo-binstall
       - "curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash"
       # Install cargo-nextest
-      - "cargo binstall cargo-nextest"
+      - "cargo binstall -y cargo-nextest --secure"
       # Run unit tests using cargo-nextest
       - "cargo test-unit"
     plugins:
