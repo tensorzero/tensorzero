@@ -160,6 +160,11 @@ jobs:
           # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
 
+      - name: Print ClickHouse container logs
+        if: always()
+        run: |
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+
       - name: Launch the provider-proxy cache for E2E tests
         run: |
           ./ci/run-provider-proxy.sh ci
