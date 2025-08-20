@@ -12,4 +12,4 @@ cargo binstall -y cargo-nextest --secure
 cargo install buildkite-test-collector
 
 # Run unit tests using cargo-nextest
-cargo test-unit -Z unstable-options --format json --report-time | buildkite-test-collector
+cargo test-unit --profile ci-unit | buildkite-test-collector
