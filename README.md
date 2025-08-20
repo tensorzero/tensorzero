@@ -7,12 +7,14 @@
 **TensorZero is an open-source stack for _industrial-grade LLM applications_:**
 
 - **Gateway:** access every LLM provider through a unified API, built for performance (<1ms p99 latency)
-- **Observability:** store inferences and feedback in your database, available programmatically or in the UI 
+- **Observability:** store inferences and feedback in your database, available programmatically or in the UI
 - **Optimization:** collect metrics and human feedback to optimize prompts, models, and inference strategies
-- **Evaluations:** benchmark individual inferences or end-to-end workflows using heuristics, LLM judges, etc.
-- **Experimentation:** ship with confidence with built-in A/B testing, routing, fallbacks, retries, etc. 
+- **Evaluation:** benchmark individual inferences or end-to-end workflows using heuristics, LLM judges, etc.
+- **Experimentation:** ship with confidence with built-in A/B testing, routing, fallbacks, retries, etc.
 
 Take what you need, adopt incrementally, and complement with other tools.
+
+<video src="https://github.com/user-attachments/assets/04a8466e-27d8-4189-b305-e7cecb6881ee"></video>
 
 ---
 
@@ -42,7 +44,7 @@ Take what you need, adopt incrementally, and complement with other tools.
 <table>
   <tr>
     <td width="30%" valign="top"><b>What is TensorZero?</b></td>
-    <td width="70%" valign="top">TensorZero is an open-source stack for industrial-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluations, and experimentation.</td>
+    <td width="70%" valign="top">TensorZero is an open-source stack for industrial-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluation, and experimentation.</td>
   </tr>
   <tr>
     <td width="30%" valign="top"><b>How is TensorZero different from other LLM frameworks?</b></td>
@@ -85,7 +87,7 @@ Take what you need, adopt incrementally, and complement with other tools.
 - [x] Access every major LLM provider (API or self-hosted) through a single unified API
 - [x] Infer with streaming, tool use, structured generation (JSON mode), batch, multimodal (VLMs), file inputs, caching, etc.
 - [x] Define prompt templates and schemas to enforce a consistent, typed interface between your application and the LLMs
-- [x] Satisfy extreme throughput and latency needs, thanks to Rust: <1ms p99 latency overhead at 10k+ QPS
+- [x] Satisfy extreme throughput and latency needs, thanks to 🦀 Rust: <1ms p99 latency overhead at 10k+ QPS
 - [x] Integrate using our Python client, any OpenAI SDK or OpenAI-compatible client, or our HTTP API (use any programming language)
 - [x] Ensure high availability with routing, retries, fallbacks, load balancing, granular timeouts, etc.
 - [ ] Soon: embeddings; real-time voice
@@ -111,12 +113,16 @@ Take what you need, adopt incrementally, and complement with other tools.
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-anthropic">GCP Vertex AI Anthropic</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-gemini">GCP Vertex AI Gemini</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/google-ai-studio-gemini">Google AI Studio (Gemini API)</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/groq">Groq</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/hyperbolic">Hyperbolic</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/mistral">Mistral</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openai">OpenAI</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/together">Together</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openrouter">OpenRouter</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/sglang">SGLang</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/tgi">TGI</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/together">Together AI</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/vllm">vLLM</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/xai">xAI</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/xai">xAI (Grok)</a></b></li>
       </ul>
       <p>
         <em>
@@ -296,21 +302,37 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 
 - [x] Store inferences and feedback (metrics, human edits, etc.) in your own database
 - [x] Dive into individual inferences or high-level aggregate patterns using the TensorZero UI or programmatically
-- [x] Build datasets for optimization, evaluations, and other workflows
+- [x] Build datasets for optimization, evaluation, and other workflows
 - [x] Replay historical inferences with new prompts, models, inference strategies, etc.
 - [x] Export OpenTelemetry (OTLP) traces to your favorite general-purpose observability tool
 - [ ] Soon: AI-assisted debugging and root cause analysis; AI-assisted data labeling
 
 <table>
-  <tr></tr> <!-- flip highlight order -->
-  <tr>
-    <td width="50%" align="center" valign="middle"><b>Observability » Inference</b></td>
-    <td width="50%" align="center" valign="middle"><b>Observability » Function</b></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/2cc3cc9a-f33f-4e94-b8de-07522326f80a"></td>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/00ae6605-8fa0-4efd-8238-ae8ea589860f"></td>
-  </tr>
+<tr></tr> <!-- flip highlight order -->
+<tr>
+<td width="50%" align="center" valign="middle"><b>Observability » UI</b></td>
+<td width="50%" align="center" valign="middle"><b>Observability » Programmatic</b></td>
+</tr>
+<tr>
+<td width="50%" align="center" valign="middle"><video src="https://github.com/user-attachments/assets/a23e4c95-18fa-482c-8423-6078fb4cf285"></video></td>
+<td width="50%" align="left" valign="middle">
+  
+```python
+t0.experimental_list_inferences(
+  function_name="sales_agent",
+  variant_name="qwen3-promptv2",
+  filters=BooleanMetricFilter(
+      metric_name="converted_sale",
+      value=True,
+  ),
+  order_by=[OrderBy(by="timestamp", direction="DESC")],
+  limit=100_000,
+  # ... and more ...
+)
+```
+
+</td>
+</tr>
 </table>
 
 <br>
@@ -336,7 +358,7 @@ Optimize closed-source and open-source models using supervised fine-tuning (SFT)
     <td width="50%" align="center" valign="middle"><b>Preference Fine-tuning (DPO) &mdash; Jupyter Notebook</b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/cf7acf66-732b-43b3-af2a-5eba1ce40f6f"></td>
+    <td width="50%" align="center" valign="middle"><video src="https://github.com/user-attachments/assets/82f76be7-5e02-4ada-b503-69dfa209a442"></video></td>
     <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/a67a0634-04a7-42b0-b934-9130cb7cdf51"></td>
   </tr>
 </table>
@@ -392,9 +414,9 @@ _More coming soon..._
 
 <br>
 
-### 📊 LLM Evaluations
+### 📊 LLM Evaluation
 
-> **Compare prompts, models, and inference strategies using TensorZero Evaluations &mdash; with support for heuristics and LLM judges.**
+> **Compare prompts, models, and inference strategies using evaluations powered by heuristics and LLM judges.**
 
 - [x] Evaluate individual inferences with _static evaluations_ powered by heuristics or LLM judges (&approx; unit tests for LLMs)
 - [x] Evaluate end-to-end workflows with _dynamic evaluations_ with complete flexibility (&approx; integration tests for LLMs)

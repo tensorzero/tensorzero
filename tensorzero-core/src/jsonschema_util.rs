@@ -1,12 +1,11 @@
 use jsonschema::Validator;
 use serde::Serialize;
 use serde_json::Value;
-use std::fs;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::OnceCell;
 use tracing::instrument;
 
+use crate::config::path::TomlRelativePath;
 use crate::error::{Error, ErrorDetails};
 
 #[derive(Debug, Serialize)]
@@ -25,17 +24,19 @@ impl<'a> JsonSchemaRef<'a> {
 
     pub fn value(&'a self) -> &'a Value {
         match self {
-            JsonSchemaRef::Static(schema) => schema.value,
+            JsonSchemaRef::Static(schema) => &schema.value,
             JsonSchemaRef::Dynamic(schema) => &schema.value,
         }
     }
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct StaticJSONSchema {
     #[serde(skip)]
     pub compiled: Arc<Validator>,
-    pub value: &'static serde_json::Value,
+    pub value: serde_json::Value,
 }
 
 impl PartialEq for StaticJSONSchema {
@@ -49,17 +50,14 @@ impl Default for StaticJSONSchema {
         // Create an empty JSON object
         let empty_schema: serde_json::Value = serde_json::json!({});
 
-        // Leak the memory to create a 'static reference
-        let static_schema: &'static serde_json::Value = Box::leak(Box::new(empty_schema));
-
         // Compile the schema
         #[expect(clippy::expect_used)]
         let compiled_schema =
-            jsonschema::validator_for(static_schema).expect("Failed to compile empty schema");
+            jsonschema::validator_for(&empty_schema).expect("Failed to compile empty schema");
 
         Self {
             compiled: Arc::new(compiled_schema),
-            value: static_schema,
+            value: empty_schema,
         }
     }
 }
@@ -67,41 +65,43 @@ impl Default for StaticJSONSchema {
 impl StaticJSONSchema {
     /// Just instantiates the struct, does not load the schema
     /// You should call `load` to load the schema
-    pub fn from_path<P: AsRef<Path>>(path: PathBuf, base_path: P) -> Result<Self, Error> {
-        let path = base_path.as_ref().join(path);
-        let content = fs::read_to_string(&path).map_err(|e| {
-            Error::new(ErrorDetails::JsonSchema {
-                message: format!("Failed to read JSON Schema `{}`: {}", path.display(), e),
-            })
-        })?;
+    pub fn from_path(path: TomlRelativePath) -> Result<Self, Error> {
+        let content = path.read()?;
 
         let schema: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
-                message: format!("Failed to parse JSON Schema `{}`: {}", path.display(), e),
+                message: format!(
+                    "Failed to parse JSON Schema `{}`: {}",
+                    path.get_template_key(),
+                    e
+                ),
             })
         })?;
-        // We can 'leak' memory here because we want the schema to exist for the duration of the process
-        let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(schema));
-        let compiled_schema = jsonschema::validator_for(schema_boxed).map_err(|e| {
+        let compiled_schema = jsonschema::validator_for(&schema).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
-                message: format!("Failed to compile JSON Schema `{}`: {}", path.display(), e),
+                message: format!(
+                    "Failed to compile JSON Schema `{}`: {}",
+                    path.get_template_key(),
+                    e
+                ),
             })
         })?;
         let compiled = Arc::new(compiled_schema);
-        let value = schema_boxed;
-        Ok(Self { compiled, value })
+        Ok(Self {
+            compiled,
+            value: schema,
+        })
     }
 
-    pub fn from_value(value: &serde_json::Value) -> Result<Self, Error> {
-        let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(value.clone()));
-        let compiled_schema = jsonschema::validator_for(schema_boxed).map_err(|e| {
+    pub fn from_value(value: serde_json::Value) -> Result<Self, Error> {
+        let compiled_schema = jsonschema::validator_for(&value).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
                 message: format!("Failed to compile JSON Schema: {e}"),
             })
         })?;
         Ok(Self {
             compiled: Arc::new(compiled_schema),
-            value: schema_boxed,
+            value,
         })
     }
 
@@ -124,6 +124,8 @@ impl StaticJSONSchema {
 /// The public API of this struct should look very normal except validation is `async`
 /// There are just `new` and `validate` methods.
 #[derive(Debug, Serialize, Clone)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct DynamicJSONSchema {
     pub value: Value,
     #[serde(skip)]
@@ -226,8 +228,11 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        let schema = StaticJSONSchema::from_path(temp_file.path().to_owned(), PathBuf::from(""))
-            .expect("Failed to load schema");
+        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+            temp_file.path().to_owned(),
+            None,
+        ))
+        .expect("Failed to load schema");
 
         let instance = serde_json::json!({
             "name": "John Doe",
@@ -271,24 +276,30 @@ mod tests {
         write!(temp_file, "{invalid_schema}")
             .expect("Failed to write invalid schema to temporary file");
 
-        let result = StaticJSONSchema::from_path(temp_file.path().to_owned(), PathBuf::from(""));
+        let result = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+            temp_file.path().to_owned(),
+            None,
+        ));
         assert_eq!(
             result.unwrap_err().to_string(),
             format!(
                 "Failed to compile JSON Schema `{}`: \"invalid\" is not valid under any of the schemas listed in the 'anyOf' keyword",
                 temp_file.path().display()
             )
-        )
+        );
     }
 
     #[test]
     fn test_nonexistent_file() {
-        let result =
-            StaticJSONSchema::from_path(PathBuf::from("nonexistent_file.json"), PathBuf::from(""));
+        let result = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+            "nonexistent_file.json".into(),
+            None,
+        ));
         assert_eq!(
             result.unwrap_err().to_string(),
-            "Failed to read JSON Schema `nonexistent_file.json`: No such file or directory (os error 2)".to_string()
-        )
+            "Failed to read file at nonexistent_file.json: No such file or directory (os error 2)"
+                .to_string()
+        );
     }
 
     #[tokio::test]

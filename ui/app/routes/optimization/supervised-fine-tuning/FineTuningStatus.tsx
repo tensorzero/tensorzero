@@ -6,8 +6,6 @@
 
 import { ExternalLink } from "lucide-react";
 import { Calendar, Function } from "~/components/icons/Icons";
-import type { SFTJobStatus } from "~/utils/supervised_fine_tuning/common";
-import { SFTAnalysis } from "./SFTAnalysis";
 import { extractTimestampFromUUIDv7 } from "~/utils/common";
 import { RawDataAccordion } from "./RawDataAccordion";
 import { ProgressIndicator } from "./ProgressIndicator";
@@ -23,14 +21,26 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
+import { SFTResult } from "./SFTResult";
+import type { SFTFormValues } from "./types";
+import type {
+  OptimizationJobHandle,
+  OptimizationJobInfo,
+} from "tensorzero-node";
 
 export default function LLMFineTuningStatus({
   status,
+  formData,
+  result,
+  jobHandle,
 }: {
-  status: SFTJobStatus;
+  status: { status: "idle" } | OptimizationJobInfo;
+  formData: SFTFormValues;
+  result: string | null;
+  jobHandle: OptimizationJobHandle;
 }) {
   if (status.status === "idle") return null;
-  const createdAt = extractTimestampFromUUIDv7(status.formData.jobId);
+  const createdAt = extractTimestampFromUUIDv7(formData.jobId);
   return (
     <SectionsGroup>
       <SectionLayout>
@@ -39,7 +49,7 @@ export default function LLMFineTuningStatus({
           <BasicInfoItem>
             <BasicInfoItemTitle>Base Model</BasicInfoItemTitle>
             <BasicInfoItemContent>
-              <Chip label={status.formData.model.name} font="mono" />
+              <Chip label={formData.model.name} font="mono" />
             </BasicInfoItemContent>
           </BasicInfoItem>
 
@@ -47,9 +57,9 @@ export default function LLMFineTuningStatus({
             <BasicInfoItemTitle>Function</BasicInfoItemTitle>
             <BasicInfoItemContent>
               <Chip
-                link={`/observability/functions/${status.formData.function}`}
+                link={`/observability/functions/${formData.function}`}
                 icon={<Function className="text-fg-tertiary" />}
-                label={status.formData.function}
+                label={formData.function}
                 font="mono"
               />
             </BasicInfoItemContent>
@@ -58,14 +68,14 @@ export default function LLMFineTuningStatus({
           <BasicInfoItem>
             <BasicInfoItemTitle>Metric</BasicInfoItemTitle>
             <BasicInfoItemContent>
-              <Chip label={status.formData.metric ?? "None"} font="mono" />
+              <Chip label={formData.metric ?? "None"} font="mono" />
             </BasicInfoItemContent>
           </BasicInfoItem>
 
           <BasicInfoItem>
             <BasicInfoItemTitle>Prompt</BasicInfoItemTitle>
             <BasicInfoItemContent>
-              <Chip label={status.formData.variant} font="mono" />
+              <Chip label={formData.variant} font="mono" />
             </BasicInfoItemContent>
           </BasicInfoItem>
 
@@ -82,25 +92,22 @@ export default function LLMFineTuningStatus({
       </SectionLayout>
 
       {/* hide if not available from provider, eg fireworks */}
-      {status.status === "running" &&
-        "estimatedCompletionTime" in status &&
-        status.estimatedCompletionTime && (
-          <SectionLayout>
-            <SectionHeader heading="Estimated completion" />
-            <div className="max-w-lg space-y-2">
-              <ProgressIndicator
-                createdAt={createdAt}
-                estimatedCompletion={
-                  new Date(status.estimatedCompletionTime * 1000)
-                }
-              />
-            </div>
-          </SectionLayout>
-        )}
+      {status.status === "pending" && status.estimated_finish && (
+        <SectionLayout>
+          <SectionHeader heading="Estimated completion" />
+          <div className="max-w-lg space-y-2">
+            <ProgressIndicator
+              createdAt={createdAt}
+              estimatedCompletion={status.estimated_finish}
+            />
+          </div>
+        </SectionLayout>
+      )}
+      <SFTResult finalResult={result} />
 
       <SectionLayout>
         <a
-          href={status.jobUrl}
+          href={jobHandle.job_url}
           target="_blank"
           rel="noopener noreferrer"
           className="text-primary inline-flex items-center text-sm hover:underline"
@@ -109,12 +116,7 @@ export default function LLMFineTuningStatus({
           <ExternalLink className="ml-2 h-5 w-5" />
         </a>
 
-        <RawDataAccordion rawData={status.rawData} />
-      </SectionLayout>
-
-      <SectionLayout>
-        <SectionHeader heading="Dataset analysis" />
-        <SFTAnalysis status={status} />
+        <RawDataAccordion rawData={status} />
       </SectionLayout>
     </SectionsGroup>
   );

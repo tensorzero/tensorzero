@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
 
@@ -18,6 +18,13 @@ crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
+    let deepseek_r1_provider = E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "aws-bedrock-deepseek-r1".to_string(),
+        model_name: "deepseek-r1-aws-bedrock".into(),
+        model_provider_name: "aws_bedrock".into(),
+        credentials: HashMap::new(),
+    };
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws-bedrock".to_string(),
@@ -25,6 +32,9 @@ async fn get_providers() -> E2ETestProviders {
         model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     }];
+
+    let mut simple_inference_providers = standard_providers.clone();
+    simple_inference_providers.push(deepseek_r1_provider.clone());
 
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
@@ -75,10 +85,11 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     E2ETestProviders {
-        simple_inference: standard_providers.clone(),
+        simple_inference: simple_inference_providers,
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: vec![],
+        embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: vec![],
         tool_use_inference: standard_providers.clone(),
@@ -203,7 +214,13 @@ async fn test_inference_with_explicit_region() {
     assert!(result.get("ttft_ms").unwrap().is_null());
     let raw_response = result.get("raw_response").unwrap();
     let raw_response_json: Value = serde_json::from_str(raw_response.as_str().unwrap()).unwrap();
-    let _ = raw_response_json.get("debug").unwrap().as_str().unwrap();
+    assert!(
+        !raw_response_json["output"]["message"]["content"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "Unexpected raw response: {raw_response_json}"
+    );
 }
 
 #[tokio::test]
@@ -238,4 +255,41 @@ async fn test_inference_with_explicit_broken_region() {
     let response_json = response.json::<Value>().await.unwrap();
 
     response_json.get("error").unwrap();
+}
+
+#[tokio::test]
+async fn test_inference_with_empty_system() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "write_haiku",
+        "variant_name": "aws_bedrock",
+        "episode_id": episode_id,
+        "input":
+            {"system": "",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"topic": "artificial intelligence"}}]
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(content_blocks.len() == 1);
+    let content_block = content_blocks.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    content_block.get("text").unwrap().as_str().unwrap();
 }

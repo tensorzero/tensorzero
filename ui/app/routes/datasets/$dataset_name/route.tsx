@@ -16,6 +16,7 @@ import {
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
@@ -33,7 +34,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   const [counts, rows] = await Promise.all([
-    getDatasetCounts(),
+    getDatasetCounts({}),
     getDatasetRows(dataset_name, pageSize, offset),
   ]);
   const count_info = counts.find(
@@ -78,7 +79,11 @@ export default function DatasetDetailPage({
 
   return (
     <PageLayout>
-      <PageHeader heading="Dataset" name={count_info.dataset_name} />
+      <PageHeader
+        heading={`Dataset`}
+        name={count_info.dataset_name}
+        count={count_info.count}
+      />
       <SectionLayout>
         <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
         <DatasetRowTable rows={rows} dataset_name={count_info.dataset_name} />
@@ -95,7 +100,7 @@ export default function DatasetDetailPage({
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

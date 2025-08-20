@@ -21,7 +21,7 @@ import {
   redirect,
   type RouteHandle,
 } from "react-router";
-import Output from "~/components/inference/NewOutput";
+import { Output } from "~/components/inference/Output";
 import {
   consolidate_evaluation_results,
   getEvaluatorMetricName,
@@ -29,10 +29,7 @@ import {
 } from "~/utils/clickhouse/evaluations";
 import { useConfig } from "~/context/config";
 import MetricValue from "~/components/metric/MetricValue";
-import {
-  getMetricType,
-  type EvaluatorConfig,
-} from "~/utils/config/evaluations";
+import { getMetricType } from "~/utils/config/evaluations";
 import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
 import BasicInfo from "./EvaluationDatapointBasicInfo";
 import {
@@ -47,14 +44,18 @@ import {
   useColorAssigner,
 } from "~/hooks/evaluations/ColorAssigner";
 import { getConfig } from "~/utils/config/index.server";
-import type { EvaluationConfig } from "~/utils/config/evaluations";
-import type { ContentBlockOutput } from "~/utils/clickhouse/common";
-import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
+import type {
+  EvaluationConfig,
+  EvaluatorConfig,
+  ContentBlockChatOutput,
+  JsonInferenceOutput,
+} from "tensorzero-node";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
+import { logger } from "~/utils/logger";
 
 export const handle: RouteHandle = {
   crumb: (match) => ["Datapoints", match.params.datapoint_id!],
@@ -67,6 +68,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const searchParams = new URLSearchParams(url.search);
   const config = await getConfig();
   const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw data(
+      `Evaluation config not found for evaluation ${evaluation_name}`,
+      { status: 404 },
+    );
+  }
   const function_name = evaluation_config.function_name;
   const newFeedbackId = searchParams.get("newFeedbackId");
   const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
@@ -159,12 +166,12 @@ export async function action({ request }: Route.ActionArgs) {
           response.judgeDemonstrationResponse.feedback_id,
         );
       } else {
-        console.warn("No judge demonstration response");
+        logger.warn("No judge demonstration response");
       }
       return redirect(url.toString());
     }
     default:
-      console.error(`Unknown action: ${_action}`);
+      logger.error(`Unknown action: ${_action}`);
       return null;
   }
 }
@@ -184,6 +191,12 @@ export default function EvaluationDatapointPage({
   } = loaderData;
   const config = useConfig();
   const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw data(
+      `Evaluation config not found for evaluation ${evaluation_name}`,
+      { status: 404 },
+    );
+  }
   const outputsToDisplay = [
     {
       id: "Reference",
@@ -229,7 +242,7 @@ export default function EvaluationDatapointPage({
         <SectionsGroup>
           <SectionLayout>
             <SectionHeader heading="Input" />
-            <InputSnippet input={consolidatedEvaluationResults[0].input} />
+            <InputSnippet {...consolidatedEvaluationResults[0].input} />
           </SectionLayout>
           <OutputsSection
             outputsToDisplay={outputsToDisplay}
@@ -256,7 +269,7 @@ const MetricsDisplay = ({
 }: {
   metrics: ConsolidatedMetric[];
   evaluation_name: string;
-  evaluatorsConfig: Record<string, EvaluatorConfig>;
+  evaluatorsConfig: Record<string, EvaluatorConfig | undefined>;
   datapointId: string;
   inferenceId: string | null;
   evalRunId: string;
@@ -317,14 +330,11 @@ const MetricRow = ({
   const config = useConfig();
   const metric_name = getEvaluatorMetricName(evaluation_name, evaluatorName);
   const metricProperties = config.metrics[metric_name];
-  if (
-    metricProperties.type === "comment" ||
-    metricProperties.type === "demonstration"
-  ) {
+  if (!metricProperties) {
     return null;
   }
   if (inferenceId === null) {
-    console.warn(
+    logger.warn(
       `Inference ID is null for metric ${metric_name} in datapoint ${datapointId}, this should not happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports`,
     );
   }
@@ -372,7 +382,7 @@ const MetricRow = ({
             ? evaluatorConfig.optimize
             : "max"
         }
-        cutoff={evaluatorConfig.cutoff}
+        cutoff={evaluatorConfig.cutoff ?? undefined}
         isHumanFeedback={isHumanFeedback}
         className="text-sm"
       />
@@ -394,7 +404,7 @@ const MetricRow = ({
 };
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (
@@ -425,7 +435,7 @@ type OutputsSectionProps = {
   outputsToDisplay: Array<{
     id: string;
     variant_name: string;
-    output: ContentBlockOutput[] | JsonInferenceOutput;
+    output: ContentBlockChatOutput[] | JsonInferenceOutput;
     metrics: ConsolidatedMetric[];
     inferenceId: string | null;
   }>;

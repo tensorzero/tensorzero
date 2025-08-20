@@ -7,7 +7,7 @@ import {
   DialogTrigger,
 } from "~/components/ui/dialog";
 import { Textarea } from "~/components/ui/textarea";
-import type { ChatCompletionConfig } from "~/utils/config/variant";
+import type { ChatCompletionConfig } from "tensorzero-node";
 
 interface TemplateDetailsDialogProps {
   variant: string;
@@ -41,12 +41,13 @@ export function TemplateDetailsDialog({
                       <h4 className="leading-none font-medium">
                         System Template
                       </h4>
-                      {chatCompletionVariants[variant]?.system_template ? (
+                      {chatCompletionVariants[variant]?.templates.system
+                        ?.template ? (
                         <Textarea
                           readOnly
                           value={
-                            chatCompletionVariants[variant]?.system_template
-                              ?.content
+                            chatCompletionVariants[variant]?.templates.system
+                              ?.template?.contents
                           }
                           className="h-[200px] resize-none"
                         />
@@ -61,12 +62,13 @@ export function TemplateDetailsDialog({
                       <h4 className="leading-none font-medium">
                         User Template
                       </h4>
-                      {chatCompletionVariants[variant]?.user_template ? (
+                      {chatCompletionVariants[variant]?.templates.user
+                        ?.template ? (
                         <Textarea
                           readOnly
                           value={
-                            chatCompletionVariants[variant]?.user_template
-                              ?.content
+                            chatCompletionVariants[variant]?.templates.user
+                              ?.template?.contents
                           }
                           className="h-[200px] resize-none"
                         />
@@ -83,12 +85,13 @@ export function TemplateDetailsDialog({
                   <h4 className="leading-none font-medium">
                     Assistant Template
                   </h4>
-                  {chatCompletionVariants[variant]?.assistant_template ? (
+                  {chatCompletionVariants[variant]?.templates.assistant
+                    ?.template ? (
                     <Textarea
                       readOnly
                       value={
-                        chatCompletionVariants[variant]?.assistant_template
-                          ?.content
+                        chatCompletionVariants[variant]?.templates.assistant
+                          ?.template?.contents
                       }
                       className="h-[200px] resize-none"
                     />

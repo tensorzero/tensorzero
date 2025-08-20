@@ -9,9 +9,16 @@ use reqwest_eventsource::RequestBuilderExt;
 use serde_json::json;
 use serde_json::Value;
 use std::time::Duration;
+use tensorzero::CacheParamsOptions;
+use tensorzero::ClientInferenceParams;
+use tensorzero::ClientInput;
+use tensorzero::ClientInputMessage;
+use tensorzero::ClientInputMessageContent;
 use tensorzero::ContentBlockChunk;
+use tensorzero::InferenceOutput;
 use tensorzero_core::cache::cache_lookup_streaming;
 use tensorzero_core::cache::start_cache_write_streaming;
+use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::cache::NonStreamingCacheData;
 use tensorzero_core::inference::types::ContentBlock;
 use tensorzero_core::inference::types::ContentBlockOutput;
@@ -19,6 +26,8 @@ use tensorzero_core::inference::types::FinishReason;
 use tensorzero_core::inference::types::ProviderInferenceResponseChunk;
 use tensorzero_core::inference::types::Text;
 use tensorzero_core::inference::types::TextChunk;
+use tensorzero_core::inference::types::TextKind;
+use tracing_test::traced_test;
 use uuid::Uuid;
 
 use tensorzero_core::cache::cache_lookup;
@@ -33,7 +42,8 @@ use tensorzero_core::inference::types::{
 };
 
 use crate::common::get_gateway_endpoint;
-use tensorzero_core::clickhouse::test_helpers::{
+use crate::providers::common::make_embedded_gateway;
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
 
@@ -208,20 +218,36 @@ async fn test_cache_stream_write_and_read() {
     .unwrap();
     assert!(result.is_none());
 
-    let initial_chunks = vec![ProviderInferenceResponseChunk {
-        content: vec![ContentBlockChunk::Text(TextChunk {
-            id: "0".to_string(),
-            text: "test content".to_string(),
-        })],
-        created: 1234,
-        usage: Some(Usage {
-            input_tokens: 20,
-            output_tokens: 40,
-        }),
-        raw_response: "raw response".to_string(),
-        latency: Duration::from_secs(999),
-        finish_reason: Some(FinishReason::Stop),
-    }];
+    let initial_chunks = vec![
+        ProviderInferenceResponseChunk {
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                id: "0".to_string(),
+                text: "test content".to_string(),
+            })],
+            created: 1234,
+            usage: Some(Usage {
+                input_tokens: 20,
+                output_tokens: 40,
+            }),
+            raw_response: "raw response".to_string(),
+            latency: Duration::from_secs(999),
+            finish_reason: None,
+        },
+        ProviderInferenceResponseChunk {
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                id: "1".to_string(),
+                text: "test content 2".to_string(),
+            })],
+            created: 5678,
+            usage: Some(Usage {
+                input_tokens: 100,
+                output_tokens: 200,
+            }),
+            raw_response: "raw response 2".to_string(),
+            latency: Duration::from_secs(999),
+            finish_reason: Some(FinishReason::Stop),
+        },
+    ];
 
     // Write
     start_cache_write_streaming(
@@ -230,8 +256,8 @@ async fn test_cache_stream_write_and_read() {
         initial_chunks.clone(),
         "raw request",
         &Usage {
-            input_tokens: 20,
-            output_tokens: 40,
+            input_tokens: 1,
+            output_tokens: 2,
         },
     )
     .unwrap();
@@ -248,28 +274,45 @@ async fn test_cache_stream_write_and_read() {
     assert!(result.is_some());
     let result = result.unwrap();
     let chunks = result.stream.map(|c| c.unwrap()).collect::<Vec<_>>().await;
-    assert_eq!(chunks.len(), 1);
-    let ProviderInferenceResponseChunk {
-        content,
-        created,
-        usage,
-        raw_response,
-        latency,
-        finish_reason,
-    } = &chunks[0];
-    assert_eq!(content, &initial_chunks[0].content);
-    // 'created' should be different (current timestamp is different)
-    assert_ne!(created, &initial_chunks[0].created);
-    assert_eq!(
-        usage,
-        &Some(Usage {
-            input_tokens: 20,
-            output_tokens: 40,
-        })
-    );
-    assert_eq!(raw_response, &initial_chunks[0].raw_response);
-    assert_eq!(latency, &Duration::from_secs(0));
-    assert_eq!(finish_reason, &Some(FinishReason::Stop));
+    assert_eq!(chunks.len(), 2);
+    for (i, chunk) in chunks.into_iter().enumerate() {
+        let ProviderInferenceResponseChunk {
+            content,
+            created,
+            usage,
+            raw_response,
+            latency,
+            finish_reason,
+        } = &chunk;
+        assert_eq!(content, &initial_chunks[i].content);
+        // 'created' should be different (current timestamp is different)
+        assert_ne!(created, &initial_chunks[i].created);
+        if i == 0 {
+            assert_eq!(
+                usage,
+                &Some(Usage {
+                    input_tokens: 20,
+                    output_tokens: 40,
+                })
+            );
+        } else {
+            assert_eq!(
+                usage,
+                &Some(Usage {
+                    input_tokens: 100,
+                    output_tokens: 200,
+                })
+            );
+        };
+        assert_eq!(raw_response, &initial_chunks[i].raw_response);
+        assert_eq!(latency, &Duration::from_secs(0));
+        if i == 0 {
+            assert_eq!(finish_reason, &None);
+        } else {
+            assert_eq!(finish_reason, &Some(FinishReason::Stop));
+        }
+    }
+
     // Read (should be None)
     tokio::time::sleep(Duration::from_secs(2)).await;
     let result =
@@ -277,6 +320,57 @@ async fn test_cache_stream_write_and_read() {
             .await
             .unwrap();
     assert!(result.is_none());
+}
+
+#[traced_test]
+#[tokio::test]
+pub async fn test_dont_cache_invalid_tool_call() {
+    let is_batched_writes = match std::env::var("TENSORZERO_CLICKHOUSE_BATCH_WRITES") {
+        Ok(value) => value == "true",
+        Err(_) => false,
+    };
+    if is_batched_writes {
+        // Skip test if batched writes are enabled
+        // The message is logged from the batch writer tokio task, which may run
+        // a different thread when the multi-threaded tokio runtime is used (and fail to be captured)
+        // We cannot use the single-threaded tokio runtime here, since we need to call 'block_in_place'
+        // from GatewayHandle
+        return;
+    }
+    let client = make_embedded_gateway().await;
+    let randomness = Uuid::now_v7();
+    let params = ClientInferenceParams {
+        model_name: Some("dummy::invalid_tool_arguments".to_string()),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: format!("Test inference: {randomness}"),
+                })],
+            }],
+        },
+        cache_options: CacheParamsOptions {
+            enabled: CacheEnabledMode::On,
+            max_age_s: None,
+        },
+        ..Default::default()
+    };
+    client.inference(params.clone()).await.unwrap();
+
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    let clickhouse = get_clickhouse().await;
+    assert!(logs_contain("Skipping cache write"));
+
+    // Run again, and check that we get a cache miss
+    let res = client.inference(params).await.unwrap();
+    let InferenceOutput::NonStreaming(res) = res else {
+        panic!("Expected non-streaming inference response");
+    };
+    let model_inference = select_model_inference_clickhouse(&clickhouse, res.inference_id())
+        .await
+        .unwrap();
+    assert_eq!(model_inference.get("cached").unwrap(), false);
 }
 
 #[tokio::test]

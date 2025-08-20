@@ -10,7 +10,7 @@ use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, Role,
 };
 use tensorzero_core::{
-    clickhouse::test_helpers::{
+    db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
         select_model_inference_clickhouse, select_model_inferences_clickhouse,
     },
@@ -51,7 +51,23 @@ async fn test_variant_timeout_non_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: slow_timeout: Variant `slow_timeout` timed out due to configured `non_streaming.total_ms` timeout (400ms)"
+            "error":"All variants failed with errors: slow_timeout: Variant `slow_timeout` timed out due to configured `non_streaming.total_ms` timeout (400ms)",
+            "error_json": {
+                "AllVariantsFailed": {
+                    "errors": {
+                        "slow_timeout": {
+                            "VariantTimeout": {
+                                "variant_name": "slow_timeout",
+                                "timeout": {
+                                    "secs": 0,
+                                    "nanos": 400000000
+                                },
+                                "streaming": false
+                            }
+                        }
+                    }
+                }
+            }
         })
     );
 }
@@ -85,7 +101,23 @@ async fn test_variant_timeout_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: slow_timeout: Variant `slow_timeout` timed out due to configured `streaming.ttft_ms` timeout (500ms)"
+            "error":"All variants failed with errors: slow_timeout: Variant `slow_timeout` timed out due to configured `streaming.ttft_ms` timeout (500ms)",
+            "error_json": {
+                "AllVariantsFailed": {
+                    "errors": {
+                        "slow_timeout": {
+                            "VariantTimeout": {
+                                "variant_name": "slow_timeout",
+                                "timeout": {
+                                    "secs": 0,
+                                    "nanos": 500000000
+                                },
+                                "streaming": true
+                            }
+                        }
+                    }
+                }
+            }
         })
     );
     assert_eq!(status, StatusCode::BAD_GATEWAY);
@@ -172,6 +204,8 @@ async fn test_inference_ttft_ms(payload: Value, json: bool) {
         }
     }
 
+    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let clickhouse = get_clickhouse().await;
 
     let inference = if json {
@@ -258,7 +292,29 @@ async fn test_model_provider_timeout_non_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: timeout: All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `non_streaming.total_ms` timeout (400ms)"
+            "error":"All variants failed with errors: timeout: All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `non_streaming.total_ms` timeout (400ms)",
+            "error_json": {
+                "AllVariantsFailed":  {
+                    "errors": {
+                        "timeout": {
+                            "ModelProvidersExhausted": {
+                                "provider_errors": {
+                                    "slow": {
+                                        "ModelProviderTimeout": {
+                                            "provider_name": "slow",
+                                            "timeout": {
+                                                "secs": 0,
+                                                "nanos": 400000000
+                                            },
+                                            "streaming": false
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         })
     );
 }
@@ -292,7 +348,29 @@ async fn test_model_provider_timeout_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: timeout: All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `streaming.ttft_ms` timeout (500ms)"
+            "error":"All variants failed with errors: timeout: All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `streaming.ttft_ms` timeout (500ms)",
+            "error_json": {
+                "AllVariantsFailed": {
+                    "errors": {
+                        "timeout": {
+                            "ModelProvidersExhausted": {
+                                "provider_errors": {
+                                    "slow": {
+                                        "ModelProviderTimeout": {
+                                            "provider_name": "slow",
+                                            "timeout": {
+                                                "secs": 0,
+                                                "nanos": 500000000
+                                            },
+                                            "streaming": true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         })
     );
     assert_eq!(status, StatusCode::BAD_GATEWAY);
@@ -360,8 +438,8 @@ async fn best_of_n_other_candidate(payload: Value) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 100ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
@@ -432,8 +510,8 @@ async fn best_of_n_judge_timeout(payload: Value) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 100ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
@@ -493,8 +571,8 @@ async fn slow_second_chunk_streaming(payload: Value) {
         "slow_second_chunk should take at least 2 seconds, but took {elapsed:?}"
     );
 
-    // Wait 100ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Wait 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     let clickhouse = get_clickhouse().await;
 
@@ -606,7 +684,23 @@ async fn test_model_timeout_non_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: slow_variant: Model slow_model_timeout timed out due to configured `non_streaming.total_ms` timeout (400ms)"
+            "error":"All variants failed with errors: slow_variant: Model slow_model_timeout timed out due to configured `non_streaming.total_ms` timeout (400ms)",
+            "error_json": {
+                "AllVariantsFailed": {
+                    "errors": {
+                        "slow_variant": {
+                            "ModelTimeout": {
+                                "model_name": "slow_model_timeout",
+                                "timeout": {
+                                    "secs": 0,
+                                    "nanos": 400000000
+                                },
+                                "streaming": false
+                            }
+                        }
+                    }
+                }
+            }
         })
     );
 }
@@ -640,7 +734,23 @@ async fn test_model_timeout_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: slow_variant: Model slow_model_timeout timed out due to configured `streaming.ttft_ms` timeout (500ms)"
+            "error":"All variants failed with errors: slow_variant: Model slow_model_timeout timed out due to configured `streaming.ttft_ms` timeout (500ms)",
+            "error_json": {
+                "AllVariantsFailed": {
+                    "errors": {
+                        "slow_variant": {
+                            "ModelTimeout": {
+                                "model_name": "slow_model_timeout",
+                                "timeout": {
+                                    "secs": 0,
+                                    "nanos": 500000000
+                                },
+                                "streaming": true
+                            }
+                        }
+                    }
+                }
+            }
         })
     );
     assert_eq!(status, StatusCode::BAD_GATEWAY);

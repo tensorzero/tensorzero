@@ -1,5 +1,26 @@
 import { z } from "zod";
-import type { FunctionConfig } from "../config/function";
+import type {
+  FunctionConfig,
+  JsonInferenceOutput,
+  ContentBlockChatOutput,
+  Thought,
+  JsonValue,
+} from "tensorzero-node";
+
+/**
+ * JSON types.
+ */
+
+export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.record(JsonValueSchema),
+    z.array(JsonValueSchema),
+  ]),
+);
 
 export const roleSchema = z.enum(["user", "assistant"]);
 export type Role = z.infer<typeof roleSchema>;
@@ -51,6 +72,20 @@ export const rawTextInputSchema = z.object({
   value: z.string(),
 });
 export type RawTextInput = z.infer<typeof rawTextInputSchema>;
+
+export const thoughtSchema = z.object({
+  type: z.literal("thought"),
+  text: z.string().nullable(),
+  signature: z.string().nullable(),
+  _internal_provider_type: z.string().nullable(),
+}) satisfies z.ZodType<Thought>;
+
+export const unknownSchema = z.object({
+  type: z.literal("unknown"),
+  data: JsonValueSchema,
+  model_provider_name: z.string().nullable(),
+});
+export type Unknown = z.infer<typeof unknownSchema>;
 
 export const toolCallSchema = z
   .object({
@@ -174,6 +209,8 @@ export const inputMessageContentSchema = z.discriminatedUnion("type", [
   imageContentSchema,
   fileContentSchema,
   rawTextInputSchema,
+  thoughtSchema,
+  unknownSchema,
 ]);
 export type InputMessageContent = z.infer<typeof inputMessageContentSchema>;
 
@@ -186,6 +223,8 @@ export const modelInferenceInputMessageContentSchema = z.discriminatedUnion(
     imageContentSchema,
     fileContentSchema,
     rawTextInputSchema,
+    thoughtSchema,
+    unknownSchema,
   ],
 );
 export type ModelInferenceInputMessageContent = z.infer<
@@ -201,6 +240,8 @@ export const displayInputMessageContentSchema = z.discriminatedUnion("type", [
   resolvedFileContentSchema,
   resolvedFileContentErrorSchema,
   rawTextInputSchema,
+  thoughtSchema,
+  unknownSchema,
 ]);
 
 export type DisplayInputMessageContent = z.infer<
@@ -298,18 +339,16 @@ export const requestMessageSchema = z.object({
 export type RequestMessage = z.infer<typeof requestMessageSchema>;
 
 export const jsonInferenceOutputSchema = z.object({
-  raw: z.string().default(""),
-  parsed: z.any().nullable(),
-});
-
-export type JsonInferenceOutput = z.infer<typeof jsonInferenceOutputSchema>;
+  raw: z.string().nullable(),
+  parsed: JsonValueSchema,
+}) satisfies z.ZodType<JsonInferenceOutput>;
 
 export const toolCallOutputSchema = z
   .object({
     type: z.literal("tool_call"),
-    arguments: z.any().nullable().default(null),
+    arguments: JsonValueSchema.nullable(),
     id: z.string(),
-    name: z.string().nullable().default(null),
+    name: z.string().nullable(),
     raw_arguments: z.string(),
     raw_name: z.string(),
   })
@@ -317,12 +356,21 @@ export const toolCallOutputSchema = z
 
 export type ToolCallOutput = z.infer<typeof toolCallOutputSchema>;
 
-export const contentBlockOutputSchema = z.discriminatedUnion("type", [
+export const contentBlockChatOutputSchema = z.discriminatedUnion("type", [
   textContentSchema,
   toolCallOutputSchema,
-]);
+  thoughtSchema,
+  unknownSchema,
+]) satisfies z.ZodType<ContentBlockChatOutput>;
 
-export type ContentBlockOutput = z.infer<typeof contentBlockOutputSchema>;
+export const modelInferenceOutputContentBlockSchema = z.discriminatedUnion(
+  "type",
+  [textContentSchema, toolCallContentSchema],
+);
+
+export type ModelInferenceOutputContentBlock = z.infer<
+  typeof modelInferenceOutputContentBlockSchema
+>;
 
 export const InferenceTableName = {
   CHAT: "ChatInference",
@@ -354,6 +402,11 @@ export const TableBoundsSchema = z.object({
   last_id: z.string().uuid().nullable(), // UUIDv7 string
 });
 export type TableBounds = z.infer<typeof TableBoundsSchema>;
+
+export const TableBoundsWithCountSchema = TableBoundsSchema.extend({
+  count: z.number(),
+});
+export type TableBoundsWithCount = z.infer<typeof TableBoundsWithCountSchema>;
 
 export const FeedbackBoundsSchema = TableBoundsSchema.extend({
   by_type: z.object({
@@ -405,6 +458,10 @@ function displayInputMessageContentToInputMessageContent(
         type: "file",
       };
     case "raw_text":
+      return content;
+    case "thought":
+      return content;
+    case "unknown":
       return content;
   }
 }

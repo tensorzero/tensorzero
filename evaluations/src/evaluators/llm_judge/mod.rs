@@ -123,6 +123,7 @@ pub async fn run_llm_judge_evaluator(
         cache_options: get_cache_options(inference_cache),
         extra_body: Default::default(),
         extra_headers: Default::default(),
+        internal_dynamic_variant_config: None,
     };
     let result = clients.tensorzero_client.inference(params).await?;
     let response = match result {
@@ -297,7 +298,7 @@ fn prepare_messages_input(input: &ClientInput) -> Result<Vec<ClientInputMessage>
                     content: vec![ClientInputMessageContent::Text(TextKind::Text {
                         text: system_message,
                     })],
-                })
+                });
             }
             _ => {
                 bail!("System message is not a string or object");
@@ -598,6 +599,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                is_custom: true,
             }),
         )
         .unwrap()
@@ -665,6 +667,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                is_custom: true,
             }),
         )
         .unwrap()
@@ -822,8 +825,9 @@ mod tests {
                 value: "raw text".to_string(),
             },
             ClientInputMessageContent::Thought(Thought {
-                text: "thought".to_string(),
+                text: Some("thought".to_string()),
                 signature: None,
+                provider_type: None,
             }),
         ];
         let serialized = serialize_content_for_messages_input(&content).unwrap();
@@ -891,6 +895,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let result = handle_reference_output(&config, &datapoint).unwrap();
         assert_eq!(result, None);
@@ -921,6 +926,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let err = handle_reference_output(&config, &datapoint).unwrap_err();
         assert_eq!(
@@ -947,6 +953,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let result = handle_reference_output(&config, &datapoint)
             .unwrap()
@@ -973,6 +980,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            is_custom: true,
         });
         let result = handle_reference_output(&config, &datapoint)
             .unwrap()
@@ -1075,6 +1083,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                is_custom: true,
             }),
         )
         .unwrap()
@@ -1188,6 +1197,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                is_custom: true,
             }),
         )
         .unwrap()

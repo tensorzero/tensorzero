@@ -42,12 +42,15 @@ fn default_api_key_location() -> CredentialLocation {
 }
 
 const PROVIDER_NAME: &str = "SGLang";
-const PROVIDER_TYPE: &str = "sglang";
+pub const PROVIDER_TYPE: &str = "sglang";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct SGLangProvider {
     model_name: String,
     api_base: Url,
+    #[serde(skip)]
     credentials: SGLangCredentials,
 }
 
@@ -419,7 +422,7 @@ fn sglang_to_tensorzero_chunk(
         }
         .into());
     }
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(Into::into);
     let mut finish_reason = None;
     let mut content = vec![];
     if let Some(choice) = chunk.choices.pop() {
@@ -486,7 +489,7 @@ enum SGLangResponseFormat {
 
 impl SGLangResponseFormat {
     fn new(
-        json_mode: &ModelInferenceRequestJsonMode,
+        json_mode: ModelInferenceRequestJsonMode,
         output_schema: Option<&Value>,
     ) -> Result<Option<Self>, Error> {
         match json_mode {
@@ -549,12 +552,13 @@ impl<'a> SGLangRequest<'a> {
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<SGLangRequest<'a>, Error> {
-        let response_format = SGLangResponseFormat::new(&request.json_mode, request.output_schema)?;
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
+        let response_format = SGLangResponseFormat::new(request.json_mode, request.output_schema)?;
+        let stream_options = if request.stream {
+            Some(StreamOptions {
                 include_usage: true,
-            }),
-            false => None,
+            })
+        } else {
+            None
         };
         let messages = prepare_openai_messages(
             request.system.as_deref(),
@@ -814,6 +818,7 @@ mod tests {
                 index: 0,
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: OpenAIFinishReason::Stop,

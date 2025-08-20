@@ -3,15 +3,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct ExtraHeadersConfig {
     pub data: Vec<ExtraHeader>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct ExtraHeader {
     pub name: String,
     #[serde(flatten)]
@@ -20,8 +16,8 @@ pub struct ExtraHeader {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum ExtraHeaderKind {
     Value(String),
     // We only allow `"delete": true` to be set - deserializing `"delete": false` will error
@@ -37,20 +33,20 @@ pub enum ExtraHeaderKind {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct UnfilteredInferenceExtraHeaders {
-    pub headers: Vec<InferenceExtraHeader>,
+    pub extra_headers: Vec<InferenceExtraHeader>,
 }
 
 impl UnfilteredInferenceExtraHeaders {
     pub fn is_empty(&self) -> bool {
-        self.headers.is_empty()
+        self.extra_headers.is_empty()
     }
 
     /// Filter the 'InferenceExtraHeader' options by variant name
     /// If the variant name is `None`, then all variant-specific extra header options are removed
-    pub fn filter(self, variant_name: Option<&str>) -> FilteredInferenceExtraHeaders {
+    pub fn filter(self, variant_name: &str) -> FilteredInferenceExtraHeaders {
         FilteredInferenceExtraHeaders {
             data: self
-                .headers
+                .extra_headers
                 .into_iter()
                 .filter(|config| config.should_apply_variant(variant_name))
                 .collect(),
@@ -72,7 +68,8 @@ pub struct FullExtraHeadersConfig {
     pub inference_extra_headers: FilteredInferenceExtraHeaders,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(untagged)]
 pub enum InferenceExtraHeader {
     Provider {
@@ -90,16 +87,12 @@ pub enum InferenceExtraHeader {
 }
 
 impl InferenceExtraHeader {
-    pub fn should_apply_variant(&self, variant_name: Option<&str>) -> bool {
-        match (self, variant_name) {
-            (InferenceExtraHeader::Provider { .. }, _) => true,
-            (
-                InferenceExtraHeader::Variant {
-                    variant_name: v, ..
-                },
-                Some(expected_name),
-            ) => v == expected_name,
-            (InferenceExtraHeader::Variant { .. }, None) => false,
+    pub fn should_apply_variant(&self, variant_name: &str) -> bool {
+        match self {
+            InferenceExtraHeader::Provider { .. } => true,
+            InferenceExtraHeader::Variant {
+                variant_name: v, ..
+            } => v == variant_name,
         }
     }
 }

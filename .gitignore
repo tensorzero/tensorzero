@@ -14,6 +14,9 @@ target-rust-analyzer/
 # VScode settings
 .vscode/
 
+# Zed settings
+.zed/
+
 .DS_Store
 .credentials/
 
@@ -39,8 +42,9 @@ credentials/
 node_modules/
 **/.eslintcache
 
-# Claude Code
+# Claude Code (see AGENTS.md)
 CLAUDE.md
+.claude/
 
 ui/fixtures/s3-fixtures
 ci/provider-proxy-cache

@@ -1,10 +1,16 @@
-import { describe, expect, test } from "vitest";
-import { tensorZeroClient } from "~/utils/tensorzero.server";
+import { describe, expect, test, beforeAll } from "vitest";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 import { type JsonInferenceDatapoint } from "~/utils/tensorzero";
 
-describe("update datapoints and make sure the source_inference_id is removed if the input changed", () => {
-  test("should remove the source_inference_id if the input changed", async () => {
+let tensorZeroClient: ReturnType<typeof getTensorZeroClient>;
+
+describe("update datapoints", () => {
+  beforeAll(() => {
+    tensorZeroClient = getTensorZeroClient();
+  });
+
+  test("should preserve original source_inference_id and set is_custom when updating datapoint", async () => {
     const datapoint: JsonInferenceDatapoint = {
       function_name: "extract_entities",
       input: {
@@ -60,86 +66,32 @@ describe("update datapoints and make sure the source_inference_id is removed if 
         required: ["person", "organization", "location", "miscellaneous"],
         additionalProperties: false,
       },
-      source_inference_id: null,
+      source_inference_id: "01982323-3460-71dd-8cc8-bc4d44a0c88f",
+      is_custom: true,
+      id: "01960832-7028-743c-8c44-a598aa5130fd",
     };
 
-    await tensorZeroClient.updateDatapoint(
-      "test",
-      "01960832-7028-743c-8c44-a598aa5130fd",
-      datapoint,
-      true,
-    );
+    await tensorZeroClient.updateDatapoint("test", datapoint);
 
     const retrievedDatapoint = await getDatapoint(
       "test",
       "01960832-7028-743c-8c44-a598aa5130fd",
     );
-    expect(retrievedDatapoint?.source_inference_id).toBeNull();
+    expect(retrievedDatapoint?.source_inference_id).toBe(
+      datapoint.source_inference_id,
+    );
+    expect(retrievedDatapoint?.is_custom).toBe(true);
   });
 
-  test("should not remove the source_inference_id if the input did not change", async () => {
-    const source_inference_id = "01960843-19be-7dce-922f-b5f618176ec0";
-    const datapoint: JsonInferenceDatapoint = {
-      function_name: "extract_entities",
-      input: {
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Apple Inc. is headquartered in Cupertino, California. Tim Cook is the CEO.",
-              },
-            ],
-          },
-        ],
-      },
-      output: {
-        person: ["Tim Cook"],
-        organization: ["Apple Inc."],
-        location: ["Cupertino", "California"],
-        miscellaneous: [],
-      },
-
-      output_schema: {
-        type: "object",
-        properties: {
-          person: {
-            type: "array",
-            items: { type: "string" },
-          },
-          organization: {
-            type: "array",
-            items: { type: "string" },
-          },
-          location: {
-            type: "array",
-            items: { type: "string" },
-          },
-          miscellaneous: {
-            type: "array",
-            items: { type: "string" },
-          },
-        },
-        required: ["person", "organization", "location", "miscellaneous"],
-        additionalProperties: false,
-      },
-      tags: {},
-      auxiliary: "",
-      source_inference_id,
-    };
-
-    await tensorZeroClient.updateDatapoint(
-      "test",
-      "01960832-7028-743c-8c44-a598aa5130fd",
-      datapoint,
-      false,
+  test("should list datapoints", async () => {
+    const datapoints = await tensorZeroClient.listDatapoints(
+      "foo",
+      "extract_entities",
+      10,
     );
-
-    const retrievedDatapoint = await getDatapoint(
-      "test",
-      "01960832-7028-743c-8c44-a598aa5130fd",
-    );
-    expect(retrievedDatapoint?.source_inference_id).toBe(source_inference_id);
+    expect(datapoints.length).toBe(10);
+    for (const datapoint of datapoints) {
+      expect(datapoint.function_name).toBe("extract_entities");
+    }
   });
 });

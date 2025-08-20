@@ -8,13 +8,13 @@ use super::{
     OpenAIRequestMessage, OpenAISFTTool,
 };
 use crate::{
-    config_parser::TimeoutsConfig,
+    config::TimeoutsConfig,
     error::{Error, ErrorDetails},
     inference::types::ContentBlock,
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
-    optimization::{OptimizerOutput, OptimizerStatus},
+    optimization::{OptimizationJobInfo, OptimizerOutput},
     providers::openai::PROVIDER_TYPE,
-    stored_inference::RenderedStoredInference,
+    stored_inference::RenderedSample,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -153,17 +153,13 @@ pub struct OpenAISupervisedRow<'a> {
     tools: Vec<OpenAISFTTool<'a>>,
 }
 
-impl<'a> TryFrom<&'a RenderedStoredInference> for OpenAISupervisedRow<'a> {
+impl<'a> TryFrom<&'a RenderedSample> for OpenAISupervisedRow<'a> {
     type Error = Error;
-    fn try_from(inference: &'a RenderedStoredInference) -> Result<Self, Self::Error> {
+    fn try_from(inference: &'a RenderedSample) -> Result<Self, Self::Error> {
         let (parallel_tool_calls, tools) = match &inference.tool_params {
             Some(tool_params) => (
                 tool_params.parallel_tool_calls.unwrap_or_default(),
-                tool_params
-                    .tools_available
-                    .iter()
-                    .map(|t| t.into())
-                    .collect(),
+                tool_params.tools_available.iter().map(Into::into).collect(),
             ),
             None => (false, vec![]),
         };
@@ -173,16 +169,18 @@ impl<'a> TryFrom<&'a RenderedStoredInference> for OpenAISupervisedRow<'a> {
             None,
             PROVIDER_TYPE,
         )?;
-        if inference.output.is_empty() {
+        let Some(output) = &inference.output else {
+            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+                message: "No output in inference".to_string(),
+            }));
+        };
+        if output.is_empty() {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
                 message: "No output in inference".to_string(),
             }));
         }
-        let output_content_blocks: Vec<ContentBlock> = inference
-            .output
-            .iter()
-            .map(|c| c.clone().into())
-            .collect::<Vec<_>>();
+        let output_content_blocks: Vec<ContentBlock> =
+            output.iter().map(|c| c.clone().into()).collect::<Vec<_>>();
         let final_assistant_message = tensorzero_to_openai_assistant_message(
             Cow::Owned(output_content_blocks),
             PROVIDER_TYPE,
@@ -226,24 +224,24 @@ pub struct OpenAIFineTuningJob {
     pub status: OpenAIFineTuningJobStatus,
 }
 
-pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<OptimizerStatus, Error> {
+pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<OptimizationJobInfo, Error> {
     let estimated_finish = job
         .estimated_finish
         .and_then(|unix_timestamp| DateTime::from_timestamp(unix_timestamp as i64, 0));
     Ok(match job.status {
-        OpenAIFineTuningJobStatus::ValidatingFiles => OptimizerStatus::Pending {
+        OpenAIFineTuningJobStatus::ValidatingFiles => OptimizationJobInfo::Pending {
             message: "Validating files".to_string(),
             estimated_finish,
             trained_tokens: job.trained_tokens,
             error: job.error,
         },
-        OpenAIFineTuningJobStatus::Queued => OptimizerStatus::Pending {
+        OpenAIFineTuningJobStatus::Queued => OptimizationJobInfo::Pending {
             message: "Queued".to_string(),
             estimated_finish,
             trained_tokens: job.trained_tokens,
             error: job.error,
         },
-        OpenAIFineTuningJobStatus::Running => OptimizerStatus::Pending {
+        OpenAIFineTuningJobStatus::Running => OptimizationJobInfo::Pending {
             message: "Running".to_string(),
             estimated_finish,
             trained_tokens: job.trained_tokens,
@@ -264,10 +262,10 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizer
                 },
                 extra_headers: None,
                 extra_body: None,
-                timeouts: None,
+                timeouts: TimeoutsConfig::default(),
                 discard_unknown_chunks: false,
             };
-            OptimizerStatus::Completed {
+            OptimizationJobInfo::Completed {
                 output: OptimizerOutput::Model(UninitializedModelConfig {
                     routing: vec![model_name.clone().into()],
                     providers: HashMap::from([(model_name.clone().into(), model_provider)]),
@@ -275,8 +273,14 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizer
                 }),
             }
         }
-        OpenAIFineTuningJobStatus::Failed => OptimizerStatus::Failed,
-        OpenAIFineTuningJobStatus::Cancelled => OptimizerStatus::Failed,
+        OpenAIFineTuningJobStatus::Failed => OptimizationJobInfo::Failed {
+            message: "Failed".to_string(),
+            error: job.error,
+        },
+        OpenAIFineTuningJobStatus::Cancelled => OptimizationJobInfo::Failed {
+            message: "Cancelled".to_string(),
+            error: job.error,
+        },
     })
 }
 
@@ -294,19 +298,20 @@ pub enum OpenAIFineTuningJobStatus {
 #[cfg(test)]
 mod tests {
     use crate::{
-        inference::types::{ContentBlockChatOutput, ModelInput, RequestMessage, Role, Text},
+        inference::types::{
+            ContentBlockChatOutput, ModelInput, RequestMessage, ResolvedInput,
+            ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
+        },
         providers::openai::OpenAIContentBlock,
     };
     use serde_json::json;
-    use uuid::Uuid;
 
     use super::*;
 
     #[test]
     fn test_convert_to_sft_row() {
-        let inference = RenderedStoredInference {
+        let inference = RenderedSample {
             function_name: "test".to_string(),
-            variant_name: "test".to_string(),
             input: ModelInput {
                 system: Some("You are a helpful assistant named Dr. M.M. Patel.".to_string()),
                 messages: vec![RequestMessage {
@@ -316,13 +321,24 @@ mod tests {
                     })],
                 }],
             },
-            output: vec![ContentBlockChatOutput::Text(Text {
+            stored_input: ResolvedInput {
+                system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("What is the capital of France?"),
+                    }],
+                }],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "The capital of France is Paris.".to_string(),
-            })],
-            episode_id: Uuid::now_v7(),
-            inference_id: Uuid::now_v7(),
+            })]),
+            episode_id: Some(uuid::Uuid::now_v7()),
+            inference_id: Some(uuid::Uuid::now_v7()),
             tool_params: None,
             output_schema: None,
+            dispreferred_outputs: vec![],
+            tags: HashMap::new(),
         };
         let row = OpenAISupervisedRow::try_from(&inference).unwrap();
         assert_eq!(row.messages.len(), 3);
@@ -367,7 +383,7 @@ mod tests {
         let status = convert_to_optimizer_status(job).unwrap();
         assert!(matches!(
             status,
-            OptimizerStatus::Completed {
+            OptimizationJobInfo::Completed {
                 output: OptimizerOutput::Model(_),
             }
         ));
@@ -385,7 +401,7 @@ mod tests {
         let status = convert_to_optimizer_status(job).unwrap();
         assert!(matches!(
             status,
-            OptimizerStatus::Completed {
+            OptimizationJobInfo::Completed {
                 output: OptimizerOutput::Model(_),
             }
         ));
@@ -399,7 +415,7 @@ mod tests {
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(running).unwrap();
         let status = convert_to_optimizer_status(job).unwrap();
-        assert!(matches!(status, OptimizerStatus::Pending { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "failed" status
         let failed = json!({
@@ -410,7 +426,7 @@ mod tests {
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(failed).unwrap();
         let status = convert_to_optimizer_status(job).unwrap();
-        assert!(matches!(status, OptimizerStatus::Failed));
+        assert!(matches!(status, OptimizationJobInfo::Failed { .. }));
 
         // Test for "validating_files" status
         let validating = json!({
@@ -421,7 +437,7 @@ mod tests {
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(validating).unwrap();
         let status = convert_to_optimizer_status(job).unwrap();
-        assert!(matches!(status, OptimizerStatus::Pending { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "queued" status
         let queued = json!({
@@ -432,7 +448,7 @@ mod tests {
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(queued).unwrap();
         let status = convert_to_optimizer_status(job).unwrap();
-        assert!(matches!(status, OptimizerStatus::Pending { .. }));
+        assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for unknown status - this should result in an error from convert_to_optimizer_status
         // as OpenAIFineTuningJobStatus deserialization would fail first if it's truly unknown.

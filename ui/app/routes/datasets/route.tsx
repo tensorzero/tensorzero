@@ -13,6 +13,8 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import { DatasetsActions } from "./DatasetsActions";
+import { logger } from "~/utils/logger";
+import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -21,9 +23,27 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
-  const counts = await getDatasetCounts(pageSize, offset);
+  const counts = await getDatasetCounts({
+    page_size: pageSize,
+    offset,
+  });
   const numberOfDatasets = await getNumberOfDatasets();
   return { counts, pageSize, offset, numberOfDatasets };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const action = formData.get("action");
+  if (action === "delete") {
+    const datasetName = formData.get("datasetName");
+    if (typeof datasetName !== "string") {
+      throw data("Dataset name is required", { status: 400 });
+    }
+    const client = await getNativeTensorZeroClient();
+    const staleDataset = await client.staleDataset(datasetName);
+    return staleDataset;
+  }
+  return null;
 }
 
 export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
@@ -57,7 +77,7 @@ export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

@@ -1,8 +1,7 @@
 import { useMemo } from "react";
 import React from "react";
 import { useSearchParams, useNavigate } from "react-router";
-
-import * as RadixTooltip from "@radix-ui/react-tooltip";
+import { Tooltip as RadixTooltip } from "radix-ui";
 import {
   Table,
   TableBody,
@@ -25,21 +24,19 @@ import type {
   ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import type {
-  JsonInferenceOutput,
-  ContentBlockOutput,
-} from "~/utils/clickhouse/common";
-import OutputComponent from "~/components/inference/Output";
+import { Output } from "~/components/inference/Output";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
 import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
-import {
-  formatMetricSummaryValue,
-  type MetricConfig,
-} from "~/utils/config/metric";
-import { type EvaluatorConfig } from "~/utils/config/evaluations";
+import { formatMetricSummaryValue } from "~/utils/config/feedback";
+import type {
+  EvaluatorConfig,
+  MetricConfig,
+  JsonInferenceOutput,
+  ContentBlockChatOutput,
+} from "tensorzero-node";
 import {
   useColorAssigner,
   ColorAssignerProvider,
@@ -47,6 +44,7 @@ import {
 import MetricValue, { isCutoffFailed } from "~/components/metric/MetricValue";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import InputSnippet from "~/components/inference/InputSnippet";
+import { logger } from "~/utils/logger";
 
 type TruncatedContentProps = (
   | {
@@ -59,7 +57,7 @@ type TruncatedContentProps = (
     }
   | {
       type: "output";
-      content: JsonInferenceOutput | ContentBlockOutput[];
+      content: JsonInferenceOutput | ContentBlockChatOutput[];
     }
 ) & {
   maxLength?: number;
@@ -86,9 +84,9 @@ const TruncatedContent = ({
           <pre className="w-full text-xs whitespace-pre-wrap">{content}</pre>
         </div>
       ) : type === "input" ? (
-        <InputSnippet input={content} />
+        <InputSnippet {...content} />
       ) : (
-        <OutputComponent output={content} />
+        <Output output={content} />
       )}
     </TruncatedContentTooltip>
   );
@@ -158,10 +156,10 @@ function getInputSummary(input: DisplayInput): string {
 
 // Helper function to generate a summary of an Output object
 function getOutputSummary(
-  output: JsonInferenceOutput | ContentBlockOutput[],
+  output: JsonInferenceOutput | ContentBlockChatOutput[],
 ): string {
   if (Array.isArray(output)) {
-    // It's ContentBlockOutput[]
+    // It's ContentBlockChatOutput[]
     if (output.length === 0) return "Empty output";
 
     const firstBlock = output[0];
@@ -244,7 +242,7 @@ export function EvaluationTable({
       {
         id: string;
         input: DisplayInput;
-        reference_output: JsonInferenceOutput | ContentBlockOutput[];
+        reference_output: JsonInferenceOutput | ContentBlockChatOutput[];
       }
     >();
 
@@ -271,7 +269,7 @@ export function EvaluationTable({
       Map<
         string, // evaluation run id
         {
-          generated_output: JsonInferenceOutput | ContentBlockOutput[];
+          generated_output: JsonInferenceOutput | ContentBlockChatOutput[];
           metrics: Map<string, MetricValueInfo>;
         }
       >
@@ -392,7 +390,7 @@ export function EvaluationTable({
                       {
                         generated_output:
                           | JsonInferenceOutput
-                          | ContentBlockOutput[];
+                          | ContentBlockChatOutput[];
                         metrics: Map<string, MetricValueInfo>;
                       },
                     ][];
@@ -475,12 +473,11 @@ export function EvaluationTable({
                               );
                               const metricValue = data.metrics.get(metric_name);
                               const metricType =
-                                config.metrics[metric_name].type;
+                                config.metrics[metric_name]?.type;
                               const evaluatorConfig =
-                                config.evaluations[evaluation_name].evaluators[
+                                config.evaluations[evaluation_name]?.evaluators[
                                   evaluator_name
                                 ];
-                              const evaluationType = evaluatorConfig.type;
 
                               return (
                                 <TableCell
@@ -489,9 +486,11 @@ export function EvaluationTable({
                                 >
                                   {/* Add group and relative positioning to the container */}
                                   <div
-                                    className={`group relative flex h-full items-center justify-center ${metricValue && evaluationType === "llm_judge" ? "pl-10" : ""}`}
+                                    className={`group relative flex h-full items-center justify-center ${metricValue && evaluatorConfig?.type === "llm_judge" ? "pl-10" : ""}`}
                                   >
-                                    {metricValue ? (
+                                    {metricValue &&
+                                    metricType &&
+                                    evaluatorConfig ? (
                                       <>
                                         <MetricValue
                                           value={metricValue.value}
@@ -504,10 +503,13 @@ export function EvaluationTable({
                                               ? evaluatorConfig.optimize
                                               : "max"
                                           }
-                                          cutoff={evaluatorConfig.cutoff}
+                                          cutoff={
+                                            evaluatorConfig.cutoff ?? undefined
+                                          }
                                         />
                                         {/* Make feedback editor appear on hover */}
-                                        {evaluationType === "llm_judge" && (
+                                        {evaluatorConfig.type ===
+                                          "llm_judge" && (
                                           <div
                                             className="ml-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                                             // Stop click event propagation so the row navigation is not triggered
@@ -564,14 +566,20 @@ const EvaluatorHeader = ({
   summaryStats: EvaluationStatistics[];
 }) => {
   const config = useConfig();
-  const EvaluationConfig = config.evaluations[evaluation_name];
-  const evaluatorConfig = EvaluationConfig.evaluators[evaluator_name];
+  const evaluationConfig = config.evaluations[evaluation_name];
+  const evaluatorConfig = evaluationConfig?.evaluators[evaluator_name];
+  if (!evaluatorConfig) {
+    logger.warn(
+      `Evaluator config not found for evaluation ${evaluation_name} and evaluator ${evaluator_name}`,
+    );
+    return null;
+  }
   const metric_name = getEvaluatorMetricName(evaluation_name, evaluator_name);
   const metricProperties = config.metrics[metric_name];
-  if (
-    metricProperties.type === "comment" ||
-    metricProperties.type === "demonstration"
-  ) {
+  if (!metricProperties) {
+    logger.warn(
+      `Metric config not found for evaluation ${evaluation_name} and metric ${metric_name}`,
+    );
     return null;
   }
   return (

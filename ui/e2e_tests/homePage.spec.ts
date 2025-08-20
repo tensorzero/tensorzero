@@ -14,3 +14,15 @@ test("@base-path should check the health endpoint with the correct base path", a
   await page.goto("/");
   await expect(page.getByText("TensorZero Gateway")).toBeVisible();
 });
+
+test("should show 17 functions in the functions badge", async ({ page }) => {
+  await page.goto("/");
+
+  // Find the functions card specifically by looking for the card that contains both "Functions" title and description
+  const functionsCard = page.locator(".block").filter({
+    has: page.locator('h3:has-text("Functions")'),
+    hasText: "17 functions",
+  });
+
+  await expect(functionsCard).toBeVisible();
+});

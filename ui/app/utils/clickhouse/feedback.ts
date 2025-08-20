@@ -5,8 +5,9 @@ import {
   type FeedbackBounds,
 } from "./common";
 import { data } from "react-router";
-import { clickhouseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
 import { z } from "zod";
+import { logger } from "~/utils/logger";
 
 export const booleanMetricFeedbackRowSchema = z.object({
   type: z.literal("boolean"),
@@ -103,7 +104,7 @@ export async function queryBooleanMetricsByTargetId(params: {
   }
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params,
@@ -111,7 +112,7 @@ export async function queryBooleanMetricsByTargetId(params: {
     const rows = await resultSet.json();
     return z.array(booleanMetricFeedbackRowSchema).parse(rows);
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error querying boolean metrics", { status: 500 });
   }
 }
@@ -127,7 +128,7 @@ export async function queryBooleanMetricFeedbackBoundsByTargetId(params: {
     `;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { target_id },
@@ -146,7 +147,7 @@ export async function queryBooleanMetricFeedbackBoundsByTargetId(params: {
 
     return bounds;
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error querying boolean metric feedback bounds", {
       status: 500,
     });
@@ -159,7 +160,7 @@ export async function countBooleanMetricFeedbackByTargetId(
   const query = `SELECT toUInt32(COUNT()) AS count FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:String}`;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { target_id },
@@ -173,7 +174,7 @@ export async function countBooleanMetricFeedbackByTargetId(
 
     return parsedRows[0].count;
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error counting boolean metric feedback", { status: 500 });
   }
 }
@@ -271,7 +272,7 @@ export async function queryCommentFeedbackByTargetId(params: {
   }
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params,
@@ -279,7 +280,7 @@ export async function queryCommentFeedbackByTargetId(params: {
     const rows = await resultSet.json();
     return z.array(commentFeedbackRowSchema).parse(rows);
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error querying comment feedback", { status: 500 });
   }
 }
@@ -297,7 +298,7 @@ export async function queryCommentFeedbackBoundsByTargetId(params: {
     `;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { target_id },
@@ -316,7 +317,7 @@ export async function queryCommentFeedbackBoundsByTargetId(params: {
 
     return bounds;
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error querying comment feedback bounds", { status: 500 });
   }
 }
@@ -327,7 +328,7 @@ export async function countCommentFeedbackByTargetId(
   const query = `SELECT toUInt32(COUNT()) AS count FROM CommentFeedbackByTargetId WHERE target_id = {target_id:String}`;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { target_id },
@@ -341,7 +342,7 @@ export async function countCommentFeedbackByTargetId(
 
     return parsedRows[0].count;
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error counting comment feedback", { status: 500 });
   }
 }
@@ -436,7 +437,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
   }
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params,
@@ -444,7 +445,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
     const rows = await resultSet.json();
     return z.array(demonstrationFeedbackRowSchema).parse(rows);
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error querying demonstration feedback", { status: 500 });
   }
 }
@@ -462,7 +463,7 @@ export async function queryDemonstrationFeedbackBoundsByInferenceId(params: {
     `;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { inference_id },
@@ -481,7 +482,7 @@ export async function queryDemonstrationFeedbackBoundsByInferenceId(params: {
 
     return bounds;
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error querying demonstration feedback bounds", {
       status: 500,
     });
@@ -494,7 +495,7 @@ export async function countDemonstrationFeedbackByInferenceId(
   const query = `SELECT toUInt32(COUNT()) AS count FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {inference_id:String}`;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { inference_id },
@@ -508,7 +509,7 @@ export async function countDemonstrationFeedbackByInferenceId(
 
     return parsedRows[0].count;
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error counting demonstration feedback", { status: 500 });
   }
 }
@@ -610,7 +611,7 @@ export async function queryFloatMetricsByTargetId(params: {
   }
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params,
@@ -618,7 +619,7 @@ export async function queryFloatMetricsByTargetId(params: {
     const rows = await resultSet.json();
     return z.array(floatMetricFeedbackRowSchema).parse(rows);
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error querying float metric feedback", { status: 500 });
   }
 }
@@ -634,7 +635,7 @@ export async function queryFloatMetricFeedbackBoundsByTargetId(params: {
     `;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { target_id },
@@ -653,7 +654,7 @@ export async function queryFloatMetricFeedbackBoundsByTargetId(params: {
 
     return bounds;
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error querying float metric feedback bounds", {
       status: 500,
     });
@@ -666,7 +667,7 @@ export async function countFloatMetricFeedbackByTargetId(
   const query = `SELECT toUInt32(COUNT()) AS count FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:String}`;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { target_id },
@@ -680,7 +681,7 @@ export async function countFloatMetricFeedbackByTargetId(
 
     return parsedRows[0].count;
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error counting float metric feedback", { status: 500 });
   }
 }
@@ -938,7 +939,7 @@ export async function queryMetricsWithFeedback(params: {
     ORDER BY metric_type, metric_name`;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: {
@@ -961,7 +962,7 @@ export async function queryMetricsWithFeedback(params: {
 
     return metricsWithFeedbackDataSchema.parse({ metrics: validMetrics });
   } catch (error) {
-    console.error("Error fetching metrics with feedback:", error);
+    logger.error("Error fetching metrics with feedback:", error);
     throw data("Error fetching metrics with feedback", { status: 500 });
   }
 }
@@ -1000,7 +1001,7 @@ export async function pollForFeedbackItem(
     }
   }
   if (!found) {
-    console.warn(
+    logger.warn(
       `Feedback ${feedbackId} for target ${targetId} not found after ${maxRetries} retries.`,
     );
   }
@@ -1033,7 +1034,7 @@ export async function queryLatestFeedbackIdByMetric(params: {
   `;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: { target_id },
@@ -1053,7 +1054,7 @@ export async function queryLatestFeedbackIdByMetric(params: {
       latestFeedbackByMetric.map((item) => [item.metric_name, item.latest_id]),
     );
   } catch (error) {
-    console.error("ERROR", error);
+    logger.error("ERROR", error);
     throw data("Error querying latest feedback by metric", { status: 500 });
   }
 }

@@ -26,9 +26,8 @@ use crate::{
  */
 
 /// A Tool object describes how a tool can be dynamically configured by the user.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct Tool {
@@ -74,6 +73,8 @@ impl Tool {
     }
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ToolConfig {
     Static(Arc<StaticToolConfig>),
@@ -83,6 +84,8 @@ pub enum ToolConfig {
 }
 
 /// Contains the configuration information for a specific tool
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[derive(Debug, PartialEq, Serialize)]
 pub struct StaticToolConfig {
     pub description: String,
@@ -92,6 +95,8 @@ pub struct StaticToolConfig {
 }
 
 /// Contains the configuration information for a tool defined at runtime
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct DynamicToolConfig {
     pub description: String,
@@ -102,6 +107,8 @@ pub struct DynamicToolConfig {
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImplicitToolConfig {
     pub parameters: StaticJSONSchema,
@@ -109,6 +116,8 @@ pub struct ImplicitToolConfig {
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement for a JSON schema that is dynamically passed at inference time
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DynamicImplicitToolConfig {
     pub parameters: DynamicJSONSchema,
@@ -118,6 +127,8 @@ pub struct DynamicImplicitToolConfig {
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ToolCallConfig {
     pub tools_available: Vec<ToolConfig>,
     pub tool_choice: ToolChoice,
@@ -206,13 +217,14 @@ impl ToolCallConfig {
             .parallel_tool_calls
             .or(function_parallel_tool_calls);
 
-        let tool_call_config_option = match tools_available.is_empty() {
-            true => None,
-            false => Some(Self {
+        let tool_call_config_option = if tools_available.is_empty() {
+            None
+        } else {
+            Some(Self {
                 tools_available,
                 tool_choice,
                 parallel_tool_calls,
-            }),
+            })
         };
 
         Ok(tool_call_config_option)
@@ -276,6 +288,7 @@ impl ToolCallConfigDatabaseInsert {
 /// `tool_choice` and `parallel_tool_calls` are optional and will override the function-level values.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
 pub struct DynamicToolParams {
     pub allowed_tools: Option<Vec<String>>,
     pub additional_tools: Option<Vec<Tool>>,
@@ -328,6 +341,8 @@ impl ToolCall {
 /// name/raw_name distinction.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ToolCallInput {
     pub name: Option<String>,
     pub arguments: Option<Value>,
@@ -378,9 +393,8 @@ impl TryFrom<ToolCallInput> for ToolCall {
 
 /// A ToolCallOutput is a request by a model to call a Tool
 /// in the form that we return to the client / ClickHouse
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ToolCallOutput {
     pub arguments: Option<Value>,
@@ -442,7 +456,7 @@ impl ToolCallOutput {
 impl ToolCallConfig {
     #[cfg(test)]
     pub fn implicit_from_value(value: &Value) -> Self {
-        let parameters = StaticJSONSchema::from_value(value).unwrap();
+        let parameters = StaticJSONSchema::from_value(value.clone()).unwrap();
         let implicit_tool_config = ToolConfig::Implicit(ImplicitToolConfig { parameters });
         Self {
             tools_available: vec![implicit_tool_config],
@@ -454,9 +468,8 @@ impl ToolCallConfig {
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct ToolResult {
     pub name: String,
@@ -483,9 +496,8 @@ impl ToolResult {
 /// and even specify which tool to be used.
 ///
 /// This enum is used to denote this tool choice.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[ts(export)]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
 pub enum ToolChoice {
@@ -542,9 +554,9 @@ impl ToolConfig {
 
     pub fn parameters(&self) -> &Value {
         match self {
-            ToolConfig::Static(config) => config.parameters.value,
+            ToolConfig::Static(config) => &config.parameters.value,
             ToolConfig::Dynamic(config) => &config.parameters.value,
-            ToolConfig::Implicit(config) => config.parameters.value,
+            ToolConfig::Implicit(config) => &config.parameters.value,
             ToolConfig::DynamicImplicit(config) => &config.parameters.value,
         }
     }
@@ -574,7 +586,7 @@ impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
             tools_available: tool_call_config
                 .tools_available
                 .into_iter()
-                .map(|tool| tool.into())
+                .map(ToolConfig::into)
                 .collect(),
             tool_choice: tool_call_config.tool_choice,
             parallel_tool_calls: tool_call_config.parallel_tool_calls,
@@ -755,7 +767,7 @@ mod tests {
                 Arc::new(StaticToolConfig {
                     name: "get_temperature".to_string(),
                     description: "Get the current temperature in a given location".to_string(),
-                    parameters: StaticJSONSchema::from_value(&json!({
+                    parameters: StaticJSONSchema::from_value(json!({
                     "type": "object",
                     "properties": {
                         "location": {"type": "string"},
@@ -773,7 +785,7 @@ mod tests {
                     name: "query_articles".to_string(),
                     description: "Query articles from a database based on given criteria"
                         .to_string(),
-                    parameters: StaticJSONSchema::from_value(&json!({
+                    parameters: StaticJSONSchema::from_value(json!({
                         "type": "object",
                         "properties": {
                             "keyword": {"type": "string"},
@@ -1191,7 +1203,7 @@ mod tests {
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.id, "123");
 
-        assert!(logs_contain("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object."))
+        assert!(logs_contain("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object."));
     }
 
     #[tokio::test]

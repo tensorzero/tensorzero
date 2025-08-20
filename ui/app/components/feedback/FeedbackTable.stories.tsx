@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import FeedbackTable from "./FeedbackTable";
 import { ConfigProvider } from "~/context/config";
-import type { Config } from "~/utils/config";
+import type { Config } from "tensorzero-node";
 
 // Helper function to generate a UUID-like string from a number that sorts correctly
 // Higher numbers produce lexicographically larger UUIDs (for descending sort)
@@ -12,9 +12,17 @@ function makeOrderedUuid(num = 0): string {
 
 const config: Config = {
   gateway: {
+    disable_pseudonymous_usage_analytics: false,
     observability: {
       enabled: true,
       async_writes: false,
+      skip_completed_migrations: false,
+      batch_writes: {
+        enabled: false,
+        __force_allow_embedded_batch_writes: false,
+        flush_interval_ms: 100n,
+        max_rows: 1000,
+      },
     },
     export: {
       otlp: {
@@ -24,8 +32,20 @@ const config: Config = {
       },
     },
     debug: false,
-    enable_template_filesystem_access: false,
+    template_filesystem_access: {
+      enabled: false,
+      base_path: null,
+    },
+    bind_address: "localhost:8080",
+    base_path: "/",
+    unstable_error_json: false,
+    unstable_disable_feedback_target_validation: false,
   },
+  object_store_info: { kind: { type: "disabled" } },
+  provider_types: {
+    gcp_vertex_gemini: null,
+  },
+  optimizers: {},
   models: {},
   embedding_models: {},
   functions: {},
@@ -44,13 +64,6 @@ const config: Config = {
       type: "boolean" as const,
       optimize: "min" as const,
       level: "inference" as const,
-    },
-    demonstration: {
-      type: "demonstration" as const,
-      level: "inference" as const,
-    },
-    comment: {
-      type: "comment" as const,
     },
   },
   tools: {},

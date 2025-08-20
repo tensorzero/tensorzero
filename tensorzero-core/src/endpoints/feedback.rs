@@ -12,8 +12,8 @@ use tokio::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
+use crate::config::{Config, MetricConfigLevel, MetricConfigType};
+use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
@@ -32,14 +32,18 @@ use super::validate_tags;
 ///
 /// This is the amount of time we want to wait after the target was supposed to have been written
 /// before we decide that the target was actually not written because we can't find it in the database.
-const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_secs(5);
+/// This should really be read at 5000ms but since there might be some jitter we want to make sure there's
+/// a read at ~5s
+const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_millis(6000);
 /// Since we can't be sure that an inference actually completed when the ID says it was
 /// (the ID is generated at the start of the inference), we wait a minimum amount of time
 /// before we decide that the target was actually not written because we can't find it in the database.
-const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1200);
+const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1000);
+/// We also poll in the intermediate time so that we can return as soon as we find a target entry.
+const FEEDBACK_TARGET_POLL_INTERVAL: Duration = Duration::from_millis(2000);
 
 /// The expected payload is a JSON object with the following fields:
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
     // the episode ID client is providing feedback for (either this or `inference_id` must be set but not both)
@@ -94,7 +98,7 @@ pub async fn feedback_handler(
     State(app_state): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Json<FeedbackResponse>, Error> {
-    feedback(app_state, params).await
+    Ok(Json(feedback(app_state, params).await?))
 }
 
 // Helper function to avoid requiring axum types in the client
@@ -105,7 +109,7 @@ pub async fn feedback(
         ..
     }: AppStateData,
     params: Params,
-) -> Result<Json<FeedbackResponse>, Error> {
+) -> Result<FeedbackResponse, Error> {
     validate_tags(&params.tags, params.internal)?;
     validate_feedback_specific_tags(&params.tags)?;
     // Get the metric config or return an error if it doesn't exist
@@ -139,8 +143,9 @@ pub async fn feedback(
                 feedback_metadata.level,
                 feedback_id,
                 dryrun,
+                config.gateway.unstable_disable_feedback_target_validation,
             )
-            .await?
+            .await?;
         }
         FeedbackType::Demonstration => {
             write_demonstration(
@@ -151,7 +156,7 @@ pub async fn feedback(
                 feedback_id,
                 dryrun,
             )
-            .await?
+            .await?;
         }
         FeedbackType::Float => {
             write_float(
@@ -161,8 +166,9 @@ pub async fn feedback(
                 feedback_metadata.target_id,
                 feedback_id,
                 dryrun,
+                config.gateway.unstable_disable_feedback_target_validation,
             )
-            .await?
+            .await?;
         }
         FeedbackType::Boolean => {
             write_boolean(
@@ -172,12 +178,13 @@ pub async fn feedback(
                 feedback_metadata.target_id,
                 feedback_id,
                 dryrun,
+                config.gateway.unstable_disable_feedback_target_validation,
             )
-            .await?
+            .await?;
         }
     }
 
-    Ok(Json(FeedbackResponse { feedback_id }))
+    Ok(FeedbackResponse { feedback_id })
 }
 
 #[derive(Debug)]
@@ -248,10 +255,13 @@ async fn write_comment(
     level: &MetricConfigLevel,
     feedback_id: Uuid,
     dryrun: bool,
+    disable_validation: bool,
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
     // Verify that the function name exists.
-    let _ = throttled_get_function_name(&connection_info, level, &target_id).await?;
+    if !disable_validation {
+        let _ = throttled_get_function_name(&connection_info, level, &target_id).await?;
+    }
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
     })?;
@@ -264,7 +274,9 @@ async fn write_comment(
     });
     if !dryrun {
         tokio::spawn(async move {
-            let _ = connection_info.write(&[payload], "CommentFeedback").await;
+            let _ = connection_info
+                .write_batched(&[payload], TableName::CommentFeedback)
+                .await;
         });
     }
     Ok(())
@@ -272,7 +284,7 @@ async fn write_comment(
 
 async fn write_demonstration(
     connection_info: ClickHouseConnectionInfo,
-    config: &Config<'_>,
+    config: &Config,
     params: &Params,
     inference_id: Uuid,
     feedback_id: Uuid,
@@ -304,7 +316,7 @@ async fn write_demonstration(
     if !dryrun {
         tokio::spawn(async move {
             let _ = connection_info
-                .write(&[payload], "DemonstrationFeedback")
+                .write_batched(&[payload], TableName::DemonstrationFeedback)
                 .await;
         });
     }
@@ -313,11 +325,12 @@ async fn write_demonstration(
 
 async fn write_float(
     connection_info: ClickHouseConnectionInfo,
-    config: &Config<'_>,
+    config: &Config,
     params: &Params,
     target_id: Uuid,
     feedback_id: Uuid,
     dryrun: bool,
+    disable_validation: bool,
 ) -> Result<(), Error> {
     let Params {
         metric_name,
@@ -325,10 +338,12 @@ async fn write_float(
         tags,
         ..
     } = params;
-    let metric_config: &crate::config_parser::MetricConfig =
-        config.get_metric_or_err(metric_name)?;
-    // Verify that the function name exists.
-    let _ = throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
+    let metric_config: &crate::config::MetricConfig = config.get_metric_or_err(metric_name)?;
+    if !disable_validation {
+        // Verify that the function name exists.
+        let _ =
+            throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
+    }
 
     let value = value.as_f64().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
@@ -339,7 +354,7 @@ async fn write_float(
     if !dryrun {
         tokio::spawn(async move {
             let _ = connection_info
-                .write(&[payload], "FloatMetricFeedback")
+                .write_batched(&[payload], TableName::FloatMetricFeedback)
                 .await;
         });
     }
@@ -348,11 +363,12 @@ async fn write_float(
 
 async fn write_boolean(
     connection_info: ClickHouseConnectionInfo,
-    config: &Config<'_>,
+    config: &Config,
     params: &Params,
     target_id: Uuid,
     feedback_id: Uuid,
     dryrun: bool,
+    disable_validation: bool,
 ) -> Result<(), Error> {
     let Params {
         metric_name,
@@ -361,8 +377,11 @@ async fn write_boolean(
         ..
     } = params;
     let metric_config = config.get_metric_or_err(metric_name)?;
-    // Verify that the function name exists.
-    let _ = throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
+    if !disable_validation {
+        // Verify that the function name exists.
+        let _ =
+            throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
+    }
     let value = value.as_bool().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
@@ -372,7 +391,7 @@ async fn write_boolean(
     if !dryrun {
         tokio::spawn(async move {
             let _ = connection_info
-                .write(&[payload], "BooleanMetricFeedback")
+                .write_batched(&[payload], TableName::BooleanMetricFeedback)
                 .await;
         });
     }
@@ -420,7 +439,7 @@ async fn throttled_get_function_name(
                 }
             }
         }
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        tokio::time::sleep(FEEDBACK_TARGET_POLL_INTERVAL).await;
     }
 }
 
@@ -456,11 +475,16 @@ async fn get_function_name(
         MetricConfigLevel::Episode => "episode_id_uint",
     };
     let query = format!(
-        "SELECT function_name FROM {table_name} FINAL WHERE {identifier_key} = toUInt128(toUUID('{target_id}'))"
+        "SELECT function_name
+         FROM {table_name}
+         WHERE {identifier_key} = toUInt128(toUUID('{target_id}'))
+         LIMIT 1
+         SETTINGS max_threads=1"
     );
     let function_name = connection_info
         .run_query_synchronous_no_params(query)
         .await?
+        .response
         .trim()
         .to_string();
     if function_name.is_empty() {
@@ -488,7 +512,7 @@ impl TryFrom<DemonstrationToolCall> for ToolCall {
                     message: format!("Failed to serialize demonstration tool call arguments: {e}"),
                 })
             })?,
-            id: "".to_string(),
+            id: String::new(),
         })
     }
 }
@@ -559,7 +583,7 @@ pub async fn validate_parse_demonstration(
             };
             let content_blocks: Vec<ContentBlockOutput> = content_blocks
                 .into_iter()
-                .map(|block| block.try_into())
+                .map(DemonstrationContentBlock::try_into)
                 .collect::<Result<Vec<ContentBlockOutput>, Error>>()?;
             let parsed_value = parse_chat_output(content_blocks, Some(&tool_call_config)).await;
             for block in &parsed_value {
@@ -583,7 +607,7 @@ pub async fn validate_parse_demonstration(
         }
         (FunctionConfig::Json(_), DynamicDemonstrationInfo::Json(output_schema)) => {
             // For json functions, the value should be a valid json object.
-            StaticJSONSchema::from_value(&output_schema)?
+            StaticJSONSchema::from_value(output_schema)?
                 .validate(value)
                 .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
@@ -643,8 +667,8 @@ async fn get_dynamic_demonstration_info(
                 )
                 .await?;
 
-            let tool_params_result =
-                serde_json::from_str::<ToolParamsResult>(&result).map_err(|e| {
+            let tool_params_result = serde_json::from_str::<ToolParamsResult>(&result.response)
+                .map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
                         message: format!("Failed to parse demonstration result: {e}"),
                     })
@@ -655,7 +679,7 @@ async fn get_dynamic_demonstration_info(
                 // This is consistent with how they are serialized at inference time.
                 tool_params_result
                     .tool_params
-                    .map(|x| x.into())
+                    .map(ToolCallConfigDatabaseInsert::into)
                     .unwrap_or_default(),
             ))
         }
@@ -670,7 +694,7 @@ async fn get_dynamic_demonstration_info(
                     ]),
                 )
                 .await?;
-            let result_value = serde_json::from_str::<Value>(&result).map_err(|e| {
+            let result_value = serde_json::from_str::<Value>(&result.response).map_err(|e| {
                 Error::new(ErrorDetails::ClickHouseQuery {
                     message: format!("Failed to parse demonstration result: {e}"),
                 })
@@ -804,10 +828,10 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use crate::config_parser::{Config, MetricConfig, MetricConfigOptimize};
+    use crate::config::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
-    use crate::testing::get_unit_test_app_state_data;
+    use crate::testing::get_unit_test_gateway_handle;
     use crate::tool::{StaticToolConfig, ToolCallOutput, ToolChoice, ToolConfig};
 
     #[tokio::test]
@@ -987,7 +1011,7 @@ mod tests {
         let config = Arc::new(Config {
             ..Default::default()
         });
-        let app_state_data = get_unit_test_app_state_data(config, true);
+        let gateway_handle = get_unit_test_gateway_handle(config, true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test comment");
@@ -1000,8 +1024,11 @@ mod tests {
             internal: false,
             dryrun: Some(false),
         };
-        let response =
-            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await;
         let details = response.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1016,7 +1043,7 @@ mod tests {
         let config = Arc::new(Config {
             ..Default::default()
         });
-        let app_state_data = get_unit_test_app_state_data(config, true);
+        let gateway_handle = get_unit_test_gateway_handle(config, true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test demonstration");
@@ -1031,9 +1058,12 @@ mod tests {
             dryrun: Some(false),
             internal: false,
         };
-        let response = feedback_handler(State(app_state_data.clone()), StructuredJson(params))
-            .await
-            .unwrap_err();
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await
+        .unwrap_err();
         let details = response.get_owned_details();
         assert_eq!(
             details,
@@ -1054,8 +1084,11 @@ mod tests {
             dryrun: Some(false),
             internal: false,
         };
-        let response =
-            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await;
         let details = response.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1080,7 +1113,7 @@ mod tests {
             metrics,
             ..Default::default()
         });
-        let app_state_data = get_unit_test_app_state_data(config.clone(), true);
+        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
         let value = json!(4.5);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
@@ -1096,9 +1129,12 @@ mod tests {
             dryrun: Some(false),
             internal: false,
         };
-        let response = feedback_handler(State(app_state_data.clone()), StructuredJson(params))
-            .await
-            .unwrap_err();
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await
+        .unwrap_err();
         let details = response.get_owned_details();
         assert_eq!(
             details,
@@ -1117,8 +1153,11 @@ mod tests {
             dryrun: Some(false),
             internal: false,
         };
-        let response =
-            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await;
         let details = response.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1143,7 +1182,7 @@ mod tests {
             metrics,
             ..Default::default()
         });
-        let app_state_data = get_unit_test_app_state_data(config.clone(), true);
+        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
         let value = json!(true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
@@ -1156,8 +1195,11 @@ mod tests {
             dryrun: None,
             internal: false,
         };
-        let response =
-            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await;
         let details = response.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1172,7 +1214,7 @@ mod tests {
         let weather_tool_config_static = StaticToolConfig {
             name: "get_temperature".to_string(),
             description: "Get the current temperature in a given location".to_string(),
-            parameters: StaticJSONSchema::from_value(&json!({
+            parameters: StaticJSONSchema::from_value(json!({
                 "type": "object",
                 "properties": {
                     "location": {"type": "string"},
@@ -1190,9 +1232,7 @@ mod tests {
         let function_config_chat_tools =
             Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
                 variants: HashMap::new(),
-                system_schema: None,
-                user_schema: None,
-                assistant_schema: None,
+                schemas: SchemaData::default(),
                 tools: vec!["get_temperature".to_string()],
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
@@ -1242,7 +1282,7 @@ mod tests {
         .unwrap();
         let expected_parsed_value =
             serde_json::to_string(&vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
-                id: "".to_string(),
+                id: String::new(),
                 name: Some("get_temperature".to_string()),
                 raw_name: "get_temperature".to_string(),
                 arguments: Some(json!({"location": "London", "unit": "celsius"})),
@@ -1319,10 +1359,8 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let function_config = Box::leak(Box::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
-            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
+            schemas: SchemaData::default(),
+            output_schema: StaticJSONSchema::from_value(output_schema.clone()).unwrap(),
             implicit_tool_call_config,
             description: None,
         })));

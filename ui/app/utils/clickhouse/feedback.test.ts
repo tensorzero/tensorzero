@@ -359,7 +359,7 @@ test("pollForFeedbackItem should find feedback when it exists", async () => {
 
   // Verify warning was logged
   expect(consoleSpy).toHaveBeenCalledWith(
-    `Feedback ${nonExistentId} for target ${targetId} not found after 2 retries.`,
+    `[TensorZero UI ${__APP_VERSION__}] Feedback ${nonExistentId} for target ${targetId} not found after 2 retries.`,
   );
 
   // Verify we still get feedback for the target, even though specific item wasn't found

@@ -1,4 +1,4 @@
-import { UserPen } from "lucide-react";
+import { RefreshCw, UserPen } from "lucide-react";
 import React from "react";
 
 export interface IconProps {
@@ -267,7 +267,7 @@ export const Calendar: React.FC<IconProps> = (props) => (
   </IconWrapper>
 );
 
-export const Input: React.FC<IconProps> = (props) => (
+export const InputIcon: React.FC<IconProps> = (props) => (
   <IconWrapper {...props}>
     <path
       fillRule="evenodd"
@@ -298,6 +298,28 @@ export const Dataset: React.FC<IconProps> = (props) => (
       fill="currentColor"
     />
   </IconWrapper>
+);
+
+export const Playground: React.FC<IconProps> = (props) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    width={props.size}
+    height={props.size}
+    className={props.className}
+  >
+    <path d="M13 7 8.7 2.7a2.41 2.41 0 0 0-3.4 0L2.7 5.3a2.41 2.41 0 0 0 0 3.4L7 13" />
+    <path d="m8 6 2-2" />
+    <path d="m18 16 2-2" />
+    <path d="m17 11 4.3 4.3c.94.94.94 2.46 0 3.4l-2.6 2.6c-.94.94-2.46.94-3.4 0L11 17" />
+    <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+    <path d="m15 5 4 4" />
+  </svg>
 );
 
 export const AddToDataset: React.FC<IconProps> = (props) => (
@@ -431,6 +453,28 @@ export const GridCheck: React.FC<IconProps> = (props) => (
   </IconWrapper>
 );
 
+export const Table: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M1.25 3.5C1.25 2.25736 2.25736 1.25 3.5 1.25H6H12.5C13.7426 1.25 14.75 2.25736 14.75 3.5V6V12.5C14.75 13.7426 13.7426 14.75 12.5 14.75H6H3.5C2.25736 14.75 1.25 13.7426 1.25 12.5V6V3.5ZM2.75 6.75V12.5C2.75 12.9142 3.08579 13.25 3.5 13.25H5.25L5.25 6.75H2.75ZM5.25 5.25H2.75V3.5C2.75 3.08579 3.08579 2.75 3.5 2.75H5.25V5.25ZM6.75 6.75L6.75 13.25H12.5C12.9142 13.25 13.25 12.9142 13.25 12.5V6.75H6.75ZM13.25 5.25H6.75V2.75H12.5C12.9142 2.75 13.25 3.08579 13.25 3.5V5.25Z"
+      fill="currentColor"
+    />
+  </IconWrapper>
+);
+
+export const TablePlus: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M1.25 3.5C1.25 2.25736 2.25736 1.25 3.5 1.25H6H12.5C13.7426 1.25 14.75 2.25736 14.75 3.5V6V8C14.75 8.41421 14.4142 8.75 14 8.75C13.5858 8.75 13.25 8.41421 13.25 8V6.75H6.75L6.75 13.25H8C8.41421 13.25 8.75 13.5858 8.75 14C8.75 14.4142 8.41421 14.75 8 14.75H6H3.5C2.25736 14.75 1.25 13.7426 1.25 12.5V6V3.5ZM2.75 6.75V12.5C2.75 12.9142 3.08579 13.25 3.5 13.25H5.25L5.25 6.75H2.75ZM5.25 5.25H2.75V3.5C2.75 3.08579 3.08579 2.75 3.5 2.75H5.25V5.25ZM6.75 5.25H13.25V3.5C13.25 3.08579 12.9142 2.75 12.5 2.75H6.75V5.25ZM12.25 9C12.25 8.58579 11.9142 8.25 11.5 8.25C11.0858 8.25 10.75 8.58579 10.75 9V10.75H9C8.58579 10.75 8.25 11.0858 8.25 11.5C8.25 11.9142 8.58579 12.25 9 12.25H10.75V14C10.75 14.4142 11.0858 14.75 11.5 14.75C11.9142 14.75 12.25 14.4142 12.25 14V12.25H14C14.4142 12.25 14.75 11.9142 14.75 11.5C14.75 11.0858 14.4142 10.75 14 10.75H12.25V9Z"
+      fill="currentColor"
+    />
+  </IconWrapper>
+);
+
 export const TableCheck: React.FC<IconProps> = (props) => (
   <IconWrapper {...props}>
     <path
@@ -520,6 +564,12 @@ export const SequenceChecks: React.FC<IconProps> = (props) => (
 
 export const UserFeedback: React.FC = () => <UserPen size={12} />;
 
+export const Refresh: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <RefreshCw size={16} />
+  </IconWrapper>
+);
+
 export const iconComponents: Record<string, React.FC<IconProps>> = {
   TensorZeroLogo,
   Placeholder,
@@ -543,7 +593,7 @@ export const iconComponents: Record<string, React.FC<IconProps>> = {
   TypeJson,
   Timer,
   Calendar,
-  Input,
+  Input: InputIcon,
   Output,
   Dataset,
   AddToDataset,
@@ -557,6 +607,8 @@ export const iconComponents: Record<string, React.FC<IconProps>> = {
   Float,
   QuestionMark,
   GridCheck,
+  Table,
+  TablePlus,
   TableCheck,
   Evaluation,
   Plus,

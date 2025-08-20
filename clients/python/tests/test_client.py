@@ -17,28 +17,26 @@ uv run pytest
 ```
 """
 
+import asyncio
 import base64
 import inspect
 import json
 import os
+import tempfile
 import threading
 import time
 import typing as t
 from copy import deepcopy
 from dataclasses import dataclass
-from enum import Enum
 from os import path
 from uuid import UUID
 
 import pytest
-import pytest_asyncio
 import tensorzero
+from clickhouse_connect import get_client  # type: ignore
 from openai import AsyncOpenAI, OpenAI
-from pytest import FixtureRequest
 from tensorzero import (
     AsyncTensorZeroGateway,
-    ChatDatapointInsert,
-    ChatInferenceDatapointInput,
     ChatInferenceResponse,
     DynamicEvaluationRunResponse,
     FeedbackResponse,
@@ -48,8 +46,6 @@ from tensorzero import (
     ImageBase64,
     ImageUrl,
     InferenceChunk,
-    JsonDatapointInsert,
-    JsonInferenceDatapointInput,
     JsonInferenceResponse,
     RawText,
     TensorZeroError,
@@ -63,9 +59,7 @@ from tensorzero import (
 )
 from tensorzero.types import (
     ChatChunk,
-    ChatDatapoint,
     JsonChunk,
-    JsonDatapoint,
     ProviderExtraBody,
     Thought,
     ToolCallChunk,
@@ -77,32 +71,6 @@ TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "../../../tensorzero-core/tests/e2e/tensorzero.toml",
 )
-
-
-class ClientType(Enum):
-    HttpGateway = 0
-    EmbeddedGateway = 1
-
-
-# TODO - get type checking working with this decorator
-@pytest_asyncio.fixture(params=[ClientType.HttpGateway, ClientType.EmbeddedGateway])  # type: ignore
-async def async_client(request: FixtureRequest):
-    if request.param == ClientType.HttpGateway:
-        client_fut = AsyncTensorZeroGateway.build_http(
-            gateway_url="http://localhost:3000",
-            verbose_errors=True,
-        )
-        assert inspect.isawaitable(client_fut)
-        async with await client_fut as client:
-            yield client
-    else:
-        client_fut = AsyncTensorZeroGateway.build_embedded(
-            config_file=TEST_CONFIG_FILE,
-            clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
-        )
-        assert inspect.isawaitable(client_fut)
-        async with await client_fut as client:
-            yield client
 
 
 def test_sync_embedded_gateway_no_config():
@@ -227,7 +195,7 @@ async def test_async_basic_inference(async_client: AsyncTensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
     assert result.finish_reason == FinishReason.STOP
     time.sleep(1)
 
@@ -288,7 +256,7 @@ async def test_async_client_build_http_sync():
         )
         usage = result.usage
         assert usage.input_tokens == 10
-        assert usage.output_tokens == 10
+        assert usage.output_tokens == 1
         assert result.finish_reason == FinishReason.STOP
 
 
@@ -328,29 +296,129 @@ async def test_async_client_build_embedded_sync():
         )
         usage = result.usage
         assert usage.input_tokens == 10
-        assert usage.output_tokens == 10
+        assert usage.output_tokens == 1
         assert result.finish_reason == FinishReason.STOP
+
+
+@pytest.mark.asyncio
+async def test_async_thought_input(async_client: AsyncTensorZeroGateway):
+    result = await async_client.inference(
+        model_name="dummy::echo_request_messages",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "thought",
+                            "text": "my_first_thought",
+                            "signature": "my_first_signature",
+                        },
+                        Thought(
+                            text="my_second_thought",
+                            signature="my_second_signature",
+                            _internal_provider_type="dummy",
+                        ),
+                        Thought(
+                            text="my_discarded_thought",
+                            signature="my_discarded_signature",
+                            _internal_provider_type="wrong_provider_type",
+                        ),
+                    ],
+                }
+            ],
+        },
+        tags={"key": "value"},
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert len(result.content) == 1
+    assert isinstance(result.content[0], Text)
+    # The last thought should be discarded, since '_internal_provider_type' does not match
+    assert (
+        result.content[0].text
+        == '{"system":null,"messages":[{"role":"user","content":[{"type":"thought","text":"my_first_thought","signature":"my_first_signature"},{"type":"thought","text":"my_second_thought","signature":"my_second_signature","_internal_provider_type":"dummy"}]}]}'
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_thought_signature_only_input(async_client: AsyncTensorZeroGateway):
+    result = await async_client.inference(
+        model_name="dummy::echo_request_messages",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "thought",
+                            "signature": "my_first_signature",
+                        },
+                        Thought(signature="my_second_signature"),
+                    ],
+                }
+            ],
+        },
+        tags={"key": "value"},
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert len(result.content) == 1
+    assert isinstance(result.content[0], Text)
+    assert (
+        result.content[0].text
+        == '{"system":null,"messages":[{"role":"user","content":[{"type":"thought","text":null,"signature":"my_first_signature"},{"type":"thought","text":null,"signature":"my_second_signature"}]}]}'
+    )
+
+
+def test_display_thought():
+    t1 = Thought(signature="my_signature")
+    assert (
+        str(t1)
+        == "Thought(text=None, type='thought', signature='my_signature', _internal_provider_type=None)"
+    )
+    assert (
+        repr(t1)
+        == "Thought(text=None, type='thought', signature='my_signature', _internal_provider_type=None)"
+    )
+
+    t2 = Thought(text="my_text", signature="my_signature")
+    assert (
+        str(t2)
+        == "Thought(text='my_text', type='thought', signature='my_signature', _internal_provider_type=None)"
+    )
+    assert (
+        repr(t2)
+        == "Thought(text='my_text', type='thought', signature='my_signature', _internal_provider_type=None)"
+    )
+
+    t3 = Thought(text="my_text")
+    assert (
+        str(t3)
+        == "Thought(text='my_text', type='thought', signature=None, _internal_provider_type=None)"
+    )
+    assert (
+        repr(t3)
+        == "Thought(text='my_text', type='thought', signature=None, _internal_provider_type=None)"
+    )
 
 
 @pytest.mark.asyncio
 async def test_async_reasoning_inference(async_client: AsyncTensorZeroGateway):
     result = await async_client.inference(
-        function_name="basic_test",
-        variant_name="reasoner",
+        model_name="dummy::reasoner_with_signature",
         input={
-            "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": "Hello"}],
         },
         tags={"key": "value"},
     )
     assert isinstance(result, ChatInferenceResponse)
-    assert result.variant_name == "reasoner"
+    assert result.variant_name == "dummy::reasoner_with_signature"
     assert result.original_response is None
     content = result.content
     assert len(content) == 2
     assert isinstance(content[0], Thought)
     assert content[0].type == "thought"
     assert content[0].text == "hmmm"
+    assert content[0].signature == "my_signature"
     assert isinstance(content[1], Text)
     assert content[1].type == "text"
     assert (
@@ -359,7 +427,7 @@ async def test_async_reasoning_inference(async_client: AsyncTensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 2
 
 
 @pytest.mark.asyncio
@@ -390,7 +458,7 @@ async def test_async_default_function_inference(async_client: AsyncTensorZeroGat
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -424,7 +492,7 @@ async def test_async_default_function_inference_plain_dict(
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -559,6 +627,7 @@ async def test_async_reasoning_inference_streaming(
             assert chunk.content[0].type == "thought"
             assert isinstance(chunk.content[0], ThoughtChunk)
             assert chunk.content[0].text == expected_thinking[i]
+            assert chunk.content[0].signature is None
         elif i < len(expected_thinking) + len(expected_text):
             assert len(chunk.content) == 1
             assert chunk.content[0].type == "text"
@@ -568,7 +637,7 @@ async def test_async_reasoning_inference_streaming(
             assert len(chunk.content) == 0
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
-            assert chunk.usage.output_tokens == 10
+            assert chunk.usage.output_tokens == 18
             assert chunk.finish_reason == FinishReason.STOP
 
 
@@ -592,10 +661,7 @@ async def test_async_inference_streaming_nonexistent_function(
             pass
 
     assert exc_info.value.status_code == 404
-    assert (
-        str(exc_info.value)
-        == 'TensorZeroError (status code 404): {"error":"Unknown function: does_not_exist"}'
-    )
+    assert '"error":"Unknown function: does_not_exist"' in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -649,7 +715,7 @@ async def test_async_tool_call_inference(async_client: AsyncTensorZeroGateway):
     assert content[0].arguments == {"location": "Brooklyn", "units": "celsius"}
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
     assert result.finish_reason == FinishReason.TOOL_CALL
 
 
@@ -684,7 +750,7 @@ async def test_async_malformed_tool_call_inference(
     assert content[0].arguments is None
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -743,10 +809,10 @@ async def test_async_tool_call_streaming(async_client: AsyncTensorZeroGateway):
 
 @pytest.mark.asyncio
 async def test_async_json_streaming(async_client: AsyncTensorZeroGateway):
-    # We don't actually have a streaming JSON function implemented in `dummy.rs` but it doesn't matter for this test since
-    # TensorZero doesn't parse the JSON output of the function for streaming calls.
+    # Pick a variant that doesn't have a dummy provider streaming special-case
     stream = await async_client.inference(
         function_name="json_success",
+        variant_name="test-diff-schema",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [
@@ -784,6 +850,7 @@ async def test_async_json_streaming(async_client: AsyncTensorZeroGateway):
     previous_inference_id = None
     previous_episode_id = None
     for i, chunk in enumerate(chunks):
+        print("Chunk: ", chunk)
         if previous_inference_id is not None:
             assert chunk.inference_id == previous_inference_id
         if previous_episode_id is not None:
@@ -791,7 +858,7 @@ async def test_async_json_streaming(async_client: AsyncTensorZeroGateway):
         previous_inference_id = chunk.inference_id
         previous_episode_id = chunk.episode_id
         variant_name = chunk.variant_name
-        assert variant_name == "test"
+        assert variant_name == "test-diff-schema"
         assert isinstance(chunk, JsonChunk)
         if i + 1 < len(chunks):
             assert chunk.raw == expected_text[i]
@@ -844,7 +911,7 @@ async def test_async_json_streaming_reasoning(async_client: AsyncTensorZeroGatew
             assert chunk.raw == ""
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
-            assert chunk.usage.output_tokens == 10
+            assert chunk.usage.output_tokens == 7
 
 
 @pytest.mark.asyncio
@@ -868,7 +935,7 @@ async def test_async_json_success(async_client: AsyncTensorZeroGateway):
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
     assert result.usage.input_tokens == 10
-    assert result.usage.output_tokens == 10
+    assert result.usage.output_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -892,7 +959,7 @@ async def test_async_json_reasoning(async_client: AsyncTensorZeroGateway):
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
     assert result.usage.input_tokens == 10
-    assert result.usage.output_tokens == 10
+    assert result.usage.output_tokens == 2
 
 
 @pytest.mark.asyncio
@@ -913,7 +980,7 @@ async def test_async_json_failure(async_client: AsyncTensorZeroGateway):
     )
     assert result.output.parsed is None
     assert result.usage.input_tokens == 10
-    assert result.usage.output_tokens == 10
+    assert result.usage.output_tokens == 1
 
 
 @pytest.mark.asyncio
@@ -964,7 +1031,32 @@ async def test_async_feedback_invalid_input(async_client: AsyncTensorZeroGateway
 
 
 @pytest.mark.asyncio
-async def test_async_tensorzero_error(async_client: AsyncTensorZeroGateway):
+async def test_async_tensorzero_error_http():
+    async_client = AsyncTensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000",
+        verbose_errors=True,
+        async_setup=False,
+    )
+    assert isinstance(async_client, AsyncTensorZeroGateway)
+    with pytest.raises(TensorZeroError) as excinfo:
+        await async_client.inference(
+            function_name="not_a_function", input={"messages": []}
+        )
+
+    assert (
+        str(excinfo.value)
+        == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function","error_json":{"UnknownFunction":{"name":"not_a_function"}}}'
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_tensorzero_error_embedded():
+    async_client = AsyncTensorZeroGateway.build_embedded(
+        config_file=TEST_CONFIG_FILE,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        async_setup=False,
+    )
+    assert isinstance(async_client, AsyncTensorZeroGateway)
     with pytest.raises(TensorZeroError) as excinfo:
         await async_client.inference(
             function_name="not_a_function", input={"messages": []}
@@ -1000,7 +1092,7 @@ async def test_async_dynamic_credentials(async_client: AsyncTensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 def test_sync_error():
@@ -1020,22 +1112,6 @@ async def test_async_error():
         async with await client_fut:
             raise Exception("My error")
     assert str(exc_info.value) == "My error"
-
-
-@pytest.fixture(params=[ClientType.HttpGateway, ClientType.EmbeddedGateway])
-def sync_client(request: FixtureRequest):
-    if request.param == ClientType.HttpGateway:
-        with TensorZeroGateway.build_http(
-            gateway_url="http://localhost:3000",
-            verbose_errors=True,
-        ) as client:
-            yield client
-    else:
-        with TensorZeroGateway.build_embedded(
-            config_file=TEST_CONFIG_FILE,
-            clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
-        ) as client:
-            yield client
 
 
 def test_sync_inference_caching(sync_client: TensorZeroGateway):
@@ -1059,7 +1135,10 @@ def test_sync_inference_caching(sync_client: TensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
+
+    # Wait for the cache entry to be written to ClickHouse
+    time.sleep(1)
 
     # Test caching
     result = sync_client.inference(
@@ -1133,6 +1212,9 @@ def test_sync_inference_streaming_caching(sync_client: TensorZeroGateway):
     assert final_chunk.usage.input_tokens == 10
     assert final_chunk.usage.output_tokens == 16
 
+    # Wait for the cache entry to be written to ClickHouse
+    time.sleep(1)
+
     # Test caching
     stream = sync_client.inference(
         function_name="basic_test",
@@ -1190,7 +1272,7 @@ def test_default_function_inference(sync_client: TensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 def test_image_inference_base64(sync_client: TensorZeroGateway):
@@ -1616,7 +1698,7 @@ def test_sync_tool_call_inference(sync_client: TensorZeroGateway):
     assert content[0].arguments == {"location": "Brooklyn", "units": "celsius"}
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 def test_sync_reasoning_inference(sync_client: TensorZeroGateway):
@@ -1645,7 +1727,7 @@ def test_sync_reasoning_inference(sync_client: TensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 2
 
 
 def test_sync_malformed_tool_call_inference(sync_client: TensorZeroGateway):
@@ -1676,7 +1758,7 @@ def test_sync_malformed_tool_call_inference(sync_client: TensorZeroGateway):
     assert content[0].arguments is None
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 def test_sync_tool_call_streaming(sync_client: TensorZeroGateway):
@@ -1802,14 +1884,14 @@ def test_sync_reasoning_inference_streaming(sync_client: TensorZeroGateway):
             assert len(chunk.content) == 0
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
-            assert chunk.usage.output_tokens == 10
+            assert chunk.usage.output_tokens == 18
 
 
 def test_sync_json_streaming(sync_client: TensorZeroGateway):
-    # We don't actually have a streaming JSON function implemented in `dummy.rs` but it doesn't matter for this test since
-    # TensorZero doesn't parse the JSON output of the function for streaming calls.
+    # Pick a variant that doesn't have a dummy provider streaming special-case
     stream = sync_client.inference(
         function_name="json_success",
+        variant_name="test-diff-schema",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [
@@ -1851,7 +1933,7 @@ def test_sync_json_streaming(sync_client: TensorZeroGateway):
         previous_inference_id = chunk.inference_id
         previous_episode_id = chunk.episode_id
         variant_name = chunk.variant_name
-        assert variant_name == "test"
+        assert variant_name == "test-diff-schema"
         assert isinstance(chunk, JsonChunk)
         if i + 1 < len(chunks):
             assert chunk.raw == expected_text[i]
@@ -1903,7 +1985,7 @@ def test_sync_json_streaming_reasoning(sync_client: TensorZeroGateway):
             assert chunk.raw == ""
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
-            assert chunk.usage.output_tokens == 10
+            assert chunk.usage.output_tokens == 7
 
 
 def test_sync_json_success(sync_client: TensorZeroGateway):
@@ -1926,7 +2008,7 @@ def test_sync_json_success(sync_client: TensorZeroGateway):
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
     assert result.usage.input_tokens == 10
-    assert result.usage.output_tokens == 10
+    assert result.usage.output_tokens == 1
 
 
 def test_sync_json_reasoning(sync_client: TensorZeroGateway):
@@ -1949,7 +2031,7 @@ def test_sync_json_reasoning(sync_client: TensorZeroGateway):
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
     assert result.usage.input_tokens == 10
-    assert result.usage.output_tokens == 10
+    assert result.usage.output_tokens == 2
 
 
 def test_sync_json_failure(sync_client: TensorZeroGateway):
@@ -1969,7 +2051,7 @@ def test_sync_json_failure(sync_client: TensorZeroGateway):
     )
     assert result.output.parsed is None
     assert result.usage.input_tokens == 10
-    assert result.usage.output_tokens == 10
+    assert result.usage.output_tokens == 1
 
 
 def test_sync_feedback(sync_client: TensorZeroGateway):
@@ -2016,7 +2098,25 @@ def test_sync_feedback_invalid_input(sync_client: TensorZeroGateway):
         )
 
 
-def test_sync_tensorzero_error(sync_client: TensorZeroGateway):
+def test_sync_tensorzero_error_http():
+    sync_client = TensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000",
+        verbose_errors=True,
+    )
+    with pytest.raises(TensorZeroError) as excinfo:
+        sync_client.inference(function_name="not_a_function", input={"messages": []})
+
+    assert (
+        str(excinfo.value)
+        == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function","error_json":{"UnknownFunction":{"name":"not_a_function"}}}'
+    )
+
+
+def test_sync_tensorzero_error_embedded():
+    sync_client = TensorZeroGateway.build_embedded(
+        config_file=TEST_CONFIG_FILE,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+    )
     with pytest.raises(TensorZeroError) as excinfo:
         sync_client.inference(function_name="not_a_function", input={"messages": []})
 
@@ -2066,7 +2166,7 @@ def test_sync_basic_inference_with_content_block(sync_client: TensorZeroGateway)
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 def test_sync_basic_inference_with_content_block_plain_dict(
@@ -2110,7 +2210,7 @@ def test_sync_basic_inference_with_content_block_plain_dict(
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 def test_prepare_inference_request(sync_client: TensorZeroGateway):
@@ -2295,6 +2395,26 @@ def test_extra_body_types(sync_client: TensorZeroGateway):
                 pointer="/stop",
                 value="Potato",
             ),
+            ProviderExtraBody(
+                model_provider_name="tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai",
+                pointer="/should_be_deleted_provider",
+                value=2,
+            ),
+            ProviderExtraBody(
+                model_provider_name="tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai",
+                pointer="/should_be_deleted_provider",
+                delete=True,
+            ),
+            VariantExtraBody(
+                variant_name="openai",
+                pointer="/should_be_deleted_variant",
+                value=2,
+            ),
+            VariantExtraBody(
+                variant_name="openai",
+                pointer="/should_be_deleted_variant",
+                delete=True,
+            ),
         ],
     )
     assert isinstance(result, ChatInferenceResponse)
@@ -2330,7 +2450,7 @@ def test_sync_dynamic_credentials(sync_client: TensorZeroGateway):
     )
     usage = result.usage
     assert usage.input_tokens == 10
-    assert usage.output_tokens == 10
+    assert usage.output_tokens == 1
 
 
 def test_sync_err_in_stream(sync_client: TensorZeroGateway):
@@ -2944,7 +3064,7 @@ def test_text_arguments_deprecation_1170_warning(sync_client: TensorZeroGateway)
     assert response.output.raw == '{"answer":"Hello"}'
     assert response.output.parsed == {"answer": "Hello"}
     assert response.usage.input_tokens == 10
-    assert response.usage.output_tokens == 10
+    assert response.usage.output_tokens == 1
     assert response.finish_reason == FinishReason.STOP
 
 
@@ -3079,293 +3199,6 @@ def test_sync_json_function_null_response(sync_client: TensorZeroGateway):
     assert result.output.parsed is None
 
 
-def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
-    datapoints = [
-        ChatDatapointInsert(
-            function_name="basic_test",
-            input={
-                "system": {"assistant_name": "foo"},
-                "messages": [
-                    {"role": "user", "content": [{"type": "text", "text": "bar"}]}
-                ],
-            },
-            output=[{"type": "text", "text": "foobar"}],
-            allowed_tools=None,
-            additional_tools=None,
-            tool_choice="auto",
-            parallel_tool_calls=False,
-            tags=None,
-        ),
-        # Ensure deprecated ChatInferenceDatapointInput is still supported
-        ChatInferenceDatapointInput(
-            function_name="basic_test",
-            input={
-                "system": {"assistant_name": "Dummy"},
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [{"type": "text", "text": "My synthetic input"}],
-                    }
-                ],
-            },
-            output=[
-                {
-                    "type": "tool_call",
-                    "name": "get_temperature",
-                    "arguments": {"location": "New York", "units": "fahrenheit"},
-                }
-            ],
-            additional_tools=[
-                {
-                    "description": "Get the current temperature in a given location",
-                    "parameters": {
-                        "$schema": "http://json-schema.org/draft-07/schema#",
-                        "type": "object",
-                        "properties": {
-                            "location": {
-                                "type": "string",
-                                "description": 'The location to get the temperature for (e.g. "New York")',
-                            },
-                            "units": {
-                                "type": "string",
-                                "description": 'The units to get the temperature in (must be "fahrenheit" or "celsius")',
-                                "enum": ["fahrenheit", "celsius"],
-                            },
-                        },
-                        "required": ["location"],
-                        "additionalProperties": False,
-                    },
-                    "name": "get_temperature",
-                    "strict": False,
-                }
-            ],
-            tool_choice="auto",
-            parallel_tool_calls=False,
-            allowed_tools=None,
-            tags=None,
-        ),
-        JsonDatapointInsert(
-            function_name="json_success",
-            input={
-                "system": {"assistant_name": "foo"},
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [{"type": "text", "arguments": {"country": "US"}}],
-                    }
-                ],
-            },
-            output={"answer": "Hello"},
-            output_schema=None,
-            tags=None,
-        ),
-        # Ensure deprecated JsonInferenceDatapointInput is still supported
-        JsonInferenceDatapointInput(
-            function_name="json_success",
-            input={
-                "system": {"assistant_name": "foo"},
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [{"type": "text", "arguments": {"country": "US"}}],
-                    }
-                ],
-            },
-            output={"response": "Hello"},
-            output_schema={
-                "type": "object",
-                "properties": {"response": {"type": "string"}},
-            },
-            tags=None,
-        ),
-    ]
-    datapoint_ids = sync_client.bulk_insert_datapoints(
-        dataset_name="test", datapoints=datapoints
-    )
-    assert len(datapoint_ids) == 4
-    assert isinstance(datapoint_ids[0], UUID)
-    assert isinstance(datapoint_ids[1], UUID)
-    assert isinstance(datapoint_ids[2], UUID)
-    assert isinstance(datapoint_ids[3], UUID)
-
-    # List datapoints filtering by function name
-    listed_datapoints = sync_client.list_datapoints(
-        dataset_name="test",
-        function_name="basic_test",
-    )
-    assert len(listed_datapoints) == 2
-    assert all(isinstance(dp, ChatDatapoint) for dp in listed_datapoints)
-    assert all(dp.function_name == "basic_test" for dp in listed_datapoints)
-
-    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[0])
-    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[1])
-    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[2])
-    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[3])
-
-
-@pytest.mark.asyncio
-async def test_async_bulk_insert_delete_datapoints(
-    async_client: AsyncTensorZeroGateway,
-):
-    datapoints = [
-        ChatDatapointInsert(
-            function_name="basic_test",
-            input={
-                "system": {"assistant_name": "foo"},
-                "messages": [
-                    {"role": "user", "content": [{"type": "text", "text": "bar"}]}
-                ],
-            },
-        ),
-        ChatDatapointInsert(
-            function_name="basic_test",
-            input={
-                "system": {"assistant_name": "Dummy"},
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [{"type": "text", "text": "My synthetic input"}],
-                    }
-                ],
-            },
-            output=[
-                {
-                    "type": "tool_call",
-                    "name": "get_temperature",
-                    "arguments": {"location": "New York", "units": "fahrenheit"},
-                }
-            ],
-            additional_tools=[
-                {
-                    "description": "Get the current temperature in a given location",
-                    "parameters": {
-                        "$schema": "http://json-schema.org/draft-07/schema#",
-                        "type": "object",
-                        "properties": {
-                            "location": {
-                                "type": "string",
-                                "description": 'The location to get the temperature for (e.g. "New York")',
-                            },
-                            "units": {
-                                "type": "string",
-                                "description": 'The units to get the temperature in (must be "fahrenheit" or "celsius")',
-                                "enum": ["fahrenheit", "celsius"],
-                            },
-                        },
-                        "required": ["location"],
-                        "additionalProperties": False,
-                    },
-                    "name": "get_temperature",
-                    "strict": False,
-                }
-            ],
-            tool_choice="auto",
-            parallel_tool_calls=False,
-            allowed_tools=None,
-            tags=None,
-        ),
-        JsonDatapointInsert(
-            function_name="json_success",
-            input={
-                "system": {"assistant_name": "foo"},
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [{"type": "text", "arguments": {"country": "US"}}],
-                    }
-                ],
-            },
-        ),
-        JsonDatapointInsert(
-            function_name="json_success",
-            input={
-                "system": {"assistant_name": "foo"},
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [{"type": "text", "arguments": {"country": "US"}}],
-                    }
-                ],
-            },
-            output={"response": "Hello"},
-            output_schema={
-                "type": "object",
-                "properties": {"response": {"type": "string"}},
-            },
-            tags=None,
-        ),
-    ]
-    dataset_name = f"test_{uuid7()}"
-    datapoint_ids = await async_client.bulk_insert_datapoints(
-        dataset_name=dataset_name, datapoints=datapoints
-    )
-    assert len(datapoint_ids) == 4
-    assert isinstance(datapoint_ids[0], UUID)
-    assert isinstance(datapoint_ids[1], UUID)
-    assert isinstance(datapoint_ids[2], UUID)
-    assert isinstance(datapoint_ids[3], UUID)
-
-    # Get a chat datapoint
-    datapoint = await async_client.get_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
-    )
-    print(datapoint)
-    assert isinstance(datapoint, ChatDatapoint)
-    assert datapoint.function_name == "basic_test"
-    assert datapoint.input == {
-        "system": {"assistant_name": "foo"},
-        "messages": [{"role": "user", "content": [{"type": "text", "value": "bar"}]}],
-    }
-    assert datapoint.output is None
-
-    # Get a json datapoint
-    datapoint = await async_client.get_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[2]
-    )
-    assert isinstance(datapoint, JsonDatapoint)
-    assert datapoint.function_name == "json_success"
-    assert datapoint.input == {
-        "system": {"assistant_name": "foo"},
-        "messages": [
-            {"role": "user", "content": [{"type": "text", "value": {"country": "US"}}]}
-        ],
-    }
-    assert datapoint.output is None
-
-    # List datapoints
-    listed_datapoints = await async_client.list_datapoints(
-        dataset_name=dataset_name,
-    )
-    assert len(listed_datapoints) == 4
-    # Assert that there are 2 chat and 2 json datapoints
-    chat_datapoints = [dp for dp in listed_datapoints if isinstance(dp, ChatDatapoint)]
-    json_datapoints = [dp for dp in listed_datapoints if isinstance(dp, JsonDatapoint)]
-    assert len(chat_datapoints) == 2
-    assert len(json_datapoints) == 2
-
-    # List datapoints filtering by function name
-    listed_datapoints = await async_client.list_datapoints(
-        dataset_name=dataset_name,
-        function_name="basic_test",
-    )
-    assert len(listed_datapoints) == 2
-    assert all(isinstance(dp, ChatDatapoint) for dp in listed_datapoints)
-    assert all(dp.function_name == "basic_test" for dp in listed_datapoints)
-
-    await async_client.delete_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
-    )
-    await async_client.delete_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[1]
-    )
-    await async_client.delete_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[2]
-    )
-    await async_client.delete_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[3]
-    )
-
-
 def test_sync_invalid_input(sync_client: TensorZeroGateway):
     with pytest.raises(TensorZeroInternalError) as exc_info:
         sync_client.inference(
@@ -3377,23 +3210,6 @@ def test_sync_invalid_input(sync_client: TensorZeroGateway):
         str(exc_info.value)
         == 'Failed to deserialize JSON to tensorzero::client_input::ClientInput: messages[0].content[0]: invalid type: string "Invalid", expected object at line 1 column 54'
     )
-
-
-@pytest.mark.asyncio
-async def test_list_nonexistent_dataset(async_client: AsyncTensorZeroGateway):
-    res = await async_client.list_datapoints(dataset_name="nonexistent_dataset")
-    assert res == []
-
-
-@pytest.mark.asyncio
-async def test_get_nonexistent_datapoint(async_client: AsyncTensorZeroGateway):
-    datapoint_id: UUID = uuid7()  # type: ignore
-    with pytest.raises(TensorZeroError) as exc_info:
-        await async_client.get_datapoint(
-            dataset_name="nonexistent_dataset", datapoint_id=datapoint_id
-        )
-    assert "Datapoint not found for" in str(exc_info.value)
-    assert "404" in str(exc_info.value)
 
 
 def test_sync_multiple_text_blocks(sync_client: TensorZeroGateway):
@@ -3442,3 +3258,136 @@ def test_sync_include_original_response_json(sync_client: TensorZeroGateway):
     )
     assert isinstance(response, JsonInferenceResponse)
     assert response.original_response == '{"answer":"Hello"}'
+
+
+def test_sync_clickhouse_batch_writes():
+    # Create a temp file and write to it
+    with tempfile.NamedTemporaryFile() as temp_file:
+        temp_file.write(b"gateway.observability.enabled = true\n")
+        temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        temp_file.write(
+            b"gateway.observability.batch_writes.__force_allow_embedded_batch_writes = true\n"
+        )
+        temp_file.flush()
+        clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
+        client = TensorZeroGateway.build_embedded(
+            config_file=temp_file.name,
+            clickhouse_url=clickhouse_url,
+        )
+        num_inferences = 100
+        results: t.List[t.Any] = []
+        episode_id = str(uuid7())
+        for _ in range(num_inferences):
+            results.append(
+                client.inference(
+                    model_name="dummy::good",
+                    episode_id=episode_id,
+                    input={
+                        "messages": [{"role": "user", "content": "Hello, world!"}],
+                    },
+                )
+            )
+
+        assert len(results) == num_inferences
+
+        # Wait for results to be written to ClickHouse
+        time.sleep(1)
+
+        expected_inference_ids = set(result.inference_id for result in results)
+
+        clickhouse_client = get_client(dsn=clickhouse_url)
+        clickhouse_result = clickhouse_client.query_df(  # type: ignore
+            f"SELECT * FROM ChatInference where episode_id = '{episode_id}'"
+        )
+        assert len(clickhouse_result) == num_inferences  # type: ignore
+
+        actual_inference_ids = set(row.id for row in clickhouse_result.iloc)  # type: ignore
+        assert actual_inference_ids == expected_inference_ids
+
+
+@pytest.mark.asyncio
+async def test_async_clickhouse_batch_writes():
+    # Create a temp file and write to it
+    with tempfile.NamedTemporaryFile() as temp_file:
+        temp_file.write(b"gateway.observability.enabled = true\n")
+        temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        temp_file.write(
+            b"gateway.observability.batch_writes.__force_allow_embedded_batch_writes = true\n"
+        )
+        temp_file.flush()
+        clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
+        client_fut = AsyncTensorZeroGateway.build_embedded(
+            config_file=temp_file.name,
+            clickhouse_url=clickhouse_url,
+        )
+        assert inspect.isawaitable(client_fut)
+        client = await client_fut
+        num_inferences = 100
+        futures: t.List[t.Awaitable[t.Any]] = []
+        episode_id = str(uuid7())
+        for _ in range(num_inferences):
+            futures.append(
+                client.inference(
+                    model_name="dummy::good",
+                    episode_id=episode_id,
+                    input={
+                        "messages": [{"role": "user", "content": "Hello, world!"}],
+                    },
+                )
+            )
+
+        results = await asyncio.gather(*futures)
+        assert len(results) == num_inferences
+
+        # Wait for results to be written to ClickHouse
+        await asyncio.sleep(1)
+
+        expected_inference_ids = set(result.inference_id for result in results)
+
+        clickhouse_client = get_client(dsn=clickhouse_url)
+        clickhouse_result = clickhouse_client.query_df(  # type: ignore
+            f"SELECT * FROM ChatInference where episode_id = '{episode_id}'"
+        )
+        assert len(clickhouse_result) == num_inferences  # type: ignore
+
+        actual_inference_ids = set(row.id for row in clickhouse_result.iloc)  # type: ignore
+        assert actual_inference_ids == expected_inference_ids
+
+
+def test_sync_cannot_enable_batch_writes():
+    # Create a temp file and write to it
+    with tempfile.NamedTemporaryFile() as temp_file:
+        temp_file.write(b"gateway.observability.enabled = true\n")
+        temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        temp_file.flush()
+        clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            TensorZeroGateway.build_embedded(
+                config_file=temp_file.name,
+                clickhouse_url=clickhouse_url,
+            )
+        assert (
+            str(exc_info.value)
+            == """Failed to construct TensorZero client: Clickhouse(Other { source: TensorZeroInternalError(Error(Config { message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode" })) })"""
+        )
+
+
+@pytest.mark.asyncio
+async def test_async_cannot_enable_batch_writes():
+    # Create a temp file and write to it
+    with tempfile.NamedTemporaryFile() as temp_file:
+        temp_file.write(b"gateway.observability.enabled = true\n")
+        temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        temp_file.flush()
+        clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
+        client_fut = AsyncTensorZeroGateway.build_embedded(
+            config_file=temp_file.name,
+            clickhouse_url=clickhouse_url,
+        )
+        assert inspect.isawaitable(client_fut)
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            await client_fut
+        assert (
+            str(exc_info.value)
+            == """Failed to construct TensorZero client: Clickhouse(Other { source: TensorZeroInternalError(Error(Config { message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode" })) })"""
+        )
