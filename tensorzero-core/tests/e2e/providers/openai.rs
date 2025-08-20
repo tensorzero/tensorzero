@@ -87,13 +87,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials,
     }];
 
-    // let image_providers = vec![E2ETestProvider {
-    //     supports_batch_inference: true,
-    //     variant_name: "openai".to_string(),
-    //     model_name: "openai::gpt-4o-mini-2024-07-18".into(),
-    //     model_provider_name: "openai".into(),
-    //     credentials: HashMap::new(),
-    // }];
+    let image_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai".to_string(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
 
     let json_providers = vec![
         E2ETestProvider {
@@ -176,8 +176,8 @@ async fn get_providers() -> E2ETestProviders {
         parallel_tool_use_inference: standard_without_o1.clone(),
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: json_mode_off_providers.clone(),
-        image_inference: vec![], // alibakdur: Skipped due to missing storage credentials
-        pdf_inference: vec![],   // alibakdur: Skipped to avoid storage-related tests
+        image_inference: image_providers.clone(),
+        pdf_inference: image_providers.clone(),
 
         shorthand_inference: shorthand_providers.clone(),
     }
@@ -1306,7 +1306,6 @@ fn cosine_similarity(a: &Embedding, b: &Embedding) -> f32 {
 // (which is S3-compatible) with just OpenAI to save time and money.
 
 #[tokio::test]
-#[ignore] // alibakdur: Skipped due to missing Cloudflare R2 credentials
 pub async fn test_image_inference_with_provider_cloudflare_r2() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
     use aws_credential_types::Credentials;
@@ -1499,7 +1498,6 @@ async fn test_content_block_text_field() {
 // (which is S3-compatible) with just OpenAI to save time and money.
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore] // alibakdur: Skipped due to missing GCP Storage credentials
 pub async fn test_image_inference_with_provider_gcp_storage() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
     use crate::providers::common::IMAGE_FUNCTION_CONFIG;
@@ -1576,7 +1574,6 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
 // (which is S3-compatible) with just OpenAI to save time and money.
 
 #[tokio::test]
-#[ignore] // alibakdur: Skipped to avoid MinIO dependency
 pub async fn test_image_inference_with_provider_docker_minio() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
     use aws_credential_types::Credentials;

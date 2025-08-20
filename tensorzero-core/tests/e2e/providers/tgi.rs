@@ -1,7 +1,7 @@
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 use std::collections::HashMap;
 
-// crate::generate_provider_tests!(get_providers);
+crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {

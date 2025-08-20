@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 
-// crate::generate_provider_tests!(get_providers);
+crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 // The main goal of our sagemaker tests to to make sure that the AWS client

@@ -2,13 +2,13 @@ use std::collections::HashMap;
 
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 
-// crate::generate_provider_tests!(get_providers);
+crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 // The main goal of our sagemaker tests to to make sure that the AWS client
 // and serialization/deserialization (including stream handling) are working correctly.
 // The actual Sagemaker instance deploys some arbitrary model and provider
-// (e.g. ollama serving gemma-3-1b), so it's not really useful to test things
+// (e.. ollama serving gemma-3-1b), so it's not really useful to test things
 // like tool-calling which don't depend on anything Sagemaker-specific.
 //
 // As a result, we leave most of the fields in `E2ETestProviders` empty.

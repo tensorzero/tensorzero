@@ -7,7 +7,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::json;
 use uuid::Uuid;
 
-// crate::generate_provider_tests!(get_providers);
+crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
@@ -119,7 +119,6 @@ async fn get_providers() -> E2ETestProviders {
 ///
 /// Note: other E2E tests will also break if the headers are missing or incorrect when running the proxy, so this test is really here for
 /// explicitness / documentation.
-#[ignore]
 #[tokio::test]
 async fn test_openrouter_headers_present_in_requests() {
     let episode_id = Uuid::now_v7();
