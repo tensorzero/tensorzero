@@ -95,7 +95,19 @@
               "gateway/configuration-reference",
               "gateway/data-model",
               "gateway/deployment",
-              "gateway/integrations"
+              "gateway/integrations",
+              {
+                "group": "API Reference",
+                "hidden": false,
+                "pages": [
+                  "gateway/api-reference/inference",
+                  "gateway/api-reference/inference-openai-compatible",
+                  "gateway/api-reference/feedback",
+                  "gateway/api-reference/batch-inference",
+                  "gateway/api-reference/datasets-datapoints",
+                  "gateway/api-reference/auxiliary-endpoints"
+                ]
+              }
             ]
           }
         ]
