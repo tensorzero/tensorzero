@@ -21,18 +21,6 @@ impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {
     }
 
     fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
-        // When using mock inference provider, check if GCP credentials are available
-        // If not, we'll let the test run but it may fail with credential errors
-        // This is preferable to panicking and failing the entire test suite
-        if use_mock_inference_provider {
-            // Check for both TensorZero's default and standard Google Cloud SDK credential variables
-            let has_credentials = std::env::var("GCP_VERTEX_CREDENTIALS_PATH").is_ok()
-                || std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok();
-
-            if !has_credentials {
-                tracing::warn!("GCP Vertex Gemini mock test may fail - no GCP credentials found. Set GCP_VERTEX_CREDENTIALS_PATH or GOOGLE_APPLICATION_CREDENTIALS environment variable.");
-            }
-        }
         UninitializedOptimizerInfo {
             inner: UninitializedOptimizerConfig::GCPVertexGeminiSFT(
                 UninitializedGCPVertexGeminiSFTConfig {
