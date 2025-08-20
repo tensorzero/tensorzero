@@ -6,7 +6,7 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write, CacheData, EmbeddingCacheData,
     EmbeddingModelProviderRequest,
 };
-use crate::config_parser::{ProviderTypesConfig, TimeoutsConfig};
+use crate::config::{ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::model::UninitializedProviderConfig;
 use crate::model_table::BaseModelTable;
@@ -558,7 +558,7 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        clickhouse::ClickHouseConnectionInfo,
+        db::clickhouse::ClickHouseConnectionInfo,
     };
 
     use super::*;

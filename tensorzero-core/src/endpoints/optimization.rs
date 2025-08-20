@@ -11,13 +11,13 @@ use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    clickhouse::{
+    config::Config,
+    db::clickhouse::{
         query_builder::{
             InferenceFilterTreeNode, InferenceOutputSource, ListInferencesParams, OrderBy,
         },
         ClickHouseConnectionInfo, ClickhouseFormat,
     },
-    config_parser::Config,
     endpoints::{inference::InferenceCredentials, stored_inference::render_samples},
     error::{Error, ErrorDetails},
     gateway_util::{AppState, AppStateData, StructuredJson},

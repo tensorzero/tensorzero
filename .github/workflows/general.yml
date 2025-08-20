@@ -52,6 +52,11 @@ jobs:
           docker load < gateway-container.tar
           docker load < ui-container.tar
 
+      - name: Create the `object_storage` directory for the multimodal-vision-finetuning example
+        run: |
+          mkdir -p examples/multimodal-vision-finetuning/object_storage
+          chmod 777 examples/multimodal-vision-finetuning/object_storage
+
       - name: Check latest docker-compose
         run: ./ci/check-all-docker-compose.sh
 
@@ -81,6 +86,11 @@ jobs:
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      - name: Create the `object_storage` directory for the multimodal-vision-finetuning example
+        run: |
+          mkdir -p examples/multimodal-vision-finetuning/object_storage
+          chmod 777 examples/multimodal-vision-finetuning/object_storage
 
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
@@ -371,15 +381,9 @@ jobs:
           - tag: "24.12-alpine"
             prefix: "24.12"
             allow_failure: false
-          - tag: "25.2-alpine"
-            prefix: "25.2"
-            allow_failure: false
           - tag: "latest-alpine"
             prefix: ""
-            # ClickHouse can make new releases at any time, which might break our tests.
-            # We allow this job to fail to avoid blocking CI whenever this happens.
-            # However, we'll still want to fix the failing tests soon after we notice the failure
-            allow_failure: true
+            allow_failure: false
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -523,6 +527,7 @@ jobs:
       OPENAI_API_KEY: not_used
       FIREWORKS_API_KEY: not_used
       FIREWORKS_ACCOUNT_ID: not_used
+      TOGETHER_API_KEY: not_used
       TENSORZERO_USE_MOCK_INFERENCE_PROVIDER: 1
       TENSORZERO_SKIP_LARGE_FIXTURES: 1
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}

@@ -6,7 +6,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::{ChatInferenceDatapoint, JsonInferenceDatapoint, Role};
 use tensorzero_core::{
-    clickhouse::test_helpers::{
+    db::clickhouse::test_helpers::{
         select_chat_dataset_clickhouse, select_json_dataset_clickhouse, stale_datapoint_clickhouse,
     },
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
@@ -18,7 +18,7 @@ use crate::{
     common::{delete_datapoint, get_gateway_endpoint},
     providers::common::make_embedded_gateway,
 };
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_datapoint_clickhouse, select_json_datapoint_clickhouse,
 };
 
