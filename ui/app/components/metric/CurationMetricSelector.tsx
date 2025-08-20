@@ -152,7 +152,7 @@ export default function CurationMetricSelector<
                       {(() => {
                         const currentMetricName = field.value as string | null;
                         const selectedMetricDetails = currentMetricName
-                          ? config.metrics[currentMetricName]
+                          ? metrics[currentMetricName]
                           : undefined;
 
                         if (currentMetricName && selectedMetricDetails) {
@@ -306,7 +306,7 @@ export default function CurationMetricSelector<
                 </PopoverContent>
               </Popover>
 
-              {field.value && config.metrics[field.value]?.type === "float" && (
+              {field.value && metrics[field.value]?.type === "float" && (
                 <FormField
                   control={control}
                   name={"threshold" as Path<T>}

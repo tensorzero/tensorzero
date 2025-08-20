@@ -12,9 +12,17 @@ function makeOrderedUuid(num = 0): string {
 
 const config: Config = {
   gateway: {
+    disable_pseudonymous_usage_analytics: false,
     observability: {
       enabled: true,
       async_writes: false,
+      skip_completed_migrations: false,
+      batch_writes: {
+        enabled: false,
+        __force_allow_embedded_batch_writes: false,
+        flush_interval_ms: 100n,
+        max_rows: 1000,
+      },
     },
     export: {
       otlp: {
@@ -31,6 +39,7 @@ const config: Config = {
     bind_address: "localhost:8080",
     base_path: "/",
     unstable_error_json: false,
+    unstable_disable_feedback_target_validation: false,
   },
   object_store_info: { kind: { type: "disabled" } },
   provider_types: {

@@ -11,7 +11,7 @@ import {
 } from "react-router";
 import { v7 as uuid } from "uuid";
 import InputSnippet from "~/components/inference/InputSnippet";
-import Output from "~/components/inference/Output";
+import { Output } from "~/components/inference/Output";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import {
   PageHeader,
@@ -21,13 +21,14 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { Badge } from "~/components/ui/badge";
-import { useConfig } from "~/context/config";
-import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
+import { useFunctionConfig } from "~/context/config";
+import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference.utils";
 import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
 } from "~/routes/api/tensorzero/inference.utils";
 import type { DisplayInputMessage } from "~/utils/clickhouse/common";
+
 import {
   ParsedDatasetRowSchema,
   type ParsedDatasetRow,
@@ -37,128 +38,164 @@ import {
   getDatasetCounts,
   staleDatapoint,
 } from "~/utils/clickhouse/datasets.server";
-import { getConfig } from "~/utils/config/index.server";
+import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { logger } from "~/utils/logger";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import { DatapointActions } from "./DatapointActions";
 import DatapointBasicInfo from "./DatapointBasicInfo";
+import type {
+  JsonInferenceOutput,
+  ContentBlockChatOutput,
+} from "tensorzero-node";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
 
-  const rawData = {
-    dataset_name: formData.get("dataset_name"),
-    function_name: formData.get("function_name"),
-    id: formData.get("id"),
-    episode_id: formData.get("episode_id"),
-    input: JSON.parse(formData.get("input") as string),
-    output: formData.get("output")
-      ? JSON.parse(formData.get("output") as string)
-      : undefined,
-    output_schema: formData.get("output_schema")
-      ? JSON.parse(formData.get("output_schema") as string)
-      : undefined,
-    tool_params: formData.get("tool_params")
-      ? JSON.parse(formData.get("tool_params") as string)
-      : undefined,
-    tags: JSON.parse(formData.get("tags") as string),
-    auxiliary: formData.get("auxiliary"),
-    is_deleted: formData.get("is_deleted") === "true",
-    updated_at: formData.get("updated_at"),
-    staled_at: null,
-    source_inference_id: formData.get("source_inference_id"),
-    is_custom: true,
-  };
+  try {
+    const rawData = {
+      dataset_name: formData.get("dataset_name"),
+      function_name: formData.get("function_name"),
+      id: formData.get("id"),
+      episode_id: formData.get("episode_id"),
+      input: JSON.parse(formData.get("input") as string),
+      output: formData.get("output")
+        ? JSON.parse(formData.get("output") as string)
+        : undefined,
+      output_schema: formData.get("output_schema")
+        ? JSON.parse(formData.get("output_schema") as string)
+        : undefined,
+      tool_params: formData.get("tool_params")
+        ? JSON.parse(formData.get("tool_params") as string)
+        : undefined,
+      tags: JSON.parse(formData.get("tags") as string),
+      auxiliary: formData.get("auxiliary"),
+      is_deleted: formData.get("is_deleted") === "true",
+      updated_at: formData.get("updated_at"),
+      staled_at: null,
+      source_inference_id: formData.get("source_inference_id"),
+      is_custom: true,
+    };
 
-  const cleanedData = Object.fromEntries(
-    Object.entries(rawData).filter(([, value]) => value !== undefined),
-  );
-  const parsedFormData: ParsedDatasetRow =
-    ParsedDatasetRowSchema.parse(cleanedData);
-  const config = await getConfig();
-  const functionConfig = config.functions[parsedFormData.function_name];
-  if (!functionConfig) {
-    return new Response(
-      `Failed to find function config for function ${parsedFormData.function_name}`,
-      { status: 400 },
+    const cleanedData = Object.fromEntries(
+      Object.entries(rawData).filter(([, value]) => value !== undefined),
     );
-  }
-  const functionType = functionConfig.type;
-
-  const action = formData.get("action");
-  if (action === "delete") {
-    await staleDatapoint(
-      parsedFormData.dataset_name,
-      parsedFormData.id,
-      functionType,
+    const parsedFormData: ParsedDatasetRow =
+      ParsedDatasetRowSchema.parse(cleanedData);
+    const config = await getConfig();
+    const functionConfig = await getFunctionConfig(
+      parsedFormData.function_name,
+      config,
     );
-    const datasetCounts = await getDatasetCounts({});
-    const datasetCount = datasetCounts.find(
-      (count) => count.dataset_name === parsedFormData.dataset_name,
-    );
-
-    if (datasetCount === undefined) {
-      return redirect("/datasets");
-    }
-    return redirect(`/datasets/${parsedFormData.dataset_name}`);
-  } else if (action === "save") {
-    // If the input changed, we should remove the source_inference_id
-    // because it will no longer be valid
-    // Transform input to match TensorZero client's expected format
-    const transformedInput = resolvedInputToTensorZeroInput(
-      parsedFormData.input,
-    );
-    const transformedOutput = transformOutputForTensorZero(
-      parsedFormData.output,
-    );
-
-    try {
-      // For future reference:
-      // These two calls would be a transaction but ClickHouse doesn't support
-
-      const datapoint = {
-        function_name: parsedFormData.function_name,
-        input: transformedInput,
-        output: transformedOutput,
-        tags: parsedFormData.tags || {},
-        auxiliary: parsedFormData.auxiliary,
-        is_custom: true, // we're saving it after an edit, so it's custom
-        ...(functionType === "json"
-          ? {
-              output_schema:
-                parsedFormData["output_schema" as keyof typeof parsedFormData],
-            }
-          : {}),
-        ...(functionType === "chat" && "tool_params" in parsedFormData
-          ? {
-              tool_params:
-                parsedFormData["tool_params" as keyof typeof parsedFormData],
-            }
-          : {}),
-        source_inference_id: parsedFormData.source_inference_id,
-        id: uuid(), // We generate a new ID here because we want old evaluation runs to be able to point to the correct data.
-      };
-      const { id } = await getTensorZeroClient().updateDatapoint(
-        parsedFormData.dataset_name,
-        datapoint,
+    if (!functionConfig) {
+      return new Response(
+        `Failed to find function config for function ${parsedFormData.function_name}`,
+        { status: 400 },
       );
+    }
+    const functionType = functionConfig.type;
+
+    const action = formData.get("action");
+    if (action === "delete") {
       await staleDatapoint(
         parsedFormData.dataset_name,
         parsedFormData.id,
         functionType,
       );
-
-      return redirect(
-        `/datasets/${parsedFormData.dataset_name}/datapoint/${id}`,
+      const datasetCounts = await getDatasetCounts({});
+      const datasetCount = datasetCounts.find(
+        (count) => count.dataset_name === parsedFormData.dataset_name,
       );
-    } catch (error) {
-      logger.error("Error updating datapoint:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
+
+      if (datasetCount === undefined) {
+        return redirect("/datasets");
+      }
+      return redirect(`/datasets/${parsedFormData.dataset_name}`);
+    } else if (action === "save") {
+      // If the input changed, we should remove the source_inference_id
+      // because it will no longer be valid
+      // Transform input to match TensorZero client's expected format
+      const transformedInput = resolvedInputToTensorZeroInput(
+        parsedFormData.input,
+      );
+      const transformedOutput = transformOutputForTensorZero(
+        parsedFormData.output,
+      );
+
+      try {
+        // For future reference:
+        // These two calls would be a transaction but ClickHouse doesn't support
+
+        const baseDatapoint = {
+          function_name: parsedFormData.function_name,
+          input: transformedInput,
+          output: transformedOutput,
+          tags: parsedFormData.tags || {},
+          auxiliary: parsedFormData.auxiliary,
+          is_custom: true, // we're saving it after an edit, so it's custom
+          source_inference_id: parsedFormData.source_inference_id,
+          id: uuid(), // We generate a new ID here because we want old evaluation runs to be able to point to the correct data.
+        };
+
+        let datapoint;
+        if (functionType === "json" && "output_schema" in parsedFormData) {
+          datapoint = {
+            ...baseDatapoint,
+            output_schema: parsedFormData.output_schema,
+          };
+        } else if (functionType === "chat" && "tool_params" in parsedFormData) {
+          datapoint = {
+            ...baseDatapoint,
+            tool_params: parsedFormData.tool_params,
+          };
+        } else {
+          throw new Error(
+            `Unexpected function type "${functionType}" or missing required properties on datapoint`,
+          );
+        }
+        const { id } = await getTensorZeroClient().updateDatapoint(
+          parsedFormData.dataset_name,
+          datapoint,
+        );
+        await staleDatapoint(
+          parsedFormData.dataset_name,
+          parsedFormData.id,
+          functionType,
+        );
+
+        return redirect(
+          `/datasets/${parsedFormData.dataset_name}/datapoint/${id}`,
+        );
+      } catch (error) {
+        logger.error("Error updating datapoint:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
     }
+  } catch (error) {
+    logger.error("Error processing datapoint action:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // Check if it's a JSON parsing error
+    if (errorMessage.includes("JSON")) {
+      return data(
+        {
+          success: false,
+          error: `Invalid JSON format: ${errorMessage}. Please ensure all JSON fields contain valid JSON.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    return data(
+      {
+        success: false,
+        error: errorMessage,
+      },
+      { status: 400 },
+    );
   }
 }
 
@@ -195,11 +232,11 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
   const [originalInput] = useState(datapoint.input);
   const [originalOutput] = useState(datapoint.output);
-  const [output, setOutput] = useState<typeof datapoint.output>(
-    datapoint.output,
-  );
-  const config = useConfig();
+  const [output, setOutput] = useState<
+    ContentBlockChatOutput[] | JsonInferenceOutput | null
+  >(datapoint.output ?? null);
   const [isEditing, setIsEditing] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const canSave = useMemo(() => {
     // Use JSON.stringify to compare object values rather than references
@@ -215,7 +252,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
   const handleReset = () => {
     setInput(datapoint.input);
-    setOutput(datapoint.output);
+    setOutput(datapoint.output ?? null);
   };
 
   const handleSystemChange = (system: string | object) =>
@@ -253,15 +290,29 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
   const handleDelete = () => submitDatapointAction("delete");
   const handleSave = () => {
+    // Clear any previous validation errors
+    setValidationError(null);
+
+    // Validate JSON output before submitting
+    if (output && "raw" in output && output.raw) {
+      try {
+        JSON.parse(output.raw);
+      } catch {
+        setValidationError(
+          "Invalid JSON in output. Please fix the JSON format before saving.",
+        );
+        return;
+      }
+    }
+
     submitDatapointAction("save");
     if (!saveError) {
       setIsEditing(false);
     }
   };
 
-  const variants = Object.keys(
-    config.functions[datapoint.function_name]?.variants || {},
-  );
+  const functionConfig = useFunctionConfig(datapoint.function_name);
+  const variants = Object.keys(functionConfig?.variants || {});
 
   const variantInferenceFetcher = useInferenceActionFetcher();
   const variantSource = "datapoint";
@@ -297,10 +348,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         tag={datapoint.is_custom && <Badge className="ml-2">Custom</Badge>}
       />
 
-      {saveError && (
+      {(saveError || validationError) && (
         <div className="mt-2 rounded-md bg-red-100 px-4 py-3 text-red-800">
           <p className="font-medium">Error saving datapoint</p>
-          <p>{saveError}</p>
+          <p>{validationError || saveError}</p>
         </div>
       )}
 
@@ -344,7 +395,11 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             <Output
               output={output}
               isEditing={isEditing}
-              onOutputChange={(output) => setOutput(output ?? undefined)}
+              onOutputChange={(output) => {
+                setOutput(output);
+                // Clear validation error when output changes
+                setValidationError(null);
+              }}
             />
           </SectionLayout>
         )}
@@ -439,9 +494,24 @@ function transformOutputForTensorZero(
   if (output === null || output === undefined) {
     return null;
   } else if ("raw" in output) {
-    return JSON.parse(output.raw);
+    if (output.raw === null) {
+      return null;
+    }
+    try {
+      return JSON.parse(output.raw);
+    } catch (error) {
+      throw new Error(
+        `Invalid JSON in output.raw: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   } else if (typeof output === "object") {
-    return JSON.parse(JSON.stringify(output));
+    try {
+      return JSON.parse(JSON.stringify(output));
+    } catch (error) {
+      throw new Error(
+        `Failed to serialize output object: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   } else {
     return output;
   }

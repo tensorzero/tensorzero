@@ -29,18 +29,19 @@ docker compose up
 a. Install the dependencies:
 
 ```bash
-# We recommend using Python 3.9+ and a virtual environment
+# We recommend using Python 3.10+ and a virtual environment
 pip install -r requirements.txt
 ```
 
 b. Run the example:
 
 ```bash
-python main.py
+python tensorzero_sdk.py
 ```
 
 </details>
 
+<details>
 <summary><b>Python (OpenAI)</b></summary>
 
 a. Install the dependencies:
@@ -53,7 +54,7 @@ pip install -r requirements.txt
 b. Run the example:
 
 ```bash
-python main_openai.py
+python openai_sdk.py
 ```
 
 </details>

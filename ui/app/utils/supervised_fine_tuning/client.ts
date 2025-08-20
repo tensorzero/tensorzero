@@ -1,5 +1,4 @@
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
-import { TensorZeroClient } from "tensorzero-node";
 import type {
   InferenceFilterTreeNode,
   InferenceOutputSource,
@@ -8,20 +7,8 @@ import type {
   UninitializedOptimizerInfo,
 } from "tensorzero-node";
 import { getConfig } from "~/utils/config/index.server";
+import { getNativeTensorZeroClient } from "../tensorzero/native_client.server";
 import { getEnv } from "../env.server";
-
-let _tensorZeroClient: TensorZeroClient | undefined;
-export async function getNativeTensorZeroClient(): Promise<TensorZeroClient> {
-  if (_tensorZeroClient) {
-    return _tensorZeroClient;
-  }
-
-  const env = getEnv();
-  _tensorZeroClient = await TensorZeroClient.buildHttp(
-    env.TENSORZERO_GATEWAY_URL,
-  );
-  return _tensorZeroClient;
-}
 
 export async function poll_sft_job(
   jobHandle: OptimizationJobHandle,
@@ -68,6 +55,21 @@ export async function launch_sft_job(
     optimizerConfig = {
       type: "fireworks_sft",
       model: data.model.name,
+      early_stop: null,
+      epochs: null,
+      learning_rate: null,
+      max_context_length: null,
+      lora_rank: null,
+      batch_size: null,
+      display_name: null,
+      output_model: null,
+      warm_start_from: null,
+      is_turbo: null,
+      eval_auto_carveout: null,
+      nodes: null,
+      mtp_enabled: null,
+      mtp_num_draft_tokens: null,
+      mtp_freeze_base_model: null,
       credentials: null,
       api_base: fireworksNativeSFTBase,
       account_id: accountId,

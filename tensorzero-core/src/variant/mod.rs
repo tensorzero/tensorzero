@@ -15,8 +15,8 @@ use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::config_parser::PathWithContents;
-use crate::config_parser::TimeoutsConfig;
+use crate::config::PathWithContents;
+use crate::config::TimeoutsConfig;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceIds;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -47,6 +47,7 @@ pub mod best_of_n_sampling;
 pub mod chain_of_thought;
 pub mod chat_completion;
 pub mod dicl;
+pub mod dynamic;
 pub mod mixture_of_n;
 
 /// Holds a particular variant implementation, plus additional top-level configuration
@@ -59,8 +60,14 @@ pub struct VariantInfo {
     pub timeouts: TimeoutsConfig,
 }
 
+impl VariantInfo {
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        self.inner.set_weight(weight);
+    }
+}
+
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum VariantConfig {
@@ -107,8 +114,8 @@ pub struct ChainOfThoughtConfigPyClass {
 /// This is represented as a tool config in the
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum JsonMode {
     Off,
     On,
@@ -118,9 +125,9 @@ pub enum JsonMode {
 
 /// Configuration that applies to the current inference request.
 #[derive(Clone, Debug)]
-pub struct InferenceConfig<'a, 'request> {
+pub struct InferenceConfig<'request> {
     pub tool_config: Option<&'request ToolCallConfig>,
-    pub templates: &'request TemplateConfig<'a>,
+    pub templates: &'request TemplateConfig<'request>,
     pub dynamic_output_schema: Option<&'request DynamicJSONSchema>,
     pub function_name: &'request str,
     pub variant_name: &'request str,
@@ -148,7 +155,7 @@ impl<'a> BatchInferenceConfig<'a> {
         &'a self,
         episode_ids: &[Uuid],
         inference_ids: &[Uuid],
-    ) -> Vec<InferenceConfig<'a, 'a>> {
+    ) -> Vec<InferenceConfig<'a>> {
         izip!(
             self.tool_configs.iter().map(|x| x.as_ref()),
             self.dynamic_output_schemas.iter().map(|x| x.as_ref()),
@@ -196,7 +203,7 @@ pub trait Variant {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error>;
@@ -206,7 +213,7 @@ pub trait Variant {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error>;
@@ -228,7 +235,7 @@ pub trait Variant {
         input: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_configs: &'a [InferenceConfig<'a, 'a>],
+        inference_configs: &'a [InferenceConfig<'a>],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error>;
@@ -244,6 +251,16 @@ impl VariantConfig {
             VariantConfig::ChainOfThought(params) => params.inner.weight,
         }
     }
+
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        match self {
+            VariantConfig::ChatCompletion(params) => params.weight = weight,
+            VariantConfig::BestOfNSampling(params) => params.weight = weight,
+            VariantConfig::Dicl(params) => params.weight = weight,
+            VariantConfig::MixtureOfN(params) => params.weight = weight,
+            VariantConfig::ChainOfThought(params) => params.inner.weight = weight,
+        }
+    }
 }
 
 impl Variant for VariantInfo {
@@ -256,7 +273,7 @@ impl Variant for VariantInfo {
         input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -352,7 +369,7 @@ impl Variant for VariantInfo {
         input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -445,7 +462,7 @@ impl Variant for VariantInfo {
         inputs: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_configs: &'a [InferenceConfig<'a, 'a>],
+        inference_configs: &'a [InferenceConfig<'a>],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -554,11 +571,12 @@ impl Variant for VariantInfo {
 }
 
 #[expect(clippy::too_many_arguments)]
+#[expect(clippy::unnecessary_wraps)]
 fn prepare_model_inference_request<'a, 'request>(
     messages: Vec<RequestMessage>,
     system: Option<String>,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'a, 'request>,
+    inference_config: &'request InferenceConfig<'request>,
     stream: bool,
     inference_params: &InferenceParams,
     base_json_mode: Option<JsonMode>,
@@ -614,7 +632,7 @@ where
             };
             let output_schema = match inference_config.dynamic_output_schema {
                 Some(schema) => Some(&schema.value),
-                None => Some(json_config.output_schema.value),
+                None => Some(&json_config.output_schema.value),
             };
             ModelInferenceRequest {
                 messages,
@@ -652,7 +670,7 @@ struct InferModelRequestArgs<'a, 'request> {
     model_name: Arc<str>,
     model_config: &'a ModelConfig,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'a, 'request>,
+    inference_config: &'request InferenceConfig<'request>,
     clients: &'request InferenceClients<'request>,
     inference_params: InferenceParams,
     retry_config: &'a RetryConfig,
@@ -733,9 +751,8 @@ async fn infer_model_request_stream<'request>(
     Ok((Box::pin(stream), model_used_info))
 }
 
-#[derive(Debug, Deserialize, Copy, Clone, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct RetryConfig {
     pub num_retries: usize,
     pub max_delay_s: f32,
@@ -797,22 +814,31 @@ impl ChatCompletionConfigPyClass {
     #[getter]
     fn get_system_template(&self) -> PyResult<Option<String>> {
         let config = Self::extract_chat_completion_config(&self.inner)?;
-        Ok(config.system_template.as_ref().map(|t| t.contents.clone()))
+        Ok(config
+            .templates
+            .system
+            .as_ref()
+            .map(|t| t.template.contents.clone()))
     }
 
     #[getter]
     fn get_user_template(&self) -> PyResult<Option<String>> {
         let config = Self::extract_chat_completion_config(&self.inner)?;
-        Ok(config.user_template.as_ref().map(|t| t.contents.clone()))
+        Ok(config
+            .templates
+            .user
+            .as_ref()
+            .map(|t| t.template.contents.clone()))
     }
 
     #[getter]
     fn get_assistant_template(&self) -> PyResult<Option<String>> {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
-            .assistant_template
+            .templates
+            .assistant
             .as_ref()
-            .map(|t| t.contents.clone()))
+            .map(|t| t.template.contents.clone()))
     }
 
     #[getter]
@@ -826,7 +852,8 @@ impl ChatCompletionConfigPyClass {
 mod tests {
     use super::*;
     use crate::cache::{CacheEnabledMode, CacheOptions};
-    use crate::clickhouse::ClickHouseConnectionInfo;
+    use crate::config::SchemaData;
+    use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::error::ErrorDetails;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
@@ -905,9 +932,7 @@ mod tests {
         // Test case 1: FunctionConfig::Chat with JsonMode::Off
         let function_config_chat = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
@@ -950,14 +975,12 @@ mod tests {
             },
             "required": ["answer"],
         });
-        let output_schema = StaticJSONSchema::from_value(&output_schema_value).unwrap();
+        let output_schema = StaticJSONSchema::from_value(output_schema_value.clone()).unwrap();
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema_value);
 
         let function_config_json = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            assistant_schema: None,
-            system_schema: None,
-            user_schema: None,
+            schemas: SchemaData::default(),
             output_schema: output_schema.clone(),
             implicit_tool_call_config: implicit_tool_call_config.clone(),
             description: None,
@@ -1112,9 +1135,7 @@ mod tests {
         let model_name = "dummy_chat_model";
         let function_config_chat = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
@@ -1217,10 +1238,8 @@ mod tests {
         let model_name_json = "json";
         let function_config_json = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
-            output_schema: StaticJSONSchema::from_value(&json!({
+            schemas: SchemaData::default(),
+            output_schema: StaticJSONSchema::from_value(json!({
                 "type": "object",
                 "properties": {
                     "answer": { "type": "string" }
@@ -1411,9 +1430,7 @@ mod tests {
         let error_model_name = "error";
         let function_config_chat = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
@@ -1554,9 +1571,7 @@ mod tests {
         // Create a dummy function config (chat completion)
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             tool_choice: crate::tool::ToolChoice::Auto,
             parallel_tool_calls: None,
@@ -1702,9 +1717,7 @@ mod tests {
         let error_model_name = "error";
         let function_config_chat = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,

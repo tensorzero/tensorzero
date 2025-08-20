@@ -2,9 +2,12 @@
 
 use std::sync::Arc;
 
-use crate::config_parser::Config;
-use crate::gateway_util::AppStateData;
+use crate::config::Config;
+use crate::gateway_util::GatewayHandle;
 
-pub fn get_unit_test_app_state_data(config: Arc<Config>, clickhouse_healthy: bool) -> AppStateData {
-    AppStateData::new_unit_test_data(config, clickhouse_healthy)
+pub fn get_unit_test_gateway_handle(
+    config: Arc<Config>,
+    clickhouse_healthy: bool,
+) -> GatewayHandle {
+    GatewayHandle::new_unit_test_data(config, clickhouse_healthy)
 }

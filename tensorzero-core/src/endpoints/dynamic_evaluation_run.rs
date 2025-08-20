@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    clickhouse::{escape_string_for_clickhouse_literal, ClickHouseConnectionInfo},
-    config_parser::Config,
+    config::Config,
+    db::clickhouse::{escape_string_for_clickhouse_literal, ClickHouseConnectionInfo},
     endpoints::validate_tags,
     error::{Error, ErrorDetails},
     gateway_util::{AppState, AppStateData, StructuredJson},
@@ -141,7 +141,7 @@ pub fn validate_variant_pins(
     variant_pins: &HashMap<String, String>,
     config: &Config,
 ) -> Result<(), Error> {
-    for (function_name, variant_name) in variant_pins.iter() {
+    for (function_name, variant_name) in variant_pins {
         let function_config = config.get_function(function_name)?;
         function_config
             .variants()

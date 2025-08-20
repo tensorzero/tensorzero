@@ -1,3 +1,7 @@
+#![expect(clippy::print_stdout)]
+use std::collections::HashMap;
+use std::{collections::HashSet, sync::Arc};
+
 use crate::{
     otel::{
         attrs_to_map, build_span_map, install_capturing_otel_exporter, CapturingOtelExporter,
@@ -17,6 +21,14 @@ use tensorzero::{
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::{
+    db::clickhouse::test_helpers::get_clickhouse_replica,
+    db::clickhouse::{
+        test_helpers::{
+            select_all_model_inferences_by_chat_episode_id_clickhouse,
+            select_chat_inferences_clickhouse,
+        },
+        ClickHouseConnectionInfo,
+    },
     endpoints::inference::ChatInferenceResponse,
     inference::types::{
         ContentBlock, ContentBlockOutput, File, RequestMessage, ResolvedInput,
@@ -29,11 +41,12 @@ use tensorzero_core::{
     },
     tool::{ToolCall, ToolCallInput},
 };
+use tokio::task::JoinSet;
 use tracing_test::traced_test;
 use url::Url;
 use uuid::Uuid;
 
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
     select_model_inference_clickhouse,
 };
@@ -135,8 +148,8 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
     let episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
     let episode_id = Uuid::parse_str(episode_id).unwrap();
 
-    // Sleep for 100ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 200ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
@@ -283,8 +296,8 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
     let episode_id =
         Uuid::parse_str(chunk_json.get("episode_id").unwrap().as_str().unwrap()).unwrap();
 
-    // Sleep for 100ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 200ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
@@ -2859,7 +2872,7 @@ async fn test_dummy_only_embedded_gateway_no_config() {
     };
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -2873,6 +2886,72 @@ async fn test_dummy_only_embedded_gateway_no_config() {
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
     assert_eq!(function_name, "tensorzero::default");
+    // It's not necessary to check ModelInference table given how many other places we do that
+}
+
+#[tokio::test]
+async fn test_dummy_only_replicated_clickhouse() {
+    let client = make_embedded_gateway_no_config().await;
+    let response = client
+        .inference(ClientInferenceParams {
+            model_name: Some("dummy::my-model".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is the name of the capital city of Japan?".to_string(),
+                    })],
+                }],
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming response");
+    };
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    // Check if ClickHouse is ok - ChatInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, response.inference_id())
+        .await
+        .unwrap();
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, response.inference_id());
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "tensorzero::default");
+
+    // Check if ClickHouse replica is ok - ChatInference Table on replica
+    let clickhouse_replica = get_clickhouse_replica().await;
+    if let Some(clickhouse_replica) = clickhouse_replica {
+        println!("ClickHouse replica is ok");
+        let result = select_chat_inference_clickhouse(&clickhouse_replica, response.inference_id())
+            .await
+            .unwrap();
+        let id_str = result.get("id").unwrap().as_str().unwrap();
+        let id = Uuid::parse_str(id_str).unwrap();
+        assert_eq!(id, response.inference_id());
+        let episode_id_str = result.get("episode_id").unwrap().as_str().unwrap();
+
+        let function_name = result.get("function_name").unwrap().as_str().unwrap();
+        assert_eq!(function_name, "tensorzero::default");
+
+        // Let's also check that the data is in InferenceById to make sure that the data is replicated to materialize views too
+        let result = clickhouse_replica.run_query_synchronous(
+            "SELECT * FROM InferenceById WHERE id_uint = toUInt128({id:UUID}) FORMAT JSONEachRow".to_string(),
+            &HashMap::from([("id", id_str)]),
+        ).await.unwrap();
+        let result: Value = serde_json::from_str(result.response.trim()).unwrap();
+        let episode_id_str_mv = result.get("episode_id").unwrap().as_str().unwrap();
+        assert_eq!(episode_id_str_mv, episode_id_str);
+    }
     // It's not necessary to check ModelInference table given how many other places we do that
 }
 
@@ -3347,8 +3426,8 @@ async fn test_client_adjust_tool_call() {
     };
 
     bad_gateway.inference(params.clone()).await.unwrap_err();
-    let stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":"{\"location\":\"Brooklyn\",\"units\":\"celsius\"}","id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[]}"#;
-    let non_stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":{"location":"Brooklyn","units":"celsius"},"id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[]}"#;
+    let stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":"{\"location\":\"Brooklyn\",\"units\":\"celsius\"}","id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[],"internal_dynamic_variant_config":null}"#;
+    let non_stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":{"location":"Brooklyn","units":"celsius"},"id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[],"internal_dynamic_variant_config":null}"#;
 
     // With an invalid gateway url, we shouldn't get a version
     assert_eq!(bad_gateway.get_gateway_version().await, None);
@@ -3567,7 +3646,7 @@ async fn check_json_cot_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - JsonInference Table
     let clickhouse = get_clickhouse().await;
@@ -3762,6 +3841,9 @@ async fn test_multiple_text_blocks_in_message() {
     let response = response.json::<Value>().await.unwrap();
     let inference_id = response.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
     // Get the ClickHouse inference
     let clickhouse = get_clickhouse().await;
     let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
@@ -3781,4 +3863,132 @@ async fn test_multiple_text_blocks_in_message() {
         input.messages[0].content[1],
         ResolvedInputMessageContent::Text { .. }
     ));
+}
+
+// We don't use the word 'batch' in the test name, since we already
+// group those tests as 'batch inference' tests
+#[tokio::test(flavor = "multi_thread")]
+async fn test_clickhouse_bulk_insert_off_default() {
+    let client = Arc::new(
+        make_embedded_gateway_with_config(
+            "
+    ",
+        )
+        .await,
+    );
+
+    let ClickHouseConnectionInfo::Production { batch_sender, .. } = client
+        .get_app_state_data()
+        .unwrap()
+        .clickhouse_connection_info
+        .clone()
+    else {
+        panic!("Clickhouse client was not production!");
+    };
+    assert!(
+        batch_sender.is_none(),
+        "Batching should not have been enabled!"
+    );
+}
+
+// We don't use the word 'batch' in the test name, since we already
+// group those tests as 'batch inference' tests
+#[tokio::test(flavor = "multi_thread")]
+async fn test_clickhouse_bulk_insert() {
+    let client = Arc::new(
+        make_embedded_gateway_with_config(
+            "
+    [gateway.observability]
+    enabled = true
+    batch_writes = { enabled = true }
+    ",
+        )
+        .await,
+    );
+
+    let ClickHouseConnectionInfo::Production { batch_sender, .. } = client
+        .get_app_state_data()
+        .unwrap()
+        .clickhouse_connection_info
+        .clone()
+    else {
+        panic!("Clickhouse client was not production!");
+    };
+    assert!(batch_sender.is_some(), "Batching was not enabled!");
+
+    let mut join_set = JoinSet::new();
+    let episode_id = Uuid::now_v7();
+    let inference_count = 10_000;
+    for _ in 0..inference_count {
+        let client = client.clone();
+        join_set.spawn(async move {
+            client
+                .inference(ClientInferenceParams {
+                    episode_id: Some(episode_id),
+                    model_name: Some("dummy::my-model".to_string()),
+                    input: ClientInput {
+                        system: None,
+                        messages: vec![ClientInputMessage {
+                            role: Role::User,
+                            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                                text: "What is the name of the capital city of Japan?".to_string(),
+                            })],
+                        }],
+                    },
+                    ..Default::default()
+                })
+                .await
+                .unwrap()
+        });
+    }
+    let mut expected_inference_ids = HashSet::new();
+    while let Some(result) = join_set.join_next().await {
+        let result = result.unwrap();
+        let InferenceOutput::NonStreaming(response) = result else {
+            panic!("Expected non-streaming response");
+        };
+        expected_inference_ids.insert(response.inference_id());
+    }
+    assert_eq!(expected_inference_ids.len(), inference_count);
+
+    assert_eq!(Arc::strong_count(&client), 1);
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+
+    let clickhouse_client = get_clickhouse().await;
+    let inferences = select_chat_inferences_clickhouse(&clickhouse_client, episode_id)
+        .await
+        .unwrap();
+    let actual_inference_ids = inferences
+        .iter()
+        .map(|i| {
+            i.get("id")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .parse::<Uuid>()
+                .unwrap()
+        })
+        .collect::<HashSet<_>>();
+
+    assert_eq!(actual_inference_ids.len(), inference_count);
+    assert_eq!(actual_inference_ids, expected_inference_ids);
+
+    let model_inferences =
+        select_all_model_inferences_by_chat_episode_id_clickhouse(episode_id, &clickhouse_client)
+            .await
+            .unwrap();
+
+    let actual_model_inference_ids = model_inferences
+        .iter()
+        .map(|i| {
+            i.get("inference_id")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .parse::<Uuid>()
+                .unwrap()
+        })
+        .collect::<HashSet<_>>();
+    assert_eq!(actual_model_inference_ids.len(), inference_count);
+    assert_eq!(actual_model_inference_ids, expected_inference_ids);
 }

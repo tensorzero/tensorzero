@@ -22,15 +22,16 @@
 
 use lazy_static::lazy_static;
 use reqwest::Client;
-use serde::Serialize;
+use serde::{Deserialize, Deserializer, Serialize};
 use std::env;
 use tokio::{
     time::{self, Duration},
     try_join,
 };
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::{config::Config, db::clickhouse::ClickHouseConnectionInfo};
 
 lazy_static! {
     /// The URL to send usage data to.
@@ -41,23 +42,29 @@ lazy_static! {
 
 /// Setup the howdy loop.
 /// This is called from the main function in the gateway or embedded client.
-pub fn setup_howdy(clickhouse: ClickHouseConnectionInfo) {
-    if env::var("TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS").unwrap_or_default() == "1" {
+pub fn setup_howdy(
+    config: &Config,
+    clickhouse: ClickHouseConnectionInfo,
+    token: CancellationToken,
+) {
+    if config.gateway.disable_pseudonymous_usage_analytics
+        || env::var("TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS").unwrap_or_default() == "1"
+    {
         info!("Pseudonymous usage analytics is disabled");
         return;
     }
     if let ClickHouseConnectionInfo::Disabled = clickhouse {
         return;
     }
-    tokio::spawn(howdy_loop(clickhouse));
+    tokio::spawn(howdy_loop(clickhouse, token));
 }
 
 /// Loops and sends usage data to the Howdy service every 6 hours.
-pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo) {
+pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo, token: CancellationToken) {
     let client = Client::new();
     let deployment_id = match get_deployment_id(&clickhouse).await {
         Ok(deployment_id) => deployment_id,
-        Err(_) => {
+        Err(()) => {
             return;
         }
     };
@@ -66,7 +73,12 @@ pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo) {
         let copied_clickhouse = clickhouse.clone();
         let copied_client = client.clone();
         let copied_deployment_id = deployment_id.clone();
-        interval.tick().await;
+        tokio::select! {
+            () = token.cancelled() => {
+                break;
+            }
+            _ = interval.tick() => {}
+        }
         tokio::spawn(async move {
             if let Err(e) =
                 send_howdy(&copied_clickhouse, &copied_client, &copied_deployment_id).await
@@ -117,79 +129,188 @@ pub async fn get_howdy_report<'a>(
     deployment_id: &'a str,
 ) -> Result<HowdyReportBody<'a>, String> {
     let dryrun = cfg!(any(test, feature = "e2e_tests"));
-    let (inference_count, feedback_count) =
-        try_join!(count_inferences(clickhouse), count_feedbacks(clickhouse))?;
+    let (inference_counts, feedback_counts, token_totals) = try_join!(
+        count_inferences(clickhouse),
+        count_feedbacks(clickhouse),
+        get_token_totals(clickhouse)
+    )?;
     Ok(HowdyReportBody {
         deployment_id,
-        inference_count,
-        feedback_count,
+        inference_count: inference_counts.inference_count,
+        feedback_count: feedback_counts.feedback_count,
         gateway_version: crate::endpoints::status::TENSORZERO_VERSION,
         commit_hash: crate::built_info::GIT_COMMIT_HASH_SHORT,
+        input_token_total: token_totals.input_tokens.map(|x| x.to_string()),
+        output_token_total: token_totals.output_tokens.map(|x| x.to_string()),
+        chat_inference_count: Some(inference_counts.chat_inference_count),
+        json_inference_count: Some(inference_counts.json_inference_count),
+        float_metric_feedback_count: Some(feedback_counts.float_metric_feedback_count),
+        boolean_metric_feedback_count: Some(feedback_counts.boolean_metric_feedback_count),
+        comment_feedback_count: Some(feedback_counts.comment_feedback_count),
+        demonstration_feedback_count: Some(feedback_counts.demonstration_feedback_count),
         dryrun,
     })
 }
 
+#[derive(Debug)]
+struct InferenceCounts {
+    inference_count: String,
+    chat_inference_count: String,
+    json_inference_count: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClickHouseInferenceCounts {
+    #[serde(deserialize_with = "deserialize_u64")]
+    chat_inference_count: u64,
+    #[serde(deserialize_with = "deserialize_u64")]
+    json_inference_count: u64,
+}
+
+// Since ClickHouse returns strings for UInt64, we need to deserialize them as u64
+fn deserialize_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    s.parse().map_err(serde::de::Error::custom)
+}
+
 /// Count all inferences in the ClickHouse DB.
 /// This returns a string since u64 cannot be represented in JSON and we simply pass it through to howdy
-async fn count_inferences(clickhouse: &ClickHouseConnectionInfo) -> Result<String, String> {
+async fn count_inferences(
+    clickhouse: &ClickHouseConnectionInfo,
+) -> Result<InferenceCounts, String> {
     let Ok(response) = clickhouse
         .run_query_synchronous_no_params(
-            r"SELECT SUM(count) AS inference_count
-                  FROM
-                  (
-                    SELECT COUNT() AS count FROM ChatInference
-                    UNION ALL
-                    SELECT COUNT() AS count FROM JsonInference
-                  )
-                  "
+            r"
+            SELECT
+                (SELECT COUNT() FROM ChatInference) as chat_inference_count,
+                (SELECT COUNT() FROM JsonInference) as json_inference_count
+            Format JSONEachRow
+            "
             .to_string(),
         )
         .await
     else {
         return Err("Failed to query ClickHouse for inference count".to_string());
     };
-    let response_str = response.response.trim().to_string();
-    // make sure this parses as a u64
-    if response_str.parse::<u64>().is_err() {
-        return Err(format!(
-            "Failed to parse inference count as u64: {}",
-            response.response
-        ));
+    let response_counts: ClickHouseInferenceCounts = serde_json::from_str(&response.response)
+        .map_err(|e| format!("Failed to deserialize ClickHouseInferenceCounts: {e}"))?;
+
+    let inference_count =
+        response_counts.chat_inference_count + response_counts.json_inference_count;
+
+    Ok(InferenceCounts {
+        inference_count: inference_count.to_string(),
+        chat_inference_count: response_counts.chat_inference_count.to_string(),
+        json_inference_count: response_counts.json_inference_count.to_string(),
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct CumulativeUsage {
+    #[serde(deserialize_with = "deserialize_optional_u64")]
+    input_tokens: Option<u64>,
+    #[serde(deserialize_with = "deserialize_optional_u64")]
+    output_tokens: Option<u64>,
+}
+
+// Since ClickHouse returns strings for UInt64, we need to deserialize them as u64
+// If the value is null we return None
+fn deserialize_optional_u64<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrNull {
+        String(String),
+        Null,
     }
-    Ok(response_str)
+
+    match StringOrNull::deserialize(deserializer)? {
+        StringOrNull::String(s) => Some(s.parse().map_err(serde::de::Error::custom)).transpose(),
+        StringOrNull::Null => Ok(None),
+    }
+}
+
+async fn get_token_totals(
+    clickhouse: &ClickHouseConnectionInfo,
+) -> Result<CumulativeUsage, String> {
+    let Ok(response) = clickhouse
+        .run_query_synchronous_no_params(
+            r"
+            SELECT
+                (SELECT count FROM CumulativeUsage FINAL WHERE type = 'input_tokens') as input_tokens,
+                (SELECT count FROM CumulativeUsage FINAL WHERE type = 'output_tokens') as output_tokens
+            Format JSONEachRow
+            "
+            .to_string(),
+        )
+        .await
+    else {
+        return Err("Failed to query ClickHouse for token total count".to_string());
+    };
+    serde_json::from_str(&response.response)
+        .map_err(|e| format!("Failed to deserialize ClickHouseInferenceCounts: {e}"))
+}
+
+#[derive(Debug)]
+struct FeedbackCounts {
+    feedback_count: String,
+    float_metric_feedback_count: String,
+    boolean_metric_feedback_count: String,
+    comment_feedback_count: String,
+    demonstration_feedback_count: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClickHouseFeedbackCounts {
+    #[serde(deserialize_with = "deserialize_u64")]
+    boolean_metric_feedback_count: u64,
+    #[serde(deserialize_with = "deserialize_u64")]
+    float_metric_feedback_count: u64,
+    #[serde(deserialize_with = "deserialize_u64")]
+    demonstration_feedback_count: u64,
+    #[serde(deserialize_with = "deserialize_u64")]
+    comment_feedback_count: u64,
 }
 
 /// Count all feedbacks in the ClickHouse DB.
 /// This returns a string since u64 cannot be represented in JSON and we simply pass it through to howdy
-async fn count_feedbacks(clickhouse: &ClickHouseConnectionInfo) -> Result<String, String> {
+async fn count_feedbacks(clickhouse: &ClickHouseConnectionInfo) -> Result<FeedbackCounts, String> {
     let Ok(response) = clickhouse
         .run_query_synchronous_no_params(
-            r"SELECT SUM(count) AS feedback_count
-                  FROM
-                  (
-                    SELECT COUNT() AS count FROM BooleanMetricFeedback
-                    UNION ALL
-                    SELECT COUNT() AS count FROM FloatMetricFeedback
-                    UNION ALL
-                    SELECT COUNT() AS count FROM DemonstrationFeedback
-                    UNION ALL
-                    SELECT COUNT() AS count FROM CommentFeedback
-                  )
-                  "
+            r"
+            SELECT
+                (SELECT COUNT() FROM BooleanMetricFeedback) as boolean_metric_feedback_count,
+                (SELECT COUNT() FROM FloatMetricFeedback) as float_metric_feedback_count,
+                (SELECT COUNT() FROM DemonstrationFeedback) as demonstration_feedback_count,
+                (SELECT COUNT() FROM CommentFeedback) as comment_feedback_count
+            Format JSONEachRow
+            "
             .to_string(),
         )
         .await
     else {
         return Err("Failed to query ClickHouse for feedback count".to_string());
     };
-    let response_str = response.response.trim().to_string();
-    if response_str.parse::<u64>().is_err() {
-        return Err(format!(
-            "Failed to parse feedback count as u64: {}",
-            response.response
-        ));
-    }
-    Ok(response_str)
+    let response_counts: ClickHouseFeedbackCounts = serde_json::from_str(&response.response)
+        .map_err(|e| format!("Failed to deserialize ClickHouseFeedbackCounts: {e}"))?;
+
+    let feedback_count = response_counts.boolean_metric_feedback_count
+        + response_counts.float_metric_feedback_count
+        + response_counts.demonstration_feedback_count
+        + response_counts.comment_feedback_count;
+
+    Ok(FeedbackCounts {
+        feedback_count: feedback_count.to_string(),
+        float_metric_feedback_count: response_counts.float_metric_feedback_count.to_string(),
+        boolean_metric_feedback_count: response_counts.boolean_metric_feedback_count.to_string(),
+        comment_feedback_count: response_counts.comment_feedback_count.to_string(),
+        demonstration_feedback_count: response_counts.demonstration_feedback_count.to_string(),
+    })
 }
 
 #[derive(Debug, Serialize)]
@@ -199,6 +320,14 @@ pub struct HowdyReportBody<'a> {
     pub feedback_count: String,
     pub gateway_version: &'static str,
     pub commit_hash: Option<&'static str>,
+    pub input_token_total: Option<String>,
+    pub output_token_total: Option<String>,
+    pub chat_inference_count: Option<String>,
+    pub json_inference_count: Option<String>,
+    pub float_metric_feedback_count: Option<String>,
+    pub boolean_metric_feedback_count: Option<String>,
+    pub comment_feedback_count: Option<String>,
+    pub demonstration_feedback_count: Option<String>,
     #[serde(default)]
     pub dryrun: bool,
 }

@@ -7,7 +7,7 @@ use std::{
 
 use crate::error::{Error, ErrorDetails};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TemplateConfig<'c> {
     env: minijinja::Environment<'c>,
 }
@@ -55,11 +55,11 @@ impl TemplateConfig<'_> {
 
     pub fn add_template(
         &mut self,
-        template_name: &str,
-        template_content: &str,
+        template_name: String,
+        template_content: String,
     ) -> Result<(), Error> {
         self.env
-            .add_template_owned(template_name.to_string(), template_content.to_string())
+            .add_template_owned(template_name.clone(), template_content)
             .map_err(|e| {
                 Error::new(ErrorDetails::MiniJinjaTemplate {
                     template_name: template_name.to_string(),
@@ -106,6 +106,10 @@ impl TemplateConfig<'_> {
     // Checks if a template needs any variables (i.e. needs a schema)
     pub fn template_needs_variables(&self, template_name: &str) -> Result<bool, Error> {
         Ok(!self.get_undeclared_variables(template_name)?.is_empty())
+    }
+
+    pub fn contains_template(&self, template_name: &str) -> bool {
+        self.env.get_template(template_name).is_ok()
     }
 
     pub fn add_hardcoded_templates(&mut self) -> Result<(), Error> {
@@ -202,6 +206,8 @@ const MIXTURE_OF_N_FUSER_CANDIDATES: &str = r"Here are the candidate answers (wi
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::jsonschema_util::StaticJSONSchema;
+
     use super::*;
     use serde_json::json;
 
@@ -283,6 +289,48 @@ pub(crate) mod tests {
         let result = templates.template_message("user_with_join", &context);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Hello, hello, hello, world!");
+    }
+
+    pub fn test_system_template_schema() -> StaticJSONSchema {
+        StaticJSONSchema::from_value(json!({
+            "type": "object",
+            "properties": {
+                "assistant_name": {
+                    "type": "string"
+                }
+            },
+            "required": ["assistant_name"]
+        }))
+        .unwrap()
+    }
+
+    pub fn test_user_template_schema() -> StaticJSONSchema {
+        StaticJSONSchema::from_value(json!({
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "age": {
+                    "type": "number"
+                }
+            },
+            "required": ["name", "age"]
+        }))
+        .unwrap()
+    }
+
+    pub fn test_assistant_template_schema() -> StaticJSONSchema {
+        StaticJSONSchema::from_value(json!({
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                }
+            },
+            "required": ["reason"]
+        }))
+        .unwrap()
     }
 
     pub fn get_test_template_config<'a>() -> TemplateConfig<'a> {

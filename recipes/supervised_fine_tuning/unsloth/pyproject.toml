@@ -1,0 +1,17 @@
+[project]
+name = "tensorzero-recipe-sft-unsloth"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "clickhouse-connect",
+    "ipykernel",
+    "ipywidgets",
+    "minijinja",
+    "notebook",
+    "numpy",
+    "pandas",
+    "toml",
+    "unsloth==2025.8.1",
+    "tensorzero>=2025.8.0",
+]

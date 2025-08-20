@@ -10,7 +10,7 @@ use git2::Repository;
 use rayon::prelude::*;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tensorzero::FeedbackParams;
-use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::{config::BatchWritesConfig, db::clickhouse::ClickHouseConnectionInfo};
 use uuid::Uuid;
 
 use crate::{
@@ -56,7 +56,9 @@ pub async fn process_inferences(
     user: Option<String>,
 ) -> Result<HashMap<Uuid, InferenceWithTrees>> {
     let clickhouse_url = std::env::var("CURSORZERO_CLICKHOUSE_URL")?;
-    let clickhouse = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
+    // Don't use batching here
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&clickhouse_url, BatchWritesConfig::default()).await?;
     let inferences = get_inferences_in_time_range(&clickhouse, commit_interval, user).await?;
 
     let inference_results: Vec<_> = inferences

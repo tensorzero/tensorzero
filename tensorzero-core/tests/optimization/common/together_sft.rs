@@ -15,12 +15,16 @@ impl OptimizationTestCase for TogetherSFTTestCase {
         false
     }
 
-    fn get_optimizer_info(&self, _use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
+    fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
         UninitializedOptimizerInfo {
             inner: UninitializedOptimizerConfig::TogetherSFT(UninitializedTogetherSFTConfig {
                 model: "meta-llama/Meta-Llama-3.1-8B-Instruct-Reference".to_string(),
                 credentials: None,
-                api_base: None,
+                api_base: if use_mock_inference_provider {
+                    Some("http://localhost:3030/together/".parse().unwrap())
+                } else {
+                    None
+                },
             }),
         }
     }

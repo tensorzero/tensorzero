@@ -18,7 +18,10 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
-use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
+use crate::embeddings::EmbeddingEncodingFormat;
+use crate::embeddings::{
+    Embedding, EmbeddingInput, EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest,
+};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
@@ -35,7 +38,7 @@ use crate::inference::types::{
     TextChunk, Usage,
 };
 use crate::inference::types::{
-    FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
+    FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, ThoughtChunk,
 };
 use crate::inference::InferenceProvider;
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
@@ -497,7 +500,7 @@ impl InferenceProvider for OpenAIProvider {
             get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         request_url
             .path_segments_mut()
-            .map_err(|_| {
+            .map_err(|()| {
                 Error::new(ErrorDetails::Inference {
                     message: "Failed to get mutable path segments".to_string(),
                 })
@@ -585,7 +588,12 @@ impl EmbeddingProvider for OpenAIProvider {
         dynamic_api_keys: &InferenceCredentials,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_body = OpenAIEmbeddingRequest::new(&self.model_name, &request.input);
+        let request_body = OpenAIEmbeddingRequest::new(
+            &self.model_name,
+            &request.input,
+            request.dimensions,
+            request.encoding_format,
+        );
         let request_url =
             get_embedding_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let start_time = Instant::now();
@@ -1132,7 +1140,7 @@ pub fn prepare_openai_messages<'a>(
     provider_type: &str,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut openai_messages = Vec::with_capacity(messages.len());
-    for message in messages.iter() {
+    for message in messages {
         openai_messages.extend(tensorzero_to_openai_messages(message, provider_type)?);
     }
     if let Some(system_msg) =
@@ -1244,7 +1252,7 @@ fn tensorzero_to_openai_user_messages<'a>(
     let mut messages = Vec::new();
     let mut user_content_blocks = Vec::new();
 
-    for block in content_blocks.iter() {
+    for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
                 user_content_blocks.push(OpenAIContentBlock::Text {
@@ -1809,6 +1817,10 @@ impl From<OpenAIResponseToolCall> for ToolCall {
 pub(super) struct OpenAIResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) content: Option<String>,
+    // OpenAI doesn't currently set this field, but some OpenAI-compatible
+    // providers (e.g. VLLM) do.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) tool_calls: Option<Vec<OpenAIResponseToolCall>>,
 }
@@ -1946,6 +1958,10 @@ struct OpenAIToolCallChunk {
 struct OpenAIDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
+    // OpenAI doesn't currently set this field, but some OpenAI-compatible
+    // providers (e.g. VLLM) do.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenAIToolCallChunk>>,
 }
@@ -2010,6 +2026,16 @@ fn openai_to_tensorzero_chunk(
         if let Some(choice_finish_reason) = choice.finish_reason {
             finish_reason = Some(choice_finish_reason.into());
         }
+        if let Some(reasoning) = choice.delta.reasoning_content {
+            // We don't have real chunk ids, so always use chunk id 1 for reasoning content
+            // (which should get concatenated into a single ContentBlock by the client)
+            content.push(ContentBlockChunk::Thought(ThoughtChunk {
+                text: Some(reasoning),
+                signature: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                id: "1".to_string(),
+            }));
+        }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {
                 text,
@@ -2058,12 +2084,24 @@ fn openai_to_tensorzero_chunk(
 #[derive(Debug, Serialize)]
 struct OpenAIEmbeddingRequest<'a> {
     model: &'a str,
-    input: &'a str,
+    input: &'a EmbeddingInput,
+    dimensions: Option<u32>,
+    encoding_format: EmbeddingEncodingFormat,
 }
 
 impl<'a> OpenAIEmbeddingRequest<'a> {
-    fn new(model: &'a str, input: &'a str) -> Self {
-        Self { model, input }
+    fn new(
+        model: &'a str,
+        input: &'a EmbeddingInput,
+        dimensions: Option<u32>,
+        encoding_format: EmbeddingEncodingFormat,
+    ) -> Self {
+        Self {
+            model,
+            input,
+            dimensions,
+            encoding_format,
+        }
     }
 }
 
@@ -2082,7 +2120,7 @@ struct OpenAIEmbeddingResponseWithMetadata<'a> {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct OpenAIEmbeddingData {
-    embedding: Vec<f32>,
+    embedding: Embedding,
 }
 
 impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderResponse {
@@ -2106,31 +2144,15 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
             })
         })?;
 
-        if response.data.len() != 1 {
-            return Err(Error::new(ErrorDetails::InferenceServer {
-                message: "Expected exactly one embedding in response".to_string(),
-                raw_request: Some(raw_request.clone()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }));
-        }
-        let embedding = response
+        let embeddings = response
             .data
             .into_iter()
-            .next()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: "Expected exactly one embedding in response".to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?
-            .embedding;
+            .map(|embedding| embedding.embedding)
+            .collect();
 
         Ok(EmbeddingProviderResponse::new(
-            embedding,
-            request.input.to_string(),
+            embeddings,
+            request.input.clone(),
             raw_request,
             raw_response,
             response.usage.into(),
@@ -2710,6 +2732,7 @@ mod tests {
                 index: 0,
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: OpenAIFinishReason::Stop,
@@ -2802,6 +2825,7 @@ mod tests {
                 finish_reason: OpenAIFinishReason::ToolCalls,
                 message: OpenAIResponseMessage {
                     content: None,
+                    reasoning_content: None,
                     tool_calls: Some(vec![OpenAIResponseToolCall {
                         id: "call1".to_string(),
                         r#type: OpenAIToolType::Function,
@@ -2946,6 +2970,7 @@ mod tests {
                     index: 0,
                     message: OpenAIResponseMessage {
                         content: Some("Choice 1".to_string()),
+                        reasoning_content: None,
                         tool_calls: None,
                     },
                     finish_reason: OpenAIFinishReason::Stop,
@@ -2955,6 +2980,7 @@ mod tests {
                     finish_reason: OpenAIFinishReason::Stop,
                     message: OpenAIResponseMessage {
                         content: Some("Choice 2".to_string()),
+                        reasoning_content: None,
                         tool_calls: None,
                     },
                 },
@@ -3149,6 +3175,7 @@ mod tests {
             choices: vec![OpenAIChatChunkChoice {
                 delta: OpenAIDelta {
                     content: Some("Hello".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: Some(OpenAIFinishReason::Stop),
@@ -3177,6 +3204,7 @@ mod tests {
                 finish_reason: Some(OpenAIFinishReason::ToolCalls),
                 delta: OpenAIDelta {
                     content: None,
+                    reasoning_content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
                         index: 0,
                         id: None,
@@ -3211,6 +3239,7 @@ mod tests {
                 finish_reason: None,
                 delta: OpenAIDelta {
                     content: None,
+                    reasoning_content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
                         index: 1,
                         id: None,
@@ -3246,6 +3275,7 @@ mod tests {
                 finish_reason: Some(OpenAIFinishReason::Stop),
                 delta: OpenAIDelta {
                     content: None,
+                    reasoning_content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
                         index: 1,
                         id: Some("id2".to_string()),

@@ -6,7 +6,9 @@ use reqwest::Client;
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use tensorzero_core::clickhouse::test_helpers::{get_clickhouse, select_chat_inference_clickhouse};
+use tensorzero_core::db::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse,
+};
 use uuid::Uuid;
 
 use crate::{
@@ -147,6 +149,7 @@ async fn get_providers() -> E2ETestProviders {
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: vec![],
+        embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: tool_providers.clone(),

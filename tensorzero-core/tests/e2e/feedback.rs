@@ -1,7 +1,10 @@
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_core::{
-    clickhouse::test_helpers::{select_feedback_clickhouse, select_feedback_tags_clickhouse},
+    config::{Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
+    db::clickhouse::test_helpers::{select_feedback_clickhouse, select_feedback_tags_clickhouse},
+    endpoints::feedback::{feedback, Params},
+    gateway_util::GatewayHandle,
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
 };
 use tokio::time::{sleep, Duration};
@@ -10,7 +13,7 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::make_embedded_gateway;
-use tensorzero_core::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 
 #[tokio::test]
 async fn e2e_test_comment_feedback_normal_function() {
@@ -168,6 +171,39 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
     assert_eq!(retrieved_target_type, "inference");
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
     assert_eq!(retrieved_value, "bad job!");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_test_comment_feedback_validation_disabled() {
+    let mut config = Config::default();
+    let clickhouse = get_clickhouse().await;
+    config.gateway.unstable_disable_feedback_target_validation = true;
+    let handle = GatewayHandle::new_with_clickhouse_and_http_client(
+        config.into(),
+        clickhouse.clone(),
+        reqwest::Client::new(),
+    );
+    let inference_id = Uuid::now_v7();
+    let params = Params {
+        inference_id: Some(inference_id),
+        metric_name: "comment".to_string(),
+        value: json!("foo bar"),
+        ..Default::default()
+    };
+    let val = feedback(handle.app_state.clone(), params).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Check that this was correctly written to ClickHouse
+    let query = format!(
+        "SELECT * FROM CommentFeedback WHERE target_id='{inference_id}' FORMAT JsonEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let result: Value = serde_json::from_str(&response.response).unwrap();
+    let clickhouse_feedback_id = Uuid::parse_str(result["id"].as_str().unwrap()).unwrap();
+    assert_eq!(val.feedback_id, clickhouse_feedback_id);
 }
 
 #[tokio::test]
@@ -1160,6 +1196,47 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
     assert_eq!(metric_name, "brevity_score");
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_test_float_feedback_validation_disabled() {
+    let mut config = Config::default();
+    let metric_config = MetricConfig {
+        r#type: MetricConfigType::Float,
+        optimize: MetricConfigOptimize::Max,
+        level: MetricConfigLevel::Inference,
+    };
+    config
+        .metrics
+        .insert("user_score".to_string(), metric_config);
+    let clickhouse = get_clickhouse().await;
+    config.gateway.unstable_disable_feedback_target_validation = true;
+    let handle = GatewayHandle::new_with_clickhouse_and_http_client(
+        config.into(),
+        clickhouse.clone(),
+        reqwest::Client::new(),
+    );
+    let inference_id = Uuid::now_v7();
+    let params = Params {
+        inference_id: Some(inference_id),
+        metric_name: "user_score".to_string(),
+        value: json!(3.1),
+        ..Default::default()
+    };
+    let val = feedback(handle.app_state.clone(), params).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Check that this was correctly written to ClickHouse
+    let query = format!(
+        "SELECT * FROM FloatMetricFeedback WHERE target_id='{inference_id}' FORMAT JsonEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let result: Value = serde_json::from_str(&response.response).unwrap();
+    let clickhouse_feedback_id = Uuid::parse_str(result["id"].as_str().unwrap()).unwrap();
+    assert_eq!(val.feedback_id, clickhouse_feedback_id);
+}
+
 #[tokio::test]
 async fn e2e_test_boolean_feedback_normal_function() {
     e2e_test_boolean_feedback_with_payload(serde_json::json!({
@@ -1351,6 +1428,47 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
     assert!(retrieved_value);
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "goal_achieved");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_test_boolean_feedback_validation_disabled() {
+    let mut config = Config::default();
+    let metric_config = MetricConfig {
+        r#type: MetricConfigType::Boolean,
+        optimize: MetricConfigOptimize::Max,
+        level: MetricConfigLevel::Inference,
+    };
+    config
+        .metrics
+        .insert("task_success".to_string(), metric_config);
+    let clickhouse = get_clickhouse().await;
+    config.gateway.unstable_disable_feedback_target_validation = true;
+    let handle = GatewayHandle::new_with_clickhouse_and_http_client(
+        config.into(),
+        clickhouse.clone(),
+        reqwest::Client::new(),
+    );
+    let inference_id = Uuid::now_v7();
+    let params = Params {
+        inference_id: Some(inference_id),
+        metric_name: "task_success".to_string(),
+        value: json!(true),
+        ..Default::default()
+    };
+    let val = feedback(handle.app_state.clone(), params).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Check that this was correctly written to ClickHouse
+    let query = format!(
+        "SELECT * FROM BooleanMetricFeedback WHERE target_id='{inference_id}' FORMAT JsonEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let result: Value = serde_json::from_str(&response.response).unwrap();
+    let clickhouse_feedback_id = Uuid::parse_str(result["id"].as_str().unwrap()).unwrap();
+    assert_eq!(val.feedback_id, clickhouse_feedback_id);
 }
 
 #[tokio::test(flavor = "multi_thread")]

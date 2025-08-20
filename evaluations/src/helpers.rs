@@ -4,10 +4,10 @@ use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use serde_json::Value;
 use tensorzero::{CacheParamsOptions, DynamicToolParams, InferenceResponse};
-use tensorzero_core::clickhouse::escape_string_for_clickhouse_literal;
+use tensorzero_core::db::clickhouse::escape_string_for_clickhouse_literal;
 use tensorzero_core::serde_util::deserialize_json_string;
 use tensorzero_core::{
-    cache::CacheEnabledMode, clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
+    cache::CacheEnabledMode, db::clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
     tool::ToolCallConfigDatabaseInsert,
 };
 use tracing::debug;
@@ -27,7 +27,7 @@ pub async fn get_tool_params_args(
         FunctionConfig::Chat(function_config) => {
             let mut additional_tools = Vec::new();
             let mut allowed_tools = Vec::new();
-            for tool in tool_params.tools_available.iter() {
+            for tool in &tool_params.tools_available {
                 if function_config.tools.contains(&tool.name) {
                     allowed_tools.push(tool.name.clone());
                 } else {
@@ -133,7 +133,7 @@ mod tests {
 
     use serde_json::json;
     use tensorzero::Tool;
-    use tensorzero_core::{function::FunctionConfigChat, tool::ToolChoice};
+    use tensorzero_core::{config::SchemaData, function::FunctionConfigChat, tool::ToolChoice};
 
     use super::*;
 
@@ -152,9 +152,7 @@ mod tests {
         };
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             tool_choice: ToolChoice::Specific("tool_1".to_string()),
             parallel_tool_calls: None,
@@ -189,9 +187,7 @@ mod tests {
         };
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec!["tool_1".to_string()],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
