@@ -51,7 +51,7 @@ RUN pnpm install --frozen-lockfile --prod
 
 # ========== tensorzero-node-build-env ==========
 
-FROM rust:latest AS tensorzero-node-build-env
+FROM rust:1.88.0 AS tensorzero-node-build-env
 
 RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm

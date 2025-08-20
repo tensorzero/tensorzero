@@ -2,8 +2,6 @@
 
 # TensorZero
 
-> <img src="https://assets.tensorzero.com/product-hunt.svg" alt="Product Hunt logo" height="10" width="10"> TensorZero is **[launching on Product Hunt today](https://www.producthunt.com/products/tensorzero?launch=tensorzero)** and we'd really appreciate your support!
-
 <p><picture><img src="https://www.tensorzero.com/github-trending-badge.svg" alt="#1 Repository Of The Day"></picture></p>
 
 **TensorZero is an open-source stack for _industrial-grade LLM applications_:**

@@ -12,9 +12,9 @@ use tokio::sync::oneshot::Sender;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-use crate::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
-use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::{Config, ConfigFileGlob};
+use crate::config::{Config, ConfigFileGlob};
+use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
@@ -348,7 +348,7 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
-    use crate::config_parser::{gateway::GatewayConfig, ObservabilityConfig};
+    use crate::config::{gateway::GatewayConfig, ObservabilityConfig};
 
     #[tokio::test]
     #[traced_test]

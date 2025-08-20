@@ -26,7 +26,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cache::CacheParamsOptions;
-use crate::config_parser::UninitializedVariantInfo;
+use crate::config::UninitializedVariantInfo;
 use crate::embeddings::{Embedding, EmbeddingInput};
 use crate::endpoints::embeddings::Params as EmbeddingParams;
 use crate::endpoints::inference::{

@@ -10,7 +10,7 @@ use evaluations::{Clients, ThrottledTensorZeroClient};
 use serde_json::json;
 use tensorzero::input_handling::resolved_input_to_client_input;
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     select_human_static_evaluation_feedback_clickhouse, select_model_inferences_clickhouse,
 };
 use tensorzero_core::endpoints::datasets::Datapoint;
@@ -29,7 +29,7 @@ use std::{path::PathBuf, sync::Arc};
 use tensorzero::{ClientBuilder, ClientBuilderMode, FeedbackParams};
 use tensorzero::{InferenceResponse, Role};
 use tensorzero_core::{
-    clickhouse::test_helpers::{
+    db::clickhouse::test_helpers::{
         clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
         select_feedback_by_target_id_clickhouse, select_json_inference_clickhouse,
     },
@@ -1227,6 +1227,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         clickhouse_url: None,
         timeout: None,
         verify_credentials: true,
+        allow_batch_writes: true,
     })
     .build()
     .await
