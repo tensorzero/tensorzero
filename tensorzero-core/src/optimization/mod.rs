@@ -1,4 +1,4 @@
-use crate::config_parser::UninitializedVariantConfig;
+use crate::config::UninitializedVariantConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};

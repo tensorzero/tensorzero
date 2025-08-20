@@ -11,7 +11,7 @@ use toml::{
 };
 
 use crate::error::{Error, ErrorDetails};
-use crate::{config_parser::span_map::SpanMap, error::IMPOSSIBLE_ERROR_MESSAGE};
+use crate::{config::span_map::SpanMap, error::IMPOSSIBLE_ERROR_MESSAGE};
 
 /// Wrapper type to enforce proper handling of toml-relative paths.
 /// When we add support for config globbing, we'll require deserializing

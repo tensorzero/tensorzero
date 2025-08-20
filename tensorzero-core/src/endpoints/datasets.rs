@@ -23,7 +23,7 @@ use uuid::Uuid;
 use crate::inference::types::Text;
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredSample};
 use crate::{
-    config_parser::Config,
+    config::Config,
     db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     error::{Error, ErrorDetails},
     function::FunctionConfig,

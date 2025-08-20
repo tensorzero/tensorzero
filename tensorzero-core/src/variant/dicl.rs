@@ -3,9 +3,9 @@ use std::sync::Arc;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::config_parser::path::TomlRelativePath;
-use crate::config_parser::LoadableConfig;
-use crate::config_parser::PathWithContents;
+use crate::config::path::TomlRelativePath;
+use crate::config::LoadableConfig;
+use crate::config::PathWithContents;
 use crate::embeddings::EmbeddingEncodingFormat;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;

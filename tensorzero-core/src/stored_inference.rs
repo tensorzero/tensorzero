@@ -7,7 +7,7 @@ use crate::inference::types::pyo3_helpers::{
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::Text;
 use crate::{
-    config_parser::Config,
+    config::Config,
     error::{Error, ErrorDetails},
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ModelInput, ResolvedInput},
     tool::ToolCallConfigDatabaseInsert,

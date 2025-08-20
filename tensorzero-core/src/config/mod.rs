@@ -16,9 +16,9 @@ use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 
-use crate::config_parser::gateway::{GatewayConfig, UninitializedGatewayConfig};
-use crate::config_parser::path::TomlRelativePath;
-use crate::config_parser::span_map::SpanMap;
+use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
+use crate::config::path::TomlRelativePath;
+use crate::config::span_map::SpanMap;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;

@@ -17,11 +17,11 @@ use tensorzero::{
     InferenceResponse,
 };
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::config_parser::{ConfigFileGlob, MetricConfigOptimize};
+use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::{
-    config_parser::Config, db::clickhouse::ClickHouseConnectionInfo,
-    endpoints::datasets::Datapoint, function::FunctionConfig,
+    config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
+    function::FunctionConfig,
 };
 use tokio::{sync::Semaphore, task::JoinSet};
 use tracing::{debug, error, info, instrument};

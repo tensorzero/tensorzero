@@ -1,4 +1,4 @@
-use crate::config_parser::{ErrorContext, SchemaData, UninitializedVariantInfo};
+use crate::config::{ErrorContext, SchemaData, UninitializedVariantInfo};
 use crate::error::Error;
 
 use super::VariantInfo;
