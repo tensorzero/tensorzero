@@ -483,6 +483,11 @@ async fn test_clickhouse_model_latency_day() {
 async fn test_clickhouse_model_latency_cumulative() {
     let clickhouse = get_clickhouse().await;
     let response = clickhouse
+        .run_query_synchronous_no_params("SELECT COUNT() FROM ModelInference".to_string())
+        .await
+        .unwrap();
+    println!("Number of model inferences: {}", response.response);
+    let response = clickhouse
         .run_query_synchronous_no_params(
             "SELECT * FROM ModelProviderStatistics FORMAT Vertical".to_string(),
         )
