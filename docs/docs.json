@@ -26,7 +26,6 @@
               "faq",
               {
                 "group": "Comparison",
-                "hidden": true,
                 "pages": [
                   "comparison/dspy",
                   "comparison/langchain",
@@ -46,7 +45,6 @@
               "gateway/tutorial",
               {
                 "group": "Guides",
-                "hidden": false,
                 "pages": [
                   {
                     "group": "Model Providers",
@@ -98,7 +96,6 @@
               "gateway/integrations",
               {
                 "group": "API Reference",
-                "hidden": false,
                 "pages": [
                   "gateway/api-reference/inference",
                   "gateway/api-reference/inference-openai-compatible",
@@ -106,6 +103,31 @@
                   "gateway/api-reference/batch-inference",
                   "gateway/api-reference/datasets-datapoints",
                   "gateway/api-reference/auxiliary-endpoints"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Optimization",
+            "pages": ["recipes/index"]
+          },
+          {
+            "group": "Evaluations",
+            "pages": [
+              "evaluations/index",
+              {
+                "group": "Static Evaluations",
+                "pages": [
+                  "evaluations/static-evaluations/tutorial",
+                  "evaluations/static-evaluations/configuration-reference",
+                  "evaluations/static-evaluations/cli-reference"
+                ]
+              },
+              {
+                "group": "Dynamic Evaluations",
+                "pages": [
+                  "evaluations/dynamic-evaluations/tutorial",
+                  "evaluations/dynamic-evaluations/api-reference"
                 ]
               }
             ]
