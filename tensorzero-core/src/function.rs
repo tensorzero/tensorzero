@@ -1,4 +1,4 @@
-use crate::config_parser::SchemaData;
+use crate::config::SchemaData;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -699,7 +699,7 @@ mod tests {
     use crate::variant::VariantConfig;
 
     use super::*;
-    use crate::config_parser::path::TomlRelativePath;
+    use crate::config::path::TomlRelativePath;
     use serde_json::json;
     use std::io::Write;
     use std::time::Duration;

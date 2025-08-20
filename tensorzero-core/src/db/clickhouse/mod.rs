@@ -17,11 +17,11 @@ use url::Url;
 mod batching;
 pub mod migration_manager;
 pub mod query_builder;
-#[cfg(any(test, feature = "e2e_tests", feature = "optimization_tests"))]
+#[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
 
-use crate::config_parser::BatchWritesConfig;
-use crate::config_parser::Config;
+use crate::config::BatchWritesConfig;
+use crate::config::Config;
 use crate::db::clickhouse::batching::BatchSender;
 use crate::db::clickhouse::batching::BatchWriterHandle;
 use crate::error::DisplayOrDebugGateway;

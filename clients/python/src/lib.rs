@@ -25,7 +25,7 @@ use python_helpers::{
     python_uuid_to_uuid,
 };
 use tensorzero_core::{
-    config_parser::{ConfigPyClass, FunctionsConfigPyClass},
+    config::{ConfigPyClass, FunctionsConfigPyClass},
     db::clickhouse::{query_builder::OrderBy, ClickhouseFormat},
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
@@ -41,7 +41,8 @@ use tensorzero_core::{
         fireworks_sft::UninitializedFireworksSFTConfig,
         gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig,
         openai_rft::UninitializedOpenAIRFTConfig, openai_sft::UninitializedOpenAISFTConfig,
-        OptimizationJobInfoPyClass, OptimizationJobStatus, UninitializedOptimizerInfo,
+        together_sft::UninitializedTogetherSFTConfig, OptimizationJobInfoPyClass,
+        OptimizationJobStatus, UninitializedOptimizerInfo,
     },
     variant::{
         BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
@@ -97,6 +98,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<UninitializedOpenAISFTConfig>()?;
     m.add_class::<UninitializedFireworksSFTConfig>()?;
     m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
+    m.add_class::<UninitializedTogetherSFTConfig>()?;
     m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;

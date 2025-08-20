@@ -13,6 +13,7 @@ use crate::inference::types::{ContentBlockChatOutput, ResolvedInput, ResolvedInp
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
 use crate::optimization::openai_rft::UninitializedOpenAIRFTConfig;
 use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
+use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
 use crate::optimization::UninitializedOptimizerConfig;
 use crate::stored_inference::{
     RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredSample,
@@ -326,9 +327,11 @@ pub fn deserialize_optimization_config(
         Ok(UninitializedOptimizerConfig::OpenAIRFT(obj.extract()?))
     } else if obj.is_instance_of::<UninitializedFireworksSFTConfig>() {
         Ok(UninitializedOptimizerConfig::FireworksSFT(obj.extract()?))
+    } else if obj.is_instance_of::<UninitializedTogetherSFTConfig>() {
+        Ok(UninitializedOptimizerConfig::TogetherSFT(obj.extract()?))
     } else {
         Err(PyValueError::new_err(
-            "Invalid optimization config. Expected OpenAISFTConfig, OpenAIRFTConfig, or FireworksSFTConfig",
+            "Invalid optimization config. Expected OpenAISFTConfig, OpenAIRFTConfig, FireworksSFTConfig, or TogetherSFTConfig",
         ))
     }
 }

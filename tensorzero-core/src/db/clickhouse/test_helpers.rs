@@ -1,5 +1,5 @@
 #![expect(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
-use crate::config_parser::BatchWritesConfig;
+use crate::config::BatchWritesConfig;
 use crate::endpoints::datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint};
 use crate::endpoints::dynamic_evaluation_run::{
     DynamicEvaluationRunEpisodeRow, DynamicEvaluationRunRow,

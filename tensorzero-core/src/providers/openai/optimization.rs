@@ -10,7 +10,7 @@ use super::{
     OpenAIRequestMessage, OpenAISFTTool, PrepareOpenAIMessagesArgs,
 };
 use crate::{
-    config_parser::TimeoutsConfig,
+    config::TimeoutsConfig,
     endpoints::openai_compatible::JsonSchemaInfo,
     error::{Error, ErrorDetails},
     inference::types::{ContentBlock, ContentBlockChatOutput},
