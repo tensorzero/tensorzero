@@ -3,12 +3,14 @@ steps:
     command:
       # Install cargo-binstall
       - "curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash"
-      - "echo $PATH"
       # Install uv
-      # - "curl -LsSf https://astral.sh/uv/install.sh | sh"
-      # - "export PATH=$PATH:$HOME/.local/bin"
-      # # Install Python
-      # - "uv python install"
+      - "echo $PATH"
+      - "curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh"
+      - "echo $PATH"
+      - "export PATH=$PATH:$HOME/.local/bin"
+      - "echo $PATH"
+      # Install Python
+      - "uv python install"
       # Install cargo-nextest
       # TODO: install the pre-built package instead of building from source
       - "cargo binstall -y cargo-nextest --secure"
