@@ -29,8 +29,8 @@ use crate::{
     function::FunctionConfig,
     gateway_util::{AppState, StructuredJson},
     inference::types::{
-        ChatInferenceDatabaseInsert, ContentBlockChatOutput, ResolveContext, Input,
-        JsonInferenceDatabaseInsert, JsonInferenceOutput,
+        ChatInferenceDatabaseInsert, ContentBlockChatOutput, Input, JsonInferenceDatabaseInsert,
+        JsonInferenceOutput, ResolveContext,
     },
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
     tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},

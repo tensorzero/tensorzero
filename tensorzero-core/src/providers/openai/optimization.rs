@@ -299,8 +299,8 @@ pub enum OpenAIFineTuningJobStatus {
 mod tests {
     use crate::{
         inference::types::{
-            ContentBlockChatOutput, ModelInput, RequestMessage, StoredInput, StoredInputMessage,
-            StoredInputMessageContent, Role, Text,
+            ContentBlockChatOutput, ModelInput, RequestMessage, Role, StoredInput,
+            StoredInputMessage, StoredInputMessageContent, Text,
         },
         providers::openai::OpenAIContentBlock,
     };

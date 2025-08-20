@@ -35,10 +35,10 @@ use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
     collect_chunks, Base64File, ChatInferenceDatabaseInsert, ChatInferenceResultChunk,
-    CollectChunksArgs, ContentBlockChatOutput, ContentBlockChunk, ResolveContext, FinishReason,
-    InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
-    InternalJsonInferenceOutput, JsonInferenceDatabaseInsert, JsonInferenceOutput,
-    JsonInferenceResultChunk, ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput,
+    CollectChunksArgs, ContentBlockChatOutput, ContentBlockChunk, FinishReason, InferenceResult,
+    InferenceResultChunk, InferenceResultStream, Input, InternalJsonInferenceOutput,
+    JsonInferenceDatabaseInsert, JsonInferenceOutput, JsonInferenceResultChunk,
+    ModelInferenceResponseWithMetadata, RequestMessage, ResolveContext, ResolvedInput,
     ResolvedInputMessageContent, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
@@ -875,15 +875,21 @@ async fn write_inference(
         // Write the inference to the Inference table
         match result {
             InferenceResult::Chat(result) => {
-                let chat_inference =
-                    ChatInferenceDatabaseInsert::new(result, input.clone().into_stored_input(), metadata);
+                let chat_inference = ChatInferenceDatabaseInsert::new(
+                    result,
+                    input.clone().into_stored_input(),
+                    metadata,
+                );
                 let _ = clickhouse_connection_info
                     .write_batched(&[chat_inference], TableName::ChatInference)
                     .await;
             }
             InferenceResult::Json(result) => {
-                let json_inference =
-                    JsonInferenceDatabaseInsert::new(result, input.clone().into_stored_input(), metadata);
+                let json_inference = JsonInferenceDatabaseInsert::new(
+                    result,
+                    input.clone().into_stored_input(),
+                    metadata,
+                );
                 let _ = clickhouse_connection_info
                     .write_batched(&[json_inference], TableName::JsonInference)
                     .await;

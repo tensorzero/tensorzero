@@ -3,8 +3,7 @@ use regex::Regex;
 use serde_json::Value;
 use std::path::PathBuf;
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput,
-    StoredInput, StoredInputMessage, StoredInputMessageContent,
+    ContentBlockChatOutput, StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
 /*
 This file handles the outputs of inferences from Cursor. We handle two cases:

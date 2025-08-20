@@ -768,7 +768,9 @@ mod tests {
         inference::types::{
             ChatInferenceResult, FinishReason, JsonInferenceResult, Latency, Usage,
         },
-        minijinja_util::tests::{get_system_filled_template, get_system_template, get_test_template_config},
+        minijinja_util::tests::{
+            get_system_filled_template, get_system_template, get_test_template_config,
+        },
         model::{ModelConfig, ModelProvider, ProviderConfig},
         providers::dummy::DummyProvider,
     };

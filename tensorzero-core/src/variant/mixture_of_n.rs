@@ -859,7 +859,10 @@ mod tests {
             Latency, ModelInferenceResponseWithMetadata, Text, Thought,
         },
         jsonschema_util::StaticJSONSchema,
-        minijinja_util::tests::{get_system_filled_template, get_system_template, get_test_template_config, test_system_template_schema},
+        minijinja_util::tests::{
+            get_system_filled_template, get_system_template, get_test_template_config,
+            test_system_template_schema,
+        },
         model::{ModelConfig, ModelProvider, ProviderConfig},
         providers::dummy::DummyProvider,
         tool::{ToolCallConfig, ToolCallOutput, ToolChoice},

@@ -44,10 +44,7 @@ impl ChatTemplates {
     }
 
     pub fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
-        self.templates
-            .values()
-            .map(|t| &t.template)
-            .collect()
+        self.templates.values().map(|t| &t.template).collect()
     }
 }
 
