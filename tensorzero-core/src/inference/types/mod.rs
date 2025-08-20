@@ -34,7 +34,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
-use crate::{cache::CacheData, config_parser::ObjectStoreInfo};
+use crate::{cache::CacheData, config::ObjectStoreInfo};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{
     endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceIds},
@@ -209,6 +209,8 @@ pub enum InputMessageContent {
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(untagged, deny_unknown_fields)]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum TextKind {
     Text { text: String },
     Arguments { arguments: Map<String, Value> },
@@ -249,9 +251,8 @@ impl<'de> Deserialize<'de> for TextKind {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum Role {
@@ -284,9 +285,8 @@ impl Role {
 /// These RequestMessages are collected into a ModelInferenceRequest,
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct Text {
     pub text: String,
@@ -307,9 +307,8 @@ impl Text {
 }
 
 /// Struct that represents Chain of Thought reasoning
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
     pub text: Option<String>,
@@ -396,9 +395,8 @@ pub enum ContentBlockOutput {
 }
 
 /// Defines the types of content block that can come from a `chat` function
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockChatOutput {
     Text(Text),
@@ -529,7 +527,8 @@ impl ModelInput {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum FinishReason {
     Stop,
@@ -561,7 +560,8 @@ pub struct ProviderInferenceResponse {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Usage {
     pub input_tokens: u32,
     pub output_tokens: u32,
@@ -671,10 +671,9 @@ pub struct JsonInferenceResult {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct JsonInferenceOutput {
     pub raw: Option<String>,
     pub parsed: Option<Value>,
@@ -1932,6 +1931,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::SchemaData;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::TemplateConfig;
@@ -2688,12 +2688,10 @@ mod tests {
             "required": ["name", "age"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             implicit_tool_call_config,
             output_schema,
             description: None,
@@ -2956,12 +2954,10 @@ mod tests {
             "required": ["name", "age"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             implicit_tool_call_config,
             output_schema,
             description: None,
@@ -3056,12 +3052,10 @@ mod tests {
             "required": ["name"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&static_output_schema);
-        let output_schema = StaticJSONSchema::from_value(&static_output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(static_output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             implicit_tool_call_config,
             output_schema,
             description: None,

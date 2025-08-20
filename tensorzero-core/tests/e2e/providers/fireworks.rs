@@ -91,19 +91,29 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    let thinking_block_providers = vec![E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "fireworks-deepseek".to_string(),
-        model_name: "deepseek-r1".into(),
-        model_provider_name: "fireworks".into(),
-        credentials: HashMap::new(),
-    }];
+    let thinking_block_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "fireworks-deepseek".to_string(),
+            model_name: "deepseek-r1".into(),
+            model_provider_name: "fireworks".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "fireworks-gpt-oss-20b".to_string(),
+            model_name: "gpt-oss-20b-fireworks".into(),
+            model_provider_name: "fireworks".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     E2ETestProviders {
         simple_inference: providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: thinking_block_providers.clone(),
+        embeddings: vec![],
         inference_params_inference: providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: tool_providers.clone(),

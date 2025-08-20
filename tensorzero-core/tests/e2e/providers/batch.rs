@@ -11,7 +11,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use tensorzero_core::{
-    clickhouse::{
+    db::clickhouse::{
         test_helpers::select_batch_model_inferences_clickhouse, ClickHouseConnectionInfo, TableName,
     },
     endpoints::batch_inference::PollPathParams,
@@ -25,7 +25,7 @@ use tokio::time::{sleep, Duration};
 use url::Url;
 use uuid::Uuid;
 
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_batch_model_inference_clickhouse, select_latest_batch_request_clickhouse,
 };
 
@@ -627,11 +627,11 @@ async fn insert_fake_pending_batch_inference_data(
     }
 
     clickhouse
-        .write(batch_inferences.as_slice(), TableName::BatchModelInference)
+        .write_batched(batch_inferences.as_slice(), TableName::BatchModelInference)
         .await
         .unwrap();
     clickhouse
-        .write(&[batch_request], TableName::BatchRequest)
+        .write_batched(&[batch_request], TableName::BatchRequest)
         .await
         .unwrap();
 

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use reqwest::Url;
 use tensorzero_core::{
-    clickhouse::ClickHouseConnectionInfo,
+    db::clickhouse::ClickHouseConnectionInfo,
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
 };
 use uuid::Uuid;
@@ -48,7 +48,7 @@ pub async fn delete_datapoint(
         format!("{}", chrono::Utc::now().format(CLICKHOUSE_DATETIME_FORMAT)).into();
 
     clickhouse
-        .write(&[datapoint_json], datapoint_kind.table_name())
+        .write_batched(&[datapoint_json], datapoint_kind.table_name())
         .await
         .unwrap();
 }

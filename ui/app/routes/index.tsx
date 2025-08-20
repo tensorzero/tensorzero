@@ -15,6 +15,7 @@ import {
   Dataset,
   GridCheck,
   SequenceChecks,
+  Playground,
 } from "~/components/icons/Icons";
 import {
   countInferencesByFunction,
@@ -36,7 +37,7 @@ export const handle: RouteHandle = {
 
 interface DirectoryCardProps {
   source: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; size?: number }>;
   title: string;
   description: string;
 }
@@ -51,7 +52,10 @@ function DirectoryCard({
     <Link to={source} className="block">
       <Card className="border-border hover:border-border-hover group flex w-full flex-row items-center gap-3 rounded-xl border p-4 hover:shadow-[0_0_0_3px_rgba(0,0,0,0.05)]">
         <div className="bg-bg-tertiary h-8 w-8 rounded-lg p-2">
-          <Icon className="text-fg-secondary group-hover:text-fg-primary transition-colors" />
+          <Icon
+            className="text-fg-secondary group-hover:text-fg-primary transition-colors"
+            size={16}
+          />
         </div>
         <div className="flex w-full flex-col overflow-hidden">
           <h3 className="text-fg-primary overflow-hidden text-sm font-medium text-ellipsis whitespace-nowrap">
@@ -96,6 +100,7 @@ export async function loader() {
     numEvaluationRuns,
     numDynamicEvaluationRuns,
     numDynamicEvaluationRunProjects,
+    functionConfigs,
   ] = await Promise.all([
     countInferencesByFunction(),
     countEpisodes(),
@@ -103,14 +108,19 @@ export async function loader() {
     countTotalEvaluationRuns(),
     countDynamicEvaluationRuns(),
     countDynamicEvaluationProjects(),
+    getAllFunctionConfigs(),
   ]);
   const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
-  const numFunctions = Object.keys(getAllFunctionConfigs()).length;
+  const numFunctions = Object.keys(functionConfigs).length;
+  const numVariants = Object.values(functionConfigs).reduce((acc, config) => {
+    return acc + (config ? Object.keys(config.variants || {}).length : 0);
+  }, 0);
   const numDatasets = datasetCounts.length;
 
   return {
     totalInferences,
     numFunctions,
+    numVariants,
     numEpisodes,
     numDatasets,
     numEvaluationRuns,
@@ -123,6 +133,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   const {
     totalInferences,
     numFunctions,
+    numVariants,
     numEpisodes,
     numDatasets,
     numEvaluationRuns,
@@ -180,6 +191,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <div id="workflows" className="flex w-full flex-col gap-2">
             <h2 className="text-md text-fg-secondary font-medium">Workflows</h2>
             <div className="flex flex-col gap-2">
+              <DirectoryCard
+                source="/playground"
+                icon={Playground}
+                title="Playground"
+                description={`${numVariants} variants`}
+              />
               <DirectoryCard
                 source="/datasets"
                 icon={Dataset}

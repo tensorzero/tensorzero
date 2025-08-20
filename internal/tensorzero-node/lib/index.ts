@@ -5,6 +5,8 @@ import {
   LaunchOptimizationWorkflowParams,
   StaleDatasetResponse,
   Config,
+  ClientInferenceParams,
+  InferenceResponse,
 } from "./bindings";
 import type { TensorZeroClient as NativeTensorZeroClientType } from "../index";
 
@@ -47,12 +49,16 @@ export class TensorZeroClient {
     return new TensorZeroClient(nativeClient);
   }
 
+  async inference(params: ClientInferenceParams): Promise<InferenceResponse> {
+    const paramsString = safeStringify(params);
+    const responseString = await this.nativeClient.inference(paramsString);
+    return JSON.parse(responseString) as InferenceResponse;
+  }
+
   async experimentalLaunchOptimizationWorkflow(
     params: LaunchOptimizationWorkflowParams,
   ): Promise<OptimizationJobHandle> {
-    const paramsString = JSON.stringify(params, (_key, value) =>
-      typeof value === "bigint" ? value.toString() : value,
-    );
+    const paramsString = safeStringify(params);
     const jobHandleString =
       await this.nativeClient.experimentalLaunchOptimizationWorkflow(
         paramsString,
@@ -63,7 +69,7 @@ export class TensorZeroClient {
   async experimentalPollOptimization(
     jobHandle: OptimizationJobHandle,
   ): Promise<OptimizationJobInfo> {
-    const jobHandleString = JSON.stringify(jobHandle);
+    const jobHandleString = safeStringify(jobHandle);
     const statusString =
       await this.nativeClient.experimentalPollOptimization(jobHandleString);
     return JSON.parse(statusString) as OptimizationJobInfo;
@@ -81,4 +87,14 @@ export default TensorZeroClient;
 export async function getConfig(configPath: string): Promise<Config> {
   const configString = await nativeGetConfig(configPath);
   return JSON.parse(configString) as Config;
+}
+
+function safeStringify(obj: unknown) {
+  try {
+    return JSON.stringify(obj, (_key, value) =>
+      typeof value === "bigint" ? value.toString() : value,
+    );
+  } catch {
+    return "null";
+  }
 }

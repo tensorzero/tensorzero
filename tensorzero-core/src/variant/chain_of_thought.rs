@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::config_parser::PathWithContents;
+use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
@@ -14,14 +14,11 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
-use crate::{
-    config_parser::LoadableConfig,
-    variant::chat_completion::{ChatCompletionConfig, UninitializedChatCompletionConfig},
-};
+use crate::variant::chat_completion::{ChatCompletionConfig, UninitializedChatCompletionConfig};
 
 use super::{InferenceConfig, ModelUsedInfo, Variant};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct ChainOfThoughtConfig {
@@ -29,19 +26,22 @@ pub struct ChainOfThoughtConfig {
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct UninitializedChainOfThoughtConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,
 }
 
-impl LoadableConfig<ChainOfThoughtConfig> for UninitializedChainOfThoughtConfig {
-    fn load(self) -> Result<ChainOfThoughtConfig, Error> {
+impl UninitializedChainOfThoughtConfig {
+    pub fn load(
+        self,
+        schemas: &SchemaData,
+        error_context: &ErrorContext,
+    ) -> Result<ChainOfThoughtConfig, Error> {
         Ok(ChainOfThoughtConfig {
-            inner: self.inner.load()?,
+            inner: self.inner.load(schemas, error_context)?,
         })
     }
 }
@@ -67,7 +67,7 @@ impl Variant for ChainOfThoughtConfig {
         };
         let original_output_schema = match inference_config.dynamic_output_schema {
             Some(schema) => &schema.value,
-            None => json_config.output_schema.value,
+            None => &json_config.output_schema.value,
         };
         let augmented_output_schema = prepare_thinking_output_schema(original_output_schema);
         let augmented_inference_config = InferenceConfig {

@@ -9,15 +9,20 @@ CARGO_VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
 # Extract version from ui/package.json
 UI_VERSION=$(grep '"version":' ui/package.json | sed 's/.*"version": "\(.*\)".*/\1/')
 
+# Extract appVersion from examples/production-deployment-k8s-helm/Chart.yaml
+CHART_VERSION=$(grep '^appVersion:' examples/production-deployment-k8s-helm/Chart.yaml | sed 's/appVersion: "\(.*\)"/\1/')
+
 echo "Cargo.toml version: $CARGO_VERSION"
 echo "ui/package.json version: $UI_VERSION"
+echo "Chart.yaml appVersion: $CHART_VERSION"
 
 # Check if versions match
-if [ "$CARGO_VERSION" != "$UI_VERSION" ]; then
+if [ "$CARGO_VERSION" != "$UI_VERSION" ] || [ "$CARGO_VERSION" != "$CHART_VERSION" ]; then
   echo "❌ Version mismatch detected!"
   echo "Cargo.toml version: $CARGO_VERSION"
   echo "ui/package.json version: $UI_VERSION"
-  echo "Please ensure both files have the same version."
+  echo "Chart.yaml appVersion: $CHART_VERSION"
+  echo "Please ensure all files have the same version."
   exit 1
 fi
 
