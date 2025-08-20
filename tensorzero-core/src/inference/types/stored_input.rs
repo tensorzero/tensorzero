@@ -1,4 +1,4 @@
-use crate::config_parser::Config;
+use crate::config::Config;
 use crate::endpoints::object_storage::get_object;
 use crate::error::Error;
 use crate::inference::types::file::Base64FileMetadata;

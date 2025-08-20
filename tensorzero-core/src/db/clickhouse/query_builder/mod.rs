@@ -860,6 +860,7 @@ mod tests {
     use serde_json::json;
     use std::path::Path;
 
+    use crate::inference::types::StoredInput;
     use crate::{config::ConfigFileGlob, inference::types::Text, tool::ToolChoice};
 
     use super::*;
