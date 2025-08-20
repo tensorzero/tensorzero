@@ -18,7 +18,7 @@ use tensorzero::{
 use tensorzero::{ClientInput, StoragePath};
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
-use tensorzero_core::error::{Error, ErrorDetails};
+use tensorzero_core::error::Error;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 use tensorzero_core::{
@@ -491,16 +491,7 @@ impl ThrottledTensorZeroClient {
 
 impl StoragePathResolver for ThrottledTensorZeroClient {
     async fn resolve(&self, storage_path: StoragePath) -> Result<String, Error> {
-        Ok(self
-            .client
-            .get_object(storage_path.clone())
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InternalError {
-                    message: format!("Error resolving object {storage_path}: {e}"),
-                })
-            })?
-            .data)
+        self.client.resolve(storage_path).await
     }
 }
 
