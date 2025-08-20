@@ -3,9 +3,6 @@ title: Inference-Time Optimizations
 description: Learn how to use inference-time strategies like dynamic in-context learning (DICL) and best-of-N sampling to optimize LLM performance.
 ---
 
-import { Image } from "astro:assets";
-import ChainOfThought from "./inference-time-optimizations-chain-of-thought.svg";
-
 Inference-time optimizations are powerful techniques that can significantly enhance the performance of your LLM applications without the need for model fine-tuning.
 
 This guide will explore two key strategies implemented as variant types in TensorZero: Best-of-N (BoN) sampling and Dynamic In-Context Learning (DICL).
@@ -86,9 +83,9 @@ This example showcases how best-of-N sampling can significantly enhance an LLM's
 
 <center>
   <Image
-    src={ChainOfThought}
+    src="./inference-time-optimizations-best-of-n-sampling.png"
     alt="Inference-Time Optimization: Chain-of-Thought (CoT)"
-    height={480}
+    height=480
   />
 </center>
 

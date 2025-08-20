@@ -3,8 +3,6 @@ title: "TensorZero Evaluations Overview"
 description: Learn how to use the TensorZero Evaluations to build principled LLM-powered applications.
 ---
 
-import { CardGrid, LinkCard } from "@astrojs/starlight/components";
-
 TensorZero offers two types of evaluations:
 
 **Static Evaluations** focus on evaluating the performance of a TensorZero variant (i.e. a choice of prompt, model, inference strategy, etc.) on a given dataset.
@@ -15,16 +13,13 @@ As a vague analogy, static evaluations are like unit tests for individual infere
 
 ---
 
-<CardGrid>
-
-<LinkCard
-  title="Tutorial: Static Evaluations"
-  href="/docs/evaluations/static-evaluations/tutorial/"
-/>
-
-<LinkCard
-  title="Tutorial: Dynamic Evaluations"
-  href="/docs/evaluations/dynamic-evaluations/tutorial/"
-/>
-
-</CardGrid>
+<Columns cols={2}>
+  <Card
+    title="Tutorial: Static Evaluations"
+    href="/docs/evaluations/static-evaluations/tutorial/"
+  ></Card>
+  <Card
+    title="Tutorial: Dynamic Evaluations"
+    href="/docs/evaluations/dynamic-evaluations/tutorial/"
+  ></Card>
+</Columns>
