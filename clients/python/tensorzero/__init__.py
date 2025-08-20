@@ -25,6 +25,7 @@ from .tensorzero import (
     ResolvedInput,
     ResolvedInputMessage,
     StoredInference,
+    TogetherSFTConfig,
     VariantsConfig,
 )
 from .tensorzero import (
@@ -90,7 +91,7 @@ ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
 OptimizationConfig = t.Union[
-    OpenAISFTConfig, FireworksSFTConfig, GCPVertexGeminiSFTConfig
+    OpenAISFTConfig, FireworksSFTConfig, GCPVertexGeminiSFTConfig, TogetherSFTConfig
 ]
 ChatInferenceOutput = t.List[ContentBlock]
 
@@ -168,6 +169,7 @@ __all__ = [
     "Thought",
     "ThoughtChunk",
     "TimeFilter",
+    "TogetherSFTConfig",
     "Tool",
     "ToolChoice",
     "ToolParams",

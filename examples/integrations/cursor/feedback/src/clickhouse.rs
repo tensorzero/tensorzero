@@ -6,7 +6,7 @@ use chrono::Utc;
 use serde::Deserialize;
 use tensorzero_core::serde_util::deserialize_json_string;
 use tensorzero_core::{
-    clickhouse::ClickHouseConnectionInfo,
+    db::clickhouse::ClickHouseConnectionInfo,
     inference::types::{ContentBlockChatOutput, ResolvedInput},
 };
 use uuid::Uuid;

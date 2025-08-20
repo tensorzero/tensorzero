@@ -21,7 +21,7 @@ import {
 import PageButtons from "~/components/utils/PageButtons";
 import BasicInfo from "./InferenceBasicInfo";
 import InputSnippet from "~/components/inference/InputSnippet";
-import Output from "~/components/inference/NewOutput";
+import { Output } from "~/components/inference/Output";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import {
   addHumanFeedback,

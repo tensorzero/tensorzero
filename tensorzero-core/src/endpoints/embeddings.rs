@@ -5,8 +5,8 @@ use tracing::instrument;
 
 use crate::{
     cache::CacheOptions,
-    clickhouse::ClickHouseConnectionInfo,
-    config_parser::Config,
+    config::Config,
+    db::clickhouse::ClickHouseConnectionInfo,
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
     endpoints::inference::InferenceClients,
     error::{Error, ErrorDetails},

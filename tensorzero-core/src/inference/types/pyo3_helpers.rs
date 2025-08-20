@@ -13,6 +13,7 @@ use crate::inference::types::{ContentBlockChatOutput, ResolvedInput, ResolvedInp
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
 use crate::optimization::gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig;
 use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
+use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
 use crate::optimization::UninitializedOptimizerConfig;
 use crate::stored_inference::{
     RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredSample,
@@ -324,13 +325,15 @@ pub fn deserialize_optimization_config(
         Ok(UninitializedOptimizerConfig::OpenAISFT(obj.extract()?))
     } else if obj.is_instance_of::<UninitializedFireworksSFTConfig>() {
         Ok(UninitializedOptimizerConfig::FireworksSFT(obj.extract()?))
+    } else if obj.is_instance_of::<UninitializedTogetherSFTConfig>() {
+        Ok(UninitializedOptimizerConfig::TogetherSFT(obj.extract()?))
     } else if obj.is_instance_of::<UninitializedGCPVertexGeminiSFTConfig>() {
         Ok(UninitializedOptimizerConfig::GCPVertexGeminiSFT(
             obj.extract()?,
         ))
     } else {
         Err(PyValueError::new_err(
-            "Invalid optimization config. Expected OpenAISFTConfig, FireworksSFTConfig or GCPVertexGeminiSFTConfig",
+            "Invalid optimization config. Expected OpenAISFTConfig, FireworksSFTConfig, GCPVertexGeminiSFTConfig, or TogetherSFTConfig",
         ))
     }
 }
