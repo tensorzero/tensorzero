@@ -8,5 +8,8 @@ apt update && apt install -y python3.13-dev
 # TODO: install the pre-built package instead of building from source
 cargo binstall -y cargo-nextest --secure
 
+# Install the BuildKite test collector
+cargo install buildkite-test-collector
+
 # Run unit tests using cargo-nextest
-cargo test-unit
+cargo test-unit -Z unstable-options --format json --report-time | buildkite-test-collector
