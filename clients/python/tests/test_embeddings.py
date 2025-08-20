@@ -18,9 +18,9 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_basic_embeddings(async_client):
+async def test_basic_embeddings(async_openai_client):
     """Test basic embeddings generation with a single input"""
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input="Hello, world!",
         model="text-embedding-3-small",
     )
@@ -36,9 +36,9 @@ async def test_basic_embeddings(async_client):
 
 
 @pytest.mark.asyncio
-async def test_basic_embeddings_shorthand(async_client):
+async def test_basic_embeddings_shorthand(async_openai_client):
     """Test basic embeddings generation with a single input"""
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input="Hello, world!",
         model="openai::text-embedding-3-large",
     )
@@ -54,7 +54,7 @@ async def test_basic_embeddings_shorthand(async_client):
 
 
 @pytest.mark.asyncio
-async def test_batch_embeddings(async_client):
+async def test_batch_embeddings(async_openai_client):
     """Test embeddings generation with multiple inputs"""
     inputs = [
         "Hello, world!",
@@ -62,7 +62,7 @@ async def test_batch_embeddings(async_client):
         "This is a test of batch embeddings.",
     ]
 
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input=inputs,
         model="text-embedding-3-small",
     )
@@ -81,9 +81,9 @@ async def test_batch_embeddings(async_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_with_dimensions(async_client):
+async def test_embeddings_with_dimensions(async_openai_client):
     """Test embeddings with specified dimensions"""
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input="Test with specific dimensions",
         model="text-embedding-3-small",
         dimensions=512,
@@ -97,9 +97,9 @@ async def test_embeddings_with_dimensions(async_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_with_encoding_format_float(async_client):
+async def test_embeddings_with_encoding_format_float(async_openai_client):
     """Test embeddings with different encoding formats"""
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input="Test encoding format",
         model="text-embedding-3-small",
         encoding_format="float",
@@ -112,9 +112,9 @@ async def test_embeddings_with_encoding_format_float(async_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_with_encoding_format_base64(async_client):
+async def test_embeddings_with_encoding_format_base64(async_openai_client):
     """Test embeddings with different encoding formats"""
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input="Test encoding format",
         model="text-embedding-3-small",
         encoding_format="base64",
@@ -127,10 +127,10 @@ async def test_embeddings_with_encoding_format_base64(async_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_with_user_parameter(async_client):
+async def test_embeddings_with_user_parameter(async_openai_client):
     """Test embeddings with user parameter for tracking"""
     user_id = "test_user_123"
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input="Test with user parameter",
         model="text-embedding-3-small",
         user=user_id,
@@ -143,10 +143,10 @@ async def test_embeddings_with_user_parameter(async_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_invalid_model_error(async_client):
+async def test_embeddings_invalid_model_error(async_openai_client):
     """Test that invalid model name raises appropriate error"""
     with pytest.raises(Exception) as exc_info:
-        await async_client.embeddings.create(
+        await async_openai_client.embeddings.create(
             input="Test invalid model",
             model="tensorzero::model_name::nonexistent_model",
         )
@@ -156,12 +156,12 @@ async def test_embeddings_invalid_model_error(async_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_large_batch(async_client):
+async def test_embeddings_large_batch(async_openai_client):
     """Test embeddings with a larger batch of inputs"""
     # Create a batch of 10 different inputs
     inputs = [f"This is test input number {i + 1}" for i in range(10)]
 
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input=inputs,
         model="text-embedding-3-small",
     )
@@ -181,17 +181,17 @@ async def test_embeddings_large_batch(async_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_consistency(async_client):
+async def test_embeddings_consistency(async_openai_client):
     """Test that the same input produces consistent embeddings"""
     input_text = "This is a consistency test"
 
     # Generate embeddings twice with the same input
-    result1 = await async_client.embeddings.create(
+    result1 = await async_openai_client.embeddings.create(
         input=input_text,
         model="text-embedding-3-small",
     )
 
-    result2 = await async_client.embeddings.create(
+    result2 = await async_openai_client.embeddings.create(
         input=input_text,
         model="text-embedding-3-small",
     )
