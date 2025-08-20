@@ -71,11 +71,13 @@ compile_notebooks () {
     local target_script="${source_nb/.ipynb/_nb.py}"
 
     # Skip if the script has already failed
-    for failed_script in "${failed_scripts[@] + ${failed_scripts[@]}}"; do
-      if [[ "$target_script" == "$failed_script" ]]; then
-        continue 2
-      fi
-    done
+    if [[ ${#failed_scripts[@]} -gt 0 ]]; then
+      for failed_script in "${failed_scripts[@]}"; do
+        if [[ "$target_script" == "$failed_script" ]]; then
+          continue 2
+        fi
+      done
+    fi
 
     local tmp_script="$(mktemp)_nb.py"
     cp "$target_script" "$tmp_script"
