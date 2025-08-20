@@ -383,9 +383,6 @@ jobs:
             allow_failure: false
           - tag: "latest-alpine"
             prefix: ""
-            # ClickHouse can make new releases at any time, which might break our tests.
-            # We allow this job to fail to avoid blocking CI whenever this happens.
-            # However, we'll still want to fix the failing tests soon after we notice the failure
             allow_failure: false
 
     steps:
