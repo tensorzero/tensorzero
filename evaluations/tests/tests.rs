@@ -1234,11 +1234,6 @@ async fn test_run_llm_judge_evaluator_chat() {
     .build()
     .await
     .unwrap();
-    let config = tensorzero_client
-        .get_app_state_data()
-        .unwrap()
-        .config
-        .clone();
     let tensorzero_client = ThrottledTensorZeroClient::new(tensorzero_client, Semaphore::new(1));
     let clients = Arc::new(Clients {
         tensorzero_client,
@@ -1292,9 +1287,15 @@ async fn test_run_llm_judge_evaluator_chat() {
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
     };
-    let input =
-        resolved_input_to_client_input(datapoint.input().clone().reresolve(&config).await.unwrap())
-            .unwrap();
+    let input = resolved_input_to_client_input(
+        datapoint
+            .input()
+            .clone()
+            .reresolve(&clients.tensorzero_client)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
@@ -1403,11 +1404,6 @@ async fn test_run_llm_judge_evaluator_chat() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_llm_judge_evaluator_json() {
     let tensorzero_client = get_tensorzero_client().await;
-    let config = tensorzero_client
-        .get_app_state_data()
-        .unwrap()
-        .config
-        .clone();
     let tensorzero_client = ThrottledTensorZeroClient::new(tensorzero_client, Semaphore::new(1));
     let clients = Arc::new(Clients {
         tensorzero_client,
@@ -1463,9 +1459,15 @@ async fn test_run_llm_judge_evaluator_json() {
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
     };
-    let input =
-        resolved_input_to_client_input(datapoint.input().clone().reresolve(&config).await.unwrap())
-            .unwrap();
+    let input = resolved_input_to_client_input(
+        datapoint
+            .input()
+            .clone()
+            .reresolve(&clients.tensorzero_client)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,

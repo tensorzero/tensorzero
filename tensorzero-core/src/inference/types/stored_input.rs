@@ -36,16 +36,32 @@ pub struct StoredInput {
     pub messages: Vec<StoredInputMessage>,
 }
 
+/// Abstracts over a `Config` (without an actual embedded gateway)
+/// and an http `Client, so that we can call `reresolve` from `StoredInference`
+/// and `evaluations`
+pub trait StoragePathResolver {
+    async fn resolve(&self, storage_path: StoragePath) -> Result<String, Error>;
+}
+
+impl StoragePathResolver for Config {
+    async fn resolve(&self, storage_path: StoragePath) -> Result<String, Error> {
+        Ok(get_object(self, storage_path).await?.data)
+    }
+}
+
 impl StoredInput {
     /// Converts a `StoredInput` to a `ResolvedInput` by fetching the file data
     /// for any nested `File`s.
-    pub async fn reresolve(self, config: &Config) -> Result<ResolvedInput, Error> {
+    pub async fn reresolve(
+        self,
+        resolver: &impl StoragePathResolver,
+    ) -> Result<ResolvedInput, Error> {
         Ok(ResolvedInput {
             system: self.system,
             messages: try_join_all(
                 self.messages
                     .into_iter()
-                    .map(|message| message.reresolve(config)),
+                    .map(|message| message.reresolve(resolver)),
             )
             .await?,
         })
@@ -63,13 +79,16 @@ pub struct StoredInputMessage {
 }
 
 impl StoredInputMessage {
-    pub async fn reresolve(self, config: &Config) -> Result<ResolvedInputMessage, Error> {
+    pub async fn reresolve(
+        self,
+        resolver: &impl StoragePathResolver,
+    ) -> Result<ResolvedInputMessage, Error> {
         Ok(ResolvedInputMessage {
             role: self.role,
             content: try_join_all(
                 self.content
                     .into_iter()
-                    .map(|content| content.reresolve(config)),
+                    .map(|content| content.reresolve(resolver)),
             )
             .await?,
         })
@@ -100,7 +119,10 @@ pub enum StoredInputMessageContent {
 }
 
 impl StoredInputMessageContent {
-    pub async fn reresolve(self, config: &Config) -> Result<ResolvedInputMessageContent, Error> {
+    pub async fn reresolve(
+        self,
+        resolver: &impl StoragePathResolver,
+    ) -> Result<ResolvedInputMessageContent, Error> {
         match self {
             StoredInputMessageContent::Text { value } => {
                 Ok(ResolvedInputMessageContent::Text { value })
@@ -118,12 +140,12 @@ impl StoredInputMessageContent {
                 Ok(ResolvedInputMessageContent::Thought(thought))
             }
             StoredInputMessageContent::File(file) => {
-                let object = get_object(config, file.storage_path.clone()).await?;
+                let data = resolver.resolve(file.storage_path.clone()).await?;
                 Ok(ResolvedInputMessageContent::File(Box::new(FileWithPath {
                     file: Base64File {
                         url: file.file.url.clone(),
                         mime_type: file.file.mime_type.clone(),
-                        data: object.data,
+                        data,
                     },
                     storage_path: file.storage_path.clone(),
                 })))

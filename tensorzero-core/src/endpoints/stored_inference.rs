@@ -16,7 +16,7 @@ pub async fn render_samples<T: StoredSample>(
     validate_variant_pins(&variants, &config)?;
     let resolution_futures = stored_samples
         .iter()
-        .map(|inference_example| inference_example.input().clone().reresolve(&config));
+        .map(|inference_example| inference_example.input().clone().reresolve(&*config));
 
     // Await all futures concurrently.
     // For now, we drop the errors here.
