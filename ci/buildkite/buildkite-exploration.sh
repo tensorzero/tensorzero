@@ -1,5 +1,5 @@
 # Set BUILDKITE_ANALYTICS_TOKEN
-export BUILDKITE_ANALYTICS_TOKEN=${CI_UNIT_BUILDKITE_ANALYTICS_TOKEN:?Environment variable CI_UNIT_BUILDKITE_ANALYTICS_TOKEN must be set.}
+export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get CI_UNIT_BUILDKITE_ANALYTICS_TOKEN)
 
 # Install cargo-binstall
 curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
