@@ -1,3 +1,6 @@
 steps:
   - label: ":rust:"
     command: "cargo test-unit"
+    plugins:
+      - docker:
+          image: "rust"
