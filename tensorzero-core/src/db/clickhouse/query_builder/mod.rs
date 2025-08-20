@@ -9,7 +9,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    config_parser::{Config, MetricConfigType},
+    config::{Config, MetricConfigType},
     db::clickhouse::ClickhouseFormat,
     error::{Error, ErrorDetails},
     function::FunctionConfig,
@@ -860,7 +860,7 @@ mod tests {
     use serde_json::json;
     use std::path::Path;
 
-    use crate::{config_parser::ConfigFileGlob, inference::types::Text, tool::ToolChoice};
+    use crate::{config::ConfigFileGlob, inference::types::Text, tool::ToolChoice};
 
     use super::*;
 

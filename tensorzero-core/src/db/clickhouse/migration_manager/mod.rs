@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::env;
 use std::time::{Duration, Instant};
 
-use crate::config_parser::BatchWritesConfig;
+use crate::config::BatchWritesConfig;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use crate::db::HealthCheckable;
 use crate::endpoints::status::TENSORZERO_VERSION;

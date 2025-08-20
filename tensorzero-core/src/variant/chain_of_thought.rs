@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::config_parser::{ErrorContext, PathWithContents, SchemaData};
+use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};

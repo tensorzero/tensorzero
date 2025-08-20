@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero_core::{
-    config_parser::ProviderTypesConfig,
+    config::ProviderTypesConfig,
     db::clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
     embeddings::{
         EmbeddingEncodingFormat, EmbeddingProvider, EmbeddingRequest,

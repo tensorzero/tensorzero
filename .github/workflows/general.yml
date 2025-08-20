@@ -533,6 +533,7 @@ jobs:
       OPENAI_API_KEY: not_used
       FIREWORKS_API_KEY: not_used
       FIREWORKS_ACCOUNT_ID: not_used
+      TOGETHER_API_KEY: not_used
       TENSORZERO_USE_MOCK_INFERENCE_PROVIDER: 1
       TENSORZERO_SKIP_LARGE_FIXTURES: 1
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}

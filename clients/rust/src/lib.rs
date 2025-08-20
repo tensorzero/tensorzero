@@ -8,7 +8,7 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
-use tensorzero_core::config_parser::ConfigFileGlob;
+use tensorzero_core::config::ConfigFileGlob;
 pub use tensorzero_core::db::DatabaseConnection;
 use tensorzero_core::db::HealthCheckable;
 pub use tensorzero_core::db::{ModelUsageTimePoint, TimeWindow};
@@ -21,7 +21,7 @@ pub use tensorzero_core::gateway_util::setup_clickhouse_without_config;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
-    config_parser::Config,
+    config::Config,
     endpoints::{
         datasets::InsertDatapointParams,
         dynamic_evaluation_run::{
