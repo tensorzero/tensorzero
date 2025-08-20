@@ -12,6 +12,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use tokio::time::error::Elapsed;
 use tokio::time::Duration;
+use crate::inference::types::Role;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -31,7 +32,6 @@ use crate::inference::types::extra_headers::{
     FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
 };
 use crate::inference::types::ResolvedInput;
-use crate::inference::types::Role;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
@@ -834,8 +834,6 @@ impl ChatCompletionConfigPyClass {
 
     #[getter]
     fn get_assistant_template(&self) -> PyResult<Option<String>> {
-        use crate::inference::types::Role;
-
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
             .templates
@@ -861,7 +859,7 @@ mod tests {
     use crate::error::ErrorDetails;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::{
-        ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role, Usage,
+        ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Usage,
     };
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::tests::get_test_template_config;
