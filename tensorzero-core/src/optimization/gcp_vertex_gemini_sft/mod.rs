@@ -307,7 +307,18 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         };
 
         let url = match &self.api_base {
-            Some(api_base) => api_base.clone(),
+            Some(api_base) => {
+                // Build the full URL using the base plus the project/region path
+                let path = format!(
+                    "v1/projects/{}/locations/{}/tuningJobs",
+                    self.project_id, self.region
+                );
+                api_base.join(&path).map_err(|e| {
+                    Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: e.to_string(),
+                    })
+                })?
+            }
             None => gcp_vertex_gemini_base_url(&self.project_id, &self.region).map_err(|e| {
                 Error::new(ErrorDetails::InvalidBaseUrl {
                     message: e.to_string(),
@@ -399,9 +410,18 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
         // Construct the poll URL based on whether api_base is provided
         let poll_url = match &self.api_base {
             Some(api_base) => {
-                // For mock server, extract job name from job_url and append to api_base
-                let job_name = self.job_url.path().trim_start_matches("/v1/");
-                api_base.join(job_name).map_err(|e| {
+                // For mock server, extract just the job ID from job_url and build full path
+                let job_id = self.job_url.path().split('/').next_back().ok_or_else(|| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: "Failed to extract job ID from job URL".to_string(),
+                    })
+                })?;
+                // Build the full URL using the base plus the project/region/job path
+                let path = format!(
+                    "v1/projects/{}/locations/{}/tuningJobs/{}",
+                    self.project_id, self.region, job_id
+                );
+                api_base.join(&path).map_err(|e| {
                     Error::new(ErrorDetails::InternalError {
                         message: format!("Failed to construct poll URL: {e}"),
                     })
