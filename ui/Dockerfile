@@ -49,20 +49,9 @@ RUN tar -vxf /tmp/packages.tar -C .
 
 RUN pnpm install --frozen-lockfile --prod
 
-# ========== minijinja-build-env ==========
-
-FROM rust:latest AS minijinja-build-env
-
-COPY . /build
-
-WORKDIR /build/ui/app/utils/minijinja
-RUN apt-get update && apt-get install -y nodejs npm
-RUN npm install -g wasm-pack
-RUN wasm-pack build --features console_error_panic_hook
-
 # ========== tensorzero-node-build-env ==========
 
-FROM rust:latest AS tensorzero-node-build-env
+FROM rust:1.88.0 AS tensorzero-node-build-env
 
 RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm
@@ -102,8 +91,6 @@ COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/index.cjs 
 COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/*linux*.node /app/internal/tensorzero-node/
 
 COPY . .
-
-COPY --from=minijinja-build-env /build/ui/app/utils/minijinja/pkg ./ui/app/utils/minijinja/pkg
 
 RUN pnpm --filter=tensorzero-ui run build
 

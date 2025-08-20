@@ -27,16 +27,32 @@ export function SnippetContent({
   const [needsExpansion, setNeedsExpansion] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Simple check on initial render and when content changes
+  // Use an effect to observe size changes
   useEffect(() => {
-    if (contentRef.current && maxHeight !== "Content") {
-      // Simple check if content is taller than maxHeight
-      const contentHeight = contentRef.current.scrollHeight;
-      setNeedsExpansion(contentHeight > maxHeight);
-    } else {
+    // Ensure we don't run this logic if expansion is not possible
+    if (maxHeight === "Content") {
       setNeedsExpansion(false);
+      return;
     }
-  }, [children, maxHeight]);
+
+    const element = contentRef.current;
+    if (!element) return;
+
+    // Define the observer
+    const observer = new ResizeObserver(() => {
+      // When the size changes, check if the scrollHeight exceeds maxHeight
+      const contentHeight = element.scrollHeight;
+      setNeedsExpansion(contentHeight > maxHeight);
+    });
+
+    // Start observing the element
+    observer.observe(element);
+
+    // Cleanup function: stop observing when the component unmounts
+    return () => {
+      observer.disconnect();
+    };
+  }, [children, maxHeight]); // Re-run if children or maxHeight prop changes
 
   return (
     <div className="relative">
@@ -113,6 +129,7 @@ export interface SnippetTab {
 interface SnippetTabsProps {
   tabs: SnippetTab[];
   defaultTab?: string;
+  activeTab?: string;
   children?: ((activeTab: string) => ReactNode) | ReactNode;
   onTabChange?: (tabId: string) => void;
 }
@@ -131,14 +148,21 @@ const tabIndicator = cva("", {
 export function SnippetTabs({
   tabs,
   defaultTab,
+  activeTab: controlledActiveTab,
   children,
   onTabChange,
 }: SnippetTabsProps) {
   const defaultTabId = defaultTab || tabs[0]?.id;
-  const [activeTab, setActiveTab] = useState(defaultTabId);
+  const [uncontrolledActiveTab, setUncontrolledActiveTab] =
+    useState(defaultTabId);
+
+  // Use controlled tab if provided, otherwise use internal state
+  const activeTab = controlledActiveTab ?? uncontrolledActiveTab;
 
   const handleTabChange = (tabId: string) => {
-    setActiveTab(tabId);
+    if (!controlledActiveTab) {
+      setUncontrolledActiveTab(tabId);
+    }
     onTabChange?.(tabId);
   };
 

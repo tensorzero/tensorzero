@@ -100,6 +100,66 @@ export function safeParseInt(
   return Number.isNaN(integer) ? (defaultValue ?? null) : integer;
 }
 
+/** @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/isSupersetOf */
+export function isSupersetOf(setA: Set<unknown>, setB: Set<unknown>): boolean {
+  // @ts-expect-error: Check if native Set.prototype.isSuperset is available
+  if (typeof Set.prototype.isSupersetOf === "function") {
+    // @ts-expect-error: Call native
+    return setA.isSupersetOf(setB);
+  }
+
+  for (const item of setB) {
+    if (!setA.has(item)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/** @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/isSubsetOf */
+export function isSubsetOf(setA: Set<unknown>, setB: Set<unknown>): boolean {
+  // @ts-expect-error: Check if native Set.prototype.isSubsetOf is available
+  if (typeof Set.prototype.isSubsetOf === "function") {
+    // @ts-expect-error: Call native
+    return setA.isSubsetOf(setB);
+  }
+
+  for (const item of setA) {
+    if (!setB.has(item)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/** @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/symmetricDifference */
+export function symmetricDifference<A, B = A>(
+  setA: Set<A>,
+  setB: Set<B>,
+): Set<A | B> {
+  // @ts-expect-error: Check if native Set.prototype.symmetricDifference is available
+  if (typeof Set.prototype.symmetricDifference === "function") {
+    // @ts-expect-error: Call native
+    return setA.symmetricDifference(setB);
+  }
+
+  const result = new Set<A | B>();
+  for (const item of setA) {
+    if (!setB.has(item as unknown as B)) {
+      result.add(item);
+    }
+  }
+  for (const item of setB) {
+    if (!setA.has(item as unknown as A)) {
+      result.add(item);
+    }
+  }
+
+  return result;
+}
+
 interface ErrorLike {
   message: string;
   name: string;

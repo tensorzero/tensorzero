@@ -11,11 +11,12 @@ use tensorzero::FeedbackParams;
 use tensorzero::InferenceOutput;
 use tensorzero::Role;
 use tensorzero::{ClientInferenceParams, ClientInput};
-use tensorzero_core::clickhouse::migration_manager;
-use tensorzero_core::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
-use tensorzero_core::config_parser::Config;
-use tensorzero_core::gateway_util::AppStateData;
+use tensorzero_core::config::{Config, ConfigFileGlob};
+use tensorzero_core::db::clickhouse::migration_manager;
+use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::gateway_util::GatewayHandle;
 use tensorzero_core::howdy::{get_deployment_id, get_howdy_report};
 use tensorzero_core::inference::types::TextKind;
 use tokio::time::Duration;
@@ -32,14 +33,23 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
     let config = Arc::new(
-        Config::load_from_path_optional_verify_credentials(&config_path, false)
-            .await
-            .unwrap(),
+        Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new_from_path(&config_path).unwrap(),
+            false,
+        )
+        .await
+        .unwrap(),
     );
-    migration_manager::run(&clickhouse).await.unwrap();
-    let state =
-        AppStateData::new_with_clickhouse_and_http_client(config, clickhouse, Client::new());
-    ClientBuilder::build_from_state(state).await.unwrap()
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        skip_completed_migrations: false,
+        manual_run: false,
+    })
+    .await
+    .unwrap();
+    let handle =
+        GatewayHandle::new_with_clickhouse_and_http_client(config, clickhouse, Client::new());
+    ClientBuilder::build_from_state(handle).await.unwrap()
 }
 
 #[tokio::test(flavor = "multi_thread")]

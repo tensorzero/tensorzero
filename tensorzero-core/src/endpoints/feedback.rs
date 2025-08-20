@@ -12,8 +12,8 @@ use tokio::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
+use crate::config::{Config, MetricConfigLevel, MetricConfigType};
+use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
@@ -275,7 +275,7 @@ async fn write_comment(
     if !dryrun {
         tokio::spawn(async move {
             let _ = connection_info
-                .write(&[payload], TableName::CommentFeedback)
+                .write_batched(&[payload], TableName::CommentFeedback)
                 .await;
         });
     }
@@ -316,7 +316,7 @@ async fn write_demonstration(
     if !dryrun {
         tokio::spawn(async move {
             let _ = connection_info
-                .write(&[payload], TableName::DemonstrationFeedback)
+                .write_batched(&[payload], TableName::DemonstrationFeedback)
                 .await;
         });
     }
@@ -338,8 +338,7 @@ async fn write_float(
         tags,
         ..
     } = params;
-    let metric_config: &crate::config_parser::MetricConfig =
-        config.get_metric_or_err(metric_name)?;
+    let metric_config: &crate::config::MetricConfig = config.get_metric_or_err(metric_name)?;
     if !disable_validation {
         // Verify that the function name exists.
         let _ =
@@ -355,7 +354,7 @@ async fn write_float(
     if !dryrun {
         tokio::spawn(async move {
             let _ = connection_info
-                .write(&[payload], TableName::FloatMetricFeedback)
+                .write_batched(&[payload], TableName::FloatMetricFeedback)
                 .await;
         });
     }
@@ -392,7 +391,7 @@ async fn write_boolean(
     if !dryrun {
         tokio::spawn(async move {
             let _ = connection_info
-                .write(&[payload], TableName::BooleanMetricFeedback)
+                .write_batched(&[payload], TableName::BooleanMetricFeedback)
                 .await;
         });
     }
@@ -608,7 +607,7 @@ pub async fn validate_parse_demonstration(
         }
         (FunctionConfig::Json(_), DynamicDemonstrationInfo::Json(output_schema)) => {
             // For json functions, the value should be a valid json object.
-            StaticJSONSchema::from_value(&output_schema)?
+            StaticJSONSchema::from_value(output_schema)?
                 .validate(value)
                 .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
@@ -829,10 +828,10 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use crate::config_parser::{Config, MetricConfig, MetricConfigOptimize};
+    use crate::config::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
-    use crate::testing::get_unit_test_app_state_data;
+    use crate::testing::get_unit_test_gateway_handle;
     use crate::tool::{StaticToolConfig, ToolCallOutput, ToolChoice, ToolConfig};
 
     #[tokio::test]
@@ -1012,7 +1011,7 @@ mod tests {
         let config = Arc::new(Config {
             ..Default::default()
         });
-        let app_state_data = get_unit_test_app_state_data(config, true);
+        let gateway_handle = get_unit_test_gateway_handle(config, true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test comment");
@@ -1025,8 +1024,11 @@ mod tests {
             internal: false,
             dryrun: Some(false),
         };
-        let response =
-            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await;
         let details = response.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1041,7 +1043,7 @@ mod tests {
         let config = Arc::new(Config {
             ..Default::default()
         });
-        let app_state_data = get_unit_test_app_state_data(config, true);
+        let gateway_handle = get_unit_test_gateway_handle(config, true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test demonstration");
@@ -1056,9 +1058,12 @@ mod tests {
             dryrun: Some(false),
             internal: false,
         };
-        let response = feedback_handler(State(app_state_data.clone()), StructuredJson(params))
-            .await
-            .unwrap_err();
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await
+        .unwrap_err();
         let details = response.get_owned_details();
         assert_eq!(
             details,
@@ -1079,8 +1084,11 @@ mod tests {
             dryrun: Some(false),
             internal: false,
         };
-        let response =
-            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await;
         let details = response.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1105,7 +1113,7 @@ mod tests {
             metrics,
             ..Default::default()
         });
-        let app_state_data = get_unit_test_app_state_data(config.clone(), true);
+        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
         let value = json!(4.5);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
@@ -1121,9 +1129,12 @@ mod tests {
             dryrun: Some(false),
             internal: false,
         };
-        let response = feedback_handler(State(app_state_data.clone()), StructuredJson(params))
-            .await
-            .unwrap_err();
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await
+        .unwrap_err();
         let details = response.get_owned_details();
         assert_eq!(
             details,
@@ -1142,8 +1153,11 @@ mod tests {
             dryrun: Some(false),
             internal: false,
         };
-        let response =
-            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await;
         let details = response.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1168,7 +1182,7 @@ mod tests {
             metrics,
             ..Default::default()
         });
-        let app_state_data = get_unit_test_app_state_data(config.clone(), true);
+        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
         let value = json!(true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
@@ -1181,8 +1195,11 @@ mod tests {
             dryrun: None,
             internal: false,
         };
-        let response =
-            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        let response = feedback_handler(
+            State(gateway_handle.app_state.clone()),
+            StructuredJson(params),
+        )
+        .await;
         let details = response.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1197,7 +1214,7 @@ mod tests {
         let weather_tool_config_static = StaticToolConfig {
             name: "get_temperature".to_string(),
             description: "Get the current temperature in a given location".to_string(),
-            parameters: StaticJSONSchema::from_value(&json!({
+            parameters: StaticJSONSchema::from_value(json!({
                 "type": "object",
                 "properties": {
                     "location": {"type": "string"},
@@ -1215,9 +1232,7 @@ mod tests {
         let function_config_chat_tools =
             Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
                 variants: HashMap::new(),
-                system_schema: None,
-                user_schema: None,
-                assistant_schema: None,
+                schemas: SchemaData::default(),
                 tools: vec!["get_temperature".to_string()],
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
@@ -1344,10 +1359,8 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let function_config = Box::leak(Box::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
-            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
+            schemas: SchemaData::default(),
+            output_schema: StaticJSONSchema::from_value(output_schema.clone()).unwrap(),
             implicit_tool_call_config,
             description: None,
         })));
