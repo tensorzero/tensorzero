@@ -1,6 +1,12 @@
 steps:
-  - label: ":rust:"
-    command: "cargo test-unit"
+  - label: ":rust: Rust Unit Tests"
+    command:
+      # Install cargo-binstall
+      - "curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash"
+      # Install cargo-nextest
+      - "cargo binstall cargo-nextest"
+      # Run unit tests using cargo-nextest
+      - "cargo test-unit"
     plugins:
       - docker:
           image: "rust"
