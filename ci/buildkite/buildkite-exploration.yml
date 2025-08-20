@@ -5,5 +5,5 @@ steps:
       - docker:
           image: "rust"
       - test-collector#v1.0.0:
-          files: "../../target/nextest/ci-unit/junit.xml"
+          files: "target/nextest/ci-unit/junit.xml"
           format: "junit"
