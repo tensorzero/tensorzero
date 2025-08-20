@@ -41,7 +41,40 @@
           },
           {
             "group": "Gateway",
-            "pages": ["gateway/index", "gateway/tutorial"]
+            "pages": [
+              "gateway/index",
+              "gateway/tutorial",
+              {
+                "group": "Guides",
+                "pages": [
+                  {
+                    "group": "Model Providers",
+                    "pages": [
+                      "gateway/guides/providers/anthropic",
+                      "gateway/guides/providers/aws-bedrock",
+                      "gateway/guides/providers/aws-sagemaker",
+                      "gateway/guides/providers/azure",
+                      "gateway/guides/providers/deepseek",
+                      "gateway/guides/providers/fireworks",
+                      "gateway/guides/providers/gcp-vertex-ai-anthropic",
+                      "gateway/guides/providers/gcp-vertex-ai-gemini",
+                      "gateway/guides/providers/google-ai-studio-gemini",
+                      "gateway/guides/providers/groq",
+                      "gateway/guides/providers/hyperbolic",
+                      "gateway/guides/providers/mistral",
+                      "gateway/guides/providers/openai-compatible",
+                      "gateway/guides/providers/openai",
+                      "gateway/guides/providers/openrouter",
+                      "gateway/guides/providers/sglang",
+                      "gateway/guides/providers/tgi",
+                      "gateway/guides/providers/together",
+                      "gateway/guides/providers/vllm",
+                      "gateway/guides/providers/xai"
+                    ]
+                  }
+                ]
+              }
+            ]
           }
         ]
       }
