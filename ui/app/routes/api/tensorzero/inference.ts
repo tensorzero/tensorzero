@@ -1,5 +1,8 @@
-import { isTensorZeroServerError } from "~/utils/tensorzero";
-import { JSONParseError } from "~/utils/common";
+import {
+  isTensorZeroServerError,
+  TensorZeroServerError,
+} from "~/utils/tensorzero";
+import { isErrorLike, JSONParseError } from "~/utils/common";
 import type { Route } from "./+types/inference";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import type { ClientInferenceParams } from "tensorzero-node";
@@ -16,9 +19,18 @@ export async function action({ request }: Route.ActionArgs): Promise<Response> {
     const extraOptions = getExtraInferenceOptions();
     const request = { ...parsed, ...extraOptions } as ClientInferenceParams;
     const nativeClient = await getNativeTensorZeroClient();
-    const inference = await nativeClient.inference(request);
+    const inference = await nativeClient.inference(request).catch((error) => {
+      if (isErrorLike(error)) {
+        throw new TensorZeroServerError(error.message, { status: 500 });
+      }
+      throw error;
+    });
     return Response.json(inference);
   } catch (error) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("Error in inference action:", error);
+    }
+
     if (error instanceof JSONParseError) {
       return Response.json(
         { error: "Error parsing request data" },

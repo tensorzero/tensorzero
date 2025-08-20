@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::env;
 use std::time::{Duration, Instant};
 
-use crate::config_parser::BatchWritesConfig;
+use crate::config::BatchWritesConfig;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use crate::db::DatabaseConnection;
 use crate::endpoints::status::TENSORZERO_VERSION;
@@ -126,7 +126,9 @@ pub async fn should_skip_migrations(
                     return false;
                 }
                 if message.contains("UNKNOWN_TABLE") {
-                    tracing::info!("TensorZeroMigration table not found, assuming clean start");
+                    tracing::info!(
+                        "TensorZeroMigration table not found, we should run migrations."
+                    );
                     return false;
                 }
             }
@@ -183,8 +185,10 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
         return Ok(());
     }
     tracing::debug!("All migrations have not yet been applied, running migrations");
-    let database_exists = clickhouse.check_database_exists().await?;
-    if !database_exists {
+    let database_and_migrations_table_exists = clickhouse
+        .check_database_and_migrations_table_exists()
+        .await?;
+    if !database_and_migrations_table_exists {
         if clickhouse.is_cluster_configured() && !manual_run {
             let database = clickhouse.database();
             let run_migrations_command = get_run_migrations_command();
@@ -193,7 +197,7 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
             }.into());
         } else {
             // This is a no-op if the database already exists
-            clickhouse.create_database().await?;
+            clickhouse.create_database_and_migrations_table().await?;
         }
     }
 

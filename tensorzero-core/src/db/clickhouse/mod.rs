@@ -1,4 +1,5 @@
 use enum_map::Enum;
+use migration_manager::migrations::check_table_exists;
 use reqwest::multipart::Form;
 use reqwest::multipart::Part;
 use reqwest::Client;
@@ -19,8 +20,8 @@ pub mod query_builder;
 #[cfg(any(test, feature = "e2e_tests", feature = "optimization_tests"))]
 pub mod test_helpers;
 
-use crate::config_parser::BatchWritesConfig;
-use crate::config_parser::Config;
+use crate::config::BatchWritesConfig;
+use crate::config::Config;
 use crate::db::clickhouse::batching::BatchSender;
 use crate::db::clickhouse::batching::BatchWriterHandle;
 use crate::error::DisplayOrDebugGateway;
@@ -519,7 +520,7 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn check_database_exists(&self) -> Result<bool, Error> {
+    pub async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error> {
         match self {
             Self::Disabled => Ok(true),
             Self::Mock { .. } => Ok(true),
@@ -565,12 +566,19 @@ impl ClickHouseConnectionInfo {
                         message: format!("Failed to parse count response as u8: {e}"),
                     })
                 })?;
-                Ok(count > 0)
+                if count == 0 {
+                    // The database doesn't exist
+                    return Ok(false);
+                }
+                let migrations_table_exists =
+                    check_table_exists(self, "TensorZeroMigration", "0000").await?;
+
+                Ok(migrations_table_exists)
             }
         }
     }
 
-    pub async fn create_database(&self) -> Result<(), Error> {
+    pub async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => {}
             Self::Mock { .. } => {}

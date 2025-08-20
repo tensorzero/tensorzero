@@ -3,8 +3,8 @@ use serde_json::Value;
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use crate::config_parser::path::TomlRelativePath;
-use crate::config_parser::{PathWithContents, SchemaData};
+use crate::config::path::TomlRelativePath;
+use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails};
@@ -23,6 +23,9 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::variant::JsonMode;
 
+mod templates;
+pub use templates::ChatTemplates;
+
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
     InferModelRequestArgs, InferenceConfig, ModelUsedInfo, RetryConfig, Variant,
@@ -38,16 +41,6 @@ use super::{
 pub struct TemplateWithSchema {
     pub template: PathWithContents,
     pub schema: Option<StaticJSONSchema>,
-}
-
-/// Holds of all of the templates and schemas used by a chat-completion variant.
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub struct ChatTemplates {
-    pub system: Option<TemplateWithSchema>,
-    pub user: Option<TemplateWithSchema>,
-    pub assistant: Option<TemplateWithSchema>,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -72,6 +65,15 @@ pub struct ChatCompletionConfig {
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+#[serde(deny_unknown_fields)]
+pub struct UninitializedInputWrappers {
+    user: Option<TomlRelativePath>,
+    assistant: Option<TomlRelativePath>,
+    system: Option<TomlRelativePath>,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
@@ -82,6 +84,7 @@ pub struct UninitializedChatCompletionConfig {
     pub system_template: Option<TomlRelativePath>,
     pub user_template: Option<TomlRelativePath>,
     pub assistant_template: Option<TomlRelativePath>,
+    pub input_wrappers: Option<UninitializedInputWrappers>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub max_tokens: Option<u32>,
@@ -102,7 +105,11 @@ pub struct UninitializedChatCompletionConfig {
 }
 
 impl UninitializedChatCompletionConfig {
-    pub fn load(self, schemas: &SchemaData) -> Result<ChatCompletionConfig, Error> {
+    pub fn load(
+        self,
+        schemas: &SchemaData,
+        error_context: &ErrorContext,
+    ) -> Result<ChatCompletionConfig, Error> {
         Ok(ChatCompletionConfig {
             weight: self.weight,
             model: self.model,
@@ -137,7 +144,16 @@ impl UninitializedChatCompletionConfig {
                         })
                     })
                     .transpose()?,
-            },
+            }
+            .apply_wrappers(
+                self.input_wrappers,
+                schemas,
+                format!(
+                    "functions.{}.variants.{}",
+                    error_context.function_name, error_context.variant_name
+                )
+                .as_str(),
+            )?,
             temperature: self.temperature,
             top_p: self.top_p,
             max_tokens: self.max_tokens,
@@ -655,7 +671,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::cache::{CacheEnabledMode, CacheOptions};
-    use crate::config_parser::SchemaData;
+    use crate::config::SchemaData;
     use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{

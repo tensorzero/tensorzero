@@ -8,7 +8,7 @@ use super::{
     GCPVertexGeminiFileURI, GCPVertexGeminiSupervisedRow,
 };
 use crate::{
-    config_parser::TimeoutsConfig,
+    config::TimeoutsConfig,
     error::{Error, ErrorDetails},
     inference::types::{ContentBlock, FlattenUnknown},
     model::{
