@@ -195,9 +195,7 @@ export function tensorZeroStoredInputToInput(
 ): Input {
   return {
     system: resolvedInput.system ?? undefined,
-    messages: resolvedInput.messages.map(
-      tensorZeroStoredMessageToInputMessage,
-    ),
+    messages: resolvedInput.messages.map(tensorZeroStoredMessageToInputMessage),
   };
 }
 
