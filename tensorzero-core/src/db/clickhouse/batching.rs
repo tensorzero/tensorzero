@@ -2,7 +2,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
-use crate::config_parser::BatchWritesConfig;
+use crate::config::BatchWritesConfig;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use enum_map::EnumMap;
 use futures::future::Shared;

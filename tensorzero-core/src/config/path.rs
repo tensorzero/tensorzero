@@ -11,7 +11,7 @@ use toml::{
 };
 
 use crate::error::{Error, ErrorDetails};
-use crate::{config_parser::span_map::SpanMap, error::IMPOSSIBLE_ERROR_MESSAGE};
+use crate::{config::span_map::SpanMap, error::IMPOSSIBLE_ERROR_MESSAGE};
 
 /// Wrapper type to enforce proper handling of toml-relative paths.
 /// When we add support for config globbing, we'll require deserializing
@@ -367,6 +367,84 @@ static TARGET_PATH_COMPONENTS: &[&[PathComponent]] = &[
         PathComponent::Literal("gateway"),
         PathComponent::Literal("template_filesystem_access"),
         PathComponent::Literal("base_path"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("user"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("system"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("assistant"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("user"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("assistant"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("system"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("user"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("assistant"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("system"),
     ],
 ];
 

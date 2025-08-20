@@ -637,6 +637,7 @@ function variantInfoToUninitalizedVariantInfo(
         type: "chat_completion" as const,
         weight: inner.weight,
         model: inner.model,
+        input_wrappers: null,
         system_template: convertTemplate(
           inner.templates.system?.template || null,
         ),
@@ -665,6 +666,7 @@ function variantInfoToUninitalizedVariantInfo(
         evaluator: {
           weight: inner.evaluator.weight,
           model: inner.evaluator.model,
+          input_wrappers: null,
           system_template: convertTemplate(
             inner.evaluator.templates.system?.template || null,
           ),
@@ -716,6 +718,7 @@ function variantInfoToUninitalizedVariantInfo(
         fuser: {
           weight: inner.fuser.weight,
           model: inner.fuser.model,
+          input_wrappers: null,
           system_template: convertTemplate(
             inner.fuser.templates.system?.template || null,
           ),
@@ -743,6 +746,7 @@ function variantInfoToUninitalizedVariantInfo(
         type: "experimental_chain_of_thought" as const,
         weight: inner.weight,
         model: inner.model,
+        input_wrappers: null,
         system_template: convertTemplate(
           inner.templates.system?.template || null,
         ),

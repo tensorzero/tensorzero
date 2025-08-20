@@ -10,7 +10,7 @@ use tensorzero::{
 };
 use tensorzero_core::{
     cache::CacheOptions,
-    config_parser::ProviderTypesConfig,
+    config::ProviderTypesConfig,
     db::clickhouse::test_helpers::CLICKHOUSE_URL,
     db::clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
     endpoints::inference::InferenceClients,

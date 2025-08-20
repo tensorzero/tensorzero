@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::Write;
 
-use crate::config_parser::TimeoutsConfig;
+use crate::config::TimeoutsConfig;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::ContentBlock;
