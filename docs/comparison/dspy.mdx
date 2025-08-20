@@ -1,0 +1,69 @@
+---
+title: "Comparison: TensorZero vs. DSPy"
+sidebarTitle: "DSPy"
+description: "TensorZero is an open-source alternative to DSPy featuring an LLM gateway, observability, optimization, evaluations, and experimentation."
+---
+
+TensorZero and DSPy serve **different but complementary** purposes in the LLM ecosystem.
+TensorZero is a full-stack LLM engineering platform focused on production applications and optimization, while DSPy is a framework for programming with language models through modular prompting.
+**You can get the best of both worlds by using DSPy and TensorZero together!**
+
+## Similarities
+
+- **LLM Optimization.**
+  Both TensorZero and DSPy focus on LLM optimization, but in different ways.
+  DSPy focuses on automated prompt engineering, while TensorZero provides a complete set of tools for optimizing LLM systems (including prompts, models, and inference strategies).
+
+- **LLM Programming Abstractions.**
+  Both TensorZero and DSPy provide abstractions for working with LLMs in a structured way, moving beyond raw prompting to more maintainable approaches.<br />
+  [→ Prompt Templates & Schemas with TensorZero](/docs/gateway/guides/prompt-templates-schemas/)
+
+- **Automated Prompt Engineering.**
+  TensorZero implements MIPROv2, the automated prompt engineering algorithm recommended by DSPy.
+  MIPROv2 jointly optimizes instructions and in-context examples in prompts.<br />
+  [→ Recipe: Automated Prompt Engineering with MIPRO](https://github.com/tensorzero/tensorzero/tree/main/recipes/mipro)
+
+## Key Differences
+
+### TensorZero
+
+- **Production Infrastructure.**
+  TensorZero provides complete production infrastructure including **observability, optimization, evaluations, and experimentation** capabilities.
+  DSPy focuses on the development phase and prompt programming patterns.
+
+- **Model Optimization.**
+  TensorZero provides tools for optimizing models, including fine-tuning and RLHF.
+  DSPy primarily focuses on automated prompt engineering.<br />
+  [→ Optimization Recipes with TensorZero](/docs/recipes/)
+
+- **Inference-Time Optimization.**
+  TensorZero provides inference-time optimizations like dynamic in-context learning.
+  DSPy focuses on offline optimization strategies (e.g. static in-context learning).<br />
+  [→ Inference-Time Optimizations with TensorZero](/docs/gateway/guides/inference-time-optimizations/)
+
+### DSPy
+
+- **Advanced Automated Prompt Engineering.**
+  DSPy provides sophisticated automated prompt engineering tools for LLMs like teleprompters, recursive reasoning, and self-improvement loops.
+  TensorZero has some built-in prompt optimization features (more on the way) and integrates with DSPy for additional capabilities.<br />
+  [→ Improving Math Reasoning &mdash; Combining TensorZero and DSPy](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)
+
+- **Lightweight Design.**
+  DSPy is a lightweight framework focused solely on LLM programming patterns, particularly during the R&D stage.
+  TensorZero is a more comprehensive platform with additional infrastructure components covering end-to-end LLM engineering workflows.
+
+<Tip title="Feedback">
+
+Is TensorZero missing any features that are really important to you? Let us know on [GitHub Discussions](https://github.com/tensorzero/tensorzero/discussions), [Slack](https://www.tensorzero.com/slack), or [Discord](https://www.tensorzero.com/discord).
+
+</Tip>
+
+## Combining TensorZero and DSPy
+
+You can get the best of both worlds by using DSPy and TensorZero together!
+
+TensorZero provides a number of pre-built optimization recipes covering common LLM engineering workflows like supervised fine-tuning and RLHF.
+But you can also easily create your own recipes and workflows.
+This example shows how to optimize a TensorZero function using a tool like DSPy.
+
+[→ Improving Math Reasoning &mdash; Combining TensorZero and DSPy](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)
