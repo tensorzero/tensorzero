@@ -53,7 +53,8 @@ jobs:
     uses: ./.github/workflows/batch-test.yml
     secrets: inherit
   live-tests:
-    runs-on: namespace-profile-tensorzero-8x16
+    # runs-on: namespace-profile-tensorzero-8x16
+    runs-on: ubuntu-latest
     permissions:
       # Permission to checkout the repository
       contents: read
