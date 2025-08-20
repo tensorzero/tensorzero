@@ -5,7 +5,7 @@ steps:
       - "curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash"
       # Install uv
       - "curl -LsSf https://astral.sh/uv/install.sh | sh"
-      - "export $PATH=$HOME/.local/bin:$PATH"
+      - "export PATH=$HOME/.local/bin:$PATH"
       # Install Python
       - "uv python install"
       # Install cargo-nextest
