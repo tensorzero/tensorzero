@@ -386,7 +386,7 @@ jobs:
             # ClickHouse can make new releases at any time, which might break our tests.
             # We allow this job to fail to avoid blocking CI whenever this happens.
             # However, we'll still want to fix the failing tests soon after we notice the failure
-            allow_failure: true
+            allow_failure: false
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
