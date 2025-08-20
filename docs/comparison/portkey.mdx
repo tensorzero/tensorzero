@@ -1,5 +1,6 @@
 ---
 title: "Comparison: TensorZero vs. Portkey"
+sidebarTitle: "Portkey"
 description: "TensorZero is an open-source alternative to Portkey featuring an LLM gateway, observability, optimization, evaluations, and experimentation."
 ---
 
@@ -11,23 +12,23 @@ Additionally, TensorZero has more features around LLM optimization (e.g. advance
 
 - **Unified Inference API.**
   Both TensorZero and Portkey offer a unified inference API that allows you to access LLMs from most major model providers with a single integration, with support for structured outputs, batch inference, tool use, streaming, and more.<br />
-  [→ TensorZero Gateway Quick Start](/quickstart/)
+  [→ TensorZero Gateway Quickstart](/docs/quickstart/)
 
 - **Automatic Fallbacks, Retries, & Load Balancing for Higher Reliability.**
   Both TensorZero and Portkey offer automatic fallbacks, retries, and load balancing features to increase reliability.<br />
-  [→ Retries & Fallbacks with TensorZero](/guides/inference/call-any-llm-provider/)
+  [→ Retries & Fallbacks with TensorZero](/docs/gateway/guides/retries-fallbacks/)
 
 - **Experimentation (A/B Testing or Canary Testing).**
   Both TensorZero and Portkey offer experimentation features to help you test your prompts and models.<br />
-  [→ Experimentation (A/B Testing) with TensorZero](/guides/experimentation/compare-variants-ab-testing/)
+  [→ Experimentation (A/B Testing) with TensorZero](/docs/gateway/guides/experimentation/)
 
 - **Schemas, Templates.**
   Both TensorZero and Portkey offer schema and template features to help you manage your LLM applications.<br />
-  [→ Prompt Templates & Schemas with TensorZero](/configuration-reference/)
+  [→ Prompt Templates & Schemas with TensorZero](/docs/gateway/guides/prompt-templates-schemas/)
 
 - **Multimodal Inference.**
   Both TensorZero and Portkey support multimodal inference.<br />
-  [→ Multimodal Inference with TensorZero](/guides/inference/call-any-llm-provider/)
+  [→ Multimodal Inference with TensorZero](/docs/gateway/guides/multimodal-inference/)
 
 ## Key Differences
 
@@ -40,27 +41,27 @@ Additionally, TensorZero has more features around LLM optimization (e.g. advance
 - **Built-in Evaluations.**
   TensorZero offers built-in evaluation functionality, including heuristics and LLM judges.
   Portkey doesn't offer any evaluation features.<br />
-  [→ TensorZero Evaluations Overview](/guides/evaluation/evaluate-individual-inferences/)
+  [→ TensorZero Evaluations Overview](/docs/evaluations/)
 
 - **Open-Source Inference Caching.**
   TensorZero offers open-source inference caching features, allowing you to cache requests to improve latency and reduce costs.
   Portkey also offers inference caching features, but they are limited to their commercial (hosted) offering.<br />
-  [→ Inference Caching with TensorZero](/guides/inference/call-any-llm-provider/)
+  [→ Inference Caching with TensorZero](/docs/gateway/guides/inference-caching/)
 
 - **Open-Source Fine-Tuning Workflows.**
   TensorZero offers open-source built-in fine-tuning workflows, allowing you to create custom models using your own data.
   Portkey also offers fine-tuning features, but they are limited to their enterprise ($$$) offering.<br />
-  [→ Fine-Tuning Recipes with TensorZero](/guides/optimization/overview/)
+  [→ Fine-Tuning Recipes with TensorZero](/docs/recipes/)
 
 - **Advanced Fine-Tuning Workflows.**
   TensorZero offers advanced fine-tuning workflows, including the ability to curate datasets using feedback signals (e.g. production metrics) and the ability to use RLHF for reinforcement learning.
   Portkey doesn't offer similar features.<br />
-  [→ Fine-Tuning Recipes with TensorZero](/guides/optimization/overview/)
+  [→ Fine-Tuning Recipes with TensorZero](/docs/recipes/)
 
 - **Inference-Time Optimizations.**
   TensorZero offers built-in inference-time optimizations (e.g. dynamic in-context learning), allowing you to optimize your inference performance.
   Portkey doesn't offer any inference-time optimizations.<br />
-  [→ Inference-Time Optimizations with TensorZero](/guides/optimization/overview/)
+  [→ Inference-Time Optimizations with TensorZero](/docs/gateway/guides/inference-time-optimizations/)
 
 - **Programmatic & GitOps-Friendly Orchestration.**
   TensorZero can be fully orchestrated programmatically in a GitOps-friendly way.

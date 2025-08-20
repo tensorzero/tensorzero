@@ -1,15 +1,16 @@
 ---
 title: "Comparison: TensorZero vs. LangChain"
+sidebarTitle: "LangChain"
 description: "TensorZero is an open-source alternative to LangChain featuring an LLM gateway, observability, optimization, evaluations, and experimentation."
 ---
 
 TensorZero and LangChain both provide tools for LLM orchestration, but they serve different purposes in the ecosystem.
 While LangChain focuses on rapid prototyping with a large ecosystem of integrations, TensorZero is designed for production-grade deployments with built-in observability, optimization, evaluations, and experimentation capabilities.
 
-<Tip>
-**Interested in LangGraph?**
+<Tip title="Interested in LangGraph?">
 
 We provide a minimal example [integrating TensorZero with LangGraph](https://github.com/tensorzero/tensorzero/tree/main/examples/integrations/langgraph).
+
 </Tip>
 
 ## Similarities
@@ -25,15 +26,15 @@ We provide a minimal example [integrating TensorZero with LangGraph](https://git
 
 - **Unified Interface.**
   Both TensorZero and LangChain offer a unified interface that allows you to access LLMs from most major model providers with a single integration, with support for structured outputs, tool use, streaming, and more.<br />
-  [→ TensorZero Gateway Quick Start](/quickstart)
+  [→ TensorZero Gateway Quickstart](/docs/quickstart/)
 
 - **Inference-Time Optimizations.**
   Both TensorZero and LangChain offer inference-time optimizations like dynamic in-context learning.<br />
-  [→ Inference-Time Optimizations with TensorZero](/guides/optimization/overview)
+  [→ Inference-Time Optimizations with TensorZero](/docs/gateway/guides/inference-time-optimizations/)
 
 - **Inference Caching.**
   Both TensorZero and LangChain allow you to cache requests to improve latency and reduce costs.<br />
-  [→ Inference Caching with TensorZero](/guides/gateway/call-any-llm-provider)
+  [→ Inference Caching with TensorZero](/docs/gateway/guides/inference-caching/)
 
 ## Key Differences
 
@@ -44,8 +45,8 @@ We provide a minimal example [integrating TensorZero with LangGraph](https://git
   By treating LLM functions as interfaces with structured inputs and outputs, TensorZero allows you to swap implementations without changing application code.
   This approach makes it easier to manage complex LLM applications, enables GitOps for prompt and configuration management, and streamlines optimization and experimentation workflows.
   LangChain blends application logic with LLM implementation details, streamlining rapid prototyping but making it harder to maintain and optimize complex applications.<br />
-  [→ Prompt Templates & Schemas with TensorZero](/guides/gateway/call-any-llm-provider)<br />
-  [→ Advanced: Think of LLM Applications as POMDPs — Not Agents](https://www.tensorzero.com/blog/think-of-llm-applications-as-pomdps-not-agents/)
+  [→ Prompt Templates & Schemas with TensorZero](/docs/gateway/guides/prompt-templates-schemas/)<br />
+  [→ Advanced: Think of LLM Applications as POMDPs — Not Agents](/blog/think-of-llm-applications-as-pomdps-not-agents/)
 
 - **Open-Source Observability.**
   TensorZero offers built-in observability features (including UI), collecting inference and feedback data in your own database.
@@ -55,49 +56,49 @@ We provide a minimal example [integrating TensorZero with LangGraph](https://git
   TensorZero offers built-in optimization features, including supervised fine-tuning, RLHF, and automated prompt engineering recipes.
   With the TensorZero UI, you can fine-tune models using your inference and feedback data in just a few clicks.
   LangChain doesn't offer any built-in optimization features.<br />
-  [→ Optimization Recipes with TensorZero](/recipes)
+  [→ Optimization Recipes with TensorZero](/docs/recipes/)
 
 - **Built-in Evaluations.**
   TensorZero offers built-in evaluation functionality, including heuristics and LLM judges.
   LangChain requires a separate commercial service (LangSmith) for evaluations.<br />
-  [→ TensorZero Evaluations Overview](/guides/evaluation/evaluate-individual-inferences)
+  [→ TensorZero Evaluations Overview](/docs/evaluations/)
 
 - **Built-in Experimentation (A/B Testing).**
   TensorZero offers built-in experimentation features, allowing you to run experiments on your prompts, models, and inference strategies.
   LangChain doesn't offer any experimentation features.<br />
-  [→ Experimentation (A/B Testing) with TensorZero](/guides/experimentation/compare-variants-ab-testing)
+  [→ Experimentation (A/B Testing) with TensorZero](/docs/gateway/guides/experimentation/)
 
 - **Performance & Scalability.**
   TensorZero is built from the ground up for high performance, with a focus on low latency and high throughput.
   LangChain introduces substantial latency and memory overhead to your application.<br />
-  [→ TensorZero Gateway Benchmarks](/guides/advanced/benchmarks)
+  [→ TensorZero Gateway Benchmarks](/docs/gateway/benchmarks/)
 
 - **Language and Platform Agnostic.**
   TensorZero is language and platform agnostic; in addition to its Python client, it supports any language that can make HTTP requests.
   LangChain only supports applications built in Python and JavaScript.<br />
-  [→ TensorZero Gateway API Reference](/api-reference/introduction)
+  [→ TensorZero Gateway API Reference](/docs/gateway/api-reference/inference/)
 
 - **Batch Inference.**
   TensorZero supports batch inference with certain model providers, which significantly reduces inference costs.
   LangChain doesn't support batch inference.<br />
-  [→ Batch Inference with TensorZero](/guides/gateway/call-any-llm-provider)
+  [→ Batch Inference with TensorZero](/docs/gateway/guides/batch-inference/)
 
 - **Credential Management.**
   TensorZero streamlines credential management for your model providers, allowing you to manage your API keys in a single place and set up advanced workflows like load balancing between API keys.
   LangChain only offers basic credential management features.<br />
-  [→ Credential Management with TensorZero](/guides/deployment/gateway)
+  [→ Credential Management with TensorZero](/docs/gateway/guides/credential-management/)
 
 - **Automatic Fallbacks for Higher Reliability.**
   TensorZero allows you to very easily set up retries, fallbacks, load balancing, and routing to increase reliability.
   LangChain only offers basic, cumbersome fallback functionality.<br />
-  [→ Retries & Fallbacks with TensorZero](/guides/gateway/call-any-llm-provider)
+  [→ Retries & Fallbacks with TensorZero](/docs/gateway/guides/retries-fallbacks/)
 
 ### LangChain
 
 - **Focus on Rapid Prototyping.**
   LangChain is designed for rapid prototyping, with a focus on ease of use and rapid iteration.
-  TensorZero is designed for production-grade deployments, so it requires more setup and configuration (e.g. a database to store your observability data) — but you can still get started in minutes.<br />
-  [→ TensorZero Quick Start — From 0 to Observability & Fine-Tuning](/quickstart)
+  TensorZero is designed for production-grade deployments, so it requires more setup and configuration (e.g. a database to store your observability data) &mdash; but you can still get started in minutes.<br />
+  [→ TensorZero Quickstart — From 0 to Observability & Fine-Tuning](/docs/quickstart/)
 
 - **Ecosystem of Integrations.**
   LangChain has a large ecosystem of integrations with other libraries and tools, including model providers, vector databases, observability tools, and more.
@@ -107,8 +108,8 @@ We provide a minimal example [integrating TensorZero with LangGraph](https://git
   LangChain offers paid managed (hosted) services for features like observability (LangSmith).
   TensorZero is fully open-source and self-hosted.
 
-<Tip>
-**Feedback**
+<Tip title="Feedback">
 
 Is TensorZero missing any features that are really important to you? Let us know on [GitHub Discussions](https://github.com/tensorzero/tensorzero/discussions), [Slack](https://www.tensorzero.com/slack), or [Discord](https://www.tensorzero.com/discord).
+
 </Tip>

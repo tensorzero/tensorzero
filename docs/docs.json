@@ -18,108 +18,32 @@
         "tab": "Guides",
         "groups": [
           {
-            "group": "Get started",
-            "pages": ["index", "quickstart"]
-          },
-          {
-            "group": "Inference",
+            "group": "Introduction",
             "pages": [
-              "guides/inference/call-any-llm-provider",
+              "index",
+              "quickstart",
+              "vision-roadmap",
+              "faq",
               {
-                "group": "Model Providers",
+                "group": "Comparison",
+                "hidden": true,
                 "pages": [
-                  "guides/inference/model-providers/index",
-                  "guides/inference/model-providers/anthropic",
-                  "guides/inference/model-providers/aws-bedrock",
-                  "guides/inference/model-providers/aws-sagemaker",
-                  "guides/inference/model-providers/azure",
-                  "guides/inference/model-providers/deepseek",
-                  "guides/inference/model-providers/fireworks",
-                  "guides/inference/model-providers/gcp-vertex-ai-anthropic",
-                  "guides/inference/model-providers/gcp-vertex-ai-gemini",
-                  "guides/inference/model-providers/google-ai-studio-gemini",
-                  "guides/inference/model-providers/groq",
-                  "guides/inference/model-providers/hyperbolic",
-                  "guides/inference/model-providers/index",
-                  "guides/inference/model-providers/mistral",
-                  "guides/inference/model-providers/openai-compatible",
-                  "guides/inference/model-providers/openai",
-                  "guides/inference/model-providers/openrouter",
-                  "guides/inference/model-providers/sglang",
-                  "guides/inference/model-providers/tgi",
-                  "guides/inference/model-providers/together",
-                  "guides/inference/model-providers/vllm",
-                  "guides/inference/model-providers/xai"
+                  "comparison/dspy",
+                  "comparison/langchain",
+                  "comparison/langfuse",
+                  "comparison/litellm",
+                  "comparison/openpipe",
+                  "comparison/openrouter",
+                  "comparison/portkey"
                 ]
               }
             ]
           },
           {
-            "group": "Observability",
-            "pages": [
-              "guides/observability/log-inferences",
-              "guides/observability/log-episodes",
-              "guides/observability/log-feedback",
-              "guides/observability/export-otlp-opentelemetry"
-            ]
-          },
-          {
-            "group": "Optimization",
-            "pages": ["guides/optimization/overview"]
-          },
-          {
-            "group": "Evaluation",
-            "pages": [
-              "guides/evaluation/evaluate-individual-inferences",
-              "guides/evaluation/evaluate-end-to-end-workflows"
-            ]
-          },
-          {
-            "group": "Experimentation",
-            "pages": ["guides/experimentation/compare-variants-ab-testing"]
-          },
-          {
-            "group": "Deployment",
-            "pages": [
-              "guides/deployment/gateway",
-              "guides/deployment/ui",
-              "guides/deployment/clickhouse",
-              "guides/deployment/object-storage"
-            ]
-          },
-          {
-            "group": "Advanced",
-            "pages": [
-              "guides/advanced/benchmarks",
-              "guides/advanced/clients",
-              "guides/advanced/data-model",
-              "guides/advanced/integrations",
-              "guides/advanced/tutorial"
-            ]
+            "group": "Gateway",
+            "pages": ["gateway/index", "gateway/tutorial"]
           }
         ]
-      },
-      {
-        "tab": "API Reference",
-        "groups": [
-          {
-            "group": "API documentation",
-            "pages": ["api-reference/introduction"]
-          },
-          {
-            "group": "Endpoint examples",
-            "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
-            ]
-          }
-        ]
-      },
-      {
-        "tab": "Configuration Reference",
-        "pages": ["configuration-reference/index"]
       }
     ],
     "global": {
@@ -156,7 +80,6 @@
     "links": [],
     "primary": {
       "type": "github",
-      "label": "GitHub",
       "href": "https://github.com/tensorzero/tensorzero"
     }
   },

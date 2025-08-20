@@ -1,16 +1,16 @@
 ---
-title: Quick Start — From 0 to Observability & Fine-Tuning
+title: Quickstart
 description: Get up and running with TensorZero in 5 minutes.
 ---
 
-This Quick Start guide shows how we'd upgrade an OpenAI wrapper to a minimal TensorZero deployment with built-in observability and fine-tuning capabilities &mdash; in just 5 minutes.
+This Quickstart guide shows how we'd upgrade an OpenAI wrapper to a minimal TensorZero deployment with built-in observability and fine-tuning capabilities &mdash; in just 5 minutes.
 From there, you can take advantage of dozens of features to build best-in-class LLM applications.
 
-:::tip
+<Tip>
 
 You can also find the runnable code for this example on [GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/quickstart).
 
-:::
+</Tip>
 
 ## Status Quo: OpenAI Wrapper
 
@@ -35,8 +35,7 @@ with OpenAI() as client:
 print(response)
 ```
 
-<details>
-<summary>Sample Output</summary>
+<Accordion title="Sample Output">
 
 ```python
 ChatCompletion(
@@ -67,7 +66,7 @@ ChatCompletion(
 )
 ```
 
-</details>
+</Accordion>
 
 ## Migrating to TensorZero
 
@@ -103,8 +102,7 @@ Let's launch TensorZero.
 curl -LO "https://raw.githubusercontent.com/tensorzero/tensorzero/refs/heads/main/examples/quickstart/docker-compose.yml"
 ```
 
-<details>
-<summary>`docker-compose.yml`</summary>
+<Accordion title="`docker-compose.yml`">
 
 ```yaml title="docker-compose.yml"
 # This is a simplified example for learning purposes. Do not use this in production.
@@ -164,19 +162,17 @@ services:
         condition: service_healthy
 ```
 
-</details>
+</Accordion>
 
 Our setup should look like:
 
-<FileTree>
-
+```
 - config/
   - tensorzero.toml
 - after.py see below
 - before.py
 - docker-compose.yml
-
-</FileTree>
+```
 
 Let's launch everything!
 
@@ -190,8 +186,8 @@ The gateway will replicate our original OpenAI call and store the data in our da
 
 The TensorZero Gateway can be used with the **TensorZero Python client**, with **OpenAI client (Python, Node, etc.)**, or via its **HTTP API in any programming language**.
 
-<Tabs syncKey="client">
-<TabItem label="Python">
+<Tabs>
+<Tab title="Python">
 
 You can install the TensorZero Python client with:
 
@@ -223,8 +219,7 @@ with TensorZeroGateway.build_embedded(
 print(response)
 ```
 
-<details>
-<summary>Sample Output</summary>
+<Accordion title="Sample Output">
 
 ```python
 ChatInferenceResponse(
@@ -244,11 +239,11 @@ ChatInferenceResponse(
 )
 ```
 
-</details>
+</Accordion>
 
-</TabItem>
+</Tab>
 
-<TabItem label="Python (Async)">
+<Tab title="Python (Async)">
 
 You can install the TensorZero Python client with:
 
@@ -287,8 +282,7 @@ async def main():
 asyncio.run(main())
 ```
 
-<details>
-<summary>Sample Output</summary>
+<Accordion title="Sample Output">
 
 ```python
 ChatInferenceResponse(
@@ -308,17 +302,17 @@ ChatInferenceResponse(
 )
 ```
 
-</details>
+</Accordion>
 
-</TabItem>
+</Tab>
 
-<TabItem label="Python (OpenAI)">
+<Tab title="Python (OpenAI)">
 
-:::tip
+<Tip>
 
 You can run an embedded (in-memory) TensorZero Gateway directly in your OpenAI Python client.
 
-:::
+</Tip>
 
 ```python title="after_openai.py" "base_url="http://localhost:3000/openai/v1"" "tensorzero::function_name::generate_haiku"
 from openai import OpenAI
@@ -346,8 +340,7 @@ response = client.chat.completions.create(
 print(response)
 ```
 
-<details>
-<summary>Sample Output</summary>
+<Accordion title="Sample Output">
 
 ```python
 ChatCompletion(
@@ -383,11 +376,11 @@ ChatCompletion(
 )
 ```
 
-</details>
+</Accordion>
 
-</TabItem>
+</Tab>
 
-<TabItem label="Node (OpenAI)">
+<Tab title="Node (OpenAI)">
 
 You can use TensorZero in Node (JavaScript/TypeScript) with the OpenAI Node client.
 This approach requires running the TensorZero Gateway as a separate service.
@@ -413,8 +406,7 @@ const response = await client.chat.completions.create({
 console.log(JSON.stringify(response, null, 2));
 ```
 
-<details>
-<summary>Sample Output</summary>
+<Accordion title="Sample Output">
 
 ```json
 {
@@ -443,11 +435,11 @@ console.log(JSON.stringify(response, null, 2));
 }
 ```
 
-</details>
+</Accordion>
 
-</TabItem>
+</Tab>
 
-<TabItem label="HTTP">
+<Tab title="HTTP">
 
 ```bash
 curl -X POST "http://localhost:3000/inference" \
@@ -465,8 +457,7 @@ curl -X POST "http://localhost:3000/inference" \
   }'
 ```
 
-<details>
-<summary>Sample Output</summary>
+<Accordion title="Sample Output">
 
 ```python
 {
@@ -486,9 +477,9 @@ curl -X POST "http://localhost:3000/inference" \
 }
 ```
 
-</details>
+</Accordion>
 
-</TabItem>
+</Tab>
 
 </Tabs>
 
@@ -507,14 +498,14 @@ We can inspect data about individual inferences, entire functions, and more.
 <div class="flex gap-4">
   <div>
     <img
-      src="quick-start-observability-function.png"
+      src="quickstart-observability-function.png"
       alt="TensorZero UI Observability - Function Detail Page - Screenshot"
     />
   </div>
   <span>{/* CSS hack to maintain margin */}</span>
   <div>
     <img
-      src="quick-start-observability-inference.png"
+      src="quickstart-observability-inference.png"
       alt="TensorZero UI Observability - Inference Detail Page - Screenshot"
     />
   </div>
@@ -533,22 +524,19 @@ The TensorZero UI also provides a workflow for fine-tuning models like GPT-4o an
 With a few clicks, you can launch a fine-tuning job.
 Once the job is complete, the TensorZero UI will provide a configuration snippet you can add to your `tensorzero.toml`.
 
-<img
-  src="quick-start-observability"
-  alt="TensorZero UI Fine-Tuning Screenshot"
-/>
+<img src="quickstart-sft.png" alt="TensorZero UI Fine-Tuning Screenshot" />
 
-:::tip
+<Tip>
 
 We can also send [metrics & feedback](/docs/gateway/guides/metrics-feedback/) to the TensorZero Gateway.
 This data is used to curate better datasets for fine-tuning and other optimization workflows.
 Since we haven't done that yet, the TensorZero UI will skip the curation step before fine-tuning.
 
-:::
+</Tip>
 
 ## Conclusion & Next Steps
 
-The Quick Start guide gives a tiny taste of what TensorZero is capable of.
+The Quickstart guide gives a tiny taste of what TensorZero is capable of.
 
 We strongly encourage you to check out the guides on [metrics & feedback](/docs/gateway/guides/metrics-feedback/) and [prompt templates & schemas](/docs/gateway/guides/prompt-templates-schemas/).
 Though optional, they unlock many of the downstream features TensorZero offers in experimentation and optimization.

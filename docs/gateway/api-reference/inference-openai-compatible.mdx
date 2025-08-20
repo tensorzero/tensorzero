@@ -1,0 +1,1206 @@
+---
+title: "API Reference: Inference (OpenAI-Compatible)"
+description: API reference for the `/openai/v1/chat/completions` endpoint.
+tableOfContents:
+  maxHeadingLevel: 5
+---
+
+## `POST /openai/v1/chat/completions`
+
+The `/openai/v1/chat/completions` endpoint allows TensorZero users to make TensorZero inferences with the OpenAI client.
+The gateway translates the OpenAI request parameters into the arguments expected by the `inference` endpoint and calls the same underlying implementation.
+This endpoint supports most of the features supported by the `inference` endpoint, but there are some limitations.
+Most notably, this endpoint doesn't support dynamic credentials, so they must be specified with a different method.
+
+<Tip>
+
+See the [API Reference for `POST /inference`](/docs/gateway/api-reference/inference/) for more details on inference with the native TensorZero API.
+
+</Tip>
+
+### Request
+
+The OpenAI-compatible inference endpoints translate the OpenAI request parameters into the arguments expected by the `inference` endpoint.
+
+TensorZero-specific parameters are prefixed with `tensorzero::` (e.g. `tensorzero::episode_id`).
+These fields should be provided as extra body parameters in the request body.
+
+:::caution
+
+The gateway will use the credentials specified in the `tensorzero.toml` file.
+In most cases, these credentials will be environment variables available to the TensorZero gateway &mdash; _not_ your OpenAI client.
+
+API keys sent from the OpenAI client will be ignored.
+
+:::
+
+#### `tensorzero::credentials`
+
+- **Type:** object (a map from dynamic credential names to API keys)
+- **Required:** no (default: no credentials)
+
+Each model provider in your TensorZero configuration can be configured to accept credentials at inference time by using the `dynamic` location (e.g. `dynamic::my_dynamic_api_key_name`).
+See the [configuration reference](/docs/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
+The gateway expects the credentials to be provided in the `credentials` field of the request body as specified below.
+The gateway will return a 400 error if the credentials are not provided and the model provider has been configured with dynamic credentials.
+
+<Accordion title="Example">
+
+```toml
+[models.my_model_name.providers.my_provider_name]
+# ...
+# Note: the name of the credential field (e.g. `api_key_location`) depends on the provider type
+api_key_location = "dynamic::my_dynamic_api_key_name"
+# ...
+```
+
+```json
+{
+  // ...
+  "tensorzero::credentials": {
+    // ...
+    "my_dynamic_api_key_name": "sk-..."
+    // ...
+  }
+  // ...
+}
+```
+
+</Accordion>
+
+#### `tensorzero::dryrun`
+
+- **Type:** boolean
+- **Required:** no
+
+If `true`, the inference request will be executed but won't be stored to the database.
+The gateway will still call the downstream model providers.
+
+This field is primarily for debugging and testing, and you should generally not use it in production.
+
+This field should be provided as an extra body parameter in the request body.
+
+#### `tensorzero::episode_id`
+
+- **Type:** UUID
+- **Required:** no
+
+The ID of an existing episode to associate the inference with.
+
+For the first inference of a new episode, you should not provide an `episode_id`.
+If null, the gateway will generate a new episode ID and return it in the response.
+Only use episode IDs that were returned by the TensorZero gateway.
+
+This field should be provided as an extra body parameter in the request body.
+
+#### `tensorzero::extra_body`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `tensorzero::extra_body` field allows you to modify the request body that TensorZero sends to a model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+:::caution
+
+The OpenAI SDKs generally also support such functionality.
+
+If you use the OpenAI SDK's `extra_body` field, it will override the request from the client to the gateway.
+If you use `tensorzero::extra_body`, it will override the request from the gateway to the model provider.
+
+:::
+
+Each object in the array must have three fields:
+
+- `variant_name` or `model_provider_name`: The modification will only be applied to the specified variant or model provider
+- `pointer`: A [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body
+- One of the following:
+  - `value`: The value to insert at that location; it can be of any type including nested types
+  - `delete = true`: Deletes the field at the specified location, if present.
+
+<Tip>
+
+You can also set `extra_body` in the configuration file.
+The values provided at inference-time take priority over the values in the configuration file.
+
+</Tip>
+
+<Accordion title="
+
+Example: `tensorzero::extra_body`
+
+">
+
+If TensorZero would normally send this request body to the provider...
+
+```json
+{
+  "project": "tensorzero",
+  "safety_checks": {
+    "no_internet": false,
+    "no_agi": true
+  }
+}
+```
+
+...then the following `extra_body` in the inference request...
+
+```json
+{
+  // ...
+  "tensorzero::extra_body": [
+    {
+      "variant_name": "my_variant", // or "model_provider_name": "my_model_provider"
+      "pointer": "/agi",
+      "value": true
+    },
+    {
+      "variant_name": "my_variant", // or "model_provider_name": "my_model_provider"
+      "pointer": "/safety_checks/no_agi",
+      "value": {
+        "bypass": "on"
+      }
+    }
+  ]
+}
+```
+
+...overrides the request body (for `my_variant` only) to:
+
+```json
+{
+  "agi": true,
+  "project": "tensorzero",
+  "safety_checks": {
+    "no_internet": false,
+    "no_agi": {
+      "bypass": "on"
+    }
+  }
+}
+```
+
+</Accordion>
+
+#### `tensorzero::extra_headers`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `tensorzero::extra_headers` field allows you to modify the request headers that TensorZero sends to a model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+:::caution
+
+The OpenAI SDKs generally also support such functionality.
+
+If you use the OpenAI SDK's `extra_headers` field, it will override the request from the client to the gateway.
+If you use `tensorzero::extra_headers`, it will override the request from the gateway to the model provider.
+
+:::
+
+Each object in the array must have three fields:
+
+- `variant_name` or `model_provider_name`: The modification will only be applied to the specified variant or model provider
+- `name`: The name of the header to modify
+- `value`: The value to set the header to
+
+<Tip>
+
+You can also set `extra_headers` in the configuration file.
+The values provided at inference-time take priority over the values in the configuration file.
+
+</Tip>
+
+<Accordion title="
+
+Example: `tensorzero::extra_headers`
+
+">
+
+If TensorZero would normally send the following request headers to the provider...
+
+```text
+Safety-Checks: on
+```
+
+...then the following `extra_headers`...
+
+```json
+{
+  "extra_headers": [
+    {
+      "variant_name": "my_variant", // or "model_provider_name": "my_model_provider"
+      "name": "Safety-Checks",
+      "value": "off"
+    },
+    {
+      "variant_name": "my_variant", // or "model_provider_name": "my_model_provider"
+      "name": "Intelligence-Level",
+      "value": "AGI"
+    }
+  ]
+}
+```
+
+...overrides the request headers to:
+
+```text
+Safety-Checks: off
+Intelligence-Level: AGI
+```
+
+</Accordion>
+
+#### `tensorzero::tags`
+
+- **Type:** flat JSON object with string keys and values
+- **Required:** no
+
+User-provided tags to associate with the inference.
+
+For example, `{"user_id": "123"}` or `{"author": "Alice"}`.
+
+#### `frequency_penalty`
+
+- **Type:** float
+- **Required:** no (default: `null`)
+
+Penalizes new tokens based on their frequency in the text so far if positive, encourages them if negative.
+Overrides the `frequency_penalty` setting for any chat completion variants being used.
+
+#### `max_completion_tokens`
+
+- **Type:** integer
+- **Required:** no (default: `null`)
+
+Limits the number of tokens that can be generated by the model in a chat completion variant.
+If both this and `max_tokens` are set, the smaller value is used.
+
+#### `max_tokens`
+
+- **Type:** integer
+- **Required:** no (default: `null`)
+
+Limits the number of tokens that can be generated by the model in a chat completion variant.
+If both this and `max_completion_tokens` are set, the smaller value is used.
+
+#### `messages`
+
+- **Type:** list
+- **Required:** yes
+
+A list of messages to provide to the model.
+
+Each message is an object with the following fields:
+
+- `role` (required): The role of the message sender in an OpenAI message (`assistant`, `system`, `tool`, or `user`).
+- `content` (required for `user` and `system` messages and optional for `assistant` and `tool` messages): The content of the message.
+  The content must be either a string or an array of content blocks (see below).
+- `tool_calls` (optional for `assistant` messages, otherwise disallowed): A list of tool calls. Each tool call is an object with the following fields:
+  - `id`: A unique identifier for the tool call
+  - `type`: The type of tool being called (currently only `"function"` is supported)
+  - `function`: An object containing:
+    - `name`: The name of the function to call
+    - `arguments`: A JSON string containing the function arguments
+- `tool_call_id` (required for `tool` messages, otherwise disallowed): The ID of the tool call to associate with the message. This should be one that was originally returned by the gateway in a tool call `id` field.
+
+A content block is an object that can have type `text` or `image_url`.
+
+If the content block has type `text`, it must have either of the following additional fields:
+
+- `text`: The text for the content block.
+- `tensorzero::arguments`: A JSON object containing the function arguments for TensorZero functions with templates and schemas (see [Prompt Templates & Schemas](/docs/gateway/guides/prompt-templates-schemas/) for details).
+
+If a content block has type `image_url`, it must have the following additional fields:
+
+- `"image_url"`: A JSON object with the following field:
+  - `url`: The URL for a remote image (e.g. `"https://example.com/image.png"`) or base64-encoded data for an embedded image (e.g. `"data:image/png;base64,..."`).
+
+:::caution
+
+Currently, the OpenAI-compatible inference endpoint does not accept other content blocks like `raw_text` or `unknown`.
+See the [Inference API Reference](/docs/gateway/api-reference/inference/) for details on how to provide such content blocks as input.
+
+:::
+
+#### `model`
+
+- **Type:** string
+- **Required:** yes
+
+The name of the TensorZero function or model being called, with the appropriate prefix.
+
+<table>
+  <tbody>
+    <tr>
+      <td width="50%">
+        <b>To call...</b>
+      </td>
+      <td width="50%">
+        <b>Use this format...</b>
+      </td>
+    </tr>
+    <tr>
+      <td width="50%">
+        A function defined as `[functions.my_function]` in your
+        `tensorzero.toml` configuration file
+      </td>
+      <td width="50%">`tensorzero::function_name::my_function`</td>
+    </tr>
+    <tr>
+      <td width="50%">
+        A model defined as `[models.my_model]` in your `tensorzero.toml`
+        configuration file
+      </td>
+      <td width="50%">`tensorzero::model_name::my_model`</td>
+    </tr>
+    <tr>
+      <td width="50%">
+        A model offered by a model provider, without defining it in your
+        `tensorzero.toml` configuration file (if supported, see below)
+      </td>
+      <td width="50%">
+        `tensorzero::model_name::{provider_type}::{model_name}`
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<Tip>
+
+The following model providers support short-hand model names: `anthropic`, `deepseek`, `fireworks`, `gcp_vertex_anthropic`, `gcp_vertex_gemini`, `google_ai_studio_gemini`, `groq`, `hyperbolic`, `mistral`, `openai`, `openrouter`, `together`, and `xai`.
+
+</Tip>
+
+For example, if you have the following configuration:
+
+```toml title="tensorzero.toml"
+[models.gpt-4o]
+routing = ["openai", "azure"]
+
+[models.gpt-4o.providers.openai]
+# ...
+
+[models.gpt-4o.providers.azure]
+# ...
+
+[functions.extract-data]
+# ...
+```
+
+Then:
+
+- `tensorzero::function_name::extract-data` calls the `extract-data` function defined above.
+- `tensorzero::model_name::gpt-4o` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/docs/gateway/guides/retries-fallbacks/) for details.
+- `tensorzero::model_name::openai::gpt-4o` calls the OpenAI API directly for the `gpt-4o` model, ignoring the `gpt-4o` model defined above.
+
+:::caution
+
+Be careful about the different prefixes: `tensorzero::model_name::gpt-4o` will use the `[models.gpt-4o]` model defined in the `tensorzero.toml` file, whereas `tensorzero::model_name::openai::gpt-4o` will call the OpenAI API directly for the `gpt-4o` model.
+
+:::
+
+#### `parallel_tool_calls`
+
+- **Type:** boolean
+- **Required:** no (default: `null`)
+
+Overrides the `parallel_tool_calls` setting for the function being called.
+
+#### `presence_penalty`
+
+- **Type:** float
+- **Required:** no (default: `null`)
+
+Penalizes new tokens based on whether they appear in the text so far if positive, encourages them if negative.
+Overrides the `presence_penalty` setting for any chat completion variants being used.
+
+#### `response_format`
+
+- **Type:** either a string or an object
+- **Required:** no (default: `null`)
+
+Options here are `"text"`, `"json_object"`, and `"{"type": "json_schema", "schema": ...}"`, where the schema field contains a valid JSON schema.
+This field is not actually respected except for the `"json_schema"` variant, in which the `schema` field can be used to dynamically set the output schema for a `json` function.
+
+#### `seed`
+
+- **Type:** integer
+- **Required:** no (default: `null`)
+
+Overrides the `seed` setting for any chat completion variants being used.
+
+#### `stop_sequences`
+
+- **Type:** list of strings
+- **Required:** no (default: `null`)
+
+Overrides the `stop_sequences` setting for any chat completion variants being used.
+
+#### `stream`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+If true, the gateway will stream the response to the client in an OpenAI-compatible format.
+
+#### `stream_options`
+
+- **Type:** object with field `"include_usage"`
+- **Required:** no (default: `null`)
+
+If `"include_usage"` is `true`, the gateway will include usage information in the response.
+
+<Accordion title="
+
+Example: `stream_options`
+
+">
+
+If the following `stream_options` is provided...
+
+```json
+{
+  ...
+  "stream_options": {
+    "include_usage": true
+  }
+  ...
+}
+```
+
+...then the gateway will include usage information in the response.
+
+```json
+{
+  ...
+  "usage": {
+    "prompt_tokens": 123,
+    "completion_tokens": 456,
+    "total_tokens": 579
+  }
+  ...
+```
+
+</Accordion>
+
+#### `temperature`
+
+- **Type:** float
+- **Required:** no (default: `null`)
+
+Overrides the `temperature` setting for any chat completion variants being used.
+
+#### `tools`
+
+- **Type:** list of `tool` objects (see below)
+- **Required:** no (default: `null`)
+
+Allows the user to dynamically specify tools at inference time in addition to those that are specified in the configuration.
+
+Each `tool` object has the following structure:
+
+- **`type`**: Must be `"function"`
+- **`function`**: An object containing:
+  - **`name`**: The name of the function (string, required)
+  - **`description`**: A description of what the function does (string, optional)
+  - **`parameters`**: A JSON Schema object describing the function's parameters (required)
+  - **`strict`**: Whether to enforce strict schema validation (boolean, defaults to false)
+
+#### `tool_choice`
+
+- **Type:** string or object
+- **Required:** no (default: `"none"` if no tools are present, `"auto"` if tools are present)
+
+Controls which (if any) tool is called by the model by overriding the value in configuration. Supported values:
+
+- `"none"`: The model will not call any tool and instead generates a message
+- `"auto"`: The model can pick between generating a message or calling one or more tools
+- `"required"`: The model must call one or more tools
+- `{"type": "function", "function": {"name": "my_function"}}`: Forces the model to call the specified tool
+
+#### `top_p`
+
+- **Type:** float
+- **Required:** no (default: `null`)
+
+Overrides the `top_p` setting for any chat completion variants being used.
+
+#### `tensorzero::variant_name`
+
+- **Type:** string
+- **Required:** no
+
+If set, pins the inference request to a particular variant (not recommended).
+
+You should generally not set this field, and instead let the TensorZero gateway assign a variant.
+This field is primarily used for testing or debugging purposes.
+
+This field should be provided as an extra body parameter in the request body.
+
+### Response
+
+<Tabs>
+<Tab title="Regular">
+
+In regular (non-streaming) mode, the response is a JSON object with the following fields:
+
+#### `choices`
+
+- **Type:** list of `choice` objects, where each choice contains:
+  - **`index`**: A zero-based index indicating the choice's position in the list (integer)
+  - **`finish_reason`**: Always `"stop"`.
+  - **`message`**: An object containing:
+    - **`content`**: The message content (string, optional)
+    - **`tool_calls`**: List of tool calls made by the model (optional). The format is the same as in the request.
+    - **`role`**: The role of the message sender (always `"assistant"`).
+
+:::caution
+
+The OpenAI-compatible inference endpoint can't handle unknown content blocks in the response.
+If the model provider returns an unknown content block, the gateway will drop the content block from the response and log a warning.
+
+If you need to access unknown content blocks, use the native TensorZero API.
+See the [Inference API Reference](/docs/gateway/api-reference/inference/) for details.
+
+:::
+
+#### `created`
+
+- **Type:** integer
+
+The Unix timestamp (in seconds) of when the inference was created.
+
+#### `episode_id`
+
+- **Type:** UUID
+
+The ID of the episode that the inference was created for.
+
+#### `id`
+
+- **Type:** UUID
+
+The inference ID.
+
+#### `model`
+
+- **Type:** string
+
+The name of the variant that was actually used for the inference.
+
+#### `object`
+
+- **Type:** string
+
+The type of the inference object (always `"chat.completion"`).
+
+#### `system_fingerprint`
+
+- **Type:** string
+
+Always ""
+
+#### `usage`
+
+- **Type:** object
+
+Contains token usage information for the request and response, with the following fields:
+
+- **`prompt_tokens`**: Number of tokens in the prompt (integer)
+- **`completion_tokens`**: Number of tokens in the completion (integer)
+- **`total_tokens`**: Total number of tokens used (integer)
+
+</Tab>
+<Tab title="Streaming">
+
+In streaming mode, the response is an <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#event_stream_format" target="_blank">SSE</a> stream of JSON messages, followed by a final `[DONE]` message.
+
+Each JSON message has the following fields:
+
+#### `choices`
+
+- **Type:** list
+
+A list of choices from the model, where each choice contains:
+
+- `index`: The index of the choice (integer)
+- `finish_reason`: always ""
+- `delta`: An object containing either:
+  - `content`: The next piece of generated text (string), or
+  - `tool_calls`: A list of tool calls, each containing the next piece of the tool call being generated
+
+#### `created`
+
+- **Type:** integer
+
+The Unix timestamp (in seconds) of when the inference was created.
+
+#### `episode_id`
+
+- **Type:** UUID
+
+The ID of the episode that the inference was created for.
+
+#### `id`
+
+- **Type:** UUID
+
+The inference ID.
+
+#### `model`
+
+- **Type:** string
+
+The name of the variant that was actually used for the inference.
+
+#### `object`
+
+- **Type:** string
+
+The type of the inference object (always `"chat.completion"`).
+
+#### `system_fingerprint`
+
+- **Type:** string
+
+Always ""
+
+#### `usage`
+
+- **Type:** object
+- **Required:** no
+
+Contains token usage information for the request and response, with the following fields:
+
+- **`prompt_tokens`**: Number of tokens in the prompt (integer)
+- **`completion_tokens`**: Number of tokens in the completion (integer)
+- **`total_tokens`**: Total number of tokens used (integer)
+
+</Tab>
+</Tabs>
+
+### Examples
+
+{/* for the table of contents */}
+
+<span class="!invisible !h-0 !m-0 !p-0 !inline">
+
+#### Chat Function with Structured System Prompt
+
+</span>
+
+<Accordion title="Chat Function with Structured System Prompt">
+
+##### Configuration
+
+```toml mark="draft_email"
+// tensorzero.toml
+# ...
+[functions.draft_email]
+type = "chat"
+system_schema = "functions/draft_email/system_schema.json"
+# ...
+```
+
+```json
+// functions/draft_email/system_schema.json
+{
+  "type": "object",
+  "properties": {
+    "assistant_name": { "type": "string" }
+  }
+}
+```
+
+##### Request
+
+<Tabs>
+<Tab title="Python">
+
+```python frame="code" title="POST /inference" mark="draft_email"
+from openai import AsyncOpenAI
+
+async with AsyncOpenAI(
+    base_url="http://localhost:3000/openai/v1"
+) as client:
+    result = await client.chat.completions.create(
+        # there already was an episode_id from an earlier inference
+        extra_body={"tensorzero::episode_id": str(episode_id)},
+        messages=[
+            {
+                "role": "system",
+                "content": [{"assistant_name": "Alfred Pennyworth"}]
+                # NOTE: the JSON is in an array here so that a structured system message can be sent
+            },
+            {
+                "role": "user",
+                "content": "I need to write an email to Gabriel explaining..."
+            }
+        ],
+        model="tensorzero::function_name::draft_email",
+        temperature=0.4,
+        # Optional: stream=True
+    )
+```
+
+</Tab>
+<Tab title="HTTP">
+
+```bash frame="code" title="POST /inference" mark="draft_email"
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "episode_id: your_episode_id_here" \
+  -d '{
+    "messages": [
+      {
+        "role": "system",
+        "content": [{"assistant_name": "Alfred Pennyworth"}]
+      },
+      {
+        "role": "user",
+        "content": "I need to write an email to Gabriel explaining..."
+      }
+    ],
+    "model": "tensorzero::function_name::draft_email",
+    "temperature": 0.4
+    // Optional: "stream": true
+  }'
+```
+
+</Tab>
+</Tabs>
+
+##### Response
+
+<Tabs>
+<Tab title="Regular">
+
+```json frame="code" title="POST /inference"
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "episode_id": "11111111-1111-1111-1111-111111111111",
+  "model": "email_draft_variant",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "content": "Hi Gabriel,\n\nI noticed...",
+        "role": "assistant"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 100,
+    "completion_tokens": 100,
+    "total_tokens": 200
+  }
+}
+```
+
+</Tab>
+<Tab title="Streaming">
+
+In streaming mode, the response is an <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#event_stream_format" target="_blank">SSE</a> stream of JSON messages, followed by a final `[DONE]` message.
+
+Each JSON message has the following fields:
+
+```json frame="code" title="POST /inference"
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "episode_id": "11111111-1111-1111-1111-111111111111",
+  "model": "email_draft_variant",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "delta": {
+        "content": "Hi Gabriel,\n\nI noticed..."
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 100,
+    "completion_tokens": 100,
+    "total_tokens": 200
+  }
+}
+```
+
+</Tab>
+</Tabs>
+</Accordion>
+
+{/* for the table of contents */}
+
+<span class="!invisible !h-0 !m-0 !p-0 !inline">
+
+#### Chat Function with Dynamic Tool Use
+
+</span>
+
+<Accordion title="Chat Function with Dynamic Tool Use">
+
+##### Configuration
+
+```toml "weather_bot"
+// tensorzero.toml
+# ...
+
+[functions.weather_bot]
+type = "chat"
+# Note: no `tools = ["get_temperature"]` field in configuration
+
+# ...
+
+```
+
+##### Request
+
+<Tabs>
+<Tab title="Python">
+
+```python frame="code" title="POST /inference" mark="weather_bot"
+from openai import AsyncOpenAI
+
+async with AsyncOpenAI(
+    base_url="http://localhost:3000/openai/v1"
+) as client:
+    result = await client.chat.completions.create(
+        model="tensorzero::function_name::weather_bot",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the weather like in Tokyo?"
+                }
+            ]
+        },
+        tools=[
+            {
+              "type": "function",
+              "function": {
+                  "name": "get_temperature",
+                  "description": "Get the current temperature in a given location",
+                  "parameters": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The location to get the temperature for (e.g. \"New York\")"
+                        },
+                        "units": {
+                            "type": "string",
+                            "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
+                            "enum": ["fahrenheit", "celsius"]
+                        }
+                    },
+                    "required": ["location"],
+                    "additionalProperties": false
+                }
+              }
+            }
+        ],
+        # optional: stream=True,
+    )
+```
+
+</Tab>
+<Tab title="HTTP">
+
+```bash frame="code" title="POST /inference" mark="weather_bot"
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tensorzero::function_name::weather_bot",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "What is the weather like in Tokyo?"
+        }
+      ]
+    },
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "get_temperature",
+          "description": "Get the current temperature in a given location",
+          "parameters": {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "properties": {
+              "location": {
+                "type": "string",
+                "description": "The location to get the temperature for (e.g. \"New York\")"
+              },
+              "units": {
+                "type": "string",
+                "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
+                "enum": ["fahrenheit", "celsius"]
+              }
+            },
+            "required": ["location"],
+            "additionalProperties": false
+          }
+        }
+      }
+    ]
+    // optional: "stream": true
+  }'
+```
+
+</Tab>
+</Tabs>
+
+##### Response
+
+<Tabs>
+<Tab title="Regular">
+
+```json frame="code" title="POST /inference" mark="get_temperature"
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "episode_id": "11111111-1111-1111-1111-111111111111",
+  "model": "weather_bot_variant",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "123456789",
+            "type": "function",
+            "function": {
+              "name": "get_temperature",
+              "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"
+            }
+          }
+        ],
+        "role": "assistant"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 100,
+    "completion_tokens": 100,
+    "total_tokens": 200
+  }
+}
+```
+
+</Tab>
+<Tab title="Streaming">
+
+In streaming mode, the response is an <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#event_stream_format" target="_blank">SSE</a> stream of JSON messages, followed by a final `[DONE]` message.
+
+Each JSON message has the following fields:
+
+```json frame="code" title="POST /inference"
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "episode_id": "11111111-1111-1111-1111-111111111111",
+  "model": "weather_bot_variant",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "123456789",
+            "type": "function",
+            "function": {
+              "name": "get_temperature",
+              "arguments": "{\"location\":" // a tool arguments delta
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 100,
+    "completion_tokens": 100,
+    "total_tokens": 200
+  }
+}
+```
+
+</Tab>
+</Tabs>
+</Accordion>
+
+<span class="!invisible !h-0 !m-0 !p-0 !inline">
+
+#### Json Function with Dynamic Output Schema
+
+</span>
+
+<Accordion title="JSON Function with Dynamic Output Schema">
+
+##### Configuration
+
+```toml mark="extract_email"
+// tensorzero.toml
+# ...
+[functions.extract_email]
+type = "json"
+output_schema = "output_schema.json"
+# ...
+```
+
+```json frame="code" mark="email"
+// output_schema.json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "email": {
+      "type": "string"
+    }
+  },
+  "required": ["email"]
+}
+```
+
+##### Request
+
+<Tabs>
+<Tab title="Python">
+
+```python frame="code" title="POST /inference" mark="extract_email"
+from openai import AsyncOpenAI
+
+dynamic_output_schema = {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "email": { "type": "string" },
+    "domain": { "type": "string" }
+  },
+  "required": ["email", "domain"]
+}
+
+async with AsyncOpenAI(
+    base_url="http://localhost:3000/openai/v1"
+) as client:
+    result = await client.chat.completions.create(
+        model="tensorzero::function_name::extract_email",
+        input={
+            "system": "You are an AI assistant...",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "...blah blah blah hello@tensorzero.com blah blah blah..."
+                }
+            ]
+        }
+        # Override the output schema using the `response_format` field
+        response_format={"type": "json_schema", "schema": dynamic_output_schema}
+        # optional: stream=True,
+    )
+```
+
+</Tab>
+<Tab title="HTTP">
+
+```bash frame="code" title="POST /inference" mark="extract_email"
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tensorzero::function_name::extract_email",
+    "input": {
+      "system": "You are an AI assistant...",
+      "messages": [
+        {
+          "role": "user",
+          "content": "...blah blah blah hello@tensorzero.com blah blah blah..."
+        }
+      ]
+    },
+    "response_format": {
+      "type": "json_schema",
+      "schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "email": { "type": "string" },
+          "domain": { "type": "string" }
+        },
+        "required": ["email", "domain"]
+      }
+    },
+    // optional: "stream": true
+  }'
+```
+
+</Tab>
+</Tabs>
+
+##### Response
+
+<Tabs>
+<Tab title="Regular">
+
+```json frame="code" title="POST /inference" mark="email"
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "episode_id": "11111111-1111-1111-1111-111111111111",
+  "model": "extract_email_variant",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "content": "{\"email\": \"hello@tensorzero.com\", \"domain\": \"tensorzero.com\"}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 100,
+    "completion_tokens": 100,
+    "total_tokens": 200
+  }
+}
+```
+
+</Tab>
+<Tab title="Streaming">
+
+In streaming mode, the response is an <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#event_stream_format" target="_blank">SSE</a> stream of JSON messages, followed by a final `[DONE]` message.
+
+Each JSON message has the following fields:
+
+```json frame="code" title="POST /inference" mark="email"
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "episode_id": "11111111-1111-1111-1111-111111111111",
+  "model": "extract_email_variant",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "content": "{\"email\":" // a JSON content delta
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 100,
+    "completion_tokens": 100,
+    "total_tokens": 200
+  }
+}
+```
+
+</Tab>
+</Tabs>
+</Accordion>

@@ -1,0 +1,151 @@
+---
+title: "CLI Reference"
+description: Learn how to use the TensorZero Evaluations CLI.
+---
+
+TensorZero Evaluations is available both through a command-line interface (CLI) tool and through the TensorZero UI.
+
+## Usage
+
+We provide a `tensorzero/evaluations` Docker image for easy usage.
+
+We strongly recommend using TensorZero Evaluations CLI with Docker Compose to keep things simple.
+
+```yaml title="docker-compose.yml"
+services:
+  evaluations:
+    profiles: [evaluations] # this service won't run by default with `docker compose up`
+    image: tensorzero/evaluations
+    volumes:
+      - ./config:/app/config:ro
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+      # ... and any other relevant API credentials ...
+      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+```
+
+```bash
+docker compose run --rm evaluations \
+    --evaluation-name haiku_eval \
+    --dataset-name haiku_dataset \
+    --variant-name gpt_4o \
+    --concurrency 5
+```
+
+<Accordion title="Building from Source</Accordion>
+
+You can build the TensorZero Evaluations CLI from source if necessary. See our [GitHub repository](https://github.com/tensorzero/tensorzero/tree/main/evaluations) for instructions.
+
+</Accordion>
+
+### Inference Caching
+
+TensorZero Evaluations uses [Inference Caching](/docs/gateway/guides/inference-caching/) to improve inference speed and cost.
+
+By default, it will read from and write to the inference cache.
+Soon, you'll be able to customize this behavior.
+
+### Environment Variables
+
+#### `TENSORZERO_CLICKHOUSE_URL`
+
+- **Example:** `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/database_name`
+- **Required:** yes
+
+This environment variable specifies the URL of your ClickHouse database.
+
+#### Model Provider Credentials
+
+- **Example:** `OPENAI_API_KEY=sk-...`
+- **Required:** no
+
+If you're using an external TensorZero Gateway (see `--gateway-url` flag below), you don't need to provide these credentials to the evaluations tool.
+
+If you're using a built-in gateway (no `--gateway-url` flag), you must provide same credentials the gateway would use.
+See [Integrations](/docs/gateway/integrations/) for more information.
+
+### CLI Flags
+
+#### `--config-file PATH`
+
+- **Example:** `--config-file /path/to/tensorzero.toml`
+- **Required:** no (default: `./config/tensorzero.toml`)
+
+This flag specifies the path to the TensorZero configuration file.
+You should use the same configuration file for your entire project.
+
+#### `--concurrency N`
+
+- **Example:** `--concurrency 5`
+- **Required:** no (default: `1`)
+
+This flag specifies the maximum number of concurrent TensorZero inference requests during evaluation.
+
+#### `--dataset-name NAME` (`-d`)
+
+- **Example:** `--dataset-name my_dataset`
+- **Required:** yes
+
+This flag specifies the dataset to use for evaluation.
+The dataset should be stored in your ClickHouse database.
+
+#### `--evaluation-name NAME` (`-e`)
+
+- **Example:** `--evaluation-name my_evaluation`
+- **Required:** yes
+
+This flag specifies the name of the evaluation to run, as defined in your TensorZero configuration file.
+
+#### `--format FORMAT` (`-f`)
+
+- **Options:** `pretty`, `jsonl`
+- **Example:** `--format jsonl`
+- **Required:** no (default: `pretty`)
+
+This flag specifies the output format for the evaluation CLI tool.
+
+You can use the `jsonl` format if you want to programatically process the evaluation results.
+
+#### `--gateway-url URL`
+
+- **Example:** `--gateway-url http://localhost:3000`
+- **Required:** no (default: none)
+
+If you provide this flag, the evaluations tool will use an external TensorZero Gateway for inference requests.
+
+If you don't provide this flag, the evaluations tool will use a built-in TensorZero gateway.
+In this case, the evaluations tool will require the same credentials the gateway would use.
+See [Integrations](/docs/gateway/integrations/) for more information.
+
+#### `--inference-cache MODE`
+
+- **Options:** `on`, `read_only`, `write_only`, `off`
+- **Example:** `--inference-cache read_only`
+- **Required:** no (default: `on`)
+
+This flag specifies the behavior of the inference cache.
+See [Inference Caching](/docs/gateway/guides/inference-caching/) for more information.
+
+#### `--variant-name NAME` (`-v`)
+
+This flag specifies the variant to evaluate.
+The variant name should be present in your TensorZero configuration file.
+
+### Exit Status
+
+The evaluations process exits with a status code of `0` if the evaluation was successful, and a status code of `1` if the evaluation failed.
+
+If you configure a `cutoff` for any of your evaluators, the evaluation will fail if the average score for any evaluator is below its cutoff.
+
+<Tip>
+
+The exit status code is helpful for integrating TensorZero Evaluations into your CI/CD pipeline.
+
+You can define sanity checks for your variants with `cutoff` to detect performance regressions early before shipping to production
+
+</Tip>

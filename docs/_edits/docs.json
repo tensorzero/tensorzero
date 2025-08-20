@@ -1,0 +1,172 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "TensorZero Docs",
+  "description": "TensorZero is an open-source stack for industrial-grade LLM applications that unifies an LLM gateway, observability, optimization, evaluation, and experimentation.",
+  "colors": {
+    "primary": "#FF4F00",
+    "light": "#FFB56D",
+    "dark": "#FF4F00"
+  },
+  "favicon": "/favicon.svg",
+  "contextual": {
+    "options": ["copy", "view", "chatgpt", "claude"]
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": ["index", "quickstart"]
+          },
+          {
+            "group": "Inference",
+            "pages": [
+              "guides/inference/call-any-llm-provider",
+              {
+                "group": "Model Providers",
+                "pages": [
+                  "guides/inference/model-providers/index",
+                  "guides/inference/model-providers/anthropic",
+                  "guides/inference/model-providers/aws-bedrock",
+                  "guides/inference/model-providers/aws-sagemaker",
+                  "guides/inference/model-providers/azure",
+                  "guides/inference/model-providers/deepseek",
+                  "guides/inference/model-providers/fireworks",
+                  "guides/inference/model-providers/gcp-vertex-ai-anthropic",
+                  "guides/inference/model-providers/gcp-vertex-ai-gemini",
+                  "guides/inference/model-providers/google-ai-studio-gemini",
+                  "guides/inference/model-providers/groq",
+                  "guides/inference/model-providers/hyperbolic",
+                  "guides/inference/model-providers/index",
+                  "guides/inference/model-providers/mistral",
+                  "guides/inference/model-providers/openai-compatible",
+                  "guides/inference/model-providers/openai",
+                  "guides/inference/model-providers/openrouter",
+                  "guides/inference/model-providers/sglang",
+                  "guides/inference/model-providers/tgi",
+                  "guides/inference/model-providers/together",
+                  "guides/inference/model-providers/vllm",
+                  "guides/inference/model-providers/xai"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Observability",
+            "pages": [
+              "guides/observability/log-inferences",
+              "guides/observability/log-episodes",
+              "guides/observability/log-feedback",
+              "guides/observability/export-otlp-opentelemetry"
+            ]
+          },
+          {
+            "group": "Optimization",
+            "pages": ["guides/optimization/overview"]
+          },
+          {
+            "group": "Evaluation",
+            "pages": [
+              "guides/evaluation/evaluate-individual-inferences",
+              "guides/evaluation/evaluate-end-to-end-workflows"
+            ]
+          },
+          {
+            "group": "Experimentation",
+            "pages": ["guides/experimentation/compare-variants-ab-testing"]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "guides/deployment/gateway",
+              "guides/deployment/ui",
+              "guides/deployment/clickhouse",
+              "guides/deployment/object-storage"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "guides/advanced/benchmarks",
+              "guides/advanced/clients",
+              "guides/advanced/data-model",
+              "guides/advanced/integrations",
+              "guides/advanced/tutorial"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "API documentation",
+            "pages": ["api-reference/introduction"]
+          },
+          {
+            "group": "Endpoint examples",
+            "pages": [
+              "api-reference/endpoint/get",
+              "api-reference/endpoint/create",
+              "api-reference/endpoint/delete",
+              "api-reference/endpoint/webhook"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Configuration Reference",
+        "pages": ["configuration-reference/index"]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "Documentation",
+          "href": "https://www.tensorzero.com/docs",
+          "icon": "book-open-cover"
+        },
+        {
+          "anchor": "Blog",
+          "href": "https://www.tensorzero.com/blog",
+          "icon": "newspaper"
+        },
+        {
+          "anchor": "Slack",
+          "href": "https://www.tensorzero.com/slack",
+          "icon": "slack"
+        },
+        {
+          "anchor": "Discord",
+          "href": "https://www.tensorzero.com/discord",
+          "icon": "discord"
+        }
+      ]
+    }
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg",
+    "href": "https://www.tensorzero.com/"
+  },
+  "navbar": {
+    "links": [],
+    "primary": {
+      "type": "github",
+      "label": "GitHub",
+      "href": "https://github.com/tensorzero/tensorzero"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/tensorzero/tensorzero",
+      "x": "https://x.com/tensorzero",
+      "linkedin": "https://linkedin.com/company/tensorzero",
+      "slack": "https://www.tensorzero.com/slack",
+      "discord": "https://www.tensorzero.com/discord"
+    }
+  }
+}
