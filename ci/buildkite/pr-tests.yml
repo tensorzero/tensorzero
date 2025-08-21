@@ -13,5 +13,5 @@ steps:
           mount-buildkite-agent: true
 
   - label: "Node.js Tests"
-    command: bash ./ci/node-unit-tests.sh
+    command: bash ./ci/buildkite/node-unit-tests.sh
     depends_on: "build-gateway-container"
