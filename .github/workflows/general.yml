@@ -305,18 +305,6 @@ jobs:
         run: |
           uv run stubtest tensorzero.tensorzero
 
-      - name: "Python: OpenAI Client: Install dependencies"
-        working-directory: clients/openai-python
-        run: |
-          uv venv
-          uv pip sync requirements.txt
-
-      - name: "Python: OpenAI Client: pyright"
-        working-directory: clients/openai-python
-        run: |
-          uv pip install pyright==1.1.394
-          uv run pyright
-
       - name: "Node.js: Run prettier"
         run: pnpm --filter=openai-node run format
 

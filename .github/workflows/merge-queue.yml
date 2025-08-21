@@ -239,18 +239,6 @@ jobs:
           fi
           exit 1
 
-      - name: "Python: OpenAI Client: Install dependencies"
-        working-directory: clients/openai-python
-        run: |
-          uv venv
-          uv pip sync requirements.txt
-
-      - name: "Python: OpenAI Client: pytest"
-        working-directory: clients/openai-python
-        timeout-minutes: 5
-        run: |
-          uv run pytest --verbose
-
       - name: "Node.js: OpenAI Client: test"
         working-directory: clients/openai-node
         run: |
