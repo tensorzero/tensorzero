@@ -1,0 +1,100 @@
+---
+title: Streaming Inference
+description: Learn how to use streaming inference with TensorZero Gateway.
+---
+
+The TensorZero Gateway supports streaming inference responses for both chat and JSON functions.
+Streaming allows you to receive model outputs incrementally as they are generated, rather than waiting for the complete response.
+This can significantly improve the perceived latency of your application and enable real-time user experiences.
+
+When streaming is enabled:
+
+1. The gateway starts sending responses as soon as the model begins generating content
+2. Each response chunk contains a delta (increment) of the content
+3. The final chunk indicates the completion of the response
+
+## Examples
+
+You can enable streaming by setting the `stream` parameter to `true` in your inference request.
+The response will be returned as a Server-Sent Events (SSE) stream, followed by a final `[DONE]` message.
+When using a client library, the client will handle the SSE stream under the hood and return a stream of chunk objects.
+
+See [API Reference](/docs/gateway/api-reference/inference/) for more details.
+
+<Tip>
+
+You can also find a runnable example on [GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/streaming-inference).
+
+</Tip>
+
+### Chat Functions
+
+In chat functions, typically each chunk will contain a delta (increment) of the text content:
+
+```json
+{
+  "inference_id": "00000000-0000-0000-0000-000000000000",
+  "episode_id": "11111111-1111-1111-1111-111111111111",
+  "variant_name": "prompt_v1",
+  "content": [
+    {
+      "type": "text",
+      "id": "0",
+      "text": "Hi Gabriel," // a text content delta
+    }
+  ],
+  // token usage information is only available in the final chunk with content (before the [DONE] message)
+  "usage": {
+    "input_tokens": 100,
+    "output_tokens": 100
+  }
+}
+```
+
+For tool calls, each chunk contains a delta of the tool call arguments:
+
+```json
+{
+  "inference_id": "00000000-0000-0000-0000-000000000000",
+  "episode_id": "11111111-1111-1111-1111-111111111111",
+  "variant_name": "prompt_v1",
+  "content": [
+    {
+      "type": "tool_call",
+      "id": "123456789",
+      "name": "get_temperature",
+      "arguments": "{\"location\":" // a tool arguments delta
+    }
+  ],
+  // token usage information is only available in the final chunk with content (before the [DONE] message)
+  "usage": {
+    "input_tokens": 100,
+    "output_tokens": 100
+  }
+}
+```
+
+### JSON Functions
+
+For JSON functions, each chunk contains a portion of the JSON string being generated.
+Note that the chunks may not be valid JSON on their own - you'll need to concatenate them to get the complete JSON response.
+The gateway doesn't return parsed or validated JSON objects when streaming.
+
+```json
+{
+  "inference_id": "00000000-0000-0000-0000-000000000000",
+  "episode_id": "11111111-1111-1111-1111-111111111111",
+  "variant_name": "prompt_v1",
+  "raw": "{\"email\":", // a JSON content delta
+  // token usage information is only available in the final chunk with content (before the [DONE] message)
+  "usage": {
+    "input_tokens": 100,
+    "output_tokens": 100
+  }
+}
+```
+
+## Technical Notes
+
+- Token usage information is only available in the final chunk with content (before the `[DONE]` message)
+- Streaming may not be available with certain [inference-time optimizations](/docs/gateway/guides/inference-time-optimizations/)
