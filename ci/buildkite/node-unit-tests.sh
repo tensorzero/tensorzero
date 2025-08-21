@@ -58,7 +58,7 @@ pnpm install --frozen-lockfile
 # ------------------------------------------------------------------------------
 # Build your workspace package(s)
 # ------------------------------------------------------------------------------
-pnpm build  # builds `tensorzero-node` if defined in the workspace
+pnpm -r build  # builds `tensorzero-node` if defined in the workspace
 
 # ------------------------------------------------------------------------------
 # Docker: download & load gateway container (unchanged)
