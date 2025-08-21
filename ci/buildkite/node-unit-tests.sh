@@ -18,10 +18,10 @@ rustc --version
 # Install Node
 # Download and install fnm:
 curl -o- https://fnm.vercel.app/install | bash
+source /root/.bashrc
 
 # Download and install Node.js:
 fnm install 22
-source /root/.bashrc
 
 # Verify the Node.js version:
 node -v # Should print "v22.18.0".
