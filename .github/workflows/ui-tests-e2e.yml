@@ -20,7 +20,7 @@ on:
 
 jobs:
   ui-tests-no-network:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-tensorzero-8x16
     steps:
       - name: Set DNS
         run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
@@ -166,7 +166,7 @@ jobs:
           retention-days: 7
 
   ui-tests-e2e-credentials:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-tensorzero-8x16
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
     # For now, it just runs in the merge queue and on prs from the main repo
