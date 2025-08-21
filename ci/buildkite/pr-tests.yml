@@ -1,6 +1,6 @@
 steps:
   - label: ":rust: Rust Unit Tests"
-    command: bash ./ci/buildkite/buildkite-unit-tests.sh
+    command: bash ./ci/buildkite/unit-tests.sh
     plugins:
       - docker:
           image: "rust"
