@@ -58,7 +58,7 @@ pub async fn test_bulk_embedding_with_provider(provider: EmbeddingTestProvider) 
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["model"].as_str().unwrap(),
-        provider.model_name
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(
         response_json["data"].as_array().unwrap().len(),
@@ -93,7 +93,7 @@ pub async fn test_embedding_with_dimensions_with_provider(provider: EmbeddingTes
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["model"].as_str().unwrap(),
-        provider.model_name
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
     assert_eq!(
@@ -123,7 +123,7 @@ pub async fn test_embedding_with_encoding_format_with_provider(provider: Embeddi
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["model"].as_str().unwrap(),
-        provider.model_name
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
     let embedding = &response_json["data"][0]["embedding"];
@@ -151,7 +151,7 @@ pub async fn test_embedding_with_user_parameter_with_provider(provider: Embeddin
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["model"].as_str().unwrap(),
-        provider.model_name
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
     assert!(!response_json["data"][0]["embedding"]
@@ -194,7 +194,7 @@ pub async fn test_embedding_large_bulk_with_provider(provider: EmbeddingTestProv
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["model"].as_str().unwrap(),
-        provider.model_name
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(response_json["data"].as_array().unwrap().len(), 10);
 

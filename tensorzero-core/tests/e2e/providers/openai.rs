@@ -1720,7 +1720,10 @@ pub async fn test_shorthand_embedding() {
     let response_json = response.json::<Value>().await.unwrap();
     println!("Shorthand API response: {response_json:?}");
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
-    assert_eq!(response_json["model"].as_str().unwrap(), shorthand_model);
+    assert_eq!(
+        response_json["model"].as_str().unwrap(),
+        format!("tensorzero::embedding_model_name::{shorthand_model}")
+    );
     assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
     assert_eq!(response_json["data"][0]["index"].as_u64().unwrap(), 0);
     assert_eq!(
