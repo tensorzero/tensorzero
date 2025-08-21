@@ -106,15 +106,15 @@ jobs:
           OLD_ROWS=$(wc -l < ./fixtures/model_inference_cache_e2e.jsonl.old)
           NEW_ROWS=$(wc -l < ./fixtures/model_inference_cache_e2e.jsonl)
           echo "Old cache file has $OLD_ROWS rows, new cache file has $NEW_ROWS rows"
-          # Temporarily disabled
-          # if [ "$OLD_ROWS" != "$NEW_ROWS" ]; then
-          #   echo "ERROR: Row count mismatch between old and new cache files"
-          #   echo "Old rows:"
-          #   echo "$OLD_ROWS"
-          #   echo "New rows:"
-          #   echo "$NEW_ROWS"
-          #   exit 1
-          # fi
+          if [ "$OLD_ROWS" != "$NEW_ROWS" ]; then
+            echo "ERROR: Row count mismatch between old and new cache files"
+            echo "Old rows:"
+            echo "$OLD_ROWS"
+            echo "New rows:"
+            echo "$NEW_ROWS"
+            # Temporarily disabled
+            # exit 1
+          fi
           # Note that we cannot check the file contents - we will legitimately get some different cache keys when
           # regenerating, since the output from some cache entries get fed into judge models (affecting the cache key)
           echo "Cache file validation passed: same number of rows"
