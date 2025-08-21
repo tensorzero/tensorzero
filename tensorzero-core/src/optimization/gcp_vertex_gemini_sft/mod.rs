@@ -24,9 +24,6 @@ use crate::{
     stored_inference::RenderedSample,
 };
 
-#[cfg(feature = "pyo3")]
-use crate::inference::types::pyo3_helpers::tensorzero_core_error;
-
 pub fn gcp_vertex_gemini_base_url(project_id: &str, region: &str) -> Result<Url, url::ParseError> {
     let subdomain_prefix = location_subdomain_prefix(region);
     Url::parse(&format!(
@@ -95,7 +92,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
     #[new]
     #[pyo3(signature = (*, model, bucket_name, project_id, region, learning_rate_multiplier=None, adapter_size=None, n_epochs=None, export_last_checkpoint_only=None, credentials=None, api_base=None, seed=None, service_account=None, kms_key_name=None, tuned_model_display_name=None, bucket_path_prefix=None))]
     pub fn new(
-        py: Python<'_>,
+        _py: Python<'_>,
         model: String,
         bucket_name: String,
         project_id: String,
@@ -113,13 +110,11 @@ impl UninitializedGCPVertexGeminiSFTConfig {
         bucket_path_prefix: Option<String>,
     ) -> PyResult<Self> {
         // Use Deserialize to convert the string to a CredentialLocation
-        let credentials = match credentials {
-            Some(s) => match serde_json::from_str(&s) {
-                Ok(parsed) => Some(parsed),
-                Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
-            },
-            None => None,
-        };
+        let credentials = credentials
+            .map(|s| serde_json::from_str(&s))
+            .transpose()
+            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?
+            .or_else(|| Some(default_api_key_location()));
         let api_base = api_base
             .map(|s| {
                 Url::parse(&s)

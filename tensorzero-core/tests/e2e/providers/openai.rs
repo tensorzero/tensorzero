@@ -5,8 +5,8 @@ use std::sync::Arc;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
-use tensorzero_core::config_parser::ProviderTypesConfig;
-use tensorzero_core::config_parser::TimeoutsConfig;
+use tensorzero_core::config::ProviderTypesConfig;
+use tensorzero_core::config::TimeoutsConfig;
 use tensorzero_core::embeddings::{
     Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProvider,
     EmbeddingProviderConfig, EmbeddingRequest, UninitializedEmbeddingProviderConfig,
@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::{E2ETestProvider, E2ETestProviders, EmbeddingTestProvider};
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
 
@@ -226,7 +226,7 @@ pub async fn test_provider_config_extra_body() {
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -337,8 +337,8 @@ async fn test_default_function_default_tool_choice() {
         "tool_call"
     );
 
-    // Sleep for 100ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 200ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Just check 'tool_choice' in the raw request, since we already have lots of tests
     // that check the full ChatInference/ModelInference rows
@@ -1251,13 +1251,14 @@ async fn test_embedding_sanity_check() {
         dimensions: None,
         encoding_format: EmbeddingEncodingFormat::Float,
     };
+    let request_info = (&provider_config).into();
     let api_keys = InferenceCredentials::default();
 
     // Compute all 3 embeddings concurrently
     let (response_a, response_b, response_c) = tokio::join!(
-        provider_config.embed(&embedding_request_a, &client, &api_keys),
-        provider_config.embed(&embedding_request_b, &client, &api_keys),
-        provider_config.embed(&embedding_request_c, &client, &api_keys)
+        provider_config.embed(&embedding_request_a, &client, &api_keys, &request_info),
+        provider_config.embed(&embedding_request_b, &client, &api_keys, &request_info),
+        provider_config.embed(&embedding_request_c, &client, &api_keys, &request_info)
     );
 
     // Unwrap the results
@@ -1732,4 +1733,30 @@ pub async fn test_shorthand_embedding() {
         .is_empty());
     assert!(response_json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
     assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
+}
+
+#[tokio::test]
+pub async fn test_embedding_extra_body() {
+    let payload = json!({
+        "input": "Hello, world!",
+        "model": "voyage_3_5_lite_256",
+    });
+    let response = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:?}");
+    assert_eq!(response_json["object"].as_str().unwrap(), "list");
+    // voyage-3.5-lite outputs 1024 dimensions by default, but we use extra_body to tell it to output 256.
+    assert_eq!(
+        response_json["data"][0]["embedding"]
+            .as_array()
+            .unwrap()
+            .len(),
+        256
+    );
 }

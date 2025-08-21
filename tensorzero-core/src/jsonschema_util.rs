@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::sync::OnceCell;
 use tracing::instrument;
 
-use crate::config_parser::path::TomlRelativePath;
+use crate::config::path::TomlRelativePath;
 use crate::error::{Error, ErrorDetails};
 
 #[derive(Debug, Serialize)]
@@ -24,7 +24,7 @@ impl<'a> JsonSchemaRef<'a> {
 
     pub fn value(&'a self) -> &'a Value {
         match self {
-            JsonSchemaRef::Static(schema) => schema.value,
+            JsonSchemaRef::Static(schema) => &schema.value,
             JsonSchemaRef::Dynamic(schema) => &schema.value,
         }
     }
@@ -36,7 +36,7 @@ impl<'a> JsonSchemaRef<'a> {
 pub struct StaticJSONSchema {
     #[serde(skip)]
     pub compiled: Arc<Validator>,
-    pub value: &'static serde_json::Value,
+    pub value: serde_json::Value,
 }
 
 impl PartialEq for StaticJSONSchema {
@@ -50,17 +50,14 @@ impl Default for StaticJSONSchema {
         // Create an empty JSON object
         let empty_schema: serde_json::Value = serde_json::json!({});
 
-        // Leak the memory to create a 'static reference
-        let static_schema: &'static serde_json::Value = Box::leak(Box::new(empty_schema));
-
         // Compile the schema
         #[expect(clippy::expect_used)]
         let compiled_schema =
-            jsonschema::validator_for(static_schema).expect("Failed to compile empty schema");
+            jsonschema::validator_for(&empty_schema).expect("Failed to compile empty schema");
 
         Self {
             compiled: Arc::new(compiled_schema),
-            value: static_schema,
+            value: empty_schema,
         }
     }
 }
@@ -80,9 +77,7 @@ impl StaticJSONSchema {
                 ),
             })
         })?;
-        // We can 'leak' memory here because we want the schema to exist for the duration of the process
-        let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(schema));
-        let compiled_schema = jsonschema::validator_for(schema_boxed).map_err(|e| {
+        let compiled_schema = jsonschema::validator_for(&schema).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
                 message: format!(
                     "Failed to compile JSON Schema `{}`: {}",
@@ -92,20 +87,21 @@ impl StaticJSONSchema {
             })
         })?;
         let compiled = Arc::new(compiled_schema);
-        let value = schema_boxed;
-        Ok(Self { compiled, value })
+        Ok(Self {
+            compiled,
+            value: schema,
+        })
     }
 
-    pub fn from_value(value: &serde_json::Value) -> Result<Self, Error> {
-        let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(value.clone()));
-        let compiled_schema = jsonschema::validator_for(schema_boxed).map_err(|e| {
+    pub fn from_value(value: serde_json::Value) -> Result<Self, Error> {
+        let compiled_schema = jsonschema::validator_for(&value).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
                 message: format!("Failed to compile JSON Schema: {e}"),
             })
         })?;
         Ok(Self {
             compiled: Arc::new(compiled_schema),
-            value: schema_boxed,
+            value,
         })
     }
 

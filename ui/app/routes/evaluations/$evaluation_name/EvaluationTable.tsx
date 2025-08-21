@@ -1,8 +1,7 @@
 import { useMemo } from "react";
 import React from "react";
 import { useSearchParams, useNavigate } from "react-router";
-
-import * as RadixTooltip from "@radix-ui/react-tooltip";
+import { Tooltip as RadixTooltip } from "radix-ui";
 import {
   Table,
   TableBody,
@@ -25,7 +24,7 @@ import type {
   ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
 import type { DisplayInput } from "~/utils/clickhouse/common";
-import OutputComponent from "~/components/inference/Output";
+import { Output } from "~/components/inference/Output";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
@@ -87,7 +86,7 @@ const TruncatedContent = ({
       ) : type === "input" ? (
         <InputSnippet {...content} />
       ) : (
-        <OutputComponent output={content} />
+        <Output output={content} />
       )}
     </TruncatedContentTooltip>
   );
@@ -160,7 +159,7 @@ function getOutputSummary(
   output: JsonInferenceOutput | ContentBlockChatOutput[],
 ): string {
   if (Array.isArray(output)) {
-    // It's ContentBlockOutput[]
+    // It's ContentBlockChatOutput[]
     if (output.length === 0) return "Empty output";
 
     const firstBlock = output[0];

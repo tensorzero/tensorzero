@@ -68,13 +68,15 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    let reasoning_providers = vec![E2ETestProvider {
+    // TODO: Re-enable once we can switch to a T4 GPU
+    /*let reasoning_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "vllm-gpt-oss-20b".to_string(),
         model_name: "gpt-oss-20b-vllm".to_string(),
         model_provider_name: "vllm".to_string(),
         credentials: HashMap::new(),
-    }];
+    }];*/
+    let reasoning_providers = vec![];
 
     E2ETestProviders {
         simple_inference: providers.clone(),

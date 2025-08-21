@@ -28,6 +28,7 @@ impl TensorZeroClient {
             clickhouse_url,
             timeout: timeout.map(Duration::from_secs_f64),
             verify_credentials: false,
+            allow_batch_writes: false,
         })
         .build()
         .await

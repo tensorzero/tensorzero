@@ -1,72 +1,61 @@
 import { Loader2 } from "lucide-react";
-import { Suspense, memo } from "react";
-import { Await, useAsyncError } from "react-router";
 import { Refresh } from "~/components/icons/Icons";
-import NewOutput from "~/components/inference/NewOutput";
+import { Output } from "~/components/inference/Output";
 import { Button } from "~/components/ui/button";
 import { CodeEditor } from "~/components/ui/code-editor";
-import { refreshClientInference, type PlaygroundVariantInfo } from "./utils";
-import type { DisplayInput } from "~/utils/clickhouse/common";
-import type {
-  Datapoint,
-  FunctionConfig,
-  InferenceResponse,
-} from "tensorzero-node";
+import {
+  type ClientInferenceInputArgs,
+  getClientInferenceQueryKey,
+  getClientInferenceQueryFunction,
+} from "./utils";
+import { useQuery } from "@tanstack/react-query";
+import { isErrorLike } from "~/utils/common";
+import { memo } from "react";
 
-interface DatapointPlaygroundOutputProps {
-  datapoint: Datapoint;
-  variant: PlaygroundVariantInfo;
-  inferencePromise: Promise<InferenceResponse> | undefined;
-  isLoading?: boolean;
-  setPromise: (
-    variantName: string,
-    datapointId: string,
-    promise: Promise<InferenceResponse>,
-  ) => void;
-  input: DisplayInput;
-  functionName: string;
-  functionConfig: FunctionConfig;
-}
-const DatapointPlaygroundOutput = memo(
-  function DatapointPlaygroundOutput({
-    datapoint,
-    variant,
-    inferencePromise,
-    setPromise,
-    input,
-    functionName,
-    isLoading,
-    functionConfig,
-  }: DatapointPlaygroundOutputProps) {
+const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
+  function DatapointPlaygroundOutput(props) {
+    const query = useQuery({
+      queryKey: getClientInferenceQueryKey(props),
+      queryFn: getClientInferenceQueryFunction(props),
+      // Only re-fetch when the user explicitly requests it
+      refetchOnMount: false,
+      refetchInterval: false,
+      retry: false,
+    });
+
     const loadingIndicator = (
       <div className="flex min-h-[8rem] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
       </div>
     );
+
     const refreshButton = (
       <Button
+        aria-label={`Reload ${props.variant.name} inference`}
         variant="ghost"
         size="icon"
         className="absolute top-1 right-1 z-5 cursor-pointer opacity-25 transition-opacity hover:opacity-100"
-        onClick={() => {
-          refreshClientInference(
-            setPromise,
-            input,
-            datapoint,
-            variant,
-            functionName,
-            functionConfig,
-          );
-        }}
+        onClick={() => query.refetch()}
       >
         <Refresh />
       </Button>
     );
 
-    if (!inferencePromise) {
-      return isLoading ? (
-        loadingIndicator
-      ) : (
+    if (query.isLoading || query.isRefetching) {
+      return loadingIndicator;
+    }
+
+    if (query.isError) {
+      return (
+        <>
+          {refreshButton}
+          <InferenceError error={query.error} />
+        </>
+      );
+    }
+
+    if (!query.data) {
+      return (
         <div className="flex min-h-[8rem] items-center justify-center">
           {refreshButton}
           <div className="text-muted-foreground text-sm">
@@ -76,73 +65,35 @@ const DatapointPlaygroundOutput = memo(
       );
     }
 
+    const output =
+      "content" in query.data ? query.data.content : query.data.output;
+
     return (
-      <div className="group relative">
-        <Suspense fallback={loadingIndicator}>
-          <Await
-            resolve={inferencePromise}
-            errorElement={
-              <>
-                {refreshButton}
-                <InferenceError />
-              </>
-            }
-          >
-            {(response) => {
-              if (!response) {
-                return (
-                  <>
-                    {refreshButton}
-                    <div className="flex min-h-[8rem] items-center justify-center">
-                      <div className="text-muted-foreground text-sm">
-                        No response available
-                      </div>
-                    </div>
-                  </>
-                );
-              }
-              let output;
-              if ("content" in response) {
-                output = response.content;
-              } else {
-                output = response.output;
-              }
-              return (
-                <>
-                  {refreshButton}
-                  <NewOutput output={output} maxHeight={480} />
-                </>
-              );
-            }}
-          </Await>
-        </Suspense>
+      <div className="group relative" data-testid="datapoint-playground-output">
+        {refreshButton}
+        <Output output={output} maxHeight={480} />
       </div>
     );
   },
+  // TODO: Remove custom comparison and make props stable instead
   (prevProps, nextProps) => {
     return (
       prevProps.datapoint.id === nextProps.datapoint.id &&
       prevProps.variant.name === nextProps.variant.name &&
       prevProps.functionName === nextProps.functionName &&
-      prevProps.inferencePromise === nextProps.inferencePromise &&
-      prevProps.setPromise === nextProps.setPromise &&
-      JSON.stringify(prevProps.input) === JSON.stringify(nextProps.input) &&
-      prevProps.isLoading === nextProps.isLoading
+      JSON.stringify(prevProps.input) === JSON.stringify(nextProps.input)
     );
   },
 );
 
 export default DatapointPlaygroundOutput;
 
-function InferenceError() {
-  const error = useAsyncError();
-  const isInferenceError = error instanceof Error;
-
+function InferenceError({ error }: { error: unknown }) {
   return (
     <div className="max-h-[16rem] max-w-md overflow-y-auto px-4 text-red-600">
       <h3 className="text-sm font-medium">Inference Error</h3>
       <div className="mt-2 text-sm">
-        {isInferenceError ? (
+        {isErrorLike(error) ? (
           <CodeEditor value={error.message} readOnly showLineNumbers={false} />
         ) : (
           "Failed to load inference"
