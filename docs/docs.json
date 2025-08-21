@@ -184,5 +184,10 @@
       "slack": "https://www.tensorzero.com/slack",
       "discord": "https://www.tensorzero.com/discord"
     }
+  },
+  "errors": {
+    "404": {
+      "redirect": false
+    }
   }
 }
