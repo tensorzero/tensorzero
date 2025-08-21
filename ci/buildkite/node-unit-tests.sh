@@ -1,66 +1,94 @@
 #!/bin/bash
 set -euxo pipefail
 
+# ------------------------------------------------------------------------------
+# Configurable versions (override via env if needed)
+# ------------------------------------------------------------------------------
+: "${NODE_VERSION:=22}"      # Use "22" for latest 22.x, or pin e.g. "22.9.0" for determinism
+: "${PNPM_VERSION:=9}"       # Use "9" (latest 9.x) or pin "9.12.3", etc.
+
+# ------------------------------------------------------------------------------
 # Set the short commit hash
+# ------------------------------------------------------------------------------
 SHORT_HASH=${BUILDKITE_COMMIT:0:7}
-# Set DNS to not call howdy
+
+# ------------------------------------------------------------------------------
+# Networking hardening used by your tests
+# ------------------------------------------------------------------------------
 echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
 
-# Uncomment if needed: Cleanup disk space
-# ./ci/free-disk-space.sh
-
-# Setup Rust
+# ------------------------------------------------------------------------------
+# Setup Rust (unchanged)
+# ------------------------------------------------------------------------------
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source $HOME/.cargo/env
-# Verify installation
+source "$HOME/.cargo/env"
 rustc --version
 
-# Install Node
-# Download and install fnm:
-curl -o- https://fnm.vercel.app/install | bash
-source /root/.bashrc
+# ------------------------------------------------------------------------------
+# Install Node & pnpm via Volta (cross-platform, CI-friendly)
+# ------------------------------------------------------------------------------
+export VOLTA_HOME="${HOME}/.volta"
+export PATH="${VOLTA_HOME}/bin:${PATH}"
 
-# Download and install Node.js:
-fnm install 22
+if ! command -v volta >/dev/null 2>&1; then
+  curl -fsSL https://get.volta.sh | bash -s -- --skip-setup
+  # ensure just-installed volta is on PATH for this shell
+  export PATH="${HOME}/.volta/bin:${PATH}"
+fi
 
-# Verify the Node.js version:
-node -v # Should print "v22.18.0".
+# Pin toolchain (respects versions above; you can also pin in package.json)
+volta install "node@${NODE_VERSION}"
+volta install "pnpm@${PNPM_VERSION}"
 
-# Verify npm version:
-npm -v # Should print "10.9.3".
+# Verify toolchain
+node -v
+npm -v
+pnpm -v
 
-# Install pnpm
-curl -fsSL https://get.pnpm.io/install.sh | sh -
-
-# Use pnpm to install Node deps
+# ------------------------------------------------------------------------------
+# pnpm cache optimization
+# ------------------------------------------------------------------------------
+# Use a stable, user-scoped pnpm store path (can be mounted/cached by your CI)
+pnpm config set store-dir "${HOME}/.pnpm-store"
+# Pre-resolve dependencies from lockfile (no node_modules yet; speeds up CI)
+pnpm fetch
+# Install exactly from lockfile
 pnpm install --frozen-lockfile
 
-# Build `tensorzero-node`
-pnpm build
+# ------------------------------------------------------------------------------
+# Build your workspace package(s)
+# ------------------------------------------------------------------------------
+pnpm build  # builds `tensorzero-node` if defined in the workspace
 
-# Download the gateway container from BuildKite artifacts
+# ------------------------------------------------------------------------------
+# Docker: download & load gateway container (unchanged)
+# ------------------------------------------------------------------------------
 buildkite-agent artifact download gateway-container.tar gateway-container.tar
-
-# Load it into Docker
 docker load < gateway-container.tar
 
-# Set up fake credentials needed for the gateway to start up
-echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
-echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
-echo "TENSORZERO_GATEWAY_TAG=sha-$SHORT_HASH" >> fixtures/.env
-echo "TENSORZERO_UI_TAG=sha-$SHORT_HASH" >> fixtures/.env
+# ------------------------------------------------------------------------------
+# Fixture env for containers
+# ------------------------------------------------------------------------------
+{
+  echo "FIREWORKS_ACCOUNT_ID=not_used"
+  echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
+  echo "TENSORZERO_GATEWAY_TAG=sha-$SHORT_HASH"
+  echo "TENSORZERO_UI_TAG=sha-$SHORT_HASH"
+} >> fixtures/.env
 
-# Environment variables only used by the gateway container
-# We deliberately leave these unset when starting the UI container, to ensure
-# that it doesn't depend on them being set
-echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env-gateway
-echo "OPENAI_API_KEY=not_used" >> fixtures/.env-gateway
+{
+  echo "FIREWORKS_API_KEY=not_used"
+  echo "OPENAI_API_KEY=not_used"
+} >> fixtures/.env-gateway
 
-TENSORZERO_GATEWAY_TAG=sha-$SHORT_HASH docker compose -f fixtures/docker-compose.yml up -d
+# ------------------------------------------------------------------------------
+# Start fixtures and wait
+# ------------------------------------------------------------------------------
+TENSORZERO_GATEWAY_TAG="sha-$SHORT_HASH" docker compose -f fixtures/docker-compose.yml up -d
 docker compose -f fixtures/docker-compose.yml wait fixtures
 
-# Add the buildkite collector
+# ------------------------------------------------------------------------------
+# Test setup & execution
+# ------------------------------------------------------------------------------
 pnpm add -D buildkite-test-collector
-
-# Run the ui unit tests
 pnpm ui:test
