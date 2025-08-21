@@ -1,0 +1,17 @@
+name: Buildkite Test Suite
+run-name: "Buildkite Test Suite for: ${{ github.event.pull_request.title || github.ref }}"
+
+on:
+  merge_group:
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger a Buildkite Build on Push using v2.0.0
+        uses: buildkite/trigger-pipeline-action@v2.0.0
+        with:
+          buildkite_api_access_token: ${{ secrets.TRIGGER_BK_BUILD_TOKEN }}
+          pipeline: "tensorzero/buildkite-exploration"
