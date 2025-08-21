@@ -1,6 +1,9 @@
 # Set BUILDKITE_ANALYTICS_TOKEN
 export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get CI_UNIT_BUILDKITE_ANALYTICS_TOKEN)
 echo $BUILDKITE_ANALYTICS_TOKEN
+echo "XXX"
+echo $(buildkite-agent secret get CI_UNIT_BUILDKITE_ANALYTICS_TOKEN)
+echo "YYY"
 exit 1
 
 # Install cargo-binstall
