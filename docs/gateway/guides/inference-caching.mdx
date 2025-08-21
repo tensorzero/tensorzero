@@ -1,0 +1,60 @@
+---
+title: Inference Caching
+description: Learn how to use inference caching with TensorZero Gateway.
+---
+
+The TensorZero Gateway supports caching of inference responses to improve latency and reduce costs.
+When caching is enabled, identical requests will be served from the cache instead of being sent to the model provider, resulting in faster response times and lower token usage.
+
+## Usage
+
+The TensorZero Gateway supports the following cache modes:
+
+- `write_only` (default): Only write to cache but don't serve cached responses
+- `read_only`: Only read from cache but don't write new entries
+- `on`: Both read from and write to cache
+- `off`: Disable caching completely
+
+You can also optionally specify a maximum age for cache entries in seconds for inference reads.
+This parameter is ignored for inference writes.
+
+See [API Reference](/docs/gateway/api-reference/inference/#cache_options) for more details.
+
+## Example
+
+```python
+from tensorzero import TensorZeroGateway
+
+with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
+    response = client.inference(
+        model_name="openai::gpt-4o-mini",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital of Japan?",
+                }
+            ]
+        },
+        cache_options={
+            "enabled": "on",  # read and write to cache
+            "max_age_s": 3600,  # optional: cache entries >1h (>3600s) old are disregarded for reads
+        },
+    )
+
+print(response)
+```
+
+## Technical Notes
+
+- The cache applies to individual model requests, not inference requests.
+  This means that the following will be cached separately:
+  multiple variants of the same function;
+  multiple calls to the same function with different parameters;
+  individual model requests for inference-time optimizations;
+  and so on.
+- The `max_age_s` parameter applies to the retrieval of cached responses.
+  The cache does not automatically delete old entries (i.e. not a TTL).
+- When the gateway serves a cached response, the usage fields are set to zero.
+- The cache data is stored in ClickHouse.
+- For batch inference, the gateway only writes to the cache but does not serve cached responses.
