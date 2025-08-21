@@ -45,6 +45,7 @@ env:
   VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
   VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
   VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
+  VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
 
 jobs:
