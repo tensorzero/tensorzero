@@ -10,7 +10,7 @@ lazy_static! {
     pub static ref WEATHER_TOOL_CONFIG_STATIC: Arc<StaticToolConfig> = Arc::new(StaticToolConfig {
         name: "get_temperature".to_string(),
         description: "Get the current temperature in a given location".to_string(),
-        parameters: StaticJSONSchema::from_value(&json!({
+        parameters: StaticJSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "location": {"type": "string"},
@@ -30,7 +30,7 @@ lazy_static! {
     pub static ref QUERY_TOOL_CONFIG_STATIC: Arc<StaticToolConfig> = Arc::new(StaticToolConfig {
         name: "query_articles".to_string(),
         description: "Query articles from Wikipedia".to_string(),
-        parameters: StaticJSONSchema::from_value(&json!({
+        parameters: StaticJSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "query": {"type": "string"},

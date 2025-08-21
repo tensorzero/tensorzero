@@ -1,4 +1,4 @@
-use crate::clickhouse::TableName;
+use crate::db::clickhouse::TableName;
 use crate::function::FunctionConfigType;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
@@ -22,8 +22,8 @@ use uuid::Uuid;
 use crate::inference::types::Text;
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredSample};
 use crate::{
-    clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
-    config_parser::Config,
+    config::Config,
+    db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     error::{Error, ErrorDetails},
     function::FunctionConfig,
     gateway_util::{AppState, StructuredJson},
@@ -1361,6 +1361,7 @@ impl StoredSample for Datapoint {
         match self {
             Datapoint::Chat(datapoint) => SimpleStoredSampleInfo {
                 function_name: datapoint.function_name,
+                input: datapoint.input,
                 output: datapoint.output,
                 dispreferred_outputs: Vec::default(),
                 tool_params: datapoint.tool_params,
@@ -1376,6 +1377,7 @@ impl StoredSample for Datapoint {
                 });
                 SimpleStoredSampleInfo {
                     function_name: datapoint.function_name,
+                    input: datapoint.input,
                     output,
                     dispreferred_outputs: Vec::default(),
                     tool_params: None,

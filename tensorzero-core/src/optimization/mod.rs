@@ -1,3 +1,4 @@
+use crate::config::UninitializedVariantConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -23,7 +24,6 @@ use crate::optimization::together_sft::{
     TogetherSFTConfig, TogetherSFTJobHandle, UninitializedTogetherSFTConfig,
 };
 use crate::stored_inference::RenderedSample;
-use crate::variant::VariantConfig;
 
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
@@ -129,16 +129,16 @@ impl JobHandle for OptimizationJobHandle {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OptimizerOutput {
-    Variant(Box<VariantConfig>),
+    Variant(Box<UninitializedVariantConfig>),
     Model(UninitializedModelConfig),
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum OptimizationJobInfo {

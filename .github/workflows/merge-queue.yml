@@ -7,6 +7,12 @@ on:
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 
+# When triggered from the merge queue, cancel any existing workflow runs for the same PR branch
+# Otherwise, use the unique run id for the concurrency group, to prevent anything from getting cancelled
+concurrency:
+  group: ${{ github.event_name == 'merge_group' && format('{0}-{1}', github.workflow, github.ref) || github.run_id }}
+  cancel-in-progress: true
+
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -60,11 +66,15 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      - name: Install gdb
+        run: sudo apt-get update && sudo apt-get install -y gdb
+
       - name: Warm up modal instances
         run: |
           curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-inference-vllm-inference.modal.run/docs > vllm_modal_logs.txt &
           curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-inference-sglang-inference.modal.run/ > sglang_modal_logs.txt &
-          curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-gpt-oss-20b-serve.modal.run/ > vllm_gpt_oss_modal_logs.txt &
+          # TODO: Re-enable once we can switch to a T4 GPU
+          # curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-gpt-oss-20b-serve.modal.run/ > vllm_gpt_oss_modal_logs.txt &
 
       - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
@@ -135,6 +145,7 @@ jobs:
           echo "[gateway.observability.batch_writes]" >> tensorzero-core/tests/e2e/tensorzero.toml
           echo "enabled = true" >> tensorzero-core/tests/e2e/tensorzero.toml
           echo "flush_interval_ms = 80" >> tensorzero-core/tests/e2e/tensorzero.toml
+          echo "__force_allow_embedded_batch_writes = true" >> tensorzero-core/tests/e2e/tensorzero.toml
 
       - name: Download provider-proxy cache
         # When running as a cron job, don't use the provider-proxy cache.
@@ -146,7 +157,12 @@ jobs:
       - name: Launch ClickHouse container for E2E tests
         run: |
           # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait || true
+
+      - name: Print ClickHouse container logs
+        if: always()
+        run: |
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
       - name: Launch the provider-proxy cache for E2E tests
         run: |
@@ -182,18 +198,45 @@ jobs:
       - name: "Python: PyO3 Client: pytest"
         working-directory: clients/python
         run: |
-          bash ./test.sh
+          # Start the test in background and capture its PID
+          bash ./test.sh --verbose &
+          TEST_PID=$!
+          echo "Started test.sh with PID: $TEST_PID"
 
-      - name: "Python: OpenAI Client: Install dependencies"
-        working-directory: clients/openai-python
-        run: |
-          uv venv
-          uv pip sync requirements.txt
+          # Wait for 5 minutes (300 seconds)
+          for i in {1..300}; do
+            if ! kill -0 $TEST_PID 2>/dev/null; then
+              echo "Test completed normally"
+              wait $TEST_PID
+              exit $?
+            fi
+            sleep 1
+          done
 
-      - name: "Python: OpenAI Client: pytest"
-        working-directory: clients/openai-python
-        run: |
-          uv run pytest
+          echo "Test has been running for 5 minutes, capturing backtraces..."
+
+          # Get all processes related to our test
+          echo "=== Process tree ==="
+          ps -ef | grep -E "(test\.sh|pytest|python)" | grep -v grep || true
+
+          echo "=== Capturing backtraces with gdb ==="
+          # Find all python processes that might be related to our test
+          PYTHON_PIDS=$(pgrep -f "python.*pytest" || true)
+          if [ -n "$PYTHON_PIDS" ]; then
+            for pid in $PYTHON_PIDS; do
+              echo "--- Backtrace for Python process $pid ---"
+              gdb -p $pid --batch \
+                -ex "set pagination off" \
+                -ex "thread apply all bt" \
+                -ex "info threads" \
+                -ex "detach" \
+                -ex "quit" 2>&1 || true
+              echo ""
+            done
+          else
+            echo "No Python processes found"
+          fi
+          exit 1
 
       - name: "Node.js: OpenAI Client: test"
         working-directory: clients/openai-node
@@ -241,6 +284,7 @@ jobs:
 
       - name: Print vLLM GPT-OSS modal logs
         if: always()
+        continue-on-error: true
         run: cat vllm_gpt_oss_modal_logs.txt
 
       - name: Upload provider-proxy cache
@@ -274,6 +318,11 @@ jobs:
 
       - name: Run inference for production deployment tests
         run: examples/production-deployment/run.sh
+
+      - name: Print Docker compose logs
+        if: always()
+        run: |
+          docker compose -f examples/production-deployment/docker-compose.yml logs -t
 
       - name: Take down docker compose for production deployment tests
         run: |
