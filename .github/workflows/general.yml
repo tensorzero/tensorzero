@@ -305,18 +305,6 @@ jobs:
         run: |
           uv run stubtest tensorzero.tensorzero
 
-      - name: "Python: OpenAI Client: Install dependencies"
-        working-directory: clients/openai-python
-        run: |
-          uv venv
-          uv pip sync requirements.txt
-
-      - name: "Python: OpenAI Client: pyright"
-        working-directory: clients/openai-python
-        run: |
-          uv pip install pyright==1.1.394
-          uv run pyright
-
       - name: "Node.js: Run prettier"
         run: pnpm --filter=openai-node run format
 
@@ -381,15 +369,9 @@ jobs:
           - tag: "24.12-alpine"
             prefix: "24.12"
             allow_failure: false
-          - tag: "25.2-alpine"
-            prefix: "25.2"
-            allow_failure: false
           - tag: "latest-alpine"
             prefix: ""
-            # ClickHouse can make new releases at any time, which might break our tests.
-            # We allow this job to fail to avoid blocking CI whenever this happens.
-            # However, we'll still want to fix the failing tests soon after we notice the failure
-            allow_failure: true
+            allow_failure: false
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -533,6 +515,7 @@ jobs:
       OPENAI_API_KEY: not_used
       FIREWORKS_API_KEY: not_used
       FIREWORKS_ACCOUNT_ID: not_used
+      TOGETHER_API_KEY: not_used
       TENSORZERO_USE_MOCK_INFERENCE_PROVIDER: 1
       TENSORZERO_SKIP_LARGE_FIXTURES: 1
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}

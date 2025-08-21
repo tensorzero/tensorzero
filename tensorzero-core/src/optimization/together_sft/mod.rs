@@ -1,4 +1,6 @@
 #[cfg(feature = "pyo3")]
+use pyo3::exceptions::PyValueError;
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -66,11 +68,19 @@ impl std::fmt::Display for TogetherSFTJobHandle {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "TogetherSFTConfig"))]
 pub struct UninitializedTogetherSFTConfig {
     pub model: String,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credentials: Option<CredentialLocation>,
     pub api_base: Option<Url>,
+}
+
+impl std::fmt::Display for UninitializedTogetherSFTConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -117,6 +127,57 @@ impl<'a> TryFrom<&'a RenderedSample> for TogetherSupervisedRow<'a> {
         )?;
         messages.push(final_assistant_message);
         Ok(Self { messages, tools })
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl UninitializedTogetherSFTConfig {
+    // We allow too many arguments since it is a Python constructor
+    /// NOTE: This signature currently does not work:
+    /// print(TogetherSFTConfig.__init__.__text_signature__)
+    /// prints out signature:
+    /// ($self, /, *args, **kwargs)
+    #[new]
+    #[pyo3(signature = (*, model, credentials=None, api_base=None))]
+    pub fn new(
+        model: String,
+        credentials: Option<String>,
+        api_base: Option<String>,
+    ) -> PyResult<Self> {
+        // Use Deserialize to convert the string to a CredentialLocation
+        let credentials = credentials
+            .map(|s| serde_json::from_str(&s))
+            .transpose()
+            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?
+            .or_else(|| Some(default_api_key_location()));
+        let api_base = api_base
+            .map(|s| {
+                Url::parse(&s)
+                    .map_err(|e| PyErr::new::<PyValueError, std::string::String>(e.to_string()))
+            })
+            .transpose()?;
+        Ok(Self {
+            model,
+            credentials,
+            api_base,
+        })
+    }
+
+    /// Initialize the TogetherSFTConfig. All parameters are optional except for `model`.
+    ///
+    /// :param model: The model to use for the fine-tuning job.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::OPENAI_API_KEY". See docs for more details.
+    /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
+    #[expect(unused_variables)]
+    #[pyo3(signature = (*, model, credentials=None, api_base=None))]
+    fn __init__(
+        this: Py<Self>,
+        model: String,
+        credentials: Option<String>,
+        api_base: Option<String>,
+    ) -> Py<Self> {
+        this
     }
 }
 
@@ -333,7 +394,7 @@ impl Optimizer for TogetherSFTConfig {
                 n_checkpoints: Some(1),
                 n_evals: Some(n_evals),
                 learning_rate: 0.00001,
-                batch_size: 32,
+                batch_size: 8,
                 lr_scheduler: TogetherLRScheduler {
                     lr_scheduler_type: TogetherLRSchedulerType::Linear,
                     lr_scheduler_args: TogetherLRSchedulerArgs { min_lr_ratio: 0.0 },
