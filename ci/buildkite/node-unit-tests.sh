@@ -65,6 +65,7 @@ pnpm -r build  # builds `tensorzero-node` if defined in the workspace
 # ------------------------------------------------------------------------------
 buildkite-agent artifact download gateway-container.tar .
 docker load < gateway-container.tar
+cd ui
 
 # ------------------------------------------------------------------------------
 # Fixture env for containers
@@ -91,4 +92,4 @@ docker compose -f fixtures/docker-compose.yml wait fixtures
 # Test setup & execution
 # ------------------------------------------------------------------------------
 pnpm add -D buildkite-test-collector
-pnpm ui:test
+pnpm test
