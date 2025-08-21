@@ -151,7 +151,7 @@ impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
         };
         Ok(EmbeddingParams {
             input: params.input,
-            model_name: model_name.to_string(),
+            model_name,
             dimensions: params.dimensions,
             encoding_format: params.encoding_format,
             credentials: params.tensorzero_credentials,
