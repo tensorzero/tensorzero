@@ -5,6 +5,12 @@ steps:
     artifact_paths:
       - gateway-container.tar
 
+  - label: "Build UI Container"
+    command: bash ./ci/buildkite/build-gateway-container.sh
+    key: "build-ui-container"
+    artifact_paths:
+      - ui-container.tar
+
   - label: ":rust: Rust Unit Tests"
     command: bash ./ci/buildkite/rust-unit-tests.sh
     plugins:
