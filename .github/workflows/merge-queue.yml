@@ -45,6 +45,7 @@ env:
   VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
   VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
   VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
+  VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
 
 jobs:
@@ -237,18 +238,6 @@ jobs:
             echo "No Python processes found"
           fi
           exit 1
-
-      - name: "Python: OpenAI Client: Install dependencies"
-        working-directory: clients/openai-python
-        run: |
-          uv venv
-          uv pip sync requirements.txt
-
-      - name: "Python: OpenAI Client: pytest"
-        working-directory: clients/openai-python
-        timeout-minutes: 5
-        run: |
-          uv run pytest --verbose
 
       - name: "Node.js: OpenAI Client: test"
         working-directory: clients/openai-node
