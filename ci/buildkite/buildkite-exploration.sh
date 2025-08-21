@@ -7,6 +7,11 @@
 # echo $(buildkite-agent secret get CI_UNIT_BUILDKITE_ANALYTICS_TOKEN)
 # echo "YYY"
 # exit 1
+# Check if BUILDKITE_ANALYTICS_TOKEN is set
+if [ -z "$BUILDKITE_ANALYTICS_TOKEN" ]; then
+    echo "Error: BUILDKITE_ANALYTICS_TOKEN is not set"
+    exit 1
+fi
 
 # Install cargo-binstall
 curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
