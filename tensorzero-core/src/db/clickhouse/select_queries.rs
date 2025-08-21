@@ -10,28 +10,33 @@ use super::ClickHouseConnectionInfo;
 
 #[async_trait]
 impl SelectQueries for ClickHouseConnectionInfo {
+    /// Retrieves a timeseries of model usage data.
+    /// This will return max_periods complete time periods worth of data if present
+    /// as well as the current time period's data.
+    /// So there are at most max_periods + 1 time periods worth of data returned.
     async fn get_model_usage_timeseries(
         &self,
         time_window: TimeWindow,
         max_periods: u32,
     ) -> Result<Vec<ModelUsageTimePoint>, Error> {
         // TODO: probably factor this out into common code as other queries will likely need similar logic
+        // NOTE: this filter pattern will likely include some extra data since the current period is likely incomplete.
         let (time_grouping, time_filter) = match time_window {
             TimeWindow::Hour => (
                 "toStartOfHour(minute)",
-                format!("minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL {max_periods} HOUR"),
+                format!("minute >= (SELECT max(toStartOfHour(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} HOUR"),
             ),
             TimeWindow::Day => (
                 "toStartOfDay(minute)",
-                format!("minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL {max_periods} DAY"),
+                format!("minute >= (SELECT max(toStartOfDay(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} DAY"),
             ),
             TimeWindow::Week => (
                 "toStartOfWeek(minute)",
-                format!("minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL {max_periods} WEEK"),
+                format!("minute >= (SELECT max(toStartOfWeek(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} WEEK"),
             ),
             TimeWindow::Month => (
                 "toStartOfMonth(minute)",
-                format!("minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL {max_periods} MONTH"),
+                format!("minute >= (SELECT max(toStartOfMonth(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MONTH"),
             ),
             TimeWindow::Cumulative => (
                 "toDateTime('1970-01-01 00:00:00')",
