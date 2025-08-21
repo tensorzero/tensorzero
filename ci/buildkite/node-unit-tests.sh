@@ -57,5 +57,8 @@ echo "OPENAI_API_KEY=not_used" >> fixtures/.env-gateway
 TENSORZERO_GATEWAY_TAG=sha-$SHORT_HASH docker compose -f fixtures/docker-compose.yml up -d
 docker compose -f fixtures/docker-compose.yml wait fixtures
 
+# Add the buildkite collector
+pnpm add -D buildkite-test-collector
+
 # Run the ui unit tests
 pnpm ui:test
