@@ -438,11 +438,11 @@ jobs:
 
       - name: Launch non-replicated ClickHouse container for E2E tests
         if: matrix.replicated == false
-        run: TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }} TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse gateway fixtures mock-inference-provider --wait
+        run: TENSORZERO_SKIP_LARGE_FIXTURES=1 TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }} TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse gateway fixtures mock-inference-provider --wait
 
       - name: Launch replicated ClickHouse container for E2E tests
         if: matrix.replicated == true
-        run: TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }} TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up clickhouse-01 clickhouse-02 clickhouse-03 gateway fixtures mock-inference-provider --wait
+        run: TENSORZERO_SKIP_LARGE_FIXTURES=1 TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }} TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up clickhouse-01 clickhouse-02 clickhouse-03 gateway fixtures mock-inference-provider --wait
 
       # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
       - name: Check ClickHouse version
