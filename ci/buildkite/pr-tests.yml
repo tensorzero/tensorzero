@@ -12,6 +12,6 @@ steps:
           image: "rust"
           mount-buildkite-agent: true
 
-  - label: "Node.js Tests"
+  - label: ":node: Node.js Tests"
     command: bash ./ci/buildkite/node-unit-tests.sh
     depends_on: "build-gateway-container"
