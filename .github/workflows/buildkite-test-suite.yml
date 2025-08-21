@@ -1,5 +1,5 @@
 name: Buildkite Test Suite
-run-name: "Buildkite Test Suite for: ${{ github.event.pull_request.title || github.ref }}"
+run-name: "Buildkite Test Suite: ${{ github.event.pull_request.title || github.ref }}"
 
 on:
   merge_group:
