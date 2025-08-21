@@ -25,7 +25,7 @@ You can also find the complete code for this example on [GitHub](https://github.
 
 </Tip>
 
-For production deployments, see our [Deployment Guide](/docs/gateway/deployment/).
+For production deployments, see our [Deployment Guide](/gateway/deployment/).
 
 You'll also need to deploy a SageMaker endpoint for your LLM model.
 For this example, we're using a container running Ollama.
@@ -60,7 +60,7 @@ Alternatively, you can use `hosted_provider = "tgi"` if you had deployed TGI ins
 
 You can specify the endpoint's `region` explicitly, or use `allow_auto_detect_region = true` to infer region with the AWS SDK.
 
-See the [Configuration Reference](/docs/gateway/configuration-reference/) for optional fields.
+See the [Configuration Reference](/gateway/configuration-reference/) for optional fields.
 The relevant fields will depend on the `hosted_provider`.
 
 ### Credentials
@@ -84,7 +84,7 @@ Create a minimal Docker Compose configuration:
 
 ```yaml title="docker-compose.yml"
 # This is a simplified example for learning purposes. Do not use this in production.
-# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+# For production-ready deployments, see: https://www.tensorzero.com/gateway/deployment
 
 services:
   gateway:

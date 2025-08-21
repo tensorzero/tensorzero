@@ -9,12 +9,12 @@ It's easy to get started with the TensorZero Gateway.
 To deploy the TensorZero Gateway, you need to:
 
 - Setup a ClickHouse database
-- Optional: Create a [configuration file](/docs/gateway/configuration-reference/)
+- Optional: Create a [configuration file](/gateway/configuration-reference/)
 - Run the gateway
 
 <Tip>
 
-See the [TensorZero UI Deployment Guide](/docs/ui/deployment/) for more details on how to deploy the TensorZero UI.
+See the [TensorZero UI Deployment Guide](/ui/deployment/) for more details on how to deploy the TensorZero UI.
 
 </Tip>
 
@@ -27,7 +27,7 @@ This data is later used for model observability, experimentation, and optimizati
 
 For development purposes, you can run a single-node ClickHouse instance locally (e.g. using Homebrew or Docker) or a cheap `Development`-tier cluster on ClickHouse Cloud.
 
-See the <a href="https://clickhouse.com/docs/en/install" target="_blank">ClickHouse documentation</a> for more details on configuring your ClickHouse deployment.
+See the <a href="https://clickhouse.com/en/install" target="_blank">ClickHouse documentation</a> for more details on configuring your ClickHouse deployment.
 
 ### Production
 
@@ -48,7 +48,7 @@ You can alternatively run your own self-managed ClickHouse instance or cluster.
 The TensorZero Gateway does _not_ automatically enable data replication for ClickHouse tables.
 
 If you are using a _self-managed distributed_ ClickHouse deployment, you must set up replication yourself.
-See the ClickHouse [replication documentation](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/replication#converting-from-mergetree-to-replicatedmergetree) for more details.
+See the ClickHouse [replication documentation](https://clickhouse.com/en/engines/table-engines/mergetree-family/replication#converting-from-mergetree-to-replicatedmergetree) for more details.
 
 ClickHouse Cloud automatically sets up data replication, so this step is not necessary if you're using the managed service.
 
@@ -74,7 +74,7 @@ TENSORZERO_CLICKHOUSE_URL="http://host.docker.internal:8123/tensorzero"
 
 The TensorZero Gateway automatically applies database migrations on startup.
 
-See `[gateway]` in the [Configuration Reference](/docs/gateway/configuration-reference/) for the relevant configuration (e.g. customizing the port).
+See `[gateway]` in the [Configuration Reference](/gateway/configuration-reference/) for the relevant configuration (e.g. customizing the port).
 
 <Accordion title="Disabling Observability (Not Recommended)">
 
@@ -151,7 +151,7 @@ cargo run --release --bin gateway -- path/to/your/tensorzero.toml
 
 You can deploy the TensorZero Gateway alongside your application (e.g. as a sidecar container) or as a standalone service.
 
-A single gateway instance can handle over 1k QPS/core with sub-millisecond latency (see [Benchmarks](/docs/gateway/benchmarks/)), so a simple deployment should suffice for the vast majority of applications. If you deploy it as an independent service, we recommend deploying at least two instances behind a load balancer for high availability. The gateway is stateless, so you can easily scale horizontally and don't need to worry about persistence.
+A single gateway instance can handle over 1k QPS/core with sub-millisecond latency (see [Benchmarks](/gateway/benchmarks/)), so a simple deployment should suffice for the vast majority of applications. If you deploy it as an independent service, we recommend deploying at least two instances behind a load balancer for high availability. The gateway is stateless, so you can easily scale horizontally and don't need to worry about persistence.
 
 <Accordion title="Running with Docker (Recommended)" defaultOpen="true">
 
@@ -187,11 +187,11 @@ The TensorZero Gateway requires either `--config-file` to specify a custom confi
 
 ### Clients
 
-See the [Clients](/docs/gateway/clients/) page for more details on how to interact with the TensorZero Gateway.
+See the [Clients](/gateway/clients/) page for more details on how to interact with the TensorZero Gateway.
 
 ### Configuration
 
-To run the TensorZero Gateway, first you need to create a `tensorzero.toml` configuration file. Read more about the configuration file [here](/docs/gateway/configuration-reference/).
+To run the TensorZero Gateway, first you need to create a `tensorzero.toml` configuration file. Read more about the configuration file [here](/gateway/configuration-reference/).
 
 ### Model Provider Credentials
 
@@ -220,7 +220,7 @@ If required credentials are missing, the gateway will fail on startup.
 **Notes:**
 
 - AWS Bedrock supports many authentication methods, including environment variables, IAM roles, and more. See the AWS documentation for more details.
-- If you're using the GCP Vertex provider, you also need to mount the credentials for a service account in JWT form (described [here](https://cloud.google.com/docs/authentication/provide-credentials-adc#service-account)) to `/app/gcp-credentials.json` using an additional `-v` flag.
+- If you're using the GCP Vertex provider, you also need to mount the credentials for a service account in JWT form (described [here](https://cloud.google.com/authentication/provide-credentials-adc#service-account)) to `/app/gcp-credentials.json` using an additional `-v` flag.
 
 <Tip>
 

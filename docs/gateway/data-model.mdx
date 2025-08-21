@@ -73,7 +73,7 @@ This is the inference request you'd make if you had called the model provider di
 | `input_messages`      | Array(RequestMessage) | The user and assistant messages input to the model         |
 | `output`              |  Array(ContentBlock)  | The output of the model                                    |
 
-A `RequestMessage` is an object with shape `{role: "user" | "assistant", content: List[ContentBlock]}` (content blocks are defined [here](/docs/gateway/api-reference/inference/#content-block)).
+A `RequestMessage` is an object with shape `{role: "user" | "assistant", content: List[ContentBlock]}` (content blocks are defined [here](/gateway/api-reference/inference/#content-block)).
 
 ## `DynamicInContextLearningExample`
 
@@ -249,7 +249,7 @@ Once the request succeeds, we use this information to populate the `ChatInferenc
 
 <Accordion title="Materialized View Tables">
 
-[Materialized views](https://clickhouse.com/docs/en/materialized-view) in columnar databases like ClickHouse pre-compute alternative indexings of data, dramatically improving query performance compared to computing results on-the-fly.
+[Materialized views](https://clickhouse.com/en/materialized-view) in columnar databases like ClickHouse pre-compute alternative indexings of data, dramatically improving query performance compared to computing results on-the-fly.
 In TensorZero's case, we store denormalized data about inferences and feedback in the materialized views below to support efficient queries for common downstream use cases.
 
 ## `FeedbackTag`
