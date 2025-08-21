@@ -38,7 +38,7 @@ use crate::inference::{InferenceProvider, TensorZeroEventError};
 
 const PROVIDER_NAME: &str = "Azure";
 pub const PROVIDER_TYPE: &str = "azure";
-const AZURE_INFERENCE_API_VERSION: &str = "2024-10-21";
+const AZURE_INFERENCE_API_VERSION: &str = "2025-04-01-preview";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
