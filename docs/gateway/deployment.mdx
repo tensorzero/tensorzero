@@ -27,7 +27,7 @@ This data is later used for model observability, experimentation, and optimizati
 
 For development purposes, you can run a single-node ClickHouse instance locally (e.g. using Homebrew or Docker) or a cheap `Development`-tier cluster on ClickHouse Cloud.
 
-See the <a href="https://clickhouse.com/en/install" target="_blank">ClickHouse documentation</a> for more details on configuring your ClickHouse deployment.
+See the <a href="https://clickhouse.com/docs/en/install" target="_blank">ClickHouse documentation</a> for more details on configuring your ClickHouse deployment.
 
 ### Production
 
@@ -48,7 +48,7 @@ You can alternatively run your own self-managed ClickHouse instance or cluster.
 The TensorZero Gateway does _not_ automatically enable data replication for ClickHouse tables.
 
 If you are using a _self-managed distributed_ ClickHouse deployment, you must set up replication yourself.
-See the ClickHouse [replication documentation](https://clickhouse.com/en/engines/table-engines/mergetree-family/replication#converting-from-mergetree-to-replicatedmergetree) for more details.
+See the ClickHouse [replication documentation](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/replication#converting-from-mergetree-to-replicatedmergetree) for more details.
 
 ClickHouse Cloud automatically sets up data replication, so this step is not necessary if you're using the managed service.
 
@@ -220,7 +220,7 @@ If required credentials are missing, the gateway will fail on startup.
 **Notes:**
 
 - AWS Bedrock supports many authentication methods, including environment variables, IAM roles, and more. See the AWS documentation for more details.
-- If you're using the GCP Vertex provider, you also need to mount the credentials for a service account in JWT form (described [here](https://cloud.google.com/authentication/provide-credentials-adc#service-account)) to `/app/gcp-credentials.json` using an additional `-v` flag.
+- If you're using the GCP Vertex provider, you also need to mount the credentials for a service account in JWT form (described [here](https://cloud.google.com/docs/authentication/provide-credentials-adc#service-account)) to `/app/gcp-credentials.json` using an additional `-v` flag.
 
 <Tip>
 

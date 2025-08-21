@@ -249,7 +249,7 @@ Once the request succeeds, we use this information to populate the `ChatInferenc
 
 <Accordion title="Materialized View Tables">
 
-[Materialized views](https://clickhouse.com/en/materialized-view) in columnar databases like ClickHouse pre-compute alternative indexings of data, dramatically improving query performance compared to computing results on-the-fly.
+[Materialized views](https://clickhouse.com/docs/en/materialized-view) in columnar databases like ClickHouse pre-compute alternative indexings of data, dramatically improving query performance compared to computing results on-the-fly.
 In TensorZero's case, we store denormalized data about inferences and feedback in the materialized views below to support efficient queries for common downstream use cases.
 
 ## `FeedbackTag`
