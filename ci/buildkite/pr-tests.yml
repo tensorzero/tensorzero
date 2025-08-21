@@ -1,6 +1,7 @@
 steps:
   - label: "Build Gateway Container"
     command: bash ./ci/buildkite/build-gateway-container.sh
+    key: "build-gateway-container"
     artifact_paths:
       - gateway-container.tar
 
@@ -10,3 +11,7 @@ steps:
       - docker:
           image: "rust"
           mount-buildkite-agent: true
+
+  - label: "Node.js Tests"
+    command: bash ./ci/node-unit-tests.sh
+    depends_on: "build-gateway-container"
