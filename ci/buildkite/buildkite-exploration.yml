@@ -5,6 +5,3 @@ steps:
       - docker:
           image: "rust"
           mount-buildkite-agent: true
-      - test-collector#v1.0.0:
-          files: "target/nextest/ci-unit/junit.xml"
-          format: "junit"
