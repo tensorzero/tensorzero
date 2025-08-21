@@ -139,17 +139,26 @@ pub struct OpenAICompatibleEmbeddingParams {
     tensorzero_credentials: InferenceCredentials,
 }
 
-impl From<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
-    fn from(params: OpenAICompatibleEmbeddingParams) -> Self {
-        EmbeddingParams {
+impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
+    type Error = Error;
+    fn try_from(params: OpenAICompatibleEmbeddingParams) -> Result<Self, Self::Error> {
+        let model_name = match params.model.strip_prefix(TENSORZERO_MODEL_NAME_PREFIX) {
+            Some(model_name) => model_name.to_string(),
+            None => {
+                tracing::warn!("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::'");
+                params.model
+            }
+        };
+        Ok(EmbeddingParams {
             input: params.input,
-            model_name: params.model,
+            model_name: model_name.to_string(),
             dimensions: params.dimensions,
             encoding_format: params.encoding_format,
             credentials: params.tensorzero_credentials,
-        }
+        })
     }
 }
+
 #[derive(Debug, Serialize)]
 #[serde(tag = "object", rename_all = "lowercase")]
 pub enum OpenAIEmbeddingResponse {
@@ -184,7 +193,7 @@ impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
                     index: i,
                 })
                 .collect(),
-            model: response.model,
+            model: format!("{TENSORZERO_MODEL_NAME_PREFIX}{}", response.model),
             usage: OpenAIEmbeddingUsage {
                 prompt_tokens: response.usage.input_tokens,
                 total_tokens: response.usage.input_tokens,
@@ -201,7 +210,7 @@ pub async fn embeddings_handler(
     }): AppState,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
 ) -> Result<Json<OpenAIEmbeddingResponse>, Error> {
-    let embedding_params = openai_compatible_params.into();
+    let embedding_params = openai_compatible_params.try_into()?;
     let response = embeddings(config, &http_client, embedding_params).await?;
     Ok(Json(response.into()))
 }
@@ -1970,5 +1979,39 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly
             }
         );
+    }
+
+    #[traced_test]
+    #[test]
+    fn test_try_from_embedding_params_deprecated() {
+        let openai_embedding_params = OpenAICompatibleEmbeddingParams {
+            input: EmbeddingInput::Single("foo".to_string()),
+            model: "text-embedding-ada-002".to_string(),
+            dimensions: Some(15),
+            encoding_format: EmbeddingEncodingFormat::Float,
+            tensorzero_credentials: InferenceCredentials::default(),
+        };
+        let param: EmbeddingParams = openai_embedding_params.try_into().unwrap();
+        assert_eq!(param.model_name, "text-embedding-ada-002");
+        assert_eq!(param.dimensions, Some(15));
+        assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
+        assert!(logs_contain("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::'"));
+    }
+
+    #[traced_test]
+    #[test]
+    fn test_try_from_embedding_params_strip() {
+        let openai_embedding_params = OpenAICompatibleEmbeddingParams {
+            input: EmbeddingInput::Single("foo".to_string()),
+            model: "tensorzero::model_name::text-embedding-ada-002".to_string(),
+            dimensions: Some(15),
+            encoding_format: EmbeddingEncodingFormat::Float,
+            tensorzero_credentials: InferenceCredentials::default(),
+        };
+        let param: EmbeddingParams = openai_embedding_params.try_into().unwrap();
+        assert_eq!(param.model_name, "text-embedding-ada-002");
+        assert_eq!(param.dimensions, Some(15));
+        assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
+        assert!(!logs_contain("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::'"));
     }
 }
