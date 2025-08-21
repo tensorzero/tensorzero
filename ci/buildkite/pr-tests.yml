@@ -1,4 +1,9 @@
 steps:
+  - label: "Build Gateway Container"
+    command: bash ./ci/buildkite/build-gateway-container.sh
+    artifact-paths:
+      - gateway-container.tar
+
   - label: ":rust: Rust Unit Tests"
     command: bash ./ci/buildkite/rust-unit-tests.sh
     plugins:
