@@ -63,7 +63,7 @@ pnpm -r build  # builds `tensorzero-node` if defined in the workspace
 # ------------------------------------------------------------------------------
 # Docker: download & load gateway container (unchanged)
 # ------------------------------------------------------------------------------
-buildkite-agent artifact download gateway-container.tar gateway-container.tar
+buildkite-agent artifact download gateway-container.tar .
 docker load < gateway-container.tar
 
 # ------------------------------------------------------------------------------
