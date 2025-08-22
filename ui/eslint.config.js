@@ -81,7 +81,7 @@ export default [
   ...tseslint.configs.recommended,
   {
     rules: {
-      "@typescript-eslint/switch-exhaustiveness-check": "warn",
+      "@typescript-eslint/switch-exhaustiveness-check": "error",
     },
   },
 ];
