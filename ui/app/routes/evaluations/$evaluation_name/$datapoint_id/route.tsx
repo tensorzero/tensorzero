@@ -21,7 +21,7 @@ import {
   redirect,
   type RouteHandle,
 } from "react-router";
-import Output from "~/components/inference/NewOutput";
+import { Output } from "~/components/inference/Output";
 import {
   consolidate_evaluation_results,
   getEvaluatorMetricName,
@@ -44,9 +44,12 @@ import {
   useColorAssigner,
 } from "~/hooks/evaluations/ColorAssigner";
 import { getConfig } from "~/utils/config/index.server";
-import type { EvaluationConfig, EvaluatorConfig } from "tensorzero-node";
-import type { ContentBlockOutput } from "~/utils/clickhouse/common";
-import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
+import type {
+  EvaluationConfig,
+  EvaluatorConfig,
+  ContentBlockChatOutput,
+  JsonInferenceOutput,
+} from "tensorzero-node";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { Toaster } from "~/components/ui/toaster";
@@ -432,7 +435,7 @@ type OutputsSectionProps = {
   outputsToDisplay: Array<{
     id: string;
     variant_name: string;
-    output: ContentBlockOutput[] | JsonInferenceOutput;
+    output: ContentBlockChatOutput[] | JsonInferenceOutput;
     metrics: ConsolidatedMetric[];
     inferenceId: string | null;
   }>;

@@ -9,10 +9,15 @@ use tokio::time::Instant;
 use url::Url;
 
 use crate::cache::ModelProviderRequest;
+use crate::embeddings::{
+    Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingProvider,
+    EmbeddingProviderRequestInfo, EmbeddingProviderResponse, EmbeddingRequest,
+};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -27,7 +32,7 @@ use crate::providers::helpers::{
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
-    OpenAIToolChoiceString, SpecificToolChoice,
+    OpenAIToolChoiceString, OpenAIUsage, SpecificToolChoice,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -281,6 +286,98 @@ impl InferenceProvider for AzureProvider {
     }
 }
 
+impl EmbeddingProvider for AzureProvider {
+    async fn embed(
+        &self,
+        request: &EmbeddingRequest,
+        client: &reqwest::Client,
+        dynamic_api_keys: &InferenceCredentials,
+        model_provider_data: &EmbeddingProviderRequestInfo,
+    ) -> Result<EmbeddingProviderResponse, Error> {
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let request_url = get_azure_embedding_url(&self.endpoint, &self.deployment_id)?;
+        let request_body = AzureEmbeddingRequest::new(request);
+
+        let request_builder = client
+            .post(request_url)
+            .header("api-key", api_key.expose_secret());
+        let start_time = Instant::now();
+
+        let request_body_value = serde_json::to_value(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing Azure embedding request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
+
+        let (response, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
+            &FullExtraBodyConfig::default(), // No overrides supported
+            &Default::default(),             // No extra headers for embeddings yet
+            model_provider_data,
+            &self.deployment_id,
+            request_body_value,
+            request_builder,
+        )
+        .await?;
+        if response.status().is_success() {
+            let raw_response = response.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
+            let response: AzureEmbeddingResponse =
+                serde_json::from_str(&raw_response).map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing JSON response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(raw_request.clone()),
+                        raw_response: Some(raw_response.clone()),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
+            let latency = Latency::NonStreaming {
+                response_time: start_time.elapsed(),
+            };
+            Ok(into_embedding_provider_response(
+                response,
+                request_body,
+                latency,
+                raw_response,
+            )?)
+        } else {
+            let status = response.status();
+            let response_text = response.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error parsing error response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                })
+            })?;
+            Err(handle_openai_error(
+                &raw_request,
+                status,
+                &response_text,
+                PROVIDER_TYPE,
+            ))
+        }
+    }
+}
+
 fn get_azure_chat_url(endpoint: &Url, deployment_id: &str) -> Result<Url, Error> {
     let mut url = endpoint.clone();
     url.path_segments_mut()
@@ -300,6 +397,70 @@ fn get_azure_chat_url(endpoint: &Url, deployment_id: &str) -> Result<Url, Error>
     url.query_pairs_mut()
         .append_pair("api-version", "2024-10-21");
     Ok(url)
+}
+
+fn get_azure_embedding_url(endpoint: &Url, deployment_id: &str) -> Result<Url, Error> {
+    let mut url = endpoint.clone();
+
+    url.path_segments_mut()
+        .map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!("Error parsing URL: {e:?}"),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: None,
+            })
+        })?
+        .push("openai")
+        .push("deployments")
+        .push(deployment_id)
+        .push("embeddings");
+    url.query_pairs_mut()
+        .append_pair("api-version", "2024-10-21");
+    Ok(url)
+}
+
+#[derive(Debug, Deserialize)]
+struct AzureEmbeddingResponse {
+    data: Vec<AzureEmbeddingData>,
+    usage: OpenAIUsage,
+}
+
+#[derive(Debug, Deserialize)]
+struct AzureEmbeddingData {
+    embedding: Embedding,
+}
+
+fn into_embedding_provider_response(
+    response: AzureEmbeddingResponse,
+    request_body: AzureEmbeddingRequest,
+    latency: Latency,
+    raw_response: String,
+) -> Result<EmbeddingProviderResponse, Error> {
+    let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!(
+                "Error serializing request body as JSON: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
+            raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+            raw_response: None,
+            provider_type: PROVIDER_TYPE.to_string(),
+        })
+    })?;
+    let embeddings = response
+        .data
+        .into_iter()
+        .map(|data| data.embedding)
+        .collect();
+    Ok(EmbeddingProviderResponse::new(
+        embeddings,
+        request_body.input.clone(),
+        raw_request,
+        raw_response,
+        response.usage.into(),
+        latency,
+    ))
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -504,6 +665,24 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
     }
 }
 
+#[derive(Debug, Serialize)]
+struct AzureEmbeddingRequest<'a> {
+    input: &'a EmbeddingInput,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dimensions: Option<u32>,
+    encoding_format: EmbeddingEncodingFormat,
+}
+
+impl<'a> AzureEmbeddingRequest<'a> {
+    fn new(request: &'a EmbeddingRequest) -> Self {
+        Self {
+            input: &request.input,
+            dimensions: request.dimensions,
+            encoding_format: request.encoding_format,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
@@ -702,6 +881,7 @@ mod tests {
                 index: 0,
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: OpenAIFinishReason::Stop,

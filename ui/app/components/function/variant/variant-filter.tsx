@@ -8,7 +8,7 @@ import {
   ComboboxList,
   ComboboxProvider,
 } from "@ariakit/react";
-import * as Popover from "@radix-ui/react-popover";
+import { Popover } from "radix-ui";
 import { Input } from "~/components/ui/input";
 import clsx from "clsx";
 import { Separator } from "~/components/ui/separator";

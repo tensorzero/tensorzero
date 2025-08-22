@@ -21,7 +21,7 @@ import {
 import PageButtons from "~/components/utils/PageButtons";
 import BasicInfo from "./InferenceBasicInfo";
 import InputSnippet from "~/components/inference/InputSnippet";
-import Output from "~/components/inference/NewOutput";
+import { Output } from "~/components/inference/Output";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import {
   addHumanFeedback,
@@ -335,15 +335,50 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   const { submit } = variantInferenceFetcher;
   const onVariantSelect = (variant: string) => {
-    setSelectedVariant(variant);
-    setOpenModal("variant-response");
-    const request = prepareInferenceActionRequest({
-      resource: inference,
-      source: variantSource,
-      variant,
-    });
-    // TODO: handle JSON.stringify error
-    submit({ data: JSON.stringify(request) });
+    try {
+      const request = prepareInferenceActionRequest({
+        resource: inference,
+        source: variantSource,
+        variant,
+      });
+
+      // Set state and open modal only if request preparation succeeds
+      setSelectedVariant(variant);
+      setOpenModal("variant-response");
+
+      try {
+        submit({ data: JSON.stringify(request) });
+      } catch (stringifyError) {
+        logger.error("Failed to stringify request:", stringifyError);
+        toast({
+          title: "Request Error",
+          description: "Failed to prepare the request. Please try again.",
+          variant: "destructive",
+        });
+        // Reset state on error
+        setSelectedVariant(null);
+        setOpenModal(null);
+      }
+    } catch (error) {
+      logger.error("Failed to prepare inference request:", error);
+
+      // Show user-friendly error message based on the error type
+      let errorMessage = "Failed to prepare the request. Please try again.";
+      if (error instanceof Error) {
+        if (error.message.includes("Extra body is not supported")) {
+          errorMessage =
+            "This inference contains extra body parameters which are not supported in the UI.";
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+      }
+
+      toast({
+        title: "Request Preparation Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
   };
 
   const humanFeedbackFetcher = useFetcherWithReset<typeof action>();
@@ -601,9 +636,9 @@ function prepareDemonstrationFromVariantOutput(
   variantOutput: VariantResponseInfo,
 ) {
   const output = variantOutput.output;
-  // output can either be a JsonInferenceOutput or a ContentBlockOutput[] (or undefined)
+  // output can either be a JsonInferenceOutput or a ContentBlockChatOutput[] (or undefined)
   // if it is a JsonInferenceOutput, we need to take the Parsed field and throw if it is missing
-  // if it is a ContentBlockOutput[], we can return as is
+  // if it is a ContentBlockChatOutput[], we can return as is
   if (Array.isArray(output)) {
     return output;
   } else if (output && "parsed" in output) {

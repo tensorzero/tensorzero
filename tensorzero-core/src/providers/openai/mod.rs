@@ -18,13 +18,18 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
-use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
+use crate::embeddings::EmbeddingEncodingFormat;
+use crate::embeddings::{
+    Embedding, EmbeddingInput, EmbeddingProvider, EmbeddingProviderRequestInfo,
+    EmbeddingProviderResponse, EmbeddingRequest,
+};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
+use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::file::{mime_type_to_ext, require_image};
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
@@ -35,7 +40,7 @@ use crate::inference::types::{
     TextChunk, Usage,
 };
 use crate::inference::types::{
-    FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
+    FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, ThoughtChunk,
 };
 use crate::inference::InferenceProvider;
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
@@ -583,9 +588,15 @@ impl EmbeddingProvider for OpenAIProvider {
         request: &EmbeddingRequest,
         client: &reqwest::Client,
         dynamic_api_keys: &InferenceCredentials,
+        model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_body = OpenAIEmbeddingRequest::new(&self.model_name, &request.input);
+        let request_body = OpenAIEmbeddingRequest::new(
+            &self.model_name,
+            &request.input,
+            request.dimensions,
+            request.encoding_format,
+        );
         let request_url =
             get_embedding_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let start_time = Instant::now();
@@ -593,22 +604,26 @@ impl EmbeddingProvider for OpenAIProvider {
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
-        let res = request_builder
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!(
-                        "Error sending request to OpenAI: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
+
+        let request_body_value = serde_json::to_value(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing OpenAI embedding request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
+
+        let (res, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
+            &FullExtraBodyConfig::default(), // No overrides supported
+            &Default::default(),             // No extra headers for embeddings yet
+            model_provider_data,
+            &self.model_name,
+            request_body_value,
+            request_builder,
+        )
+        .await?;
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
@@ -616,7 +631,7 @@ impl EmbeddingProvider for OpenAIProvider {
                         "Error parsing text response: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
@@ -629,7 +644,7 @@ impl EmbeddingProvider for OpenAIProvider {
                             "Error parsing JSON response: {}",
                             DisplayOrDebugGateway::new(e)
                         ),
-                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                        raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
                     })
@@ -647,7 +662,7 @@ impl EmbeddingProvider for OpenAIProvider {
             .try_into()?)
         } else {
             Err(handle_openai_error(
-                &serde_json::to_string(&request_body).unwrap_or_default(),
+                &raw_request,
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -655,7 +670,7 @@ impl EmbeddingProvider for OpenAIProvider {
                             "Error parsing error response: {}",
                             DisplayOrDebugGateway::new(e)
                         ),
-                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                        raw_request: Some(raw_request.clone()),
                         raw_response: None,
                         provider_type: PROVIDER_TYPE.to_string(),
                     })
@@ -1767,6 +1782,7 @@ impl<'a> OpenAIBatchRequest<'a> {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) struct OpenAIUsage {
+    #[serde(default)]
     pub prompt_tokens: u32,
     #[serde(default)]
     pub completion_tokens: u32,
@@ -1809,6 +1825,10 @@ impl From<OpenAIResponseToolCall> for ToolCall {
 pub(super) struct OpenAIResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) content: Option<String>,
+    // OpenAI doesn't currently set this field, but some OpenAI-compatible
+    // providers (e.g. VLLM) do.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) tool_calls: Option<Vec<OpenAIResponseToolCall>>,
 }
@@ -1946,6 +1966,10 @@ struct OpenAIToolCallChunk {
 struct OpenAIDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
+    // OpenAI doesn't currently set this field, but some OpenAI-compatible
+    // providers (e.g. VLLM) do.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenAIToolCallChunk>>,
 }
@@ -2010,6 +2034,16 @@ fn openai_to_tensorzero_chunk(
         if let Some(choice_finish_reason) = choice.finish_reason {
             finish_reason = Some(choice_finish_reason.into());
         }
+        if let Some(reasoning) = choice.delta.reasoning_content {
+            // We don't have real chunk ids, so always use chunk id 1 for reasoning content
+            // (which should get concatenated into a single ContentBlock by the client)
+            content.push(ContentBlockChunk::Thought(ThoughtChunk {
+                text: Some(reasoning),
+                signature: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                id: "1".to_string(),
+            }));
+        }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {
                 text,
@@ -2058,12 +2092,24 @@ fn openai_to_tensorzero_chunk(
 #[derive(Debug, Serialize)]
 struct OpenAIEmbeddingRequest<'a> {
     model: &'a str,
-    input: &'a str,
+    input: &'a EmbeddingInput,
+    dimensions: Option<u32>,
+    encoding_format: EmbeddingEncodingFormat,
 }
 
 impl<'a> OpenAIEmbeddingRequest<'a> {
-    fn new(model: &'a str, input: &'a str) -> Self {
-        Self { model, input }
+    fn new(
+        model: &'a str,
+        input: &'a EmbeddingInput,
+        dimensions: Option<u32>,
+        encoding_format: EmbeddingEncodingFormat,
+    ) -> Self {
+        Self {
+            model,
+            input,
+            dimensions,
+            encoding_format,
+        }
     }
 }
 
@@ -2082,7 +2128,7 @@ struct OpenAIEmbeddingResponseWithMetadata<'a> {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct OpenAIEmbeddingData {
-    embedding: Vec<f32>,
+    embedding: Embedding,
 }
 
 impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderResponse {
@@ -2106,31 +2152,15 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
             })
         })?;
 
-        if response.data.len() != 1 {
-            return Err(Error::new(ErrorDetails::InferenceServer {
-                message: "Expected exactly one embedding in response".to_string(),
-                raw_request: Some(raw_request.clone()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }));
-        }
-        let embedding = response
+        let embeddings = response
             .data
             .into_iter()
-            .next()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: "Expected exactly one embedding in response".to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?
-            .embedding;
+            .map(|embedding| embedding.embedding)
+            .collect();
 
         Ok(EmbeddingProviderResponse::new(
-            embedding,
-            request.input.to_string(),
+            embeddings,
+            request.input.clone(),
             raw_request,
             raw_response,
             response.usage.into(),
@@ -2710,6 +2740,7 @@ mod tests {
                 index: 0,
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: OpenAIFinishReason::Stop,
@@ -2802,6 +2833,7 @@ mod tests {
                 finish_reason: OpenAIFinishReason::ToolCalls,
                 message: OpenAIResponseMessage {
                     content: None,
+                    reasoning_content: None,
                     tool_calls: Some(vec![OpenAIResponseToolCall {
                         id: "call1".to_string(),
                         r#type: OpenAIToolType::Function,
@@ -2946,6 +2978,7 @@ mod tests {
                     index: 0,
                     message: OpenAIResponseMessage {
                         content: Some("Choice 1".to_string()),
+                        reasoning_content: None,
                         tool_calls: None,
                     },
                     finish_reason: OpenAIFinishReason::Stop,
@@ -2955,6 +2988,7 @@ mod tests {
                     finish_reason: OpenAIFinishReason::Stop,
                     message: OpenAIResponseMessage {
                         content: Some("Choice 2".to_string()),
+                        reasoning_content: None,
                         tool_calls: None,
                     },
                 },
@@ -3149,6 +3183,7 @@ mod tests {
             choices: vec![OpenAIChatChunkChoice {
                 delta: OpenAIDelta {
                     content: Some("Hello".to_string()),
+                    reasoning_content: None,
                     tool_calls: None,
                 },
                 finish_reason: Some(OpenAIFinishReason::Stop),
@@ -3177,6 +3212,7 @@ mod tests {
                 finish_reason: Some(OpenAIFinishReason::ToolCalls),
                 delta: OpenAIDelta {
                     content: None,
+                    reasoning_content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
                         index: 0,
                         id: None,
@@ -3211,6 +3247,7 @@ mod tests {
                 finish_reason: None,
                 delta: OpenAIDelta {
                     content: None,
+                    reasoning_content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
                         index: 1,
                         id: None,
@@ -3246,6 +3283,7 @@ mod tests {
                 finish_reason: Some(OpenAIFinishReason::Stop),
                 delta: OpenAIDelta {
                     content: None,
+                    reasoning_content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
                         index: 1,
                         id: Some("id2".to_string()),

@@ -18,8 +18,8 @@ use super::inference::{
     InferenceIds, InferenceModels, InferenceParams, InferenceResponse, JsonInferenceResponse,
 };
 use crate::cache::{CacheEnabledMode, CacheOptions};
-use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::config_parser::Config;
+use crate::config::Config;
+use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::{sample_variant, FunctionConfig};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
@@ -629,7 +629,7 @@ async fn write_start_batch_inference<'a>(
     }
 
     clickhouse_connection_info
-        .write(rows.as_slice(), TableName::BatchModelInference)
+        .write_batched(rows.as_slice(), TableName::BatchModelInference)
         .await?;
 
     let batch_request_insert = BatchRequestRow::new(UnparsedBatchRequestRow {
@@ -660,7 +660,7 @@ pub async fn write_batch_request_row(
     batch_request: &BatchRequestRow<'_>,
 ) -> Result<(), Error> {
     clickhouse_connection_info
-        .write(&[batch_request], TableName::BatchRequest)
+        .write_batched(&[batch_request], TableName::BatchRequest)
         .await
 }
 
@@ -758,7 +758,7 @@ async fn write_batch_request_status_update(
         errors: vec![], // TODO (#503): add better error handling
     });
     clickhouse_connection_info
-        .write(&[batch_request_insert], TableName::BatchRequest)
+        .write_batched(&[batch_request_insert], TableName::BatchRequest)
         .await?;
     Ok(())
 }
@@ -916,18 +916,18 @@ pub async fn write_completed_batch_inference<'a>(
     match &**function {
         FunctionConfig::Chat(_chat_function) => {
             clickhouse_connection_info
-                .write(&inference_rows_to_write, TableName::ChatInference)
+                .write_batched(&inference_rows_to_write, TableName::ChatInference)
                 .await?;
         }
         FunctionConfig::Json(_json_function) => {
             clickhouse_connection_info
-                .write(&inference_rows_to_write, TableName::JsonInference)
+                .write_batched(&inference_rows_to_write, TableName::JsonInference)
                 .await?;
         }
     }
     // Write all the ModelInference rows to the database
     clickhouse_connection_info
-        .write(&model_inference_rows_to_write, TableName::ModelInference)
+        .write_batched(&model_inference_rows_to_write, TableName::ModelInference)
         .await?;
 
     Ok(inferences)
@@ -1030,8 +1030,9 @@ pub async fn get_completed_batch_inference_response(
                 let query = format!(
                     "WITH inf_lookup AS (
                         SELECT episode_id
-                        FROM InferenceById FINAL
+                        FROM InferenceById
                         WHERE id_uint = toUInt128(toUUID('{}'))
+                        LIMIT 1
                     )
                     SELECT
                         ci.id as inference_id,
@@ -1129,8 +1130,9 @@ pub async fn get_completed_batch_inference_response(
                 let query = format!(
                     "WITH inf_lookup AS (
                         SELECT episode_id
-                        FROM InferenceById FINAL
+                        FROM InferenceById
                         WHERE id_uint = toUInt128(toUUID('{}'))
+                        LIMIT 1
                     )
                     SELECT
                         ji.id as inference_id,

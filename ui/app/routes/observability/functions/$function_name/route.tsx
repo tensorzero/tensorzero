@@ -210,9 +210,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
         icon={getFunctionTypeIcon(function_config.type).icon}
         iconBg={getFunctionTypeIcon(function_config.type).iconBg}
       >
-        {function_config.type === "chat" && (
-          <BasicInfo functionConfig={function_config} />
-        )}
+        <BasicInfo functionConfig={function_config} />
       </PageHeader>
 
       <SectionsGroup>

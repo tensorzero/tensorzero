@@ -23,12 +23,11 @@ use crate::inference::types::Thought;
 ///
 /// WARNING: Setting this to true will expose potentially sensitive request/response
 /// data in logs and error responses. Use with caution.
-static DEBUG: OnceCell<bool> =
-    if cfg!(feature = "e2e_tests") || cfg!(feature = "optimization_tests") {
-        OnceCell::const_new_with(true)
-    } else {
-        OnceCell::const_new()
-    };
+static DEBUG: OnceCell<bool> = if cfg!(feature = "e2e_tests") {
+    OnceCell::const_new_with(true)
+} else {
+    OnceCell::const_new()
+};
 
 pub fn set_debug(debug: bool) -> Result<(), Error> {
     // We already initialized `DEBUG`, so do nothing
@@ -189,6 +188,9 @@ pub enum ErrorDetails {
     BadCredentialsPreInference {
         provider_name: String,
     },
+    Base64 {
+        message: String,
+    },
     BatchInputValidation {
         index: usize,
         message: String,
@@ -203,7 +205,14 @@ pub enum ErrorDetails {
     Cache {
         message: String,
     },
+    Glob {
+        glob: String,
+        message: String,
+    },
     ChannelWrite {
+        message: String,
+    },
+    ClickHouseConfiguration {
         message: String,
     },
     ClickHouseConnection {
@@ -407,6 +416,9 @@ pub enum ErrorDetails {
     MissingFileExtension {
         file_name: String,
     },
+    ModelNotFound {
+        model_name: String,
+    },
     ModelProvidersExhausted {
         provider_errors: HashMap<String, Error>,
     },
@@ -513,6 +525,7 @@ impl ErrorDetails {
             ErrorDetails::ExtraBodyReplacement { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidInferenceTarget { .. } => tracing::Level::WARN,
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
+            ErrorDetails::Base64 { .. } => tracing::Level::ERROR,
             ErrorDetails::UnsupportedContentBlockType { .. } => tracing::Level::WARN,
             ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
@@ -520,6 +533,7 @@ impl ErrorDetails {
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
             ErrorDetails::BadImageFetch { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseConfiguration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
@@ -543,6 +557,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidBatchParams { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
+            ErrorDetails::Glob { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidClientMode { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDatasetName { .. } => tracing::Level::WARN,
@@ -577,6 +592,7 @@ impl ErrorDetails {
             ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
             ErrorDetails::MissingFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
+            ErrorDetails::ModelNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
             ErrorDetails::Observability { .. } => tracing::Level::WARN,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
@@ -610,6 +626,7 @@ impl ErrorDetails {
         match self {
             ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
             ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::Glob { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ExtraBodyReplacement { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -617,6 +634,7 @@ impl ErrorDetails {
             ErrorDetails::BatchNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Cache { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseConfiguration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -634,6 +652,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceClient { status_code, .. } => {
                 status_code.unwrap_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)
             }
+            ErrorDetails::Base64 { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadImageFetch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -680,6 +699,7 @@ impl ErrorDetails {
             ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFunctionInVariants { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFileExtension { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -811,6 +831,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Error replacing extra body: `{message}` with pointer: `{pointer}`"
                 )
             }
+            ErrorDetails::Glob { glob, message } => {
+                write!(f, "Error using glob: `{glob}`: {message}")
+            }
             ErrorDetails::ApiKeyMissing { provider_name } => {
                 write!(f, "API key missing for provider: {provider_name}")
             }
@@ -823,6 +846,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Bad credentials at inference time for provider: {provider_name}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                 )
             }
+            ErrorDetails::Base64 { message } => {
+                write!(f, "Error decoding base64: {message}")
+            }
             ErrorDetails::BatchInputValidation { index, message } => {
                 write!(f, "Input at index {index} failed validation: {message}",)
             }
@@ -834,6 +860,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {message}")
+            }
+            ErrorDetails::ClickHouseConfiguration { message } => {
+                write!(f, "Error in ClickHouse configuration: {message}")
             }
             ErrorDetails::ClickHouseConnection { message } => {
                 write!(f, "Error connecting to ClickHouse: {message}")
@@ -1088,6 +1117,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Could not determine file extension for file: {file_name}"
                 )
+            }
+            ErrorDetails::ModelNotFound { model_name } => {
+                write!(f, "Model not found: {model_name}")
             }
             ErrorDetails::ModelProvidersExhausted { provider_errors } => {
                 write!(

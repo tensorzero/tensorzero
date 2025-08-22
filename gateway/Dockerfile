@@ -1,6 +1,6 @@
 # ========== builder ==========
 
-FROM rust:latest AS builder
+FROM rust:1.88.0 AS builder
 
 WORKDIR /src
 
@@ -11,8 +11,8 @@ RUN git rev-parse HEAD
 
 ARG CARGO_BUILD_FLAGS=""
 
-RUN --mount=type=cache,id=tensorzero-gateway-release,sharing=shared,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=tensorzero-gateway-release,sharing=shared,target=/usr/local/cargo/git \
+RUN --mount=type=cache,id=tensorzero-gateway-release,sharing=locked,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=tensorzero-gateway-release,sharing=locked,target=/usr/local/cargo/git \
     cargo build --profile performance -p gateway $CARGO_BUILD_FLAGS && \
     cp -r /src/target/performance /release
 

@@ -1,0 +1,55 @@
+---
+title: Vision & Roadmap
+description: Learn more about TensorZero's vision and roadmap.
+---
+
+## Near-term Roadmap
+
+Our goal is to help engineers build, manage, and optimize the next generation of LLM applications: systems that learn from real-world experience.
+While in stealth, we achieved very positive technical results in commercial pilots and internal benchmarks.
+We're now working towards open-sourcing our work over the coming months.
+
+The planned near-term roadmap includes:
+
+**Optimization.**
+TensorZero offers recipes for prompt optimization (e.g. MIPRO), model optimization (e.g. fine-tuning, RLHF), and inference-time optimizations (e.g. dynamic in-context learning).
+We're working towards open-sourcing more advanced recipes and inference-time optimizations.
+
+**Evaluation & Experimentation.**
+The TensorZero Gateway supports basic A/B testing.
+We're working towards open-sourcing more advanced evaluation (e.g. reward modeling, importance sampling) and experimentation tools (e.g. asynchronous optimization for multi-armed bandits).
+
+**Observability.**
+The TensorZero Gateway already stores comprehensive observability data in a ClickHouse database you control.
+We're working towards open-sourcing a suite of user-friendly tools (e.g. dashboards) to support your LLM engineering workflows.
+
+**Examples.**
+We've written a [Quickstart](/quickstart/) guide, a comprehensive [Tutorial](/gateway/tutorial/) about the TensorZero Gateway, and many guides and examples.
+We're working towards adding more complete examples, especially for common workflows (e.g. RAG) and challenges (e.g. evaluations).
+
+**Integrations.**
+We've integrated TensorZero with many popular LLM providers (see [Integrations](/gateway/integrations/)).
+We're working towards integrating with more providers, as well as third-party LLMOps tools (e.g. fine-tuning, observability).
+
+<Tip>
+
+We'd like to prioritize the features that matter the most to our users.
+Please reach out on [Slack](https://www.tensorzero.com/slack) or [Discord](https://www.tensorzero.com/discord) to share feedback and suggestions!
+
+You can see the features and issues we're currently prioritizing on [GitHub](https://github.com/tensorzero/tensorzero/issues?q=is%3Aissue+is%3Aopen+label%3Apriority-high%2Cpriority-urgent).
+
+</Tip>
+
+## Vision
+
+As LLMs get smarter, one of the main engineering challenges will be to enable them to learn from real-world experience.
+The analogy we like here is, _"If you take a smart person and throw them at a completely new job, they likely won't be great at it at first, but will quickly learn the ropes through instruction or trial-and-error."_
+This same process is very challenging for LLMs today, especially as people try to tackle increasingly more complex use cases (e.g. agents).
+
+At some point you won't be able to judge business outcomes by evaluating individual models or staring at inferences, the way people approach LLM engineering today.
+You'll have to reason about these end-to-end systems as a whole while iterating based on the data the system produces over time.
+
+TensorZero is our answer to all this.
+We're building a layer on top of models and other tools, and automating much of the low-level LLM engineering work.
+By grounding on real-world performance, TensorZero will ultimately enable AI systems to learn from experience.
+This is our long-term vision.

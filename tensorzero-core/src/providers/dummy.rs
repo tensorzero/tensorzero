@@ -13,7 +13,10 @@ use uuid::Uuid;
 use crate::inference::InferenceProvider;
 
 use crate::cache::ModelProviderRequest;
-use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
+use crate::embeddings::{
+    Embedding, EmbeddingProvider, EmbeddingProviderRequestInfo, EmbeddingProviderResponse,
+    EmbeddingRequest,
+};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::PollBatchInferenceResponse;
@@ -755,6 +758,7 @@ impl EmbeddingProvider for DummyProvider {
         request: &EmbeddingRequest,
         _http_client: &reqwest::Client,
         _dynamic_api_keys: &InferenceCredentials,
+        _model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {
@@ -769,9 +773,12 @@ impl EmbeddingProvider for DummyProvider {
             }
             .into());
         }
+        if self.model_name.contains("slow") {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        }
         let id = Uuid::now_v7();
         let created = current_timestamp();
-        let embedding = vec![0.0; 1536];
+        let embeddings = vec![Embedding::Float(vec![0.0; 1536]); request.input.num_inputs()];
         let raw_request = DUMMY_RAW_REQUEST.to_string();
         let raw_response = DUMMY_RAW_REQUEST.to_string();
         let usage = Usage {
@@ -783,8 +790,8 @@ impl EmbeddingProvider for DummyProvider {
         };
         Ok(EmbeddingProviderResponse {
             id,
-            input: request.input.to_string(),
-            embedding,
+            input: request.input.clone(),
+            embeddings,
             created,
             raw_request,
             raw_response,

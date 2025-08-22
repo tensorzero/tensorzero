@@ -9,15 +9,15 @@ use mimalloc::MiMalloc;
 use std::fmt::Display;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
-use tensorzero_core::howdy::setup_howdy;
 use tokio::signal;
 use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
 
-use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
-use tensorzero_core::config_parser::Config;
+use tensorzero_core::config::{Config, ConfigFileGlob};
+use tensorzero_core::db::clickhouse::migration_manager::manual_run_migrations;
+use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::endpoints;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error;
@@ -30,7 +30,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
-    /// Use the `tensorzero.toml` config file at the specified path. Incompatible with `--default-config`
+    /// Use all of the config files matching the specified glob pattern. Incompatible with `--default-config`
     #[arg(long)]
     config_file: Option<PathBuf>,
 
@@ -48,6 +48,10 @@ struct Args {
     #[arg(value_enum)]
     #[clap(default_value_t = LogFormat::default())]
     log_format: LogFormat,
+
+    /// Run database migrations manually then exit.
+    #[arg(long)]
+    run_migrations_only: bool,
 
     /// Deprecated: use `--config-file` instead
     tensorzero_toml: Option<PathBuf>,
@@ -89,6 +93,12 @@ async fn main() {
         .expect_pretty("Failed to set up logs");
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
+    if args.run_migrations_only {
+        manual_run_migrations()
+            .await
+            .expect_pretty("Failed to run migrations");
+        return;
+    }
 
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
 
@@ -120,16 +130,25 @@ async fn main() {
         tracing::warn!("Running the gateway without any config-related arguments is deprecated. Use `--default-config` to start the gateway with the default config.");
     }
 
-    let config = if let Some(path) = &config_path {
-        Arc::new(
-            Config::load_and_verify_from_path(Path::new(&path))
-                .await
-                .ok() // Don't print the error here, since it was already printed when it was constructed
-                .expect_pretty("Failed to load config"),
+    let (config, glob) = if let Some(path) = &config_path {
+        let glob =
+            ConfigFileGlob::new_from_path(path).expect_pretty("Failed to process config file glob");
+        (
+            Arc::new(
+                Config::load_and_verify_from_path(&glob)
+                    .await
+                    .ok() // Don't print the error here, since it was already printed when it was constructed
+                    .expect_pretty(&format!(
+                        "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
+                        glob.glob,
+                        glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
+                    )),
+            ),
+            Some(glob),
         )
     } else {
         tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
-        Arc::new(Config::default())
+        (Arc::new(Config::default()), None)
     };
 
     if config.gateway.debug {
@@ -177,11 +196,10 @@ async fn main() {
         );
     }
 
-    // Initialize AppState
+    // Initialize GatewayHandle
     let gateway_handle = gateway_util::GatewayHandle::new(config.clone())
         .await
         .expect_pretty("Failed to initialize AppState");
-    setup_howdy(gateway_handle.app_state.clickhouse_connection_info.clone());
 
     // Create a new observability_enabled_pretty string for the log message below
     let observability_enabled_pretty = match &gateway_handle.app_state.clickhouse_connection_info {
@@ -213,9 +231,16 @@ async fn main() {
             "/batch_inference/{batch_id}/inference/{inference_id}",
             get(endpoints::batch_inference::poll_batch_inference_handler),
         )
+        // TODO(# 3191): Implement a trait for openai compatible endpoints
+        // so this logic can be centralized to one place and not reimplemented in
+        // our gateway utils.
         .route(
             "/openai/v1/chat/completions",
             post(endpoints::openai_compatible::inference_handler),
+        )
+        .route(
+            "/openai/v1/embeddings",
+            post(endpoints::openai_compatible::embeddings_handler),
         )
         .route("/feedback", post(endpoints::feedback::feedback_handler))
         // Everything above this layer has OpenTelemetry tracing enabled
@@ -340,14 +365,26 @@ async fn main() {
     }
 
     // Print the configuration being used
-    if let Some(path) = &config_path {
-        tracing::info!("├ Configuration: {}", path.to_string_lossy());
+    if let Some(glob) = &glob {
+        tracing::info!("├ Configuration: glob `{}` resolved to:", glob.glob);
+        for path in &glob.paths {
+            tracing::info!("│  ├ {}", path.to_string_lossy());
+        }
     } else {
         tracing::info!("├ Configuration: default");
     }
 
     // Print whether observability is enabled
     tracing::info!("├ Observability: {observability_enabled_pretty}");
+    if config.gateway.observability.batch_writes.enabled {
+        tracing::info!(
+            "├ Batch Writes: enabled (flush_interval_ms = {}, max_rows = {})",
+            config.gateway.observability.batch_writes.flush_interval_ms,
+            config.gateway.observability.batch_writes.max_rows
+        );
+    } else {
+        tracing::info!("├ Batch Writes: disabled");
+    }
 
     // Print whether OpenTelemetry is enabled
     if config.gateway.export.otlp.traces.enabled {

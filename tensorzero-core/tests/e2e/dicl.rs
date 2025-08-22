@@ -4,11 +4,15 @@ use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
+use std::sync::Arc;
 use std::time::Duration;
 use tensorzero_core::{
-    clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
-    config_parser::ProviderTypesConfig,
-    embeddings::{EmbeddingProvider, EmbeddingRequest, UninitializedEmbeddingProviderConfig},
+    config::ProviderTypesConfig,
+    db::clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
+    embeddings::{
+        EmbeddingEncodingFormat, EmbeddingProvider, EmbeddingRequest,
+        UninitializedEmbeddingProviderConfig,
+    },
     endpoints::inference::InferenceCredentials,
     inference::types::{
         ContentBlock, ContentBlockChatOutput, JsonInferenceOutput, RequestMessage, ResolvedInput,
@@ -19,7 +23,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inferences_clickhouse,
 };
 
@@ -361,22 +365,27 @@ async fn embed_insert_example(
     let provider_config =
         toml::from_str::<UninitializedEmbeddingProviderConfig>(provider_config_serialized)
             .expect("Failed to deserialize EmbeddingProviderConfig")
-            .load(&ProviderTypesConfig::default())
+            .load(
+                &ProviderTypesConfig::default(),
+                Arc::from("good".to_string()),
+            )
             .await
             .unwrap();
 
     let client = Client::new();
     let request = EmbeddingRequest {
-        input: serde_json::to_string(&input).unwrap(),
+        input: serde_json::to_string(&input).unwrap().into(),
+        dimensions: None,
+        encoding_format: EmbeddingEncodingFormat::Float,
     };
     let api_keys = InferenceCredentials::default();
     let response = provider_config
-        .embed(&request, &client, &api_keys)
+        .embed(&request, &client, &api_keys, &(&provider_config).into())
         .await
         .unwrap();
 
     let id = Uuid::now_v7();
-    let embedding = response.embedding;
+    let embedding = &response.embeddings[0];
 
     let input_string = serde_json::to_string(&input).unwrap();
     let row = serde_json::json!({

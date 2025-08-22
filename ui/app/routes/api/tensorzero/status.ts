@@ -1,6 +1,6 @@
 import { useFetcher } from "react-router";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { logger } from "~/utils/logger";
 
 export async function loader() {
@@ -20,14 +20,14 @@ export async function loader() {
 export function useTensorZeroStatusFetcher() {
   const statusFetcher = useFetcher();
   const status = statusFetcher.data;
+  const isLoading = statusFetcher.state === "loading";
 
   useEffect(() => {
     if (statusFetcher.state === "idle" && !statusFetcher.data) {
       statusFetcher.load("/api/tensorzero/status");
     }
-    // TODO: Fix and stop ignoring lint rule
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // Empty dependency array - only run on mount
 
-  return { status, isLoading: statusFetcher.state === "loading" };
+  return useMemo(() => ({ status, isLoading }), [status, isLoading]);
 }

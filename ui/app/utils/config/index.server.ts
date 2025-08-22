@@ -1,4 +1,4 @@
-import type { Config } from "tensorzero-node";
+import type { Config, FunctionConfig } from "tensorzero-node";
 import { getConfig as getConfigNative } from "tensorzero-node";
 import { getEnv } from "../env.server";
 
@@ -29,7 +29,7 @@ We will likely address this with some form of query library down the line.
 */
 
 export async function loadConfig(): Promise<Config> {
-  const env = await getEnv();
+  const env = getEnv();
   const config = await getConfigNative(env.TENSORZERO_UI_CONFIG_PATH);
   return config;
 }
@@ -41,6 +41,21 @@ interface ConfigCache {
 
 let configCache: ConfigCache | null = null;
 
+const defaultFunctionConfig: FunctionConfig = {
+  type: "chat",
+  variants: {},
+  schemas: {
+    system: null,
+    user: null,
+    assistant: null,
+  },
+  tools: [],
+  tool_choice: "auto",
+  parallel_tool_calls: null,
+  description:
+    "This is the default function for TensorZero. This function is used when you call a model directly without specifying a function name. It has no variants preconfigured because they are generated dynamically at inference time based on the model being called.",
+};
+
 export async function getConfig() {
   const now = Date.now();
 
@@ -50,6 +65,8 @@ export async function getConfig() {
 
   // Cache is invalid or doesn't exist, reload it
   const freshConfig = await loadConfig();
+  // eslint-disable-next-line no-restricted-syntax
+  freshConfig.functions["tensorzero::default"] = defaultFunctionConfig;
 
   configCache = { data: freshConfig, timestamp: now };
   return freshConfig;
@@ -74,7 +91,6 @@ export async function getFunctionConfig(functionName: string, config?: Config) {
  */
 export async function getAllFunctionConfigs(config?: Config) {
   const cfg = config || (await getConfig());
-  console.log("getAllFunctionConfigs", cfg.functions);
 
   return cfg.functions;
 }

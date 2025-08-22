@@ -11,7 +11,7 @@ use crate::{
     common::get_gateway_endpoint,
     providers::common::{E2ETestProvider, E2ETestProviders},
 };
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
 
@@ -117,6 +117,7 @@ async fn get_providers() -> E2ETestProviders {
         bad_auth_extra_headers,
         extra_body_inference: extra_body_providers,
         reasoning_inference: vec![],
+        embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: standard_providers.clone(),
@@ -269,8 +270,8 @@ async fn test_thinking_inference_extra_header_128k() {
 
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 100ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;

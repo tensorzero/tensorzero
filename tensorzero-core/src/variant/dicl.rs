@@ -3,9 +3,10 @@ use std::sync::Arc;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::config_parser::path::TomlRelativePath;
-use crate::config_parser::LoadableConfig;
-use crate::config_parser::PathWithContents;
+use crate::config::path::TomlRelativePath;
+use crate::config::LoadableConfig;
+use crate::config::PathWithContents;
+use crate::embeddings::EmbeddingEncodingFormat;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
@@ -21,7 +22,7 @@ use crate::model_table::ShorthandModelConfig;
 use crate::{
     embeddings::EmbeddingRequest,
     endpoints::inference::{InferenceClients, InferenceParams},
-    error::{Error, ErrorDetails},
+    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
     inference::types::{
         ContentBlockChatOutput, InferenceResult, InferenceResultStream, JsonInferenceOutput,
@@ -55,15 +56,16 @@ pub struct DiclConfig {
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
     pub json_mode: Option<JsonMode>,
+    #[cfg_attr(test, ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
+    #[cfg_attr(test, ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
     pub retries: RetryConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct UninitializedDiclConfig {
     #[serde(default)]
     pub weight: Option<f64>,
@@ -80,10 +82,12 @@ pub struct UninitializedDiclConfig {
     pub seed: Option<u32>,
     pub json_mode: Option<JsonMode>,
     #[serde(default)]
+    #[ts(skip)]
     pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
     pub retries: RetryConfig,
     #[serde(default)]
+    #[ts(skip)]
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
@@ -146,7 +150,9 @@ impl Variant for DiclConfig {
         // Add the embedding to the model inference results
         inference_response
             .mut_model_inference_results()
-            .push(embedding_response.into());
+            // This can only fail if the embedding response has a request with > 1 input,
+            // which should never happen as we only send one input at a time
+            .push(embedding_response.try_into()?);
         Ok(inference_response)
     }
 
@@ -204,7 +210,7 @@ impl Variant for DiclConfig {
         // Add the embedding to the model inference results
         model_used_info
             .previous_model_inference_results
-            .push(embedding_response.into());
+            .push(embedding_response.try_into()?);
         Ok((inference_result_stream, model_used_info))
     }
 
@@ -326,7 +332,9 @@ impl DiclConfig {
             })?;
 
         let embedding_request = EmbeddingRequest {
-            input: serialized_input.to_string(),
+            input: serialized_input.into(),
+            dimensions: None,
+            encoding_format: EmbeddingEncodingFormat::Float,
         };
 
         // Embed the input via an API request
@@ -337,12 +345,23 @@ impl DiclConfig {
         // Wrap the embedding in a response with metadata
         let embedding_response_with_metadata =
             EmbeddingResponseWithMetadata::new(embedding_response, self.embedding_model.clone());
+        let [embedding_vector] = embedding_response_with_metadata.embeddings.as_slice() else {
+            return Err(ErrorDetails::InternalError {
+                message: format!(
+                    "Embedding model returned multiple vectors. {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
+            }
+            .into());
+        };
 
         // Format the embedding as a string for ClickHouse
         let formatted_embedding = format!(
             "[{}]",
-            embedding_response_with_metadata
-                .embedding
+            embedding_vector
+                .as_float()
+                .ok_or_else(|| Error::new(ErrorDetails::InternalError {
+                    message: format!("Failed to convert DICL embedding to float array. {IMPOSSIBLE_ERROR_MESSAGE}")
+                }))?
                 .iter()
                 .map(|&x| x.to_string())
                 .collect::<Vec<_>>()

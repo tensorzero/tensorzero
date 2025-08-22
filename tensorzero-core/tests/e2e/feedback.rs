@@ -1,10 +1,8 @@
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_core::{
-    clickhouse::test_helpers::{select_feedback_clickhouse, select_feedback_tags_clickhouse},
-    config_parser::{
-        Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
-    },
+    config::{Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
+    db::clickhouse::test_helpers::{select_feedback_clickhouse, select_feedback_tags_clickhouse},
     endpoints::feedback::{feedback, Params},
     gateway_util::GatewayHandle,
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
@@ -15,7 +13,7 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::make_embedded_gateway;
-use tensorzero_core::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 
 #[tokio::test]
 async fn e2e_test_comment_feedback_normal_function() {
@@ -192,7 +190,7 @@ async fn e2e_test_comment_feedback_validation_disabled() {
         value: json!("foo bar"),
         ..Default::default()
     };
-    let val = feedback(handle.app_state, params).await.unwrap();
+    let val = feedback(handle.app_state.clone(), params).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Check that this was correctly written to ClickHouse
@@ -1223,7 +1221,7 @@ async fn e2e_test_float_feedback_validation_disabled() {
         value: json!(3.1),
         ..Default::default()
     };
-    let val = feedback(handle.app_state, params).await.unwrap();
+    let val = feedback(handle.app_state.clone(), params).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Check that this was correctly written to ClickHouse
@@ -1457,7 +1455,7 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
         value: json!(true),
         ..Default::default()
     };
-    let val = feedback(handle.app_state, params).await.unwrap();
+    let val = feedback(handle.app_state.clone(), params).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Check that this was correctly written to ClickHouse
