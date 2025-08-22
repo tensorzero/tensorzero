@@ -52,8 +52,11 @@ jobs:
   batch-tests:
     uses: ./.github/workflows/batch-test.yml
     secrets: inherit
+  build-mock-inference-provider-container:
+    uses: ./.github/workflows/build-mock-inference-provider-container.yml
   live-tests:
     runs-on: namespace-profile-tensorzero-8x16
+    needs: build-mock-inference-provider-container
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -135,10 +138,20 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
+      - name: Download `mock-inference-provider` container
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        with:
+          name: build-mock-inference-provider-container
+          path: .
+
+      - name: Load `mock-inference-provider` container
+        run: docker load < mock-inference-provider-container.tar
+
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
           echo "TENSORZERO_CLICKHOUSE_BATCH_WRITES=${{ matrix.batch_writes }}" >> $GITHUB_ENV
+          echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Configure batch writes in tensorzero.toml
         if: matrix.batch_writes == true
@@ -158,7 +171,7 @@ jobs:
       - name: Launch ClickHouse container for E2E tests
         run: |
           # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait || true
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
 
       - name: Print ClickHouse container logs
         if: always()
@@ -352,6 +365,7 @@ jobs:
         ui-tests-e2e-regen-model-inference-cache,
         live-tests,
         batch-tests,
+        build-mock-inference-provider-container,
       ]
     runs-on: ubuntu-latest
     steps:

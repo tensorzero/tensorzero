@@ -43,8 +43,16 @@ jobs:
           name: build-gateway-container
           path: .
 
-      - name: Load `gateway` container
-        run: docker load < gateway-container.tar
+      - name: Download `mock-inference-provider` container
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        with:
+          name: build-mock-inference-provider-container
+          path: .
+
+      - name: Load `gateway` and `mock-inference-provider` containers
+        run: |
+          docker load < gateway-container.tar
+          docker load < mock-inference-provider-container.tar
 
       - name: Start Docker containers and apply fixtures
         working-directory: ui
@@ -53,6 +61,7 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> fixtures/.env
 
           # Environment variables only used by the gateway container
           # We deliberately leave these unset when starting the UI container, to ensure

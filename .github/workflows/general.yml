@@ -30,7 +30,7 @@ jobs:
   # Like 'check-docker-compose', but loads the freshly built 'gateway' and 'ui' container images first
   # This checks that all of our docker-compose files work with the changes in the PR
   check-latest-docker-compose:
-    needs: [build-gateway-container, build-ui-container]
+    needs: [build-gateway-container, build-ui-container, build-mock-inference-provider-container]
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -47,10 +47,11 @@ jobs:
           pattern: build-*-container
           merge-multiple: true
 
-      - name: Load `gateway` and `ui` containers
+      - name: Load `gateway`, `ui`, and `mock-inference-provider` containers
         run: |
           docker load < gateway-container.tar
           docker load < ui-container.tar
+          docker load < mock-inference-provider-container.tar
 
       - name: Create the `object_storage` directory for the multimodal-vision-finetuning example
         run: |
@@ -511,6 +512,7 @@ jobs:
   # Run 'cargo test-optimization' against mock-inference-provider
   mock-optimization-tests:
     runs-on: ubuntu-latest
+    needs: build-mock-inference-provider-container
     env:
       OPENAI_API_KEY: not_used
       FIREWORKS_API_KEY: not_used
@@ -537,6 +539,15 @@ jobs:
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
 
+      - name: Download `mock-inference-provider` container
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        with:
+          name: build-mock-inference-provider-container
+          path: .
+
+      - name: Load `mock-inference-provider` container
+        run: docker load < mock-inference-provider-container.tar
+
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
 
@@ -546,6 +557,7 @@ jobs:
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+          echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Launch ClickHouse container for E2E tests
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
@@ -567,13 +579,16 @@ jobs:
   build-ui-container:
     uses: ./.github/workflows/build-ui-container.yml
 
+  build-mock-inference-provider-container:
+    uses: ./.github/workflows/build-mock-inference-provider-container.yml
+
   ui-tests:
     uses: ./.github/workflows/ui-tests.yml
-    needs: build-gateway-container
+    needs: [build-gateway-container, build-mock-inference-provider-container]
 
   ui-tests-e2e:
     uses: ./.github/workflows/ui-tests-e2e.yml
-    needs: [build-gateway-container, build-ui-container]
+    needs: [build-gateway-container, build-ui-container, build-mock-inference-provider-container]
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
