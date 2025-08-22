@@ -1,3 +1,12 @@
+#!/bin/bash
+set -euxo pipefail
+
+# Set up Buildkite test analytics collection
+export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get UI_E2E_ANALYTICS_ACCESS_TOKEN)
+if [ -z "$BUILDKITE_ANALYTICS_TOKEN" ]; then
+    echo "Error: BUILDKITE_ANALYTICS_TOKEN is not set"
+    exit 1
+fi
 # ------------------------------------------------------------------------------
 # Set the short commit hash
 # ------------------------------------------------------------------------------
@@ -74,7 +83,5 @@ docker compose -f ui/fixtures/docker-compose.e2e.yml up -d
 docker compose -f ui/fixtures/docker-compose.e2e.yml wait fixtures
 docker compose -f ui/fixtures/docker-compose.ui.yml up --no-build -d --wait
 #
-# Set up Buildkite test analytics collection
-export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get UI_E2E_ANALYTICS_ACCESS_TOKEN)
 
 TENSORZERO_CI=1 pnpm ui:test:e2e --grep-invert "@credentials"

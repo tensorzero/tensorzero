@@ -1,6 +1,13 @@
 #!/bin/bash
 set -euxo pipefail
 
+# Set up Buildkite test analytics collection
+export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get NODE_UNIT_ANALYTICS_ACCESS_TOKEN)
+if [ -z "$BUILDKITE_ANALYTICS_TOKEN" ]; then
+    echo "Error: BUILDKITE_ANALYTICS_TOKEN is not set"
+    exit 1
+fi
+
 # ------------------------------------------------------------------------------
 # Configurable versions (override via env if needed)
 # ------------------------------------------------------------------------------
@@ -93,8 +100,6 @@ export FIREWORKS_API_KEY="notused"
 export TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
 export TENSORZERO_GATEWAY_URL="http://localhost:3000"
 export TENSORZERO_UI_CONFIG_PATH="fixtures/config/tensorzero.toml"
-# Set up Buildkite test analytics collection
-export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get NODE_UNIT_ANALYTICS_ACCESS_TOKEN)
 
 pnpm add -D -w buildkite-test-collector
 pnpm ui:test

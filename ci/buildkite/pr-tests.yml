@@ -17,6 +17,17 @@ steps:
     artifact_paths:
       - mock-inference-provider-container.tar
 
+  - label: "Build Cargo workspace (e2e)"
+    command: bash ./ci/buildkite/build-cargo-e2e.sh
+    key: "build-cargo-e2e"
+    artifact_paths:
+      - target.e2e.tar.gz
+
+  - label: "Download S3 Fixtures"
+    command: bash ./ci/download-fixtures.sh
+    artifact_paths:
+      - fixtures.tar.gz
+
   - label: ":rust: Rust Unit Tests"
     command: bash ./ci/buildkite/rust-unit-tests.sh
     plugins:
@@ -35,3 +46,11 @@ steps:
       - "build-ui-container"
       - "build-gateway-container"
       - "build-mock-inference-provider-container"
+
+  - label: "ClickHouse Tests"
+    command: bash ./ci/clickhouse-tests.sh
+    depends_on:
+      - "download-fixtures"
+      - "build-gateway-container"
+      - "build-mock-inference-provider-container"
+      - "build-cargo-e2e"
