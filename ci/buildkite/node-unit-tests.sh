@@ -13,6 +13,34 @@ set -euxo pipefail
 SHORT_HASH=${BUILDKITE_COMMIT:0:7}
 
 # ------------------------------------------------------------------------------
+# Cleanup function (always runs on exit)
+# ------------------------------------------------------------------------------
+cleanup() {
+  echo "==============================================================================="
+  echo "Running cleanup and debug steps..."
+  echo "==============================================================================="
+
+  echo "Printing Docker Compose logs..."
+  docker compose -f ui/fixtures/docker-compose.yml logs -t || true
+
+  echo "Checking for commit hash in gateway logs..."
+  if docker compose -f ui/fixtures/docker-compose.yml logs gateway | grep "(commit: ${SHORT_HASH})"; then
+    echo "SUCCESS: Commit hash ${SHORT_HASH} found in gateway logs"
+  else
+    echo "ERROR: Commit hash ${SHORT_HASH} not found in gateway logs"
+  fi
+
+  echo "Printing ClickHouse error logs..."
+  docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log || echo "Warning: Could not print ClickHouse error logs"
+
+  echo "Printing ClickHouse trace logs..."
+  docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log || echo "Warning: Could not print ClickHouse trace logs"
+}
+
+# Set trap to run cleanup on any exit (success or failure)
+trap cleanup EXIT
+
+# ------------------------------------------------------------------------------
 # Networking hardening used by your tests
 # ------------------------------------------------------------------------------
 echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
