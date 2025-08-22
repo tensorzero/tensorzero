@@ -742,6 +742,20 @@ type = "azure"
 endpoint = "https://t0-azure-openai-east.openai.azure.com/"
 deployment_id = "text-embedding-3-small"
 
+[embedding_models.voyage_3_5_lite_256]
+routing = ["voyage"]
+
+[embedding_models.voyage_3_5_lite_256.providers.voyage]
+type = "openai"
+api_base = "https://api.voyageai.com/v1"
+model_name = "voyage-3.5-lite"
+api_key_location = "env::VOYAGE_API_KEY"
+extra_body = [
+  { pointer = "/dimensions", delete = true },
+  { pointer = "/encoding_format", delete = true },
+  { pointer = "/output_dimension", value = 256 },
+]
+
 [embedding_models.fallback]
 routing = ["slow", "openai"]
 

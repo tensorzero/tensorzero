@@ -4,6 +4,8 @@ run-name: Merge Queue Checks for ${{ github.ref }}
 on:
   workflow_dispatch:
   merge_group:
+    paths-ignore:
+      - "docs/**"
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 
@@ -46,6 +48,7 @@ env:
   VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
   VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
   VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
+  VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
 
 jobs:
@@ -108,12 +111,11 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
 
-      - name: Configure Namespace cache for Rust, Python (uv), and pnpm
+      - name: Configure Namespace cache for Python (uv), and pnpm
         uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
         with:
           cache: |
             pnpm
-            rust
             uv
 
       - name: Install JS dependencies
