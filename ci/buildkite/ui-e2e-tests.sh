@@ -46,7 +46,7 @@ echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorz
 echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> ui/fixtures/.env
 echo "TENSORZERO_GATEWAY_TAG=sha-$SHORT_HASH" >> ui/fixtures/.env
 echo "TENSORZERO_UI_TAG=sha-$SHORT_HASH" >> ui/fixtures/.env
-echo "TENSORZERO_MOCK_INFERENCE_PROVIDER=sha-$SHORT_HASH" >> ui/fixtures/.env
+echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-$SHORT_HASH" >> ui/fixtures/.env
 # We need these set in the ui container, so that we construct the correct optimizer config
 # to pass to 'experimentalLaunchOptimizationWorkflow'
 echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> ui/fixtures/.env
@@ -63,7 +63,7 @@ echo "FIREWORKS_ACCOUNT_ID='not_used'" >> ui/fixtures/.env-gateway
 echo "FIREWORKS_API_KEY='not_used'" >> ui/fixtures/.env-gateway
 echo "OPENAI_API_KEY='not_used'" >> ui/fixtures/.env-gateway
 echo "ANTHROPIC_API_KEY='not_used'" >> ui/fixtures/.env-gateway
-# TODO
+# Set real S3 credentials so images can load
 echo "S3_ACCESS_KEY_ID=$(buildkite-agent secret get S3_ACCESS_KEY_ID)" >> ui/fixtures/.env-gateway
 echo "S3_SECRET_ACCESS_KEY=$(buildkite-agent secret get S3_SECRET_ACCESS_KEY)" >> ui/fixtures/.env-gateway
 
