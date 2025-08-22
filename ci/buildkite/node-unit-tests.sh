@@ -91,5 +91,9 @@ docker compose -f fixtures/docker-compose.yml wait fixtures
 # ------------------------------------------------------------------------------
 # Test setup & execution
 # ------------------------------------------------------------------------------
+export OPENAI_API_KEY="notused"
+export FIREWORKS_API_KEY="notused"
+export TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
+export TENSORZERO_GATEWAY_URL="http://localhost:3000"
 pnpm add -D buildkite-test-collector
 pnpm test
