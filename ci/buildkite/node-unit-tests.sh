@@ -95,7 +95,7 @@ export OPENAI_API_KEY="notused"
 export FIREWORKS_API_KEY="notused"
 export TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
 export TENSORZERO_GATEWAY_URL="http://localhost:3000"
-export TENSORZERO_UI_CONFIG_PATH="ui/fixtures/config/tensorzero.toml"
+export TENSORZERO_UI_CONFIG_PATH="fixtures/config/tensorzero.toml"
 # Set up Buildkite test analytics collection
 export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get NODE_UNIT_ANALYTICS_ACCESS_TOKEN)
 
