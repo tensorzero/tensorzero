@@ -52,6 +52,7 @@ jobs:
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> ui/fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> ui/fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> ui/fixtures/.env
+          echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> ui/fixtures/.env
           ./ui/fixtures/regenerate-model-inference-cache.sh
 
       - name: Push to PR
