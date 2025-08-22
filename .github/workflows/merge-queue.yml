@@ -3,6 +3,7 @@ run-name: Merge Queue Checks for ${{ github.ref }}
 
 on:
   workflow_dispatch:
+  push:
   merge_group:
     paths-ignore:
       - "docs/**"
@@ -56,6 +57,7 @@ jobs:
     secrets: inherit
   live-tests:
     runs-on: namespace-profile-tensorzero-8x16
+    needs: [build-gateway-container]
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -107,6 +109,16 @@ jobs:
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
 
+      - name: Download container images
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        with:
+          pattern: build-*-container
+          merge-multiple: true
+
+      - name: Load `gateway`  container
+        run: |
+          docker load < gateway-container.tar
+
       - name: Install pnpm
         uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
 
@@ -157,6 +169,8 @@ jobs:
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/download-provider-proxy-cache.sh
 
       - name: Launch ClickHouse container for E2E tests
+        env:
+          TENSORZERO_GATEWAY_TAG: sha-${{ github.sha }}
         run: |
           # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait || true
