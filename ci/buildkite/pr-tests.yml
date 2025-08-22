@@ -11,6 +11,12 @@ steps:
     artifact_paths:
       - ui-container.tar
 
+  - label: "Build Mock Inference Provider Container"
+    command: bash ./ci/buildkite/build-mock-inference-provider-container.sh
+    key: "build-mock-inference-provider-container"
+    artifact_paths:
+      - mock-inference-provider-container.tar
+
   - label: ":rust: Rust Unit Tests"
     command: bash ./ci/buildkite/rust-unit-tests.sh
     plugins:
