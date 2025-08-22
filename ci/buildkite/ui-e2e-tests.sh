@@ -9,6 +9,13 @@ SHORT_HASH=${BUILDKITE_COMMIT:0:7}
 echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
 
 # ------------------------------------------------------------------------------
+# Setup Rust
+# ------------------------------------------------------------------------------
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
+rustc --version
+
+# ------------------------------------------------------------------------------
 # Setup Node.js and pnpm using shared utility
 # ------------------------------------------------------------------------------
 source "$(dirname "$0")/utils/setup-node.sh"

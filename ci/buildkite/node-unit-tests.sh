@@ -46,7 +46,7 @@ trap cleanup EXIT
 echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
 
 # ------------------------------------------------------------------------------
-# Setup Rust (unchanged)
+# Setup Rust
 # ------------------------------------------------------------------------------
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
