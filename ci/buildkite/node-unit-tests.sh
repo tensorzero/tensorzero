@@ -65,7 +65,7 @@ pnpm -r build  # builds `tensorzero-node` if defined in the workspace
 # ------------------------------------------------------------------------------
 buildkite-agent artifact download gateway-container.tar .
 docker load < gateway-container.tar
-cd ui
+
 
 # ------------------------------------------------------------------------------
 # Fixture env for containers
@@ -75,18 +75,18 @@ cd ui
   echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
   echo "TENSORZERO_GATEWAY_TAG=sha-$SHORT_HASH"
   echo "TENSORZERO_UI_TAG=sha-$SHORT_HASH"
-} >> fixtures/.env
+} >> ui/fixtures/.env
 
 {
   echo "FIREWORKS_API_KEY=not_used"
   echo "OPENAI_API_KEY=not_used"
-} >> fixtures/.env-gateway
+} >> ui/fixtures/.env-gateway
 
 # ------------------------------------------------------------------------------
 # Start fixtures and wait
 # ------------------------------------------------------------------------------
-TENSORZERO_GATEWAY_TAG="sha-$SHORT_HASH" docker compose -f fixtures/docker-compose.yml up -d
-docker compose -f fixtures/docker-compose.yml wait fixtures
+TENSORZERO_GATEWAY_TAG="sha-$SHORT_HASH" docker compose -f ui/fixtures/docker-compose.yml up -d
+docker compose -f ui/fixtures/docker-compose.yml wait fixtures
 
 # ------------------------------------------------------------------------------
 # Test setup & execution
@@ -95,5 +95,6 @@ export OPENAI_API_KEY="notused"
 export FIREWORKS_API_KEY="notused"
 export TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
 export TENSORZERO_GATEWAY_URL="http://localhost:3000"
+export TENSORZERO_UI_CONFIG_PATH="ui/fixtures/config/tensorzero.toml"
 pnpm add -D buildkite-test-collector
 pnpm test
