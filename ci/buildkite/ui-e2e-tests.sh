@@ -74,4 +74,4 @@ docker compose -f ui/fixtures/docker-compose.e2e.yml up -d
 docker compose -f ui/fixtures/docker-compose.e2e.yml wait fixtures
 docker compose -f ui/fixtures/docker-compose.ui.yml up --no-build -d --wait
 
-pnpm ui:test:e2e --grep-invert "@credentials"
+TENSORZERO_CI=1 pnpm ui:test:e2e --grep-invert "@credentials"
