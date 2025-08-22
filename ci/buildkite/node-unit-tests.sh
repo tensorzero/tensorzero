@@ -100,4 +100,4 @@ export TENSORZERO_UI_CONFIG_PATH="ui/fixtures/config/tensorzero.toml"
 export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get NODE_UNIT_ANALYTICS_ACCESS_TOKEN)
 
 pnpm add -D -w buildkite-test-collector
-pnpm test
+pnpm ui:test

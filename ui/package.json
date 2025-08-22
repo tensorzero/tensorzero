@@ -41,6 +41,7 @@
     "@uiw/react-json-view": "2.0.0-alpha.32",
     "@vitejs/plugin-react": "^4.6.0",
     "ajv": "^8.17.1",
+    "buildkite-test-collector": "^1.9.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
