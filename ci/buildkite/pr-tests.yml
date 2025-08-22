@@ -25,6 +25,7 @@ steps:
 
   - label: "Download S3 Fixtures"
     command: bash ./ci/buildkite/download-fixtures.sh
+    key: "download-fixtures"
     artifact_paths:
       - fixtures.tar.gz
 
