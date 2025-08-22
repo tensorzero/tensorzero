@@ -372,3 +372,5 @@ jobs:
     steps:
       - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
         run: exit 1
+  build-gateway-container:
+    uses: ./.github/workflows/build-gateway-container.yml
