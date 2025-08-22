@@ -41,7 +41,7 @@ cleanup() {
 trap cleanup EXIT
 
 # ------------------------------------------------------------------------------
-# Networking hardening used by your tests
+# Turn off howdy
 # ------------------------------------------------------------------------------
 echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
 
@@ -53,43 +53,12 @@ source "$HOME/.cargo/env"
 rustc --version
 
 # ------------------------------------------------------------------------------
-# Install Node & pnpm via Volta (cross-platform, CI-friendly)
+# Setup Node.js and pnpm using shared utility
 # ------------------------------------------------------------------------------
-export VOLTA_HOME="${HOME}/.volta"
-export PATH="${VOLTA_HOME}/bin:${PATH}"
-
-if ! command -v volta >/dev/null 2>&1; then
-  curl -fsSL https://get.volta.sh | bash -s -- --skip-setup
-  # ensure just-installed volta is on PATH for this shell
-  export PATH="${HOME}/.volta/bin:${PATH}"
-fi
-
-# Pin toolchain (respects versions above; you can also pin in package.json)
-volta install "node@${NODE_VERSION}"
-volta install "pnpm@${PNPM_VERSION}"
-
-# Verify toolchain
-node -v
-npm -v
-pnpm -v
+source "$(dirname "$0")/utils/setup-node.sh"
 
 # ------------------------------------------------------------------------------
-# pnpm cache optimization
-# ------------------------------------------------------------------------------
-# Use a stable, user-scoped pnpm store path (can be mounted/cached by your CI)
-pnpm config set store-dir "${HOME}/.pnpm-store"
-# Pre-resolve dependencies from lockfile (no node_modules yet; speeds up CI)
-pnpm fetch
-# Install exactly from lockfile
-pnpm install --frozen-lockfile
-
-# ------------------------------------------------------------------------------
-# Build your workspace package(s)
-# ------------------------------------------------------------------------------
-pnpm -r build  # builds `tensorzero-node` if defined in the workspace
-
-# ------------------------------------------------------------------------------
-# Docker: download & load gateway container (unchanged)
+# Docker: download & load gateway container
 # ------------------------------------------------------------------------------
 buildkite-agent artifact download gateway-container.tar .
 docker load < gateway-container.tar

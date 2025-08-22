@@ -28,3 +28,10 @@ steps:
     # command: bash ./ci/buildkite/node-unit-tests.sh
     command: bash ./ci/buildkite/node-unit-tests.sh
     depends_on: "build-gateway-container"
+
+  - label: "UI E2E Tests (without LLM credentials)"
+    command: bash ./ci/buildkite/ui-e2e-tests.sh
+    depends_on:
+      - "build-ui-container"
+      - "build-gateway-container"
+      - "build-mock-inference-provider-container"
