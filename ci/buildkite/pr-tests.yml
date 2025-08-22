@@ -20,5 +20,5 @@ steps:
 
   - label: ":node: Node.js Tests"
     # command: bash ./ci/buildkite/node-unit-tests.sh
-    command: bash ./ci/buildkite/node-unit-tests.sh || sleep infinity
+    command: bash ./ci/buildkite/node-unit-tests.sh
     depends_on: "build-gateway-container"
