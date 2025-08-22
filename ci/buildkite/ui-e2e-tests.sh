@@ -68,10 +68,13 @@ echo "S3_ACCESS_KEY_ID=$(buildkite-agent secret get S3_ACCESS_KEY_ID)" >> ui/fix
 echo "S3_SECRET_ACCESS_KEY=$(buildkite-agent secret get S3_SECRET_ACCESS_KEY)" >> ui/fixtures/.env-gateway
 
 # Start the containers for playwright tests
-# The fixtures will be built here. 
+# The fixtures will be built here.
 # TODO: should we move that into a separate step?
 docker compose -f ui/fixtures/docker-compose.e2e.yml up -d
 docker compose -f ui/fixtures/docker-compose.e2e.yml wait fixtures
 docker compose -f ui/fixtures/docker-compose.ui.yml up --no-build -d --wait
+#
+# Set up Buildkite test analytics collection
+export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get UI_E2E_ANALYTICS_ACCESS_TOKEN)
 
 TENSORZERO_CI=1 pnpm ui:test:e2e --grep-invert "@credentials"

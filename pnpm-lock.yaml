@@ -177,9 +177,6 @@ importers:
       ajv:
         specifier: ^8.17.1
         version: 8.17.1
-      buildkite-test-collector:
-        specifier: ^1.9.1
-        version: 1.9.1
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -310,6 +307,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 3.1.4
         version: 3.1.4(@vitest/browser@3.1.4)(vitest@3.2.4)
+      buildkite-test-collector:
+        specifier: ^1.9.1
+        version: 1.9.1
       eslint:
         specifier: ^9.30.1
         version: 9.30.1(jiti@2.4.2)
