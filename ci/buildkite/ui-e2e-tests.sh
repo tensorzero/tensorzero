@@ -30,7 +30,7 @@ docker load < gateway-container.tar
 # ------------------------------------------------------------------------------
 # Docker: download & load ui container
 # ------------------------------------------------------------------------------
-buildkite-agent artifact download gateway-container.tar .
+buildkite-agent artifact download ui-container.tar .
 docker load < ui-container.tar
 
 # ------------------------------------------------------------------------------
