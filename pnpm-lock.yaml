@@ -68,7 +68,7 @@ importers:
         specifier: ^4.20.3
         version: 4.20.3
 
-  examples/docs/guides/gateway/call-an-llm:
+  examples/docs/guides/gateway/call-any-llm:
     dependencies:
       openai:
         specifier: ^5.15.0
