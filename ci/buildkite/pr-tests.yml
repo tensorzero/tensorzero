@@ -1,0 +1,7 @@
+steps:
+  - label: ":rust: Rust Unit Tests"
+    command: bash ./ci/buildkite/rust-unit-tests.sh
+    plugins:
+      - docker:
+          image: "rust"
+          mount-buildkite-agent: true

@@ -166,11 +166,13 @@ test("playground should work for data with tools", async ({ page }) => {
   ).toHaveCount(1);
 
   // Verify that tool calls are displayed correctly
+  // Give the inference lots of time to run - assert at least one tool call since apparently sometimes the model outputs 2
   await expect(
-    page.getByTestId("datapoint-playground-output").getByText("Tool Call"),
-  )
-    // Give the inference lots of time to run
-    .toHaveCount(1, { timeout: 15_000 });
+    page
+      .getByTestId("datapoint-playground-output")
+      .getByText("Tool Call")
+      .first(),
+  ).toBeVisible({ timeout: 15_000 });
 
   // Verify that at least one tool call has the expected fields
   await expect(page.getByText("Name").first()).toBeVisible();

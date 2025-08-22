@@ -19,7 +19,7 @@ You can enable streaming by setting the `stream` parameter to `true` in your inf
 The response will be returned as a Server-Sent Events (SSE) stream, followed by a final `[DONE]` message.
 When using a client library, the client will handle the SSE stream under the hood and return a stream of chunk objects.
 
-See [API Reference](/docs/gateway/api-reference/inference/) for more details.
+See [API Reference](/gateway/api-reference/inference/) for more details.
 
 <Tip>
 
@@ -97,4 +97,4 @@ The gateway doesn't return parsed or validated JSON objects when streaming.
 ## Technical Notes
 
 - Token usage information is only available in the final chunk with content (before the `[DONE]` message)
-- Streaming may not be available with certain [inference-time optimizations](/docs/gateway/guides/inference-time-optimizations/)
+- Streaming may not be available with certain [inference-time optimizations](/gateway/guides/inference-time-optimizations/)

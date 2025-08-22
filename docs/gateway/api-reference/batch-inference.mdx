@@ -27,7 +27,7 @@ The gateway will rehydrate the results into the expected result when polled repe
 
 <Tip>
 
-See the [Batch Inference Guide](/docs/gateway/guides/batch-inference/) for a simple example of using the batch inference endpoints.
+See the [Batch Inference Guide](/gateway/guides/batch-inference/) for a simple example of using the batch inference endpoints.
 
 </Tip>
 
@@ -51,7 +51,7 @@ Only use this field if dynamic tool use is necessary for your use case.
 Each tool is an object with the following fields: `description`, `name`, `parameters`, and `strict`.
 
 The fields are identical to those in the configuration file, except that the `parameters` field should contain the JSON schema itself rather than a path to it.
-See [Configuration Reference](/docs/gateway/configuration-reference/#toolstool_name) for more details.
+See [Configuration Reference](/gateway/configuration-reference/#toolstool_name) for more details.
 
 #### `allowed_tools`
 
@@ -71,7 +71,7 @@ Any tools provided in `additional_tools` are always allowed, irrespective of thi
 - **Required:** no (default: no credentials)
 
 Each model provider in your TensorZero configuration can be configured to accept credentials at inference time by using the `dynamic` location (e.g. `dynamic::my_dynamic_api_key_name`).
-See the [configuration reference](/docs/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
+See the [configuration reference](/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
 The gateway expects the credentials to be provided in the `credentials` field of the request body as specified below.
 The gateway will return a 400 error if the credentials are not provided and the model provider has been configured with dynamic credentials.
 
@@ -152,7 +152,7 @@ A content block is an object with the field `type` and additional fields dependi
 If the content block has type `text`, it must have either of the following additional fields:
 
 - `text`: The text for the content block.
-- `arguments`: A JSON object containing the function arguments for TensorZero functions with templates and schemas (see [Prompt Templates & Schemas](/docs/gateway/guides/prompt-templates-schemas/) for details).
+- `arguments`: A JSON object containing the function arguments for TensorZero functions with templates and schemas (see [Prompt Templates & Schemas](/gateway/guides/prompt-templates-schemas/) for details).
 
 If the content block has type `tool_call`, it must have the following additional fields:
 
@@ -171,7 +171,7 @@ If the content block has type `file`, it must have exactly one of the following 
 - `url`: The URL for a remote file.
 - `mime_type` and `data`: The MIME type (e.g. `image/png`, `image/jpeg`, `application/pdf`) and `base64`-encoded data for an embedded file.
 
-See the [Multimodal Inference](/docs/gateway/guides/multimodal-inference/) guide for more details on how to use images in inference.
+See the [Multimodal Inference](/gateway/guides/multimodal-inference/) guide for more details on how to use images in inference.
 
 If the content block has type `raw_text`, it must have the following additional fields:
 
@@ -347,7 +347,7 @@ Currently, we support the following:
   - `temperature`
   - `top_p`
 
-See [Configuration Reference](/docs/gateway/configuration-reference/#functionsfunction_namevariantsvariant_name) for more details on the parameters, and Examples below for usage.
+See [Configuration Reference](/gateway/configuration-reference/#functionsfunction_namevariantsvariant_name) for more details on the parameters, and Examples below for usage.
 
 <Accordion title="Example">
 
@@ -522,7 +522,7 @@ The response format depends on the function type as well as the batch status whe
 
 #### `inferences`
 
-- **Type:** list of objects that exactly match the response body in the inference endpoint documented [here](/docs/gateway/api-reference/inference/#response).
+- **Type:** list of objects that exactly match the response body in the inference endpoint documented [here](/gateway/api-reference/inference/#response).
 
 ### Example
 
@@ -623,7 +623,7 @@ The response format depends on the function type as well as the batch status whe
 
 #### `inferences`
 
-- **Type:** list containing a single object that exactly matches the response body in the inference endpoint documented [here](/docs/gateway/api-reference/inference/#response).
+- **Type:** list containing a single object that exactly matches the response body in the inference endpoint documented [here](/gateway/api-reference/inference/#response).
 
 ### Example
 

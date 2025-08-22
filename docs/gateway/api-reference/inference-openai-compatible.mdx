@@ -13,7 +13,7 @@ Most notably, this endpoint doesn't support dynamic credentials, so they must be
 
 <Tip>
 
-See the [API Reference for `POST /inference`](/docs/gateway/api-reference/inference/) for more details on inference with the native TensorZero API.
+See the [API Reference for `POST /inference`](/gateway/api-reference/inference/) for more details on inference with the native TensorZero API.
 
 </Tip>
 
@@ -39,7 +39,7 @@ API keys sent from the OpenAI client will be ignored.
 - **Required:** no (default: no credentials)
 
 Each model provider in your TensorZero configuration can be configured to accept credentials at inference time by using the `dynamic` location (e.g. `dynamic::my_dynamic_api_key_name`).
-See the [configuration reference](/docs/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
+See the [configuration reference](/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
 The gateway expects the credentials to be provided in the `credentials` field of the request body as specified below.
 The gateway will return a 400 error if the credentials are not provided and the model provider has been configured with dynamic credentials.
 
@@ -309,7 +309,7 @@ A content block is an object that can have type `text` or `image_url`.
 If the content block has type `text`, it must have either of the following additional fields:
 
 - `text`: The text for the content block.
-- `tensorzero::arguments`: A JSON object containing the function arguments for TensorZero functions with templates and schemas (see [Prompt Templates & Schemas](/docs/gateway/guides/prompt-templates-schemas/) for details).
+- `tensorzero::arguments`: A JSON object containing the function arguments for TensorZero functions with templates and schemas (see [Prompt Templates & Schemas](/gateway/guides/prompt-templates-schemas/) for details).
 
 If a content block has type `image_url`, it must have the following additional fields:
 
@@ -319,7 +319,7 @@ If a content block has type `image_url`, it must have the following additional f
 <Warning>
 
 Currently, the OpenAI-compatible inference endpoint does not accept other content blocks like `raw_text` or `unknown`.
-See the [Inference API Reference](/docs/gateway/api-reference/inference/) for details on how to provide such content blocks as input.
+See the [Inference API Reference](/gateway/api-reference/inference/) for details on how to provide such content blocks as input.
 
 </Warning>
 
@@ -391,7 +391,7 @@ routing = ["openai", "azure"]
 Then:
 
 - `tensorzero::function_name::extract-data` calls the `extract-data` function defined above.
-- `tensorzero::model_name::gpt-4o` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/docs/gateway/guides/retries-fallbacks/) for details.
+- `tensorzero::model_name::gpt-4o` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/gateway/guides/retries-fallbacks/) for details.
 - `tensorzero::model_name::openai::gpt-4o` calls the OpenAI API directly for the `gpt-4o` model, ignoring the `gpt-4o` model defined above.
 
 <Warning>
@@ -561,7 +561,7 @@ The OpenAI-compatible inference endpoint can't handle unknown content blocks in 
 If the model provider returns an unknown content block, the gateway will drop the content block from the response and log a warning.
 
 If you need to access unknown content blocks, use the native TensorZero API.
-See the [Inference API Reference](/docs/gateway/api-reference/inference/) for details.
+See the [Inference API Reference](/gateway/api-reference/inference/) for details.
 
 </Warning>
 

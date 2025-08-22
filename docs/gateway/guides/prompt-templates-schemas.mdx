@@ -7,9 +7,9 @@ Prompt templates and schemas simplify engineering iteration, experimentation, an
 Notably, they enable you to:
 
 1. **Decouple prompts from application code.**
-   As you iterate on your prompts over time (or [A/B test different prompts](/docs/gateway/tutorial/#experimentation)), you'll be able to manage them in a centralized way without making changes to the application code.
+   As you iterate on your prompts over time (or [A/B test different prompts](/gateway/tutorial/#experimentation)), you'll be able to manage them in a centralized way without making changes to the application code.
 2. **Collect a structured inference dataset.**
-   Imagine down the road you want to [fine-tune a model](/docs/recipes/) using your historical data.
+   Imagine down the road you want to [fine-tune a model](/recipes/) using your historical data.
    If you had only stored prompts as strings, you'd be stuck with the outdated prompts that were actually used at inference time.
    However, if you had access to the input variables in a structured dataset, you'd easily be able to counterfactually swap new prompts into your training data before fine-tuning.
    This is particularly important when experimenting with new models, because prompts don't always translate well between them.
@@ -26,7 +26,7 @@ You can also find the runnable code for this example on [GitHub](https://github.
 
 ## Scenario
 
-In the [Quickstart](/docs/quickstart/), we built a simple LLM application that writes haikus about artificial intelligence.
+In the [Quickstart](/quickstart/), we built a simple LLM application that writes haikus about artificial intelligence.
 But what if we wanted to generate haikus about different topics?
 
 The naive solution is to parametrize the prompt in your application.
@@ -396,4 +396,4 @@ Now we can manage our prompts as configuration files, and get structured inferen
 
 As discussed, it's helpful to manage prompts in a centralized way.
 With TensorZero's approach, these prompts still live in your repository, which simplifies versioning, access control, GitOps, and more.
-This setup also let us easily benefit from more advanced features like [A/B testing different prompts](/docs/gateway/tutorial/#experimentation) or [fine-tuning a model](/docs/recipes/).
+This setup also let us easily benefit from more advanced features like [A/B testing different prompts](/gateway/tutorial/#experimentation) or [fine-tuning a model](/recipes/).

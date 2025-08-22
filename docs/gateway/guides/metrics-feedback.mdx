@@ -3,9 +3,9 @@ title: Metrics & Feedback
 description: Learn how to collect metrics and feedback about inferences or sequences of inferences.
 ---
 
-The TensorZero Gateway allows you to assign feedback to inferences or sequences of inferences ([episodes](/docs/gateway/guides/episodes/)).
+The TensorZero Gateway allows you to assign feedback to inferences or sequences of inferences ([episodes](/gateway/guides/episodes/)).
 
-Feedback captures the downstream outcomes of your LLM application, and drive the [experimentation](/docs/gateway/tutorial/#experimentation) and [optimization](/docs/recipes/) workflows in TensorZero.
+Feedback captures the downstream outcomes of your LLM application, and drive the [experimentation](/gateway/tutorial/#experimentation) and [optimization](/recipes/) workflows in TensorZero.
 For example, you can fine-tune models using data from inferences that led to positive downstream behavior.
 
 <Tip>
@@ -25,7 +25,7 @@ TensorZero currently supports the following types of feedback:
 | Comment        | Natural-language feedback from users or developers |
 | Demonstration  | Edited drafts, labels, human-generated content     |
 
-You can send feedback data to the gateway by using the [`/feedback` endpoint](/docs/gateway/api-reference/feedback/#post-feedback).
+You can send feedback data to the gateway by using the [`/feedback` endpoint](/gateway/api-reference/feedback/#post-feedback).
 
 ## Metrics
 
@@ -48,7 +48,7 @@ Comments and demonstrations are available by default and don't need to be config
 
 ### Example: Rating Haikus
 
-In the [Quickstart](/docs/quickstart/), we built a simple LLM application that writes haikus about artificial intelligence.
+In the [Quickstart](/quickstart/), we built a simple LLM application that writes haikus about artificial intelligence.
 
 Imagine we wanted to assign 👍 or 👎 to these haikus.
 Later, we can use this data to fine-tune a model using only haikus that match our tastes.
@@ -177,4 +177,4 @@ Another example that uses feedback is [Optimizing Data Extraction (NER) with Ten
 This example collects metrics and demonstrations for an LLM-powered data extraction tool, which can be used for fine-tuning and other optimization recipes.
 These optimized variants achieve substantial improvements over the original model.
 
-See [Configuration Reference](/docs/gateway/configuration-reference/#metrics) and [API Reference](/docs/gateway/api-reference/feedback/#post-feedback) for more details.
+See [Configuration Reference](/gateway/configuration-reference/#metrics) and [API Reference](/gateway/api-reference/feedback/#post-feedback) for more details.

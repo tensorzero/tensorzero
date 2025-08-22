@@ -12,11 +12,11 @@ That said, **you can get the best of both worlds by using LiteLLM as a model pro
 
 - **Unified Inference API.**
   Both TensorZero and LiteLLM offer a unified inference API that allows you to access LLMs from most major model providers with a single integration, with support for structured outputs, batch inference, tool use, streaming, and more.<br />
-  [→ TensorZero Gateway Quickstart](/docs/quickstart/)
+  [→ TensorZero Gateway Quickstart](/quickstart/)
 
 - **Automatic Fallbacks for Higher Reliability.**
   Both TensorZero and LiteLLM offer automatic fallbacks to increase reliability.<br />
-  [→ Retries & Fallbacks with TensorZero](/docs/gateway/guides/retries-fallbacks/)
+  [→ Retries & Fallbacks with TensorZero](/gateway/guides/retries-fallbacks/)
 
 - **Open Source & Self-Hosted.**
   Both TensorZero and LiteLLM are open source and self-hosted.
@@ -25,11 +25,11 @@ That said, **you can get the best of both worlds by using LiteLLM as a model pro
 
 - **Inference Caching.**
   Both TensorZero and LiteLLM allow you to cache requests to improve latency and reduce costs.<br />
-  [→ Inference Caching with TensorZero](/docs/gateway/guides/inference-caching/)
+  [→ Inference Caching with TensorZero](/gateway/guides/inference-caching/)
 
 - **Multimodal Inference.**
   Both TensorZero and LiteLLM support multimodal inference.<br />
-  [→ Multimodal Inference with TensorZero](/docs/gateway/guides/multimodal-inference/)
+  [→ Multimodal Inference with TensorZero](/gateway/guides/multimodal-inference/)
 
 ## Key Differences
 
@@ -38,7 +38,7 @@ That said, **you can get the best of both worlds by using LiteLLM as a model pro
 - **High Performance.**
   The TensorZero Gateway was built from the ground up in Rust 🦀 with performance in mind (&lt;1ms P99 latency at 10,000 QPS).
   LiteLLM is built in Python, resulting in 25-100x+ latency overhead and much lower throughput.<br />
-  [→ Performance Benchmarks: TensorZero vs. LiteLLM](/docs/gateway/benchmarks/)
+  [→ Performance Benchmarks: TensorZero vs. LiteLLM](/gateway/benchmarks/)
 
 - **Built-in Observability.**
   TensorZero offers its own observability features, collecting inference and feedback data in your own database.
@@ -47,28 +47,28 @@ That said, **you can get the best of both worlds by using LiteLLM as a model pro
 - **Built-in Evaluations.**
   TensorZero offers built-in evaluation functionality, including heuristics and LLM judges.
   LiteLLM doesn't offer any evaluations functionality.<br />
-  [→ TensorZero Evaluations Overview](/docs/evaluations/)
+  [→ TensorZero Evaluations Overview](/evaluations/)
 
 - **Built-in Experimentation (A/B Testing).**
   TensorZero offers built-in experimentation features, allowing you to run experiments on your prompts, models, and inference strategies.
   LiteLLM doesn't offer any experimentation features.<br />
-  [→ Experimentation (A/B Testing) with TensorZero](/docs/gateway/guides/experimentation/)
+  [→ Experimentation (A/B Testing) with TensorZero](/gateway/guides/experimentation/)
 
 - **Built-in Inference-Time Optimizations.**
   TensorZero offers built-in inference-time optimizations (e.g. dynamic in-context learning), allowing you to optimize your inference performance.
   LiteLLM doesn't offer any inference-time optimizations.<br />
-  [→ Inference-Time Optimizations with TensorZero](/docs/gateway/guides/inference-time-optimizations/)
+  [→ Inference-Time Optimizations with TensorZero](/gateway/guides/inference-time-optimizations/)
 
 - **Optimization Recipes.**
   TensorZero offers optimization recipes (e.g. supervised fine-tuning, RLHF, MIPRO) that leverage your own data to improve your LLM's performance.
   LiteLLM doesn't offer any features like this.<br />
-  [→ Optimization Recipes with TensorZero](/docs/recipes/)
+  [→ Optimization Recipes with TensorZero](/recipes/)
 
 - **Schemas, Templates, GitOps.**
   TensorZero enables a schema-first approach to building LLM applications, allowing you to separate your application logic from LLM implementation details.
   This approach allows your to more easily manage complex LLM applications, benefit from GitOps for prompt and configuration management, counterfactually improve data for optimization, and more.
   LiteLLM only offers the standard unstructured chat completion interface.<br />
-  [→ Prompt Templates & Schemas with TensorZero](/docs/gateway/guides/prompt-templates-schemas/)
+  [→ Prompt Templates & Schemas with TensorZero](/gateway/guides/prompt-templates-schemas/)
 
 ### LiteLLM
 
@@ -80,7 +80,7 @@ That said, **you can get the best of both worlds by using LiteLLM as a model pro
 - **Dynamic Provider Routing.**
   LiteLLM allows you to dynamically route requests to different model providers based on latency, cost, and rate limits.
   TensorZero only offers static routing capabilities, i.e. a pre-defined sequence of model providers to attempt.<br />
-  [→ Retries & Fallbacks with TensorZero](/docs/gateway/guides/retries-fallbacks/)
+  [→ Retries & Fallbacks with TensorZero](/gateway/guides/retries-fallbacks/)
 
 - **Request Prioritization.**
   LiteLLM allows you to prioritize requests over others, which can be useful for high-priority tasks when you're constrained by rate limits.
@@ -105,4 +105,4 @@ Is TensorZero missing any features that are really important to you? Let us know
 You can get the best of both worlds by using LiteLLM as a model provider inside TensorZero.
 
 LiteLLM offers an OpenAI-compatible API, so you can use TensorZero's OpenAI-compatible endpoint to call LiteLLM.
-Learn more about using [OpenAI-compatible endpoints](/docs/gateway/guides/providers/openai-compatible/).
+Learn more about using [OpenAI-compatible endpoints](/gateway/guides/providers/openai-compatible/).

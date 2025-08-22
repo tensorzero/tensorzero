@@ -13,7 +13,7 @@ That said, **you can get the best of both worlds by using OpenPipe as a model pr
 - **LLM Optimization (Fine-Tuning).**
   Both TensorZero and OpenPipe focus on LLM optimization (e.g. fine-tuning, DPO).
   OpenPipe focuses on fine-tuning, while TensorZero provides a complete set of tools for optimizing LLM systems (including prompts, models, and inference strategies).<br />
-  [→ Optimization Recipes with TensorZero](/docs/recipes/)
+  [→ Optimization Recipes with TensorZero](/recipes/)
 
 - **Built-in Observability.**
   Both TensorZero and OpenPipe offer built-in observability features.
@@ -22,7 +22,7 @@ That said, **you can get the best of both worlds by using OpenPipe as a model pr
 - **Built-in Evaluations.**
   Both TensorZero and OpenPipe offer built-in evaluations features, enabling you to sanity check and benchmark the performance of your prompts, models, and more &mdash; using heuristics and LLM judges.
   TensorZero LLM judges are also TensorZero functions, which means you can optimize them using TensorZero's optimization recipes.<br />
-  [→ TensorZero Evaluations Overview](/docs/evaluations/)
+  [→ TensorZero Evaluations Overview](/evaluations/)
 
 ## Key Differences
 
@@ -40,38 +40,38 @@ That said, **you can get the best of both worlds by using OpenPipe as a model pr
 - **Unified Inference API.**
   TensorZero offers a unified inference API that allows you to access LLMs from most major model providers with a single integration, with support for structured outputs, tool use, streaming, and more.<br />
   OpenPipe supports a much smaller set of LLMs.<br />
-  [→ TensorZero Gateway Quickstart](/docs/quickstart/)
+  [→ TensorZero Gateway Quickstart](/quickstart/)
 
 - **Built-in Inference-Time Optimizations.**
   TensorZero offers built-in inference-time optimizations (e.g. dynamic in-context learning), allowing you to optimize your inference performance.
   OpenPipe doesn't offer any inference-time optimizations.<br />
-  [→ Inference-Time Optimizations with TensorZero](/docs/gateway/guides/inference-time-optimizations/)
+  [→ Inference-Time Optimizations with TensorZero](/gateway/guides/inference-time-optimizations/)
 
 - **Automatic Fallbacks for Higher Reliability.**
   TensorZero is self-hosted and provides automatic fallbacks between model providers to increase reliability.
   OpenPipe can fallback their own models to other OpenAI-compatible APIs, but if OpenPipe itself goes down, you're out of luck.<br />
-  [→ Retries & Fallbacks with TensorZero](/docs/gateway/guides/retries-fallbacks/)
+  [→ Retries & Fallbacks with TensorZero](/gateway/guides/retries-fallbacks/)
 
 - **Built-in Experimentation (A/B Testing).**
   TensorZero offers built-in experimentation features, allowing you to run experiments on your prompts, models, and inference strategies.
   OpenPipe doesn't offer any experimentation features.<br />
-  [→ Experimentation (A/B Testing) with TensorZero](/docs/gateway/guides/experimentation/)
+  [→ Experimentation (A/B Testing) with TensorZero](/gateway/guides/experimentation/)
 
 - **Batch Inference.**
   TensorZero supports batch inference with certain model providers, which significantly reduces inference costs.
   OpenPipe doesn't support batch inference.<br />
-  [→ Batch Inference with TensorZero](/docs/gateway/guides/batch-inference/)
+  [→ Batch Inference with TensorZero](/gateway/guides/batch-inference/)
 
 - **Inference Caching.**
   Both TensorZero and OpenPipe allow you to cache requests to improve latency and reduce costs.
   OpenPipe only caches requests to their own models, while TensorZero caches requests to all model providers.<br />
-  [→ Inference Caching with TensorZero](/docs/gateway/guides/inference-caching/)
+  [→ Inference Caching with TensorZero](/gateway/guides/inference-caching/)
 
 - **Schemas, Templates, GitOps.**
   TensorZero enables a schema-first approach to building LLM applications, allowing you to separate your application logic from LLM implementation details.
   This approach allows your to more easily manage complex LLM applications, benefit from GitOps for prompt and configuration management, counterfactually improve data for optimization, and more.
   OpenPipe only offers the standard unstructured chat completion interface.<br />
-  [→ Prompt Templates & Schemas with TensorZero](/docs/gateway/guides/prompt-templates-schemas/)
+  [→ Prompt Templates & Schemas with TensorZero](/gateway/guides/prompt-templates-schemas/)
 
 ### OpenPipe
 
@@ -90,4 +90,4 @@ Is TensorZero missing any features that are really important to you? Let us know
 You can get the best of both worlds by using OpenPipe as a model provider inside TensorZero.
 
 OpenPipe provides an OpenAI-compatible API, so you can use models previously fine-tuned with OpenPipe with TensorZero.
-Learn more about using [OpenAI-compatible endpoints](/docs/gateway/guides/providers/openai-compatible/).
+Learn more about using [OpenAI-compatible endpoints](/gateway/guides/providers/openai-compatible/).

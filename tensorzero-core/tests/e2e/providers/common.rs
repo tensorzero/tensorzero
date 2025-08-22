@@ -224,12 +224,12 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_stop_sequences_inference_request_with_provider;
         use $crate::providers::common::test_warn_ignored_thought_block_with_provider;
         use $crate::providers::embeddings::test_basic_embedding_with_provider;
-        use $crate::providers::embeddings::test_batch_embedding_with_provider;
+        use $crate::providers::embeddings::test_bulk_embedding_with_provider;
         use $crate::providers::embeddings::test_embedding_with_dimensions_with_provider;
         use $crate::providers::embeddings::test_embedding_with_encoding_format_with_provider;
         use $crate::providers::embeddings::test_embedding_with_user_parameter_with_provider;
         use $crate::providers::embeddings::test_embedding_invalid_model_error_with_provider;
-        use $crate::providers::embeddings::test_embedding_large_batch_with_provider;
+        use $crate::providers::embeddings::test_embedding_large_bulk_with_provider;
         use $crate::providers::embeddings::test_embedding_consistency_with_provider;
 
         #[tokio::test]
@@ -642,10 +642,10 @@ macro_rules! generate_provider_tests {
 
 
         #[tokio::test]
-        async fn test_batch_embedding() {
+        async fn test_bulk_embedding() {
             let providers = $func().await.embeddings;
             for provider in providers {
-                test_batch_embedding_with_provider(provider).await;
+                test_bulk_embedding_with_provider(provider).await;
             }
         }
 
@@ -682,10 +682,10 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_embedding_large_batch() {
+        async fn test_embedding_large_bulk() {
             let providers = $func().await.embeddings;
             for provider in providers {
-                test_embedding_large_batch_with_provider(provider).await;
+                test_embedding_large_bulk_with_provider(provider).await;
             }
         }
 

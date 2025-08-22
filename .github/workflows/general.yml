@@ -3,6 +3,8 @@ run-name: "General Checks for: ${{ github.event.pull_request.title || github.ref
 
 on:
   merge_group:
+    paths-ignore:
+      - "docs/**"
   pull_request:
     branches: ["main"]
 
