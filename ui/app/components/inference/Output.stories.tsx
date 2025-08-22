@@ -247,3 +247,16 @@ export const ChatFunctionWithThinking: Story = {
     ],
   },
 };
+
+export const ChatFunctionWithUnknownContent: Story = {
+  args: {
+    output: [
+      {
+        type: "unknown",
+        data: null,
+        model_provider_name: null,
+      },
+      { type: "text", text: "This text comes after unknown content." },
+    ],
+  },
+};

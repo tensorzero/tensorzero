@@ -108,6 +108,7 @@ export function DatasetBuilderForm() {
         return "Creating Dataset...";
       case "complete":
         return "Success";
+      case "idle":
       default:
         if (isNewDataset) {
           return "Create Dataset";

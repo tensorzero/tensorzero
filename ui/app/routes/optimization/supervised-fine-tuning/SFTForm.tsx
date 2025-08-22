@@ -127,6 +127,7 @@ export function SFTForm({
         return "Pending...";
       case "complete":
         return "Complete";
+      case "idle":
       default:
         return "Start Fine-tuning Job";
     }
