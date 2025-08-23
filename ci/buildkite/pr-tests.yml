@@ -48,4 +48,3 @@ steps:
       - "download-fixtures"
       - "build-gateway-container"
       - "build-mock-inference-provider-container"
-      - "build-cargo-e2e"
