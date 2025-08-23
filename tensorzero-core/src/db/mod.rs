@@ -3,6 +3,7 @@ use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 pub mod clickhouse;
 
@@ -26,7 +27,16 @@ pub trait SelectQueries {
         &self,
         time_window: TimeWindow,
     ) -> Result<Vec<ModelLatencyDatapoint>, Error>;
+
+    async fn query_episode_table(
+        &self,
+        page_size: u32,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+    ) -> Result<Vec<EpisodeByIdRow>, Error>;
 }
+
+impl<T: SelectQueries + HealthCheckable + Send + Sync> DatabaseConnection for T {}
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
@@ -63,4 +73,12 @@ pub struct ModelLatencyDatapoint {
     pub count: u64,
 }
 
-impl<T: SelectQueries + HealthCheckable + Send + Sync> DatabaseConnection for T {}
+#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+#[ts(export)]
+pub struct EpisodeByIdRow {
+    pub episode_id: Uuid,
+    pub count: u32,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+    pub last_inference_id: Uuid,
+}

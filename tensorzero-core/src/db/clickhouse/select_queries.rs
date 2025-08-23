@@ -1,5 +1,8 @@
-use crate::db::clickhouse::migration_manager::migrations::migration_0035::quantiles_sql_args;
+use crate::db::{
+    clickhouse::migration_manager::migrations::migration_0035::quantiles_sql_args, EpisodeByIdRow,
+};
 use async_trait::async_trait;
+use uuid::Uuid;
 
 use crate::{
     db::{ModelLatencyDatapoint, ModelUsageTimePoint, SelectQueries, TimeWindow},
@@ -117,6 +120,59 @@ impl SelectQueries for ClickHouseConnectionInfo {
         );
         let response = self.run_query_synchronous_no_params(query).await?;
         // Deserialize the results into ModelLatencyDatapoint
+        response
+            .response
+            .trim()
+            .lines()
+            .map(|row| {
+                serde_json::from_str(row).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: e.to_string(),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    async fn query_episode_table(
+        &self,
+        page_size: u32,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+    ) -> Result<Vec<EpisodeByIdRow>, Error> {
+        let (where_clause, params) = match (before, after) {
+            (Some(before), Some(after)) => {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Cannot specify both before and after in query_episode_table"
+                        .to_string(),
+                }))
+            }
+            (Some(before), None) => (
+                "episode_id_uint > toUInt128({before:UUID})",
+                vec![("before", &before)],
+            ),
+            (None, Some(after)) => (
+                "episode_id_uint < toUInt128({after:UUID})",
+                vec![("after", &after)],
+            ),
+            (None, None) => ("1=1", vec![]),
+        };
+        let query = format!(
+            r"
+            SELECT
+                uint_to_uuid(episode_id_uint) as episode_id,
+                count,
+                formatDateTime(UUIDv7ToDateTime(uint_to_uuid(min_inference_id_uint))) as start_time,
+                formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max_inference_id_uint))) as end_time,
+                uint_to_uuid(max_inference_id_uint) as last_inference_id
+            FROM
+            EpisodeById
+            WHERE {where_clause}
+            FORMAT JSONEachRow
+            "
+        );
+        let response = self.run_query_synchronous(query, params.into()).await?;
+        // Deserialize the results into EpisodeByIdRow
         response
             .response
             .trim()
