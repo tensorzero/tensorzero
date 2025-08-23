@@ -79,7 +79,7 @@ while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
 done
 export GATEWAY_PID=$!
 
-cargo test-e2e-no-creds --profile ci-unit
+cargo test-e2e-no-creds
 
 # Upload the test JUnit XML files
 curl -X POST \
