@@ -42,8 +42,15 @@ steps:
       - "build-gateway-container"
       - "build-mock-inference-provider-container"
 
-  - label: "ClickHouse Tests"
+  - label: "ClickHouse Tests (version {{clickhouse_version}})"
     command: bash ./ci/buildkite/clickhouse-tests.sh
+    matrix:
+      setup:
+        clickhouse_version:
+          - "24.12-alpine"
+          - "latest-alpine"
+    env:
+      TENSORZERO_CLICKHOUSE_VERSION: "{{clickhouse_version}}"
     depends_on:
       - "download-fixtures"
       - "build-gateway-container"

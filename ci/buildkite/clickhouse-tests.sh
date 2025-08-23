@@ -6,6 +6,12 @@ if [ -z "$BUILDKITE_ANALYTICS_TOKEN" ]; then
     exit 1
 fi
 
+# Check for required TENSORZERO_CLICKHOUSE_VERSION environment variable
+if [ -z "$TENSORZERO_CLICKHOUSE_VERSION" ]; then
+    echo "Error: TENSORZERO_CLICKHOUSE_VERSION environment variable is required"
+    exit 1
+fi
+
 # ------------------------------------------------------------------------------
 # Set the short commit hash
 # ------------------------------------------------------------------------------
@@ -52,9 +58,8 @@ cargo binstall -y cargo-nextest --secure
 export TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests"
 export TENSORZERO_SKIP_LARGE_FIXTURES=1
 export TENSORZERO_GATEWAY_TAG=sha-$SHORT_HASH
-# TODO: get the clickhouse version from build matrix
 # TODO: handle replication
-export TENSORZERO_CLICKHOUSE_VERSION="24.12-alpine"
+# Default version was "24.12-alpine" - now required as environment variable
 export TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-$SHORT_HASH
 
 # Launch non-replicated ClickHouse containers for E2E tensorzero_e2e_tests
