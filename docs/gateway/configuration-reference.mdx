@@ -67,6 +67,22 @@ Otherwise, a malicious input could read unintended files in the file system.
 
 </Warning>
 
+### `export.otlp.traces.enabled`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+Enable [exporting traces to an external OpenTelemetry-compatible observability
+system](/gateway/guides/opentelemetry-otlp).
+
+<Warning>
+Note that you will still need to set the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
+environment variable. See above linked guide for details.
+</Warning>
+
+
+
+
 ### `observability.async_writes`
 
 - **Type:** boolean
