@@ -1,5 +1,6 @@
 use crate::db::{
     clickhouse::migration_manager::migrations::migration_0035::quantiles_sql_args, EpisodeByIdRow,
+    TableBoundsWithCount,
 };
 use async_trait::async_trait;
 use uuid::Uuid;
@@ -190,5 +191,38 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 })
             })
             .collect::<Result<Vec<_>, _>>()
+    }
+
+    async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error> {
+        let query = r"SELECT
+                        uint_to_uuid(min(episode_id_uint)) as first_id,
+                        uint_to_uuid(max(episode_id_uint)) as last_id,
+                        count() as count
+                    FROM EpisodeById
+                    WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now)
+                    FORMAT JSONEachRow"
+            .to_string();
+        let response = self.run_query_synchronous_no_params(query).await?;
+        let response = response.response.trim();
+        serde_json::from_str(response).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: e.to_string(),
+            })
+        })
+    }
+
+    async fn count_episodes(&self) -> Result<u64, Error> {
+        let query = "SELECT count() FROM EpisodeById WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now)".to_string();
+        let response = self.run_query_synchronous_no_params(query).await?;
+        let count = response
+            .response
+            .trim()
+            .parse()
+            .map_err(|e: std::num::ParseIntError| {
+                Error::new(ErrorDetails::ClickHouseDeserialization {
+                    message: e.to_string(),
+                })
+            })?;
+        Ok(count)
     }
 }

@@ -34,6 +34,10 @@ pub trait SelectQueries {
         before: Option<Uuid>,
         after: Option<Uuid>,
     ) -> Result<Vec<EpisodeByIdRow>, Error>;
+
+    async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
+
+    async fn count_episodes(&self) -> Result<u64, Error>;
 }
 
 impl<T: SelectQueries + HealthCheckable + Send + Sync> DatabaseConnection for T {}
@@ -82,4 +86,13 @@ pub struct EpisodeByIdRow {
     pub start_time: DateTime<Utc>,
     pub end_time: DateTime<Utc>,
     pub last_inference_id: Uuid,
+}
+
+#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+#[ts(export)]
+pub struct TableBoundsWithCount {
+    pub first_id: Option<Uuid>,
+    pub last_id: Option<Uuid>,
+    #[serde(deserialize_with = "deserialize_u64")]
+    pub count: u64,
 }

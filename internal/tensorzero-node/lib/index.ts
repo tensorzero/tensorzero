@@ -8,6 +8,7 @@ import {
   ClientInferenceParams,
   InferenceResponse,
   EpisodeByIdRow,
+  TableBoundsWithCount,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
@@ -165,5 +166,15 @@ export class DatabaseClient {
     const episodeTableString =
       await this.nativeDatabaseClient.queryEpisodeTable(params);
     return JSON.parse(episodeTableString) as EpisodeByIdRow[];
+  }
+
+  async queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
+    const bounds = await this.nativeDatabaseClient.queryEpisodeTableBounds();
+    return JSON.parse(bounds) as TableBoundsWithCount;
+  }
+
+  async countEpisodes(): Promise<bigint> {
+    const count = await this.nativeDatabaseClient.countEpisodes();
+    return JSON.parse(count) as bigint;
   }
 }

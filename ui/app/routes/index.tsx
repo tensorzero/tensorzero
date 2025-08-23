@@ -17,10 +17,7 @@ import {
   SequenceChecks,
   Playground,
 } from "~/components/icons/Icons";
-import {
-  countInferencesByFunction,
-  countEpisodes,
-} from "~/utils/clickhouse/inference.server";
+import { countInferencesByFunction } from "~/utils/clickhouse/inference.server";
 import { getAllFunctionConfigs } from "~/utils/config/index.server";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
@@ -30,6 +27,7 @@ import {
   countDynamicEvaluationProjects,
   countDynamicEvaluationRuns,
 } from "~/utils/clickhouse/dynamic_evaluations.server";
+import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 
 export const handle: RouteHandle = {
   hideBreadcrumbs: true,
@@ -93,6 +91,7 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
 }
 
 export async function loader() {
+  const nativeDatabaseClient = await getNativeDatabaseClient();
   const [
     countsInfo,
     numEpisodes,
@@ -103,7 +102,7 @@ export async function loader() {
     functionConfigs,
   ] = await Promise.all([
     countInferencesByFunction(),
-    countEpisodes(),
+    nativeDatabaseClient.countEpisodes(),
     getDatasetCounts({}),
     countTotalEvaluationRuns(),
     countDynamicEvaluationRuns(),

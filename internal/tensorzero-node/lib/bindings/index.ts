@@ -130,6 +130,7 @@ export * from "./StorageKind";
 export * from "./StoragePath";
 export * from "./StreamingTimeouts";
 export * from "./TGIProvider";
+export * from "./TableBoundsWithCount";
 export * from "./TagComparisonOperator";
 export * from "./TagNode";
 export * from "./TemplateFilesystemAccess";

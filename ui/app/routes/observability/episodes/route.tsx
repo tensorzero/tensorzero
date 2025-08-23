@@ -1,7 +1,3 @@
-import {
-  queryEpisodeTableBounds,
-  countEpisodes,
-} from "~/utils/clickhouse/inference.server";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import type { Route } from "./+types/route";
 import EpisodesTable from "./EpisodesTable";
@@ -31,8 +27,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       before || undefined,
       after || undefined,
     ),
-    queryEpisodeTableBounds(),
-    countEpisodes(),
+    databaseClient.queryEpisodeTableBounds(),
+    databaseClient.countEpisodes(),
   ]);
 
   return {

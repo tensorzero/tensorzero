@@ -781,3 +781,25 @@ async fn test_clickhouse_query_episode_table() {
         );
     }
 }
+
+#[tokio::test]
+async fn test_clickhouse_query_episode_table_bounds() {
+    let clickhouse = get_clickhouse().await;
+    let bounds = clickhouse.query_episode_table_bounds().await.unwrap();
+    println!("Episode table bounds: {bounds:#?}");
+
+    // Verify bounds structure
+    assert!(bounds.first_id.is_some(), "Should have a first_id");
+    assert!(bounds.last_id.is_some(), "Should have a last_id");
+
+    // Check expected values
+    assert_eq!(
+        bounds.first_id.unwrap().to_string(),
+        "0192ced0-947e-74b3-a3d7-02fd2c54d637"
+    );
+    assert_eq!(
+        bounds.last_id.unwrap().to_string(),
+        "0197177a-7c00-70a2-82a6-744bcb064c42"
+    );
+    assert_eq!(bounds.count, 20002094);
+}
