@@ -1,0 +1,188 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "TensorZero Docs",
+  "description": "TensorZero is an open-source stack for industrial-grade LLM applications that unifies an LLM gateway, observability, optimization, evaluation, and experimentation.",
+  "colors": {
+    "primary": "#FF4F00",
+    "light": "#FFB56D",
+    "dark": "#FF4F00"
+  },
+  "favicon": "/favicon.svg",
+  "contextual": {
+    "options": ["copy", "view", "chatgpt", "claude"]
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Introduction",
+            "pages": [
+              "index",
+              "quickstart",
+              "vision-roadmap",
+              "faq",
+              {
+                "group": "Comparison",
+                "pages": [
+                  "comparison/dspy",
+                  "comparison/langchain",
+                  "comparison/langfuse",
+                  "comparison/litellm",
+                  "comparison/openpipe",
+                  "comparison/openrouter",
+                  "comparison/portkey"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Gateway",
+            "pages": [
+              "gateway/index",
+              "gateway/tutorial",
+              {
+                "group": "Guides",
+                "pages": [
+                  {
+                    "group": "Model Providers",
+                    "pages": [
+                      "gateway/guides/providers/anthropic",
+                      "gateway/guides/providers/aws-bedrock",
+                      "gateway/guides/providers/aws-sagemaker",
+                      "gateway/guides/providers/azure",
+                      "gateway/guides/providers/deepseek",
+                      "gateway/guides/providers/fireworks",
+                      "gateway/guides/providers/gcp-vertex-ai-anthropic",
+                      "gateway/guides/providers/gcp-vertex-ai-gemini",
+                      "gateway/guides/providers/google-ai-studio-gemini",
+                      "gateway/guides/providers/groq",
+                      "gateway/guides/providers/hyperbolic",
+                      "gateway/guides/providers/mistral",
+                      "gateway/guides/providers/openai-compatible",
+                      "gateway/guides/providers/openai",
+                      "gateway/guides/providers/openrouter",
+                      "gateway/guides/providers/sglang",
+                      "gateway/guides/providers/tgi",
+                      "gateway/guides/providers/together",
+                      "gateway/guides/providers/vllm",
+                      "gateway/guides/providers/xai"
+                    ]
+                  },
+                  "gateway/guides/batch-inference",
+                  "gateway/guides/credential-management",
+                  "gateway/guides/episodes",
+                  "gateway/guides/experimentation",
+                  "gateway/guides/extending-tensorzero",
+                  "gateway/guides/inference-caching",
+                  "gateway/guides/inference-time-optimizations",
+                  "gateway/guides/metrics-feedback",
+                  "gateway/guides/multimodal-inference",
+                  "gateway/guides/opentelemetry-otlp",
+                  "gateway/guides/performance-latency",
+                  "gateway/guides/prompt-templates-schemas",
+                  "gateway/guides/retries-fallbacks",
+                  "gateway/guides/streaming-inference",
+                  "gateway/guides/tool-use"
+                ]
+              },
+              "gateway/benchmarks",
+              "gateway/clients",
+              "gateway/configuration-reference",
+              "gateway/data-model",
+              "gateway/deployment",
+              "gateway/integrations",
+              {
+                "group": "API Reference",
+                "pages": [
+                  "gateway/api-reference/inference",
+                  "gateway/api-reference/inference-openai-compatible",
+                  "gateway/api-reference/feedback",
+                  "gateway/api-reference/batch-inference",
+                  "gateway/api-reference/datasets-datapoints",
+                  "gateway/api-reference/auxiliary-endpoints"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Optimization",
+            "pages": ["recipes/index"]
+          },
+          {
+            "group": "Evaluations",
+            "pages": [
+              "evaluations/index",
+              {
+                "group": "Static Evaluations",
+                "pages": [
+                  "evaluations/static-evaluations/tutorial",
+                  "evaluations/static-evaluations/configuration-reference",
+                  "evaluations/static-evaluations/cli-reference"
+                ]
+              },
+              {
+                "group": "Dynamic Evaluations",
+                "pages": [
+                  "evaluations/dynamic-evaluations/tutorial",
+                  "evaluations/dynamic-evaluations/api-reference"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "UI",
+            "pages": ["ui/deployment"]
+          }
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "Documentation",
+          "href": "https://www.tensorzero.com/docs",
+          "icon": "book-open-cover"
+        },
+        {
+          "anchor": "Blog",
+          "href": "https://www.tensorzero.com/blog",
+          "icon": "newspaper"
+        },
+        {
+          "anchor": "Slack",
+          "href": "https://www.tensorzero.com/slack",
+          "icon": "slack"
+        },
+        {
+          "anchor": "Discord",
+          "href": "https://www.tensorzero.com/discord",
+          "icon": "discord"
+        }
+      ]
+    }
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg",
+    "href": "https://www.tensorzero.com/"
+  },
+  "navbar": {
+    "links": [],
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/tensorzero/tensorzero"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/tensorzero/tensorzero",
+      "x": "https://x.com/tensorzero",
+      "linkedin": "https://linkedin.com/company/tensorzero",
+      "slack": "https://www.tensorzero.com/slack",
+      "discord": "https://www.tensorzero.com/discord"
+    }
+  }
+}

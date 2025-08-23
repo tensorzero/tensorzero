@@ -322,10 +322,17 @@ pub async fn start_openai_compatible_gateway(
     };
     let gateway_handle = GatewayHandle::new_with_clickhouse(config, clickhouse_url).await?;
 
+    // TODO(# 3191): Implement a trait for openai compatible endpoints
+    // so this logic can be centralized to one place and not reimplemented in
+    // our gateway main.
     let router = Router::new()
         .route(
             "/openai/v1/chat/completions",
             post(endpoints::openai_compatible::inference_handler),
+        )
+        .route(
+            "/openai/v1/embeddings",
+            post(endpoints::openai_compatible::embeddings_handler),
         )
         .fallback(endpoints::fallback::handle_404)
         .with_state(gateway_handle.app_state.clone());

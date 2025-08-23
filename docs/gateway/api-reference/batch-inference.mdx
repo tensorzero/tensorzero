@@ -1,0 +1,669 @@
+---
+title: "API Reference: Batch Inference"
+sidebarTitle: Batch Inference
+description: API reference for the Batch Inference endpoints.
+---
+
+The `/batch_inference` endpoints allow users to take advantage of batched inference offered by LLM providers.
+These inferences are often substantially cheaper than the synchronous APIs.
+The handling and eventual data model for inferences made through this endpoint are equivalent to those made through the main `/inference` endpoint with a few exceptions:
+
+- The batch samples a single variant from the function being called.
+- There are no fallbacks or retries for bached functions.
+- Only variants of type `chat_completion` are supported.
+- Caching is not supported.
+- The `dryrun` setting is not supported.
+- Streaming is not supported.
+
+Under the hood, the gateway validates all of the requests, samples a single variant from the function being called, handles templating when applicable, and routes the inference to the appropriate model provider.
+In the batch endpoint there are no fallbacks as the requests are processed asynchronously.
+
+The typical workflow is to first use the `POST /batch_inference` endpoint to submit a batch of requests.
+Later, you can poll the `GET /batch_inference/{batch_id}` or `GET /batch_inference/:batch_id/inference/:inference_id` endpoint to check the status of the batch and retrieve results.
+Each poll will return either a pending or failed status or the results of the batch.
+Even after a batch has completed and been processed, you can continue to poll the endpoint as a way of retrieving the results.
+The first time a batch has completed and been processed, the results are stored in the ChatInference, JsonInference, and ModelInference tables as with the `/inference` endpoint.
+The gateway will rehydrate the results into the expected result when polled repeatedly after finishing
+
+<Tip>
+
+See the [Batch Inference Guide](/gateway/guides/batch-inference/) for a simple example of using the batch inference endpoints.
+
+</Tip>
+
+## `POST /batch_inference`
+
+### Request
+
+#### `additional_tools`
+
+- **Type:** list of lists of tools (see below)
+- **Required:** no (default: no additional tools)
+
+A list of lists of tools defined at inference time that the model is allowed to call.
+This field allows for dynamic tool use, i.e. defining tools at runtime.
+Each element in the outer list corresponds to a single inference in the batch.
+Each inner list contains the tools that should be available to the corresponding inference.
+
+You should prefer to define tools in the configuration file if possible.
+Only use this field if dynamic tool use is necessary for your use case.
+
+Each tool is an object with the following fields: `description`, `name`, `parameters`, and `strict`.
+
+The fields are identical to those in the configuration file, except that the `parameters` field should contain the JSON schema itself rather than a path to it.
+See [Configuration Reference](/gateway/configuration-reference/#toolstool_name) for more details.
+
+#### `allowed_tools`
+
+- **Type:** list of lists of strings
+- **Required:** no
+
+A list of lists of tool names that the model is allowed to call.
+The tools must be defined in the configuration file.
+Each element in the outer list corresponds to a single inference in the batch.
+Each inner list contains the names of the tools that are allowed for the corresponding inference.
+
+Any tools provided in `additional_tools` are always allowed, irrespective of this field.
+
+### `credentials`
+
+- **Type:** object (a map from dynamic credential names to API keys)
+- **Required:** no (default: no credentials)
+
+Each model provider in your TensorZero configuration can be configured to accept credentials at inference time by using the `dynamic` location (e.g. `dynamic::my_dynamic_api_key_name`).
+See the [configuration reference](/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
+The gateway expects the credentials to be provided in the `credentials` field of the request body as specified below.
+The gateway will return a 400 error if the credentials are not provided and the model provider has been configured with dynamic credentials.
+
+<Accordion title="Example">
+
+```toml
+[models.my_model_name.providers.my_provider_name]
+# ...
+# Note: the name of the credential field (e.g. `api_key_location`) depends on the provider type
+api_key_location = "dynamic::my_dynamic_api_key_name"
+# ...
+```
+
+```json
+{
+  // ...
+  "credentials": {
+    // ...
+    "my_dynamic_api_key_name": "sk-..."
+    // ...
+  }
+  // ...
+}
+```
+
+</Accordion>
+
+#### `episode_ids`
+
+- **Type:** list of UUIDs
+- **Required:** no
+
+The IDs of existing episodes to associate the inferences with.
+Each element in the list corresponds to a single inference in the batch.
+You can provide `null` for episode IDs for elements that should start a fresh episode.
+
+Only use episode IDs that were returned by the TensorZero gateway.
+
+#### `function_name`
+
+- **Type:** string
+- **Required:** yes
+
+The name of the function to call. This function will be the same for all inferences in the batch.
+
+The function must be defined in the configuration file.
+
+#### `inputs`
+
+- **Type:** list of `input` objects (see below)
+- **Required:** yes
+
+The input to the function.
+
+Each element in the list corresponds to a single inference in the batch.
+
+##### `input[].messages`
+
+- **Type:** list of messages (see below)
+- **Required:** no (default: `[]`)
+
+A list of messages to provide to the model.
+
+Each message is an object with the following fields:
+
+- `role`: The role of the message (`assistant` or `user`).
+- `content`: The content of the message (see below).
+
+The `content` field can be have one of the following types:
+
+- string: the text for a text message (only allowed if there is no schema for that role)
+- list of content blocks: the content blocks for the message (see below)
+
+<span id="content-block"></span>
+
+A content block is an object with the field `type` and additional fields depending on the type.
+
+If the content block has type `text`, it must have either of the following additional fields:
+
+- `text`: The text for the content block.
+- `arguments`: A JSON object containing the function arguments for TensorZero functions with templates and schemas (see [Prompt Templates & Schemas](/gateway/guides/prompt-templates-schemas/) for details).
+
+If the content block has type `tool_call`, it must have the following additional fields:
+
+- `arguments`: The arguments for the tool call.
+- `id`: The ID for the content block.
+- `name`: The name of the tool for the content block.
+
+If the content block has type `tool_result`, it must have the following additional fields:
+
+- `id`: The ID for the content block.
+- `name`: The name of the tool for the content block.
+- `result`: The result of the tool call.
+
+If the content block has type `file`, it must have exactly one of the following additional fields:
+
+- `url`: The URL for a remote file.
+- `mime_type` and `data`: The MIME type (e.g. `image/png`, `image/jpeg`, `application/pdf`) and `base64`-encoded data for an embedded file.
+
+See the [Multimodal Inference](/gateway/guides/multimodal-inference/) guide for more details on how to use images in inference.
+
+If the content block has type `raw_text`, it must have the following additional fields:
+
+- `value`: The text for the content block.
+  This content block will ignore any relevant templates and schemas for this function.
+
+If the content block has type `thought`, it must have the following additional fields:
+
+- `text`: The text for the content block.
+
+If the content block has type `unknown`, it must have the following additional fields:
+
+- `data`: The original content block from the provider, without any validation or transformation by TensorZero.
+- `model_provider_name` (optional): A string specifying when this content block should be included in the model provider input.
+  If set, the content block will only be provided to this specific model provider.
+  If not set, the content block is passed to all model providers.
+
+For example, the following hypothetical unknown content block will send the `daydreaming` content block to inference requests targeting the `your_model_provider_name` model provider.
+
+```json
+{
+  "type": "unknown",
+  "data": {
+    "type": "daydreaming",
+    "dream": "..."
+  },
+  "model_provider_name": "tensorzero::model_name::your_model_name::provider_name::your_model_provider_name"
+}
+```
+
+This is the most complex field in the entire API. See this example for more details.
+
+<Accordion title="Example">
+```json
+{
+  // ...
+  "input": {
+    "messages": [
+      // If you don't have a user (or assistant) schema...
+      {
+        "role": "user", // (or "assistant")
+        "content": "What is the weather in Tokyo?"
+      },
+      // If you have a user (or assistant) schema...
+      {
+        "role": "user", // (or "assistant")
+        "content": [
+          {
+            "type": "text",
+            "arguments": {
+              "location": "Tokyo"
+              // ...
+            }
+          }
+        ]
+      },
+      // If the model previously called a tool...
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "id": "0",
+            "name": "get_temperature",
+            "arguments": "{\"location\": \"Tokyo\"}"
+          }
+        ]
+      },
+      // ...and you're providing the result of that tool call...
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "id": "0",
+            "name": "get_temperature",
+            "result": "70"
+          }
+        ]
+      },
+      // You can also specify a text message using a content block...
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What about NYC?" // (or object if there is a schema)
+          }
+        ]
+      },
+      // You can also provide multiple content blocks in a single message...
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Sure, I can help you with that." // (or object if there is a schema)
+          },
+          {
+            "type": "tool_call",
+            "id": "0",
+            "name": "get_temperature",
+            "arguments": "{\"location\": \"New York\"}"
+          }
+        ]
+      }
+      // ...
+    ]
+    // ...
+  }
+  // ...
+}
+```
+
+</Accordion>
+
+##### `input[].system`
+
+- **Type:** string or object
+- **Required:** no
+
+The input for the system message.
+
+If the function does not have a system schema, this field should be a string.
+
+If the function has a system schema, this field should be an object that matches the schema.
+
+#### `output_schemas`
+
+- **Type:** list of optional objects (valid JSON Schema)
+- **Required:** no
+
+A list of JSON schemas that will be used to validate the output of the function for each inference in the batch.
+Each element in the list corresponds to a single inference in the batch.
+These can be null for elements that need to use the `output_schema` defined in the function configuration.
+This schema is used for validating the output of the function, and sent to providers which support structured outputs.
+
+#### `parallel_tool_calls`
+
+- **Type:** list of optional booleans
+- **Required:** no
+
+A list of booleans that indicate whether each inference in the batch should be allowed to request multiple tool calls in a single conversation turn.
+Each element in the list corresponds to a single inference in the batch.
+You can provide `null` for elements that should use the configuration value for the function being called.
+If you don't provide this field entirely, we default to the configuration value for the function being called.
+
+Most model providers do not support parallel tool calls. In those cases, the gateway ignores this field.
+At the moment, only Fireworks AI and OpenAI support parallel tool calls.
+
+#### `params`
+
+- **Type:** object (see below)
+- **Required:** no (default: `{}`)
+
+Override inference-time parameters for a particular variant type.
+This fields allows for dynamic inference parameters, i.e. defining parameters at runtime.
+
+This field's format is `{ variant_type: { param: [value1, ...], ... }, ... }`.
+You should prefer to set these parameters in the configuration file if possible.
+Only use this field if you need to set these parameters dynamically at runtime.
+Each parameter if specified should be a list of values that may be null that is the same length as the batch size.
+
+Note that the parameters will apply to every variant of the specified type.
+
+Currently, we support the following:
+
+- `chat_completion`
+  - `frequency_penalty`
+  - `max_tokens`
+  - `presence_penalty`
+  - `seed`
+  - `temperature`
+  - `top_p`
+
+See [Configuration Reference](/gateway/configuration-reference/#functionsfunction_namevariantsvariant_name) for more details on the parameters, and Examples below for usage.
+
+<Accordion title="Example">
+
+For example, if you wanted to dynamically override the `temperature` parameter for a `chat_completion` variant for the first inference in a batch of 3, you'd include the following in the request body:
+
+```json
+{
+  // ...
+  "params": {
+    "chat_completion": {
+      "temperature": [0.7, null, null]
+    }
+  }
+  // ...
+}
+```
+
+</Accordion>
+
+#### `tags`
+
+- **Type:** list of optional JSON objects with string keys and values
+- **Required:** no
+
+User-provided tags to associate with the inference.
+
+Each element in the list corresponds to a single inference in the batch.
+
+For example, `[{"user_id": "123"}, null]` or `[{"author": "Alice"}, {"author": "Bob"}]`.
+
+#### `tool_choice`
+
+- **Type:** list of optional strings
+- **Required:** no
+
+If set, overrides the tool choice strategy for the equest.
+
+Each element in the list corresponds to a single inference in the batch.
+
+The supported tool choice strategies are:
+
+- `none`: The function should not use any tools.
+- `auto`: The model decides whether or not to use a tool. If it decides to use a tool, it also decides which tools to use.
+- `required`: The model should use a tool. If multiple tools are available, the model decides which tool to use.
+- `{ specific = "tool_name" }`: The model should use a specific tool. The tool must be defined in the `tools` section of the configuration file or provided in `additional_tools`.
+
+#### `variant_name`
+
+- **Type:** string
+- **Required:** no
+
+If set, pins the batch inference request to a particular variant (not recommended).
+
+You should generally not set this field, and instead let the TensorZero gateway assign a variant.
+This field is primarily used for testing or debugging purposes.
+
+### Response
+
+For a POST request to `/batch_inference`, the response is a JSON object containing metadata that allows you to refer to the batch and poll it later on.
+The response is an object with the following fields:
+
+#### `batch_id`
+
+- **Type:** UUID
+
+The ID of the batch.
+
+#### `inference_ids`
+
+- **Type:** list of UUIDs
+
+The IDs of the inferences in the batch.
+
+#### `episode_ids`
+
+- **Type:** list of UUIDs
+
+The IDs of the episodes associated with the inferences in the batch.
+
+### Example
+
+Imagine you have a simple TensorZero function that generates haikus using GPT-4o Mini.
+
+```toml
+[functions.generate_haiku]
+type = "chat"
+
+[functions.generate_haiku.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+```
+
+You can submit a batch inference job to generate multiple haikus with a single request.
+Each entry in `inputs` is equal to the `input` field in a regular inference request.
+
+```sh
+curl -X POST http://localhost:3000/batch_inference \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function_name": "generate_haiku",
+    "variant_name": "gpt_4o_mini",
+    "inputs": [
+      {
+        "messages": [
+          {
+            "role": "user",
+            "content": "Write a haiku about artificial intelligence."
+          }
+        ]
+      },
+      {
+        "messages": [
+          {
+            "role": "user",
+            "content": "Write a haiku about general aviation."
+          }
+        ]
+      },
+      {
+        "messages": [
+          {
+            "role": "user",
+            "content": "Write a haiku about anime."
+          }
+        ]
+      }
+    ]
+  }'
+```
+
+The response contains a `batch_id` as well as `inference_ids` and `episode_ids` for each inference in the batch.
+
+```json
+{
+  "batch_id": "019470f0-db4c-7811-9e14-6fe6593a2652",
+  "inference_ids": [
+    "019470f0-d34a-77a3-9e59-bcc66db2b82f",
+    "019470f0-d34a-77a3-9e59-bcdd2f8e06aa",
+    "019470f0-d34a-77a3-9e59-bcecfb7172a0"
+  ],
+  "episode_ids": [
+    "019470f0-d34a-77a3-9e59-bc933973d087",
+    "019470f0-d34a-77a3-9e59-bca6e9b748b2",
+    "019470f0-d34a-77a3-9e59-bcb20177bf3a"
+  ]
+}
+```
+
+## `GET /batch_inference/:batch_id`
+
+Both this and the following GET endpoint can be used to poll the status of a batch.
+If you use this endpoint and poll with only the batch ID the entire batch will be returned if possible.
+The response format depends on the function type as well as the batch status when polled.
+
+### Pending
+
+`{"status": "pending"}`
+
+### Failed
+
+`{"status": "failed"}`
+
+### Completed
+
+#### `status`
+
+- **Type:** literal string `"completed"`
+
+#### `batch_id`
+
+- **Type:** UUID
+
+#### `inferences`
+
+- **Type:** list of objects that exactly match the response body in the inference endpoint documented [here](/gateway/api-reference/inference/#response).
+
+### Example
+
+Extending the example from above: you can use the `batch_id` to poll the status of this job:
+
+```sh
+curl -X GET http://localhost:3000/batch_inference/019470f0-db4c-7811-9e14-6fe6593a2652
+```
+
+While the job is pending, the response will only contain the `status` field.
+
+```json
+{
+  "status": "pending"
+}
+```
+
+Once the job is completed, the response will contain the `status` field and the `inferences` field.
+Each inference object is the same as the response from a regular inference request.
+
+```json
+{
+  "status": "completed",
+  "batch_id": "019470f0-db4c-7811-9e14-6fe6593a2652",
+  "inferences": [
+    {
+      "inference_id": "019470f0-d34a-77a3-9e59-bcc66db2b82f",
+      "episode_id": "019470f0-d34a-77a3-9e59-bc933973d087",
+      "variant_name": "gpt_4o_mini",
+      "content": [
+        {
+          "type": "text",
+          "text": "Whispers of circuits,  \nLearning paths through endless code,  \nDreams in binary."
+        }
+      ],
+      "usage": {
+        "input_tokens": 15,
+        "output_tokens": 19
+      }
+    },
+    {
+      "inference_id": "019470f0-d34a-77a3-9e59-bcdd2f8e06aa",
+      "episode_id": "019470f0-d34a-77a3-9e59-bca6e9b748b2",
+      "variant_name": "gpt_4o_mini",
+      "content": [
+        {
+          "type": "text",
+          "text": "Wings of freedom soar,  \nClouds embrace the lonely flight,  \nSky whispers adventure."
+        }
+      ],
+      "usage": {
+        "input_tokens": 15,
+        "output_tokens": 20
+      }
+    },
+    {
+      "inference_id": "019470f0-d34a-77a3-9e59-bcecfb7172a0",
+      "episode_id": "019470f0-d34a-77a3-9e59-bcb20177bf3a",
+      "variant_name": "gpt_4o_mini",
+      "content": [
+        {
+          "type": "text",
+          "text": "Vivid worlds unfold,  \nHeroes rise with dreams in hand,  \nInk and dreams collide."
+        }
+      ],
+      "usage": {
+        "input_tokens": 14,
+        "output_tokens": 20
+      }
+    }
+  ]
+}
+```
+
+## `GET /batch_inference/:batch_id/inference/:inference_id`
+
+This endpoint can be used to poll the status of a single inference in a batch.
+Since the polling involves pulling data on all the inferences in the batch, we also store the status of all those inference in ClickHouse.
+The response format depends on the function type as well as the batch status when polled.
+
+### Pending
+
+`{"status": "pending"}`
+
+### Failed
+
+`{"status": "failed"}`
+
+### Completed
+
+#### `status`
+
+- **Type:** literal string `"completed"`
+
+#### `batch_id`
+
+- **Type:** UUID
+
+#### `inferences`
+
+- **Type:** list containing a single object that exactly matches the response body in the inference endpoint documented [here](/gateway/api-reference/inference/#response).
+
+### Example
+
+Similar to above, we can also poll a particular inference:
+
+```sh
+curl -X GET http://localhost:3000/batch_inference/019470f0-db4c-7811-9e14-6fe6593a2652/inference/019470f0-d34a-77a3-9e59-bcc66db2b82f
+```
+
+While the job is pending, the response will only contain the `status` field.
+
+```json
+{
+  "status": "pending"
+}
+```
+
+Once the job is completed, the response will contain the `status` field and the `inferences` field.
+Unlike above, this request will return a list containing only the requested inference.
+
+```json
+{
+  "status": "completed",
+  "batch_id": "019470f0-db4c-7811-9e14-6fe6593a2652",
+  "inferences": [
+    {
+      "inference_id": "019470f0-d34a-77a3-9e59-bcc66db2b82f",
+      "episode_id": "019470f0-d34a-77a3-9e59-bc933973d087",
+      "variant_name": "gpt_4o_mini",
+      "content": [
+        {
+          "type": "text",
+          "text": "Whispers of circuits,  \nLearning paths through endless code,  \nDreams in binary."
+        }
+      ],
+      "usage": {
+        "input_tokens": 15,
+        "output_tokens": 19
+      }
+    }
+  ]
+}
+```
