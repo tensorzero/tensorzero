@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use tensorzero::{setup_clickhouse_without_config, DatabaseConnection, TimeWindow};
+use uuid::Uuid;
 
 #[napi(js_name = "DatabaseClient")]
 pub struct DatabaseClient(Box<dyn DatabaseConnection>);
@@ -42,6 +43,21 @@ impl DatabaseClient {
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
     }
+
+    #[napi]
+    pub async fn query_episode_table(&self, params: String) -> Result<String, napi::Error> {
+        let QueryEpisodeTableParams {
+            page_size,
+            before,
+            after,
+        } = serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let result = self
+            .0
+            .query_episode_table(page_size, before, after)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
 }
 
 #[derive(Deserialize)]
@@ -53,4 +69,11 @@ struct GetModelUsageTimeseriesParams {
 #[derive(Deserialize)]
 struct GetModelLatencyQuantilesParams {
     time_window: TimeWindow,
+}
+
+#[derive(Deserialize)]
+struct QueryEpisodeTableParams {
+    page_size: u32,
+    before: Option<Uuid>,
+    after: Option<Uuid>,
 }

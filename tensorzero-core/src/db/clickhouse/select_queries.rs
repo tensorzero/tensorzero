@@ -148,11 +148,11 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 }))
             }
             (Some(before), None) => (
-                "episode_id_uint > toUInt128({before:UUID})",
+                "episode_id_uint < toUInt128({before:UUID})",
                 vec![("before", before.to_string())],
             ),
             (None, Some(after)) => (
-                "episode_id_uint < toUInt128({after:UUID})",
+                "episode_id_uint > toUInt128({after:UUID})",
                 vec![("after", after.to_string())],
             ),
             (None, None) => ("1=1", vec![]),
@@ -161,13 +161,15 @@ impl SelectQueries for ClickHouseConnectionInfo {
             r"
             SELECT
                 uint_to_uuid(episode_id_uint) as episode_id,
-                count,
-                formatDateTime(UUIDv7ToDateTime(uint_to_uuid(min_inference_id_uint))) as start_time,
-                formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max_inference_id_uint))) as end_time,
-                uint_to_uuid(max_inference_id_uint) as last_inference_id
+                countMerge(count) as count,
+                formatDateTime(UUIDv7ToDateTime(uint_to_uuid(minMerge(min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+                formatDateTime(UUIDv7ToDateTime(uint_to_uuid(maxMerge(max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
+                uint_to_uuid(maxMerge(max_inference_id_uint)) as last_inference_id
             FROM
             EpisodeById
             WHERE {where_clause}
+            GROUP BY episode_id_uint
+            ORDER BY episode_id_uint DESC
             LIMIT {page_size}
             FORMAT JSONEachRow
             "

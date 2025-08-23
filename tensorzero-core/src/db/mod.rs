@@ -77,7 +77,8 @@ pub struct ModelLatencyDatapoint {
 #[ts(export)]
 pub struct EpisodeByIdRow {
     pub episode_id: Uuid,
-    pub count: u32,
+    #[serde(deserialize_with = "deserialize_u64")]
+    pub count: u64,
     pub start_time: DateTime<Utc>,
     pub end_time: DateTime<Utc>,
     pub last_inference_id: Uuid,

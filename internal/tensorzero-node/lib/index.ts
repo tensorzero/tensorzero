@@ -7,6 +7,7 @@ import {
   Config,
   ClientInferenceParams,
   InferenceResponse,
+  EpisodeByIdRow,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
@@ -149,5 +150,20 @@ export class DatabaseClient {
     const modelLatencyQuantilesString =
       await this.nativeDatabaseClient.getModelLatencyQuantiles(params);
     return JSON.parse(modelLatencyQuantilesString) as ModelLatencyDatapoint[];
+  }
+
+  async queryEpisodeTable(
+    pageSize: number,
+    before?: string,
+    after?: string,
+  ): Promise<EpisodeByIdRow[]> {
+    const params = safeStringify({
+      page_size: pageSize,
+      before: before,
+      after: after,
+    });
+    const episodeTableString =
+      await this.nativeDatabaseClient.queryEpisodeTable(params);
+    return JSON.parse(episodeTableString) as EpisodeByIdRow[];
   }
 }
