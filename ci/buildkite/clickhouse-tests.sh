@@ -85,7 +85,7 @@ cargo test-e2e-no-creds
 curl -X POST \
   -H "Authorization: Token token=$BUILDKITE_ANALYTICS_TOKEN" \
   -F "format=junit" \
-  -F "data=@target/nextest/ci-unit/junit.xml" \
+  -F "data=@target/nextest/clickhouse/junit.xml" \
   -F "run_env[CI]=buildkite" \
   -F "run_env[key]=$BUILDKITE_BUILD_ID" \
   -F "run_env[number]=$BUILDKITE_BUILD_NUMBER" \
