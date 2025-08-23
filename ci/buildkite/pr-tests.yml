@@ -17,12 +17,6 @@ steps:
     artifact_paths:
       - mock-inference-provider-container.tar
 
-  - label: "Build Cargo workspace (e2e)"
-    command: bash ./ci/buildkite/build-cargo-e2e.sh
-    key: "build-cargo-e2e"
-    artifact_paths:
-      - target.e2e.tar.gz
-
   - label: "Download S3 Fixtures"
     command: bash ./ci/buildkite/download-fixtures.sh
     key: "download-fixtures"

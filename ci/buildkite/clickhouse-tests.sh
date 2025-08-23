@@ -11,7 +11,6 @@ fi
 # ------------------------------------------------------------------------------
 SHORT_HASH=${BUILDKITE_COMMIT:0:7}
 
-buildkite-agent artifact download target.e2e.tar.gz .
 
 # Install cargo-binstall
 curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
@@ -34,8 +33,14 @@ docker load < gateway-container.tar
 buildkite-agent artifact download mock-inference-provider-container.tar .
 docker load < mock-inference-provider-container.tar
 
-buildkite-agent artifact download target.e2e.tar.gz .
-tar -xzvf target.e2e.tar.gz
+# ------------------------------------------------------------------------------
+# Setup Rust
+# ------------------------------------------------------------------------------
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
+rustc --version
+
+cargo build-e2e
 
 # Install Python
 # apt update && apt install -y python3.13-dev
