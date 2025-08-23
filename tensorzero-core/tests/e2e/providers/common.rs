@@ -2092,7 +2092,7 @@ pub async fn check_base64_pdf_response(
                 ContentBlock::File(Box::new(FileWithPath {
                     file: Base64File {
                         url: None,
-                        data: None,
+                        data: String::new(),
                         mime_type: mime::APPLICATION_PDF,
                     },
                     storage_path: expected_storage_path.clone(),
@@ -2248,7 +2248,7 @@ pub async fn check_base64_image_response(
                 ContentBlock::File(Box::new(FileWithPath {
                     file: Base64File {
                         url: None,
-                        data: None,
+                        data: String::new(),
                         mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: expected_storage_path.clone(),
@@ -2398,7 +2398,7 @@ pub async fn check_url_image_response(
                 }), ContentBlock::File(Box::new(FileWithPath {
                     file: Base64File {
                         url: Some(image_url.clone()),
-                        data: None,
+                        data: String::new(),
                         mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: StoragePath {

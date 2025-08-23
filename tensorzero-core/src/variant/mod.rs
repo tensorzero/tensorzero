@@ -12,6 +12,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use tokio::time::error::Elapsed;
 use tokio::time::Duration;
+use crate::inference::types::Role;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -816,7 +817,7 @@ impl ChatCompletionConfigPyClass {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
             .templates
-            .system
+            .get_implicit_system_template()
             .as_ref()
             .map(|t| t.template.contents.clone()))
     }
@@ -826,7 +827,7 @@ impl ChatCompletionConfigPyClass {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
             .templates
-            .user
+            .get_implicit_template(Role::User)
             .as_ref()
             .map(|t| t.template.contents.clone()))
     }
@@ -836,7 +837,7 @@ impl ChatCompletionConfigPyClass {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
             .templates
-            .assistant
+            .get_implicit_template(Role::Assistant)
             .as_ref()
             .map(|t| t.template.contents.clone()))
     }
@@ -858,7 +859,7 @@ mod tests {
     use crate::error::ErrorDetails;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::{
-        ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role, Usage,
+        ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Usage,
     };
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::tests::get_test_template_config;

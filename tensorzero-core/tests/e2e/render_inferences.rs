@@ -6,11 +6,14 @@ use tensorzero::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role, StorageKind, StoragePath,
     StoredChatInference, StoredInference, StoredJsonInference, Tool,
 };
+use tensorzero_core::inference::types::file::Base64FileMetadata;
+use tensorzero_core::inference::types::stored_input::StoredFile;
+use tensorzero_core::inference::types::stored_input::{
+    StoredInput, StoredInputMessage, StoredInputMessageContent,
+};
 use tensorzero_core::{
     inference::types::{
-        resolved_input::FileWithPath, Base64File, ContentBlock, ContentBlockChatOutput,
-        JsonInferenceOutput, RequestMessage, ResolvedInput, ResolvedInputMessage,
-        ResolvedInputMessageContent, Text,
+        ContentBlock, ContentBlockChatOutput, JsonInferenceOutput, RequestMessage, Text,
     },
     tool::{ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
 };
@@ -43,11 +46,11 @@ pub async fn test_render_samples_no_function() {
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -79,11 +82,11 @@ pub async fn test_render_samples_no_variant() {
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -123,11 +126,11 @@ pub async fn test_render_samples_missing_variable() {
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
-        input: ResolvedInput {
+        input: StoredInput {
             system: Some(json!({"foo": "bar"})),
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -162,11 +165,11 @@ pub async fn test_render_samples_normal() {
         StoredInference::Chat(StoredChatInference {
             function_name: "basic_test".to_string(),
             variant_name: "dummy".to_string(),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("Hello, world!"),
                     }],
                 }],
@@ -182,11 +185,11 @@ pub async fn test_render_samples_normal() {
         StoredInference::Json(StoredJsonInference {
             function_name: "json_success".to_string(),
             variant_name: "dummy".to_string(),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!({"country": "Japan"}),
                     }],
                 }],
@@ -208,11 +211,11 @@ pub async fn test_render_samples_normal() {
         StoredInference::Chat(StoredChatInference {
             function_name: "weather_helper".to_string(),
             variant_name: "dummy".to_string(),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("Hello, world!"),
                     }],
                 }],
@@ -245,19 +248,18 @@ pub async fn test_render_samples_normal() {
         StoredInference::Chat(StoredChatInference {
             function_name: "basic_test".to_string(),
             variant_name: "gpt-4o-mini-2024-07-18".to_string(),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: json!("What is this a picture of?"),
                         },
-                        ResolvedInputMessageContent::File(Box::new(FileWithPath {
-                            file: Base64File {
+                        StoredInputMessageContent::File(Box::new(StoredFile {
+                            file: Base64FileMetadata {
                                 url: None,
                                 mime_type: mime::IMAGE_PNG,
-                                data: None,
                             },
                             storage_path: StoragePath {
                                 kind: StorageKind::S3Compatible {
@@ -425,11 +427,7 @@ pub async fn test_render_samples_normal() {
     };
 
     // Check that the base64 string is > 1000 chars
-    if let Some(data) = &file.file.data {
-        assert!(data.len() > 1000);
-    } else {
-        panic!("Expected base64 data");
-    }
+    assert!(file.file.data.len() > 1000);
 
     // Check the output
     assert_eq!(fourth_inference.output.as_ref().unwrap().len(), 0);
@@ -448,27 +446,27 @@ pub async fn test_render_samples_template_no_schema() {
         function_name: "basic_test_template_no_schema".to_string(),
         variant_name: "test".to_string(),
         timestamp: Utc::now(),
-        input: ResolvedInput {
+        input: StoredInput {
             system: Some("My system message".into()),
             messages: vec![
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "First user message".into(),
                         },
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "Second user message".into(),
                         },
                     ],
                 },
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::Assistant,
                     content: vec![
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "First assistant message".into(),
                         },
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "Second assistant message".into(),
                         },
                     ],
@@ -569,11 +567,11 @@ pub async fn test_render_datapoints_no_function() {
         function_name: "basic_test".to_string(),
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -608,11 +606,11 @@ pub async fn test_render_datapoints_no_variant() {
         function_name: "basic_test".to_string(),
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -655,11 +653,11 @@ pub async fn test_render_datapoints_missing_variable() {
         function_name: "basic_test".to_string(),
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
-        input: ResolvedInput {
+        input: StoredInput {
             system: Some(json!({"foo": "bar"})),
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -697,11 +695,11 @@ pub async fn test_render_datapoints_normal() {
             function_name: "basic_test".to_string(),
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("Hello, world!"),
                     }],
                 }],
@@ -720,11 +718,11 @@ pub async fn test_render_datapoints_normal() {
             function_name: "json_success".to_string(),
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!({"country": "Japan"}),
                     }],
                 }],
@@ -746,11 +744,11 @@ pub async fn test_render_datapoints_normal() {
             function_name: "weather_helper".to_string(),
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("Hello, world!"),
                     }],
                 }],
@@ -784,19 +782,18 @@ pub async fn test_render_datapoints_normal() {
             function_name: "basic_test".to_string(),
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: json!("What is this a picture of?"),
                         },
-                        ResolvedInputMessageContent::File(Box::new(FileWithPath {
-                            file: Base64File {
+                        StoredInputMessageContent::File(Box::new(StoredFile {
+                            file: Base64FileMetadata {
                                 url: None,
                                 mime_type: mime::IMAGE_PNG,
-                                data: None,
                             },
                             storage_path: StoragePath {
                                 kind: StorageKind::S3Compatible {
@@ -951,11 +948,7 @@ pub async fn test_render_datapoints_normal() {
     };
 
     // Check that the base64 string is > 1000 chars
-    if let Some(data) = &file.file.data {
-        assert!(data.len() > 1000);
-    } else {
-        panic!("Expected base64 data");
-    }
+    assert!(file.file.data.len() > 1000);
 
     // Check the output
     assert_eq!(fourth_sample.output.as_ref().unwrap().len(), 0);
@@ -975,27 +968,27 @@ pub async fn test_render_datapoints_template_no_schema() {
         function_name: "basic_test_template_no_schema".to_string(),
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
-        input: ResolvedInput {
+        input: StoredInput {
             system: Some("My system message".into()),
             messages: vec![
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "First user message".into(),
                         },
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "Second user message".into(),
                         },
                     ],
                 },
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::Assistant,
                     content: vec![
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "First assistant message".into(),
                         },
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "Second assistant message".into(),
                         },
                     ],

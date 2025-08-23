@@ -2,6 +2,7 @@ use crate::serde_util::{
     deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
 };
 use crate::tool::ToolCallInput;
+use crate::variant::chat_completion::{ASSISTANT_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR};
 use derive_builder::Builder;
 use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::{FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders};
@@ -57,6 +58,9 @@ pub mod file;
 pub mod pyo3_helpers;
 pub mod resolved_input;
 pub mod storage;
+pub mod stored_input;
+
+pub use stored_input::{StoredInput, StoredInputMessage, StoredInputMessageContent};
 
 /*
  * Data flow in TensorZero
@@ -75,7 +79,7 @@ pub struct Input {
     pub messages: Vec<InputMessage>,
 }
 
-pub struct FetchContext<'a> {
+pub struct ResolveContext<'a> {
     pub client: &'a reqwest::Client,
     pub object_store_info: &'a Option<ObjectStoreInfo>,
 }
@@ -83,7 +87,7 @@ pub struct FetchContext<'a> {
 impl Input {
     /// Resolves any nested network resources in the input.
     /// Currently, this resolves input image urls into base64-encoded images.
-    pub async fn resolve(self, context: &FetchContext<'_>) -> Result<ResolvedInput, Error> {
+    pub async fn resolve(self, context: &ResolveContext<'_>) -> Result<ResolvedInput, Error> {
         let messages = futures::future::try_join_all(
             self.messages
                 .into_iter()
@@ -98,11 +102,14 @@ impl Input {
 }
 
 impl InputMessage {
-    pub async fn resolve(self, context: &FetchContext<'_>) -> Result<ResolvedInputMessage, Error> {
+    pub async fn resolve(
+        self,
+        context: &ResolveContext<'_>,
+    ) -> Result<ResolvedInputMessage, Error> {
         let content = futures::future::try_join_all(
             self.content
                 .into_iter()
-                .map(|content| content.resolve(context)),
+                .map(|content| content.resolve(self.role, context)),
         )
         .await?;
         Ok(ResolvedInputMessage {
@@ -115,18 +122,24 @@ impl InputMessage {
 impl InputMessageContent {
     pub async fn resolve(
         self,
-        context: &FetchContext<'_>,
+        role: Role,
+        context: &ResolveContext<'_>,
     ) -> Result<ResolvedInputMessageContent, Error> {
         Ok(match self {
             InputMessageContent::Text(TextKind::Text { text }) => {
-                ResolvedInputMessageContent::Text {
-                    value: Value::String(text),
-                }
+                ResolvedInputMessageContent::Text { text }
             }
             InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                ResolvedInputMessageContent::Text {
-                    value: Value::Object(arguments),
+                // Map the legacy `{{"type": "text", "arguments": ...}}` format format to an explicit
+                // `{{"type": "template", "name": "<role>", "arguments": ...}}` format, with the template
+                // name chosen based on the message role.
+                ResolvedInputMessageContent::Template {
+                    name: role.implicit_template_name().to_string(),
+                    arguments,
                 }
+            }
+            InputMessageContent::Template { name, arguments } => {
+                ResolvedInputMessageContent::Template { name, arguments }
             }
             InputMessageContent::ToolCall(tool_call) => {
                 ResolvedInputMessageContent::ToolCall(tool_call.try_into()?)
@@ -142,7 +155,18 @@ impl InputMessageContent {
                 tracing::warn!(
                     r#"Deprecation Warning: `{{"type": "text", "value", ...}}` is deprecated. Please use `{{"type": "text", "text": "String input"}}` or `{{"type": "text", "arguments": {{..}}}} ` instead."#
                 );
-                ResolvedInputMessageContent::Text { value }
+                match value {
+                    Value::String(text) => ResolvedInputMessageContent::Text { text },
+                    Value::Object(arguments) => ResolvedInputMessageContent::Template {
+                        name: role.implicit_template_name().to_string(),
+                        arguments,
+                    },
+                    _ => {
+                        return Err(Error::new(ErrorDetails::InvalidMessage {
+                            message: r#"The 'value' field in a `{"type": "text", "value": ... }` content block must be a string or object#".to_string()"#.to_string(),
+                        }));
+                    }
+                }
             }
             InputMessageContent::File(file) => {
                 let storage_kind = context
@@ -187,6 +211,10 @@ pub struct InputMessage {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InputMessageContent {
     Text(TextKind),
+    Template {
+        name: String,
+        arguments: Map<String, Value>,
+    },
     ToolCall(ToolCallInput),
     ToolResult(ToolResult),
     RawText {
@@ -258,6 +286,24 @@ impl<'de> Deserialize<'de> for TextKind {
 pub enum Role {
     User,
     Assistant,
+}
+
+impl Role {
+    /// The template name to use for `{"type": "text", "arguments": {}}` inputs.
+    /// This will eventually be deprecated in favor of explicit `{"type": "template", "name": "user", "arguments": {}}` inputs.
+    pub fn implicit_template_name(&self) -> &'static str {
+        match self {
+            Role::User => "user",
+            Role::Assistant => "assistant",
+        }
+    }
+
+    pub fn implicit_template_var(&self) -> &'static str {
+        match self {
+            Role::User => USER_TEXT_TEMPLATE_VAR,
+            Role::Assistant => ASSISTANT_TEXT_TEMPLATE_VAR,
+        }
+    }
 }
 
 impl std::fmt::Display for Role {
@@ -795,7 +841,7 @@ pub struct ChatInferenceDatabaseInsert {
     pub variant_name: String,
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -817,7 +863,7 @@ pub struct JsonInferenceDatabaseInsert {
     pub variant_name: String,
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: JsonInferenceOutput,
     // We at one point wrote empty auxiliary content to the database as "" but now write it as []
@@ -870,9 +916,7 @@ impl From<String> for InputMessageContent {
 #[cfg(test)]
 impl From<String> for ResolvedInputMessageContent {
     fn from(text: String) -> Self {
-        ResolvedInputMessageContent::Text {
-            value: Value::String(text),
-        }
+        ResolvedInputMessageContent::Text { text }
     }
 }
 
@@ -880,12 +924,6 @@ impl From<String> for ResolvedInputMessageContent {
 impl From<String> for ContentBlockChatOutput {
     fn from(text: String) -> Self {
         ContentBlockChatOutput::Text(Text { text })
-    }
-}
-
-impl From<Value> for ResolvedInputMessageContent {
-    fn from(value: Value) -> Self {
-        ResolvedInputMessageContent::Text { value }
     }
 }
 
@@ -1244,7 +1282,7 @@ pub async fn parse_chat_output(
 impl ChatInferenceDatabaseInsert {
     pub fn new(
         chat_result: ChatInferenceResult,
-        input: ResolvedInput,
+        input: StoredInput,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata
@@ -1274,7 +1312,7 @@ impl ChatInferenceDatabaseInsert {
 impl JsonInferenceDatabaseInsert {
     pub fn new(
         json_result: JsonInferenceResult,
-        input: ResolvedInput,
+        input: StoredInput,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata

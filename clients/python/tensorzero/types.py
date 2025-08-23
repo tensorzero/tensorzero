@@ -26,6 +26,11 @@ class HasTypeField(Protocol):
 class ContentBlock(ABC, HasTypeField):
     pass
 
+@dataclass
+class Template(ContentBlock):
+    name: str
+    arguments: Any
+    type: str = "template"
 
 @dataclass
 class Text(ContentBlock):
@@ -70,14 +75,14 @@ class RawText(ContentBlock):
 
 @dataclass
 class ImageBase64(ContentBlock):
-    data: str
+    data: Optional[str]
     mime_type: str
     type: str = "image"
 
 
 @dataclass
 class FileBase64(ContentBlock):
-    data: str
+    data: Optional[str]
     mime_type: str
     type: str = "file"
 

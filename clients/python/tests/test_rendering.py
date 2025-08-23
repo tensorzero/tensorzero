@@ -185,6 +185,7 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
     assert isinstance(content[0], FileBase64)
     assert content[0].type == "file"
     assert content[0].mime_type == "image/png"
+    assert content[0].data is not None
     assert len(content[0].data) > 1000
 
     assert isinstance(output, list)
@@ -568,6 +569,7 @@ async def test_async_render_samples_success(
     assert isinstance(content[0], FileBase64)
     assert content[0].type == "file"
     assert content[0].mime_type == "image/png"
+    assert content[0].data is not None
     assert len(content[0].data) > 1000
 
     assert isinstance(output, list)
