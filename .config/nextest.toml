@@ -29,6 +29,7 @@ default-filter = 'test(batch)'
 
 [profile.clickhouse]
 default-filter = 'test(test_dummy_only) | test(clickhouse)'
+junit.path = "junit.xml"
 
 [profile.optimization]
 default-filter = 'binary(optimization-live)'
