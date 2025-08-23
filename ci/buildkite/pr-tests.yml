@@ -43,7 +43,7 @@ steps:
       - "build-mock-inference-provider-container"
 
   - label: "ClickHouse Tests"
-    command: bash ./ci/buildkite/clickhouse-tests.sh | sleep infinity
+    command: bash ./ci/buildkite/clickhouse-tests.sh
     depends_on:
       - "download-fixtures"
       - "build-gateway-container"
