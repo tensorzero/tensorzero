@@ -36,6 +36,8 @@ default-filter = 'binary(optimization-live)'
 [profile.optimization-mock]
 default-filter = 'binary(optimization-mock)'
 
+[profile.ci-unit.junit]
+path = "junit.xml"
 
 [[profile.optimization.overrides]]
 # Settings for running optimization tests

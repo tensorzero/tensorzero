@@ -38,6 +38,7 @@ use crate::inference::{InferenceProvider, TensorZeroEventError};
 
 const PROVIDER_NAME: &str = "Azure";
 pub const PROVIDER_TYPE: &str = "azure";
+const AZURE_INFERENCE_API_VERSION: &str = "2025-04-01-preview";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -395,7 +396,7 @@ fn get_azure_chat_url(endpoint: &Url, deployment_id: &str) -> Result<Url, Error>
         .push("chat")
         .push("completions");
     url.query_pairs_mut()
-        .append_pair("api-version", "2024-10-21");
+        .append_pair("api-version", AZURE_INFERENCE_API_VERSION);
     Ok(url)
 }
 
@@ -416,7 +417,7 @@ fn get_azure_embedding_url(endpoint: &Url, deployment_id: &str) -> Result<Url, E
         .push(deployment_id)
         .push("embeddings");
     url.query_pairs_mut()
-        .append_pair("api-version", "2024-10-21");
+        .append_pair("api-version", AZURE_INFERENCE_API_VERSION);
     Ok(url)
 }
 
