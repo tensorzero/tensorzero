@@ -141,7 +141,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
         after: Option<Uuid>,
     ) -> Result<Vec<EpisodeByIdRow>, Error> {
         let (where_clause, params) = match (before, after) {
-            (Some(before), Some(after)) => {
+            (Some(_before), Some(_after)) => {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Cannot specify both before and after in query_episode_table"
                         .to_string(),
@@ -149,11 +149,11 @@ impl SelectQueries for ClickHouseConnectionInfo {
             }
             (Some(before), None) => (
                 "episode_id_uint > toUInt128({before:UUID})",
-                vec![("before", &before)],
+                vec![("before", before.to_string())],
             ),
             (None, Some(after)) => (
                 "episode_id_uint < toUInt128({after:UUID})",
-                vec![("after", &after)],
+                vec![("after", after.to_string())],
             ),
             (None, None) => ("1=1", vec![]),
         };
@@ -168,10 +168,13 @@ impl SelectQueries for ClickHouseConnectionInfo {
             FROM
             EpisodeById
             WHERE {where_clause}
+            LIMIT {page_size}
             FORMAT JSONEachRow
             "
         );
-        let response = self.run_query_synchronous(query, params.into()).await?;
+        let params_str_map: std::collections::HashMap<&str, &str> =
+            params.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let response = self.run_query_synchronous(query, &params_str_map).await?;
         // Deserialize the results into EpisodeByIdRow
         response
             .response
