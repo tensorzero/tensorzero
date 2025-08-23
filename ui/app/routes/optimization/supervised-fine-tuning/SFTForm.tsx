@@ -56,10 +56,13 @@ export function SFTForm({
 
   const [functionName, metricName, threshold] = watchedFields;
   const functionConfig = useFunctionConfig(functionName);
+  const parsedThreshold =
+  typeof threshold === "string" ? parseFloat(threshold) : threshold;
+
   const counts = useCountFetcher({
     functionName: functionName ?? undefined,
     metricName: metricName ?? undefined,
-    threshold: threshold ?? undefined,
+    threshold:!isNaN(parsedThreshold) ? parsedThreshold : undefined,
   });
   const isCuratedInferenceCountLow =
     counts.curatedInferenceCount !== null && counts.curatedInferenceCount < 10;
@@ -88,8 +91,23 @@ export function SFTForm({
   // Form submission using formFetcher
   const onSubmit = async (data: SFTFormValues) => {
     try {
+      const cleanedThreshold =
+        typeof data.threshold === "string"
+          ? parseFloat(data.threshold)
+          : data.threshold;
+
+      if (isNaN(cleanedThreshold)) {
+        logger.error("Threshold is not a valid number:", data.threshold);
+        return;
+      }
+
+      const cleanedData = {
+        ...data,
+        threshold: cleanedThreshold,
+      };
+
       const submitData = new FormData();
-      submitData.append("data", JSON.stringify(data));
+      submitData.append("data", JSON.stringify(cleanedData));
 
       formFetcher.submit(submitData, { method: "POST" });
       setSubmissionPhase("submitting");
