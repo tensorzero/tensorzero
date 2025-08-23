@@ -52,6 +52,13 @@ Typically, TensorZero will not include inputs and outputs in logs or errors to a
 It may be helpful during development to be able to see more information about requests and responses.
 When this field is set to `true`, the gateway will log more verbose errors to assist with debugging.
 
+### `disable_pseudonymous_usage_analytics`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+If set to `true`, TensorZero will not collect or share [pseudonymous usage analytics](/gateway/deployment/#disabling-pseudonymous-usage-analytics).
+
 ### `enable_template_filesystem_access`
 
 - **Type:** boolean

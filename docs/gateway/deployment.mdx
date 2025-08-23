@@ -83,8 +83,7 @@ In this case, you won't need to set up ClickHouse, and the TensorZero Gateway wi
 
 To disable observability, set the following configuration in the `tensorzero.toml` file:
 
-```toml
-// tensorzero.toml
+```toml title="tensorzero.toml"
 [gateway]
 observability.enabled = false
 ```
@@ -103,7 +102,14 @@ TensorZero also does NOT share the name of any function, variant, metric, or sim
 
 See `howdy.rs` in the GitHub repository to see exactly what usage data is collected and shared with TensorZero.
 
-You can disable usage analytics by setting the environment variable `TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1`.
+To disable usage analytics, set the followign configuration in the `tensorzero.toml` file:
+
+```toml title="tensorzero.toml"
+[gateway]
+disable_pseudonymous_usage_analytics = true
+```
+
+Alternatively, you can also set the environment variable `TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1`.
 
 </Accordion>
 
