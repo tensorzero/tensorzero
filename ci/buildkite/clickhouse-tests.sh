@@ -34,8 +34,7 @@ docker load < gateway-container.tar
 buildkite-agent artifact download mock-inference-provider-container.tar .
 docker load < mock-inference-provider-container.tar
 
-# TODO: get the e2e build artifact
-buildkite-agent artifact download target.e2e.tar.gz
+buildkite-agent artifact download target.e2e.tar.gz .
 tar -xzvf target.e2e.tar.gz
 
 # Install Python
