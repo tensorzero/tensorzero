@@ -394,7 +394,7 @@ impl Optimizer for TogetherSFTConfig {
                 n_checkpoints: Some(1),
                 n_evals: Some(n_evals),
                 learning_rate: 0.00001,
-                batch_size: 32,
+                batch_size: 8,
                 lr_scheduler: TogetherLRScheduler {
                     lr_scheduler_type: TogetherLRSchedulerType::Linear,
                     lr_scheduler_args: TogetherLRSchedulerArgs { min_lr_ratio: 0.0 },

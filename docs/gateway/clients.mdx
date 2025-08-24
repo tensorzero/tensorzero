@@ -1,0 +1,318 @@
+---
+title: TensorZero Gateway Clients
+sidebarTitle: Clients
+description: The TensorZero Gateway can be used with the TensorZero Python client, with OpenAI clients (e.g. Python/Node), or via its HTTP API in any programming language.
+---
+
+The TensorZero Gateway can be used with the **TensorZero Python client**, with **OpenAI clients (e.g. Python/Node)**, or via its **HTTP API in any programming language**.
+
+## Python
+
+### TensorZero Client
+
+The TensorZero client offers the most flexibility.
+It can be used with a built-in embedded (in-memory) gateway or a standalone HTTP gateway.
+Additionally, it can be used synchronously or asynchronously.
+
+You can install the TensorZero Python client with `pip install tensorzero`.
+
+#### Embedded Gateway
+
+The TensorZero Client includes a built-in embedded (in-memory) gateway, so you don't need to run a separate service.
+
+##### Synchronous
+
+```python
+from tensorzero import TensorZeroGateway
+
+with TensorZeroGateway.build_embedded(
+    clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero",  # optional: for observability
+    config_file="config/tensorzero.toml",  # optional: for custom functions, models, metrics, etc.
+) as client:
+    response = client.inference(
+        model_name="openai::gpt-4o-mini",  # or: function_name="your_function_name"
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Write a haiku about artificial intelligence.",
+                }
+            ]
+        },
+    )
+```
+
+##### Asynchronous
+
+```python
+from tensorzero import AsyncTensorZeroGateway
+
+
+async with await AsyncTensorZeroGateway.build_embedded(
+    clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero",  # optional: for observability
+    config_file="config/tensorzero.toml",  # optional: for custom functions, models, metrics, etc.
+) as gateway:
+    inference_response = await gateway.inference(
+        model_name="openai::gpt-4o-mini",  # or: function_name="your_function_name"
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Write a haiku about artificial intelligence.",
+                }
+            ]
+        },
+    )
+
+    feedback_response = await gateway.feedback(
+        inference_id=inference_response.inference_id,
+        metric_name="task_success",  # assuming a `task_success` metric is configured
+        value=True,
+    )
+```
+
+<Tip>
+
+You can avoid the `await` in `build_embedded` by setting `async_setup=False`.
+
+This is useful for synchronous contexts like `__init__` functions where `await` cannot be used.
+However, avoid using it in asynchronous contexts as it blocks the event loop.
+For async contexts, use the default `async_setup=True` with await.
+
+For example, it's safe to use `async_setup=False` when initializing a FastAPI server, but not while the server is actively handling requests.
+
+</Tip>
+
+#### Standalone HTTP Gateway
+
+The TensorZero Client can optionally be used with a standalone HTTP Gateway instead.
+
+##### Synchronous
+
+```python
+from tensorzero import TensorZeroGateway
+
+# Assuming the TensorZero Gateway is running on localhost:3000...
+
+with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
+    # Same as above...
+```
+
+##### Asynchronous
+
+```python
+from tensorzero import AsyncTensorZeroGateway
+
+# Assuming the TensorZero Gateway is running on localhost:3000...
+
+async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
+    # Same as above...
+```
+
+<Tip>
+
+You can avoid the `await` in `build_http` by setting `async_setup=False`.
+See above for more details.
+
+</Tip>
+
+### OpenAI Python Client
+
+You can use the OpenAI Python client to run inference requests with TensorZero.
+You need to use the TensorZero Client for feedback requests.
+
+#### Embedded Gateway
+
+You can run an embedded (in-memory) TensorZero Gateway with the OpenAI Python client, which doesn't require a separate service.
+
+```python
+from openai import OpenAI
+from tensorzero import patch_openai_client
+
+client = OpenAI()  # or AsyncOpenAI
+
+await patch_openai_client(
+    client,
+    config_file="path/to/tensorzero.toml",
+    clickhouse_url="https://user:password@host:port/database",
+)
+
+response = client.chat.completions.create(
+    model="tensorzero::model_name::openai::gpt-4o-mini",
+    messages=[
+        {
+            "role": "user",
+            "content": "Write a haiku about artificial intelligence.",
+        }
+    ],
+)
+```
+
+<Tip>
+
+You can avoid the `await` in `patch_openai_client` by setting `async_setup=False`.
+See above for more details.
+
+</Tip>
+
+#### Standalone HTTP Gateway
+
+You can deploy the TensorZero Gateway as a separate service and configure the OpenAI client to talk to it.
+See [Deployment](/gateway/deployment/) for instructions on how to deploy the TensorZero Gateway.
+
+```python "base_url="http://localhost:3000/openai/v1" "tensorzero::model_name::openai::gpt-4o-mini"
+from openai import OpenAI
+
+# Assuming the TensorZero Gateway is running on localhost:3000...
+
+with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
+    response = client.chat.completions.create(
+        model="tensorzero::model_name::openai::gpt-4o-mini",
+        messages=[
+            {
+                "role": "user",
+                "content": "Write a haiku about artificial intelligence.",
+            }
+        ],
+    )
+```
+
+#### Usage Details
+
+##### `model`
+
+In the OpenAI client, the `model` parameter should be one of the following:
+
+> **`tensorzero::function_name::<your_function_name>`**
+>
+> For example, if you have a function named `generate_haiku`, you can use `tensorzero::function_name::generate_haiku`.
+
+> **`tensorzero::model_name::<your_model_name>`**
+>
+> For example, if you have a model named `my_model` in the config file, you can use `tensorzero::model_name::my_model`.
+> Alternatively, you can use default models like `tensorzero::model_name::openai::gpt-4o-mini`.
+
+##### TensorZero Parameters
+
+You can include optional TensorZero parameters (e.g. `episode_id` and `variant_name`) by prefixing them with `tensorzero::` in the `extra_body` field in OpenAI client requests.
+
+```python
+response = client.chat.completions.create(
+    # ...
+    extra_body={
+        "tensorzero::episode_id": "00000000-0000-0000-0000-000000000000",
+    },
+)
+```
+
+## JavaScript / TypeScript / Node
+
+### OpenAI Node Client
+
+You can use the OpenAI client to run inference requests with TensorZero.
+You can deploy the TensorZero Gateway as a separate service and configure the OpenAI client to talk to the TensorZero Gateway.
+
+See [Deployment](/gateway/deployment/) for instructions on how to deploy the TensorZero Gateway.
+
+```ts "base_url="http://localhost:3000/openai/v1" "tensorzero::model_name::openai::gpt-4o-mini"
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "http://localhost:3000/openai/v1",
+});
+
+const response = await client.chat.completions.create({
+  model: "tensorzero::model_name::openai::gpt-4o-mini",
+  messages: [
+    {
+      role: "user",
+      content: "Write a haiku about artificial intelligence.",
+    },
+  ],
+});
+```
+
+<Tip>
+
+See [OpenAI Python Client » Usage Details](#usage-details) above for instructions on how to use the `model` parameter and other technical details.
+
+</Tip>
+
+You can include optional TensorZero parameters (e.g. `episode_id` and `variant_name`) by prefixing them with `tensorzero::` in the body in OpenAI client requests.
+
+```ts
+const result = await client.chat.completions.create({
+  // ...
+  "tensorzero::episode_id": "00000000-0000-0000-0000-000000000000",
+});
+```
+
+## Other Languages and Platforms
+
+The TensorZero Gateway exposes every feature via its HTTP API.
+You can deploy the TensorZero Gateway as a standalone service and interact with it from any programming language by making HTTP requests.
+
+See [Deployment](/gateway/deployment/) for instructions on how to deploy the TensorZero Gateway.
+
+### TensorZero HTTP API
+
+```bash
+curl -X POST "http://localhost:3000/inference" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_name": "openai::gpt-4o-mini",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write a haiku about artificial intelligence."
+        }
+      ]
+    }
+  }'
+```
+
+```bash
+curl -X POST "http://localhost:3000/feedback" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inference_id": "00000000-0000-0000-0000-000000000000",
+    "metric_name": "task_success",
+    "value": true,
+  }'
+```
+
+### OpenAI HTTP API
+
+You can make OpenAI-compatible requests to the TensorZero Gateway.
+
+```bash "http://localhost:3000/openai/v1/chat/completions" "tensorzero::model_name::openai::gpt-4o-mini"
+curl -X POST "http://localhost:3000/openai/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tensorzero::model_name::openai::gpt-4o-mini",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write a haiku about artificial intelligence."
+      }
+    ]
+  }'
+```
+
+<Tip>
+
+See [OpenAI Python Client » Usage Details](#usage-details) above for instructions on how to use the `model` parameter and other technical details.
+
+</Tip>
+
+You can include optional TensorZero parameters (e.g. `episode_id` and `variant_name`) by prefixing them with `tensorzero::` in the body in OpenAI client requests.
+
+```bash
+curl -X POST "http://localhost:3000/openai/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{
+        // ...
+        "tensorzero::episode_id": "00000000-0000-0000-0000-000000000000"
+      }'
+```
