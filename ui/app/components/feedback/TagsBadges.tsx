@@ -14,7 +14,7 @@ export function TagsBadges({ tags }: TagsBadgesProps) {
   const tagEntries = Object.entries(tags);
 
   if (tagEntries.length === 0) {
-    return <span className="text-muted-foreground text-sm">-</span>;
+    return <span className="text-muted-foreground text-sm">—</span>;
   }
 
   return (
@@ -33,14 +33,14 @@ export function TagsBadges({ tags }: TagsBadgesProps) {
               <TooltipTrigger asChild>
                 <Badge
                   variant={isSystemTag ? "secondary" : "outline"}
-                  className="cursor-help text-xs"
+                  className="cursor-help font-mono text-xs"
                 >
                   {truncatedText}
                 </Badge>
               </TooltipTrigger>
               <TooltipContent>
-                <div className="max-w-xs break-words">
-                  <strong>{key}</strong>: {value}
+                <div className="max-w-xs font-mono break-words">
+                  <strong>{key}</strong>={value}
                 </div>
               </TooltipContent>
             </Tooltip>
