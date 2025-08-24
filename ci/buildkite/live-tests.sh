@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+
 
 # Set up Buildkite test analytics collection
 export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get LIVE_TESTS_ANALYTICS_ACCESS_TOKEN)

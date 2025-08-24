@@ -1,3 +1,5 @@
+#!/bin/bash
+set -euo pipefail
 # Set BUILDKITE_ANALYTICS_TOKEN
 export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get CLICKHOUSE_TESTS_ANALYTICS_ACCESS_TOKEN)
 

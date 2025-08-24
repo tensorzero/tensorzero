@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euxo pipefail
 
 # Install `uv`
 curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
