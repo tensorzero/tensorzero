@@ -11,6 +11,7 @@ import FeedbackValue from "~/components/feedback/FeedbackValue";
 import { getMetricName } from "~/utils/clickhouse/helpers";
 import type { FeedbackRow } from "~/utils/clickhouse/feedback";
 import FeedbackBadges from "~/components/feedback/FeedbackBadges";
+import { TagsBadges } from "~/components/feedback/TagsBadges";
 import { useConfig } from "~/context/config";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import { cn } from "~/utils/common";
@@ -73,6 +74,7 @@ export default function FeedbackTable({
           <TableHead>Metric</TableHead>
           {anyOverwrites && <TableHead />}
           <TableHead>Value</TableHead>
+          <TableHead>Tags</TableHead>
           <TableHead>Time</TableHead>
         </TableRow>
       </TableHeader>
@@ -129,6 +131,10 @@ export default function FeedbackTable({
                     feedback={item}
                     metric={metrics[getMetricName(item)]}
                   />
+                </TableCell>
+
+                <TableCell className={cn(!isLatestOfType && "opacity-50")}>
+                  <TagsBadges tags={item.tags} />
                 </TableCell>
 
                 <TableCell>
