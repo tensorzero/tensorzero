@@ -10,11 +10,13 @@ import type { TimeWindowUnit } from "~/utils/clickhouse/function";
 type TimeGranularitySelectorProps = {
   time_granularity: TimeWindowUnit;
   onTimeGranularityChange: (time_granularity: TimeWindowUnit) => void;
+  includeCumulative?: boolean;
 };
 
 export function TimeGranularitySelector({
   time_granularity: timeGranularity,
   onTimeGranularityChange,
+  includeCumulative = true,
 }: TimeGranularitySelectorProps) {
   return (
     <div className="flex flex-col justify-center">
@@ -26,7 +28,9 @@ export function TimeGranularitySelector({
           <SelectItem value="day">Day</SelectItem>
           <SelectItem value="week">Week</SelectItem>
           <SelectItem value="month">Month</SelectItem>
-          <SelectItem value="cumulative">Cumulative</SelectItem>
+          {includeCumulative && (
+            <SelectItem value="cumulative">Cumulative</SelectItem>
+          )}
         </SelectContent>
       </Select>
     </div>
