@@ -18,15 +18,15 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_basic_embeddings(async_client):
+async def test_basic_embeddings(async_openai_client):
     """Test basic embeddings generation with a single input"""
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input="Hello, world!",
-        model="text-embedding-3-small",
+        model="tensorzero::embedding_model_name::text-embedding-3-small",
     )
 
     # Verify the response structure
-    assert result.model == "text-embedding-3-small"
+    assert result.model == "tensorzero::embedding_model_name::text-embedding-3-small"
     assert len(result.data) == 1
     assert result.data[0].index == 0
     assert result.data[0].object == "embedding"
@@ -36,15 +36,18 @@ async def test_basic_embeddings(async_client):
 
 
 @pytest.mark.asyncio
-async def test_basic_embeddings_shorthand(async_client):
+async def test_basic_embeddings_shorthand(async_openai_client):
     """Test basic embeddings generation with a single input"""
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input="Hello, world!",
-        model="openai::text-embedding-3-large",
+        model="tensorzero::embedding_model_name::openai::text-embedding-3-large",
     )
 
     # Verify the response structure
-    assert result.model == "openai::text-embedding-3-large"
+    assert (
+        result.model
+        == "tensorzero::embedding_model_name::openai::text-embedding-3-large"
+    )
     assert len(result.data) == 1
     assert result.data[0].index == 0
     assert result.data[0].object == "embedding"
@@ -54,7 +57,7 @@ async def test_basic_embeddings_shorthand(async_client):
 
 
 @pytest.mark.asyncio
-async def test_batch_embeddings(async_client):
+async def test_batch_embeddings(async_openai_client):
     """Test embeddings generation with multiple inputs"""
     inputs = [
         "Hello, world!",
@@ -62,13 +65,13 @@ async def test_batch_embeddings(async_client):
         "This is a test of batch embeddings.",
     ]
 
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input=inputs,
-        model="text-embedding-3-small",
+        model="tensorzero::embedding_model_name::text-embedding-3-small",
     )
 
     # Verify the response structure
-    assert result.model == "text-embedding-3-small"
+    assert result.model == "tensorzero::embedding_model_name::text-embedding-3-small"
     assert len(result.data) == len(inputs)
 
     for i, embedding_data in enumerate(result.data):
@@ -81,74 +84,74 @@ async def test_batch_embeddings(async_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_with_dimensions(async_client):
+async def test_embeddings_with_dimensions(async_openai_client):
     """Test embeddings with specified dimensions"""
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input="Test with specific dimensions",
-        model="text-embedding-3-small",
+        model="tensorzero::embedding_model_name::text-embedding-3-small",
         dimensions=512,
     )
 
     # Verify the response structure
-    assert result.model == "text-embedding-3-small"
+    assert result.model == "tensorzero::embedding_model_name::text-embedding-3-small"
     assert len(result.data) == 1
     # Should match requested dimensions
     assert len(result.data[0].embedding) == 512
 
 
 @pytest.mark.asyncio
-async def test_embeddings_with_encoding_format_float(async_client):
+async def test_embeddings_with_encoding_format_float(async_openai_client):
     """Test embeddings with different encoding formats"""
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input="Test encoding format",
-        model="text-embedding-3-small",
+        model="tensorzero::embedding_model_name::text-embedding-3-small",
         encoding_format="float",
     )
 
     # Verify the response structure
-    assert result.model == "text-embedding-3-small"
+    assert result.model == "tensorzero::embedding_model_name::text-embedding-3-small"
     assert len(result.data) == 1
     assert isinstance(result.data[0].embedding[0], float)
 
 
 @pytest.mark.asyncio
-async def test_embeddings_with_encoding_format_base64(async_client):
+async def test_embeddings_with_encoding_format_base64(async_openai_client):
     """Test embeddings with different encoding formats"""
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input="Test encoding format",
-        model="text-embedding-3-small",
+        model="tensorzero::embedding_model_name::text-embedding-3-small",
         encoding_format="base64",
     )
 
     # Verify the response structure
-    assert result.model == "text-embedding-3-small"
+    assert result.model == "tensorzero::embedding_model_name::text-embedding-3-small"
     assert len(result.data) == 1
     assert isinstance(result.data[0].embedding, str)
 
 
 @pytest.mark.asyncio
-async def test_embeddings_with_user_parameter(async_client):
+async def test_embeddings_with_user_parameter(async_openai_client):
     """Test embeddings with user parameter for tracking"""
     user_id = "test_user_123"
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input="Test with user parameter",
-        model="text-embedding-3-small",
+        model="tensorzero::embedding_model_name::text-embedding-3-small",
         user=user_id,
     )
 
     # Verify the response structure
-    assert result.model == "text-embedding-3-small"
+    assert result.model == "tensorzero::embedding_model_name::text-embedding-3-small"
     assert len(result.data) == 1
     assert len(result.data[0].embedding) > 0
 
 
 @pytest.mark.asyncio
-async def test_embeddings_invalid_model_error(async_client):
+async def test_embeddings_invalid_model_error(async_openai_client):
     """Test that invalid model name raises appropriate error"""
     with pytest.raises(Exception) as exc_info:
-        await async_client.embeddings.create(
+        await async_openai_client.embeddings.create(
             input="Test invalid model",
-            model="tensorzero::model_name::nonexistent_model",
+            model="tensorzero::embedding_model_name::nonexistent_model",
         )
 
     # Should get a 404 error for unknown model
@@ -156,18 +159,18 @@ async def test_embeddings_invalid_model_error(async_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_large_batch(async_client):
+async def test_embeddings_large_batch(async_openai_client):
     """Test embeddings with a larger batch of inputs"""
     # Create a batch of 10 different inputs
     inputs = [f"This is test input number {i + 1}" for i in range(10)]
 
-    result = await async_client.embeddings.create(
+    result = await async_openai_client.embeddings.create(
         input=inputs,
-        model="text-embedding-3-small",
+        model="tensorzero::embedding_model_name::text-embedding-3-small",
     )
 
     # Verify the response structure
-    assert result.model == "text-embedding-3-small"
+    assert result.model == "tensorzero::embedding_model_name::text-embedding-3-small"
     assert len(result.data) == 10
 
     # Verify each embedding
@@ -181,19 +184,19 @@ async def test_embeddings_large_batch(async_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_consistency(async_client):
+async def test_embeddings_consistency(async_openai_client):
     """Test that the same input produces consistent embeddings"""
     input_text = "This is a consistency test"
 
     # Generate embeddings twice with the same input
-    result1 = await async_client.embeddings.create(
+    result1 = await async_openai_client.embeddings.create(
         input=input_text,
-        model="text-embedding-3-small",
+        model="tensorzero::embedding_model_name::text-embedding-3-small",
     )
 
-    result2 = await async_client.embeddings.create(
+    result2 = await async_openai_client.embeddings.create(
         input=input_text,
-        model="text-embedding-3-small",
+        model="tensorzero::embedding_model_name::text-embedding-3-small",
     )
 
     # Both should have the same model and structure
