@@ -1,9 +1,9 @@
-name: Buildkite Test Suite
-run-name: "Buildkite Test Suite: ${{ github.event.pull_request.title || github.ref }}"
+name: Buildkite Merge Queue Tests
+run-name: "Buildkite Merge Queue Tests: ${{ github.event.pull_request.title || github.ref }}"
 
 on:
-  pull_request:
-    branches: ["main"]
+  merge_group:
+  workflow_dispatch:
 
 jobs:
   unit-tests:
@@ -13,4 +13,4 @@ jobs:
         uses: buildkite/trigger-pipeline-action@v2.0.0
         with:
           buildkite_api_access_token: ${{ secrets.TRIGGER_BK_BUILD_TOKEN }}
-          pipeline: "tensorzero/pr-tests"
+          pipeline: "tensorzero/merge-queue-tests"

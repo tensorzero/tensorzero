@@ -23,6 +23,7 @@ default-filter = "not test(no_aws_credentials)"
 [profile.e2e]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 default-filter = "not (test(batch)) and not (test(test_dummy_only) | test(clickhouse))"
+junit.path = "junit.xml"
 
 [profile.batch]
 default-filter = 'test(batch)'
