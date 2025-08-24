@@ -405,7 +405,23 @@ export async function getFunctionThroughputByVariant(
   // Convert time delta to UInt128 representation for UUIDv7 arithmetic
   const timeDeltaUInt128 = getTimeDeltaAsUInt128(timeDeltaMs);
 
-  const query = `
+  // Different query for cumulative stats
+  const query =
+    timeWindow === "cumulative"
+      ? `
+    SELECT
+        -- For cumulative, use a fixed period start
+        '1970-01-01T00:00:00.000Z' AS period_start,
+        i.variant_name AS variant_name,
+        -- Count all inferences per variant
+        toUInt32(count()) AS count
+    FROM InferenceById i
+    WHERE i.function_name = {functionName:String}
+    GROUP BY variant_name
+    -- Order by variant name
+    ORDER BY variant_name DESC
+`
+      : `
     SELECT
         -- Truncate timestamp to period boundaries (day/week/month) and format as ISO string
         formatDateTime(dateTrunc({timeWindow:String}, UUIDv7ToDateTime(uint_to_uuid(i.id_uint))), '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
@@ -428,7 +444,10 @@ ORDER BY period_start DESC, variant_name DESC
   const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
-    query_params: { functionName, timeWindow, timeDeltaUInt128 },
+    query_params: {
+      functionName,
+      ...(timeWindow !== "cumulative" ? { timeWindow, timeDeltaUInt128 } : {}),
+    },
   });
   const rows = await resultSet.json();
 
