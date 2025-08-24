@@ -75,7 +75,9 @@ export function VariantThroughput({
                 tickLine={false}
                 tickMargin={10}
                 axisLine={true}
-                tickFormatter={(value) => new Date(value).toLocaleDateString()}
+                tickFormatter={(value) =>
+                  new Date(value).toISOString().slice(0, 10)
+                }
               />
               <YAxis
                 tickLine={false}
@@ -103,7 +105,7 @@ export function VariantThroughput({
                   return (
                     <div className="border-border/50 bg-background grid min-w-[8rem] items-start gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl">
                       <div className="font-medium">
-                        {new Date(label).toLocaleDateString()}
+                        {new Date(label).toISOString().slice(0, 10)}
                       </div>
                       <div className="grid gap-1.5">
                         {payload
@@ -153,7 +155,7 @@ export function VariantThroughput({
                   fill={chartConfig[variantName].color}
                   fillOpacity={0.4}
                   stroke={chartConfig[variantName].color}
-                  strokeWidth={2}
+                  strokeWidth={0}
                   stackId="1"
                 />
               ))}
