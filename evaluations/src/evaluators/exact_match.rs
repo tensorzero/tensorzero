@@ -27,21 +27,18 @@ pub(super) fn run_exact_match_evaluator(
         }
         (InferenceResponse::Json(json_completion), Datapoint::Json(json_inference)) => {
             debug!("Running exact match evaluation for JSON response");
-            match &json_inference.output {
-                Some(output) => {
-                    // `output.parsed` is an Option<Value> but it should always be Some here
-                    if output.parsed.is_none() {
-                        warn!("Datapoint {} has no parsed output", json_inference.id);
-                        return Ok(None);
-                    }
-                    let matches = output.parsed == json_completion.output.parsed;
-                    debug!(matches = %matches, "JSON exact match comparison completed");
-                    Ok(Some(Value::Bool(matches)))
+            if let Some(output) = &json_inference.output {
+                // `output.parsed` is an Option<Value> but it should always be Some here
+                if output.parsed.is_none() {
+                    warn!("Datapoint {} has no parsed output", json_inference.id);
+                    return Ok(None);
                 }
-                None => {
-                    debug!("No reference output available for JSON comparison");
-                    Ok(None)
-                }
+                let matches = output.parsed == json_completion.output.parsed;
+                debug!(matches = %matches, "JSON exact match comparison completed");
+                Ok(Some(Value::Bool(matches)))
+            } else {
+                debug!("No reference output available for JSON comparison");
+                Ok(None)
             }
         }
         _ => {

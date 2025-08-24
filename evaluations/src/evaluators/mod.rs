@@ -198,15 +198,14 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
         inference_cache,
     } = params;
     let EvaluationConfig::Static(static_evaluation_config) = evaluation_config;
-    let evaluator_config = match static_evaluation_config.evaluators.get(&evaluator_name) {
-        Some(evaluator_config) => {
-            debug!("Evaluator config found");
-            evaluator_config
-        }
-        None => {
-            error!("Evaluator config not found");
-            return Err(anyhow::anyhow!("Evaluator config not found for {}. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports.", evaluator_name));
-        }
+    let evaluator_config = if let Some(evaluator_config) =
+        static_evaluation_config.evaluators.get(&evaluator_name)
+    {
+        debug!("Evaluator config found");
+        evaluator_config
+    } else {
+        error!("Evaluator config not found");
+        return Err(anyhow::anyhow!("Evaluator config not found for {}. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports.", evaluator_name));
     };
     Ok(match evaluator_config {
         EvaluatorConfig::ExactMatch(_exact_match_config) => {

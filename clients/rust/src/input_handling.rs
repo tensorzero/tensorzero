@@ -79,12 +79,11 @@ async fn resolved_input_message_content_to_client_input_message_content(
         }
         ResolvedInputMessageContent::File(file) => {
             let mime_type = file.file.mime_type;
-            let data = match file.file.data {
-                Some(data) => data,
-                None => {
-                    let storage_path = file.storage_path;
-                    fetch_file_data(storage_path, client).await?
-                }
+            let data = if let Some(data) = file.file.data {
+                data
+            } else {
+                let storage_path = file.storage_path;
+                fetch_file_data(storage_path, client).await?
             };
 
             Ok(ClientInputMessageContent::File(File::Base64 {

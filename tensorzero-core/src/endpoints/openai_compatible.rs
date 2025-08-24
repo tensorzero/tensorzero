@@ -142,15 +142,14 @@ pub struct OpenAICompatibleEmbeddingParams {
 impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
     type Error = Error;
     fn try_from(params: OpenAICompatibleEmbeddingParams) -> Result<Self, Self::Error> {
-        let model_name = match params
+        let model_name = if let Some(model_name) = params
             .model
             .strip_prefix(TENSORZERO_EMBEDDING_MODEL_NAME_PREFIX)
         {
-            Some(model_name) => model_name.to_string(),
-            None => {
-                tracing::warn!("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'");
-                params.model
-            }
+            model_name.to_string()
+        } else {
+            tracing::warn!("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'");
+            params.model
         };
         Ok(EmbeddingParams {
             input: params.input,

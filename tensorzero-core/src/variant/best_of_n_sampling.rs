@@ -469,7 +469,7 @@ async fn inner_select_best_candidate<'a, 'request>(
         model_inference_response,
         evaluator.inner.model.clone(),
     );
-    let raw = match model_inference_result
+    let raw = if let Some(text) = model_inference_result
         .output
         .iter()
         .find_map(|block| match block {
@@ -477,13 +477,12 @@ async fn inner_select_best_candidate<'a, 'request>(
             ContentBlockOutput::ToolCall(tool_call) => Some(&tool_call.arguments),
             _ => None,
         }) {
-        Some(text) => text,
-        None => {
-            Error::new(ErrorDetails::Inference {
-                message: "The evaluator did not return a text response".to_string(),
-            });
-            return Ok((None, Some(model_inference_result)));
-        }
+        text
+    } else {
+        Error::new(ErrorDetails::Inference {
+            message: "The evaluator did not return a text response".to_string(),
+        });
+        return Ok((None, Some(model_inference_result)));
     };
     let parsed_output = match serde_json::from_str::<Value>(raw) {
         Ok(value) => value,
@@ -494,26 +493,24 @@ async fn inner_select_best_candidate<'a, 'request>(
             return Ok((None, Some(model_inference_result)));
         }
     };
-    let answer_choice = match parsed_output.get("answer_choice") {
-        Some(val) => match val.as_u64() {
-            Some(num) => num as usize,
-            None => {
-                Error::new(ErrorDetails::Inference {
-                    message: format!(
-                        "The evaluator did not return a valid integer answer choice: {val}"
-                    ),
-                });
-                return Ok((None, Some(model_inference_result)));
-            }
-        },
-        None => {
+    let answer_choice = if let Some(val) = parsed_output.get("answer_choice") {
+        if let Some(num) = val.as_u64() {
+            num as usize
+        } else {
             Error::new(ErrorDetails::Inference {
                 message: format!(
-                    "The evaluator returned a JSON response without an answer_choice field: {parsed_output}"
+                    "The evaluator did not return a valid integer answer choice: {val}"
                 ),
             });
             return Ok((None, Some(model_inference_result)));
         }
+    } else {
+        Error::new(ErrorDetails::Inference {
+            message: format!(
+                "The evaluator returned a JSON response without an answer_choice field: {parsed_output}"
+            ),
+        });
+        return Ok((None, Some(model_inference_result)));
     };
     // Map the evaluator's index to the actual index
     let answer_choice = map_evaluator_to_actual_index(answer_choice, &skipped_indices);

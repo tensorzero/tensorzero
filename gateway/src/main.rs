@@ -472,12 +472,11 @@ impl<T, E: Display> ExpectPretty<T> for Result<T, E> {
 
 impl<T> ExpectPretty<T> for Option<T> {
     fn expect_pretty(self, msg: &str) -> T {
-        match self {
-            Some(value) => value,
-            None => {
-                tracing::error!("{msg}");
-                std::process::exit(1);
-            }
+        if let Some(value) = self {
+            value
+        } else {
+            tracing::error!("{msg}");
+            std::process::exit(1);
         }
     }
 }

@@ -444,86 +444,84 @@ impl<'a> TryFrom<&'a RequestMessage> for GeminiContent<'a> {
         let mut output = Vec::with_capacity(message.content.len());
         let mut iter = message.content.iter();
         while let Some(block) = iter.next() {
-            match block {
-                ContentBlock::Thought(
-                    thought @ Thought {
-                        text,
-                        signature,
-                        provider_type: _,
-                    },
-                ) => {
-                    // Gemini never produces 'thought: true' at the moment, and there's no documentation
-                    // on whether or not they should be passed back in.
-                    // As a result, we don't attempt to feed `Thought.text` back to Gemini, as this would
-                    // require us to set 'thought: true' in the request.
-                    // Instead, we just warn and discard the content block.
-                    if text.is_some() {
-                        warn_discarded_thought_block(PROVIDER_TYPE, thought);
-                    } else if let Some(signature) = signature {
-                        let next_block = iter.next();
-                        match next_block {
-                            None => {
-                                return Err(Error::new(ErrorDetails::InferenceServer {
-                                    message: "Thought block with signature must be followed by a content block in Gemini".to_string(),
-                                    provider_type: PROVIDER_TYPE.to_string(),
-                                    raw_request: None,
-                                    raw_response: None,
-                                }));
-                            }
-                            Some(ContentBlock::Thought(Thought { .. })) => {
-                                return Err(Error::new(ErrorDetails::InferenceServer {
-                                    message: "Thought block with signature cannot be followed by another thought block in Gemini".to_string(),
-                                    provider_type: PROVIDER_TYPE.to_string(),
-                                    raw_request: None,
-                                    raw_response: None,
-                                }));
-                            }
-                            Some(ContentBlock::Unknown { .. }) => {
-                                return Err(Error::new(ErrorDetails::InferenceServer {
-                                    message: "Thought block with signature cannot be followed by an unknown block in Gemini".to_string(),
-                                    provider_type: PROVIDER_TYPE.to_string(),
-                                    raw_request: None,
-                                    raw_response: None,
-                                }));
-                            }
-                            Some(next_block) => {
-                                let gemini_part = convert_non_thought_content_block(next_block)?;
-                                match gemini_part {
-                                    FlattenUnknown::Normal(part) => {
-                                        output.push(GeminiContentPart {
-                                            thought: false,
-                                            thought_signature: Some(signature.clone()),
-                                            data: FlattenUnknown::Normal(part),
-                                        });
-                                    }
-                                    // We should have handled this case above with `Some(ContentBlock::Unknown { .. })`
-                                    FlattenUnknown::Unknown(_) => {
-                                        return Err(Error::new(ErrorDetails::InternalError {
-                                            message: format!("Got unknown block after thought block. {IMPOSSIBLE_ERROR_MESSAGE}"),
-                                        }));
-                                    }
+            if let ContentBlock::Thought(
+                thought @ Thought {
+                    text,
+                    signature,
+                    provider_type: _,
+                },
+            ) = block
+            {
+                // Gemini never produces 'thought: true' at the moment, and there's no documentation
+                // on whether or not they should be passed back in.
+                // As a result, we don't attempt to feed `Thought.text` back to Gemini, as this would
+                // require us to set 'thought: true' in the request.
+                // Instead, we just warn and discard the content block.
+                if text.is_some() {
+                    warn_discarded_thought_block(PROVIDER_TYPE, thought);
+                } else if let Some(signature) = signature {
+                    let next_block = iter.next();
+                    match next_block {
+                        None => {
+                            return Err(Error::new(ErrorDetails::InferenceServer {
+                                message: "Thought block with signature must be followed by a content block in Gemini".to_string(),
+                                provider_type: PROVIDER_TYPE.to_string(),
+                                raw_request: None,
+                                raw_response: None,
+                            }));
+                        }
+                        Some(ContentBlock::Thought(Thought { .. })) => {
+                            return Err(Error::new(ErrorDetails::InferenceServer {
+                                message: "Thought block with signature cannot be followed by another thought block in Gemini".to_string(),
+                                provider_type: PROVIDER_TYPE.to_string(),
+                                raw_request: None,
+                                raw_response: None,
+                            }));
+                        }
+                        Some(ContentBlock::Unknown { .. }) => {
+                            return Err(Error::new(ErrorDetails::InferenceServer {
+                                message: "Thought block with signature cannot be followed by an unknown block in Gemini".to_string(),
+                                provider_type: PROVIDER_TYPE.to_string(),
+                                raw_request: None,
+                                raw_response: None,
+                            }));
+                        }
+                        Some(next_block) => {
+                            let gemini_part = convert_non_thought_content_block(next_block)?;
+                            match gemini_part {
+                                FlattenUnknown::Normal(part) => {
+                                    output.push(GeminiContentPart {
+                                        thought: false,
+                                        thought_signature: Some(signature.clone()),
+                                        data: FlattenUnknown::Normal(part),
+                                    });
+                                }
+                                // We should have handled this case above with `Some(ContentBlock::Unknown { .. })`
+                                FlattenUnknown::Unknown(_) => {
+                                    return Err(Error::new(ErrorDetails::InternalError {
+                                        message: format!("Got unknown block after thought block. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                                    }));
                                 }
                             }
                         }
                     }
                 }
-                _ => {
-                    let part = convert_non_thought_content_block(block)?;
-                    match part {
-                        FlattenUnknown::Normal(part) => {
-                            output.push(GeminiContentPart {
-                                thought: false,
-                                thought_signature: None,
-                                data: FlattenUnknown::Normal(part),
-                            });
-                        }
-                        FlattenUnknown::Unknown(data) => {
-                            output.push(GeminiContentPart {
-                                thought: false,
-                                thought_signature: None,
-                                data: FlattenUnknown::Unknown(data),
-                            });
-                        }
+            } else {
+                let part = convert_non_thought_content_block(block)?;
+                match part {
+                    FlattenUnknown::Normal(part) => {
+                        output.push(GeminiContentPart {
+                            thought: false,
+                            thought_signature: None,
+                            data: FlattenUnknown::Normal(part),
+                        });
+                    }
+                    FlattenUnknown::Unknown(data) => {
+                        output.push(GeminiContentPart {
+                            thought: false,
+                            thought_signature: None,
+                            data: FlattenUnknown::Unknown(data),
+                        });
                     }
                 }
             }

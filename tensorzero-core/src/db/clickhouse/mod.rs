@@ -142,15 +142,14 @@ impl ClickHouseConnectionInfo {
         let database_url = SecretString::from(database_url.to_string());
 
         // Get the cluster name from the `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` environment variable
-        let cluster_name = match std::env::var("TENSORZERO_CLICKHOUSE_CLUSTER_NAME") {
-            Ok(cluster_name) => {
-                tracing::info!("The gateway is expecting a self-hosted replicated ClickHouse deployment with cluster name `{cluster_name}`. Note: The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` doesn't apply to ClickHouse Cloud or self-managed single-node deployments.");
-                Some(cluster_name)
-            }
-            Err(_) => {
-                tracing::debug!("The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` wasn't provided, so the gateway will assume that ClickHouse is not running a self-hosted replicated cluster. Note: This variable doesn't apply to ClickHouse Cloud or self-managed single-node deployments.");
-                None
-            }
+        let cluster_name = if let Ok(cluster_name) =
+            std::env::var("TENSORZERO_CLICKHOUSE_CLUSTER_NAME")
+        {
+            tracing::info!("The gateway is expecting a self-hosted replicated ClickHouse deployment with cluster name `{cluster_name}`. Note: The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` doesn't apply to ClickHouse Cloud or self-managed single-node deployments.");
+            Some(cluster_name)
+        } else {
+            tracing::debug!("The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` wasn't provided, so the gateway will assume that ClickHouse is not running a self-hosted replicated cluster. Note: This variable doesn't apply to ClickHouse Cloud or self-managed single-node deployments.");
+            None
         };
 
         let mut connection_info = Self::Production {
@@ -721,18 +720,19 @@ impl ClickHouseConnectionInfo {
                 cluster_name,
                 database,
                 ..
-            } => match cluster_name {
-                Some(_) => get_replicated_table_engine_name(
-                    table_engine_name,
-                    table_name,
-                    database,
-                    engine_args,
-                ),
-                None => {
+            } => {
+                if cluster_name.is_some() {
+                    get_replicated_table_engine_name(
+                        table_engine_name,
+                        table_name,
+                        database,
+                        engine_args,
+                    )
+                } else {
                     let engine_args_str = engine_args.join(", ");
                     format!("{table_engine_name}({engine_args_str})")
                 }
-            },
+            }
         }
     }
 }

@@ -521,20 +521,19 @@ impl MixtureOfNConfig {
             .map(InferenceOrStreamResult::NonStream)
         };
         // As long as the fuser returns an inference result, we want to include it in the observability
-        let mut inference_result = match inference_result {
-            Ok(inf_result) => inf_result,
-            Err(_) => {
-                let random_index = rand::rng().random_range(0..candidates.len());
-                if random_index >= candidates.len() {
-                    return Err(Error::new(ErrorDetails::Inference {
-                        message: "Failed to get random candidate (should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                    }));
-                }
-                // If the fuser fails, don't provide any 'original_response' to the user
-                let mut candidate = candidates.swap_remove(random_index);
-                candidate.set_original_response(None);
-                InferenceOrStreamResult::NonStream(candidate)
+        let mut inference_result = if let Ok(inf_result) = inference_result {
+            inf_result
+        } else {
+            let random_index = rand::rng().random_range(0..candidates.len());
+            if random_index >= candidates.len() {
+                return Err(Error::new(ErrorDetails::Inference {
+                    message: "Failed to get random candidate (should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
+                }));
             }
+            // If the fuser fails, don't provide any 'original_response' to the user
+            let mut candidate = candidates.swap_remove(random_index);
+            candidate.set_original_response(None);
+            InferenceOrStreamResult::NonStream(candidate)
         };
 
         match &mut inference_result {
