@@ -19,7 +19,7 @@ import {
   PopoverTrigger,
 } from "~/components/ui/popover";
 import { Button } from "~/components/ui/button";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
 import {
   Command,
   CommandEmpty,
@@ -147,10 +147,17 @@ export default function CurationMetricSelector<
                     variant="outline"
                     role="combobox"
                     aria-expanded={open}
+                    aria-busy={metricsLoading}
                     className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border font-normal hover:cursor-pointer"
                     disabled={!functionValue || metricsLoading}
                   >
-                    <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      {metricsLoading && (
+                        <Loader2
+                          className="text-fg-tertiary h-4 w-4 shrink-0 animate-spin"
+                          aria-hidden
+                        />
+                      )}
                       {(() => {
                         const currentMetricName = field.value as string | null;
                         const selectedMetricDetails = currentMetricName
