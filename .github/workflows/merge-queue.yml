@@ -82,6 +82,9 @@ jobs:
       - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
 
+      - name: Cleanup disk space
+        run: ./ci/free-disk-space.sh
+
       - name: Update rust
         run: |
           rustup update stable
