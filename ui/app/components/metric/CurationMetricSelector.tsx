@@ -46,6 +46,8 @@ type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   feedbackCount: number | null;
   curatedInferenceCount: number | null;
   isLoading?: boolean;
+  // Notifies parent when this component's internal fetcher is loading
+  onMetricsLoadingChange?: (loading: boolean) => void;
 };
 
 /**
@@ -69,6 +71,7 @@ export default function CurationMetricSelector<
   feedbackCount,
   curatedInferenceCount,
   isLoading = false,
+  onMetricsLoadingChange,
 }: CurationMetricSelectorProps<T>) {
   const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
   const { getValues, setValue } = useFormContext<T>();
@@ -115,6 +118,12 @@ export default function CurationMetricSelector<
   }, [metricsFetcher.data, addDemonstrations]);
 
   const metricsLoading = metricsFetcher.state === "loading";
+
+  // Inform parent when the internal metrics fetcher loading state changes
+  useEffect(() => {
+    onMetricsLoadingChange?.(metricsLoading);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metricsLoading]);
 
   // Reset metric value if the selected function does not have the previously selected metric
   useEffect(() => {

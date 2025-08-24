@@ -2,15 +2,22 @@ import { useDatasetInsertCountFetcher } from "~/routes/api/datasets/count_insert
 import type { DatasetBuilderFormValues } from "./types";
 import type { Control } from "react-hook-form";
 import { Skeleton } from "~/components/ui/skeleton";
+import { useEffect } from "react";
 
 export function DatasetCountDisplay({
   control,
   setCountToInsert,
+  onLoadingChange,
 }: {
   control: Control<DatasetBuilderFormValues>;
   setCountToInsert: (count: number | null) => void;
+  onLoadingChange?: (loading: boolean) => void;
 }) {
   const { count, isLoading } = useDatasetInsertCountFetcher(control);
+  // Notify parent of loading state
+  useEffect(() => {
+    onLoadingChange?.(isLoading);
+  }, [isLoading, onLoadingChange]);
 
   if (isLoading) {
     return (
