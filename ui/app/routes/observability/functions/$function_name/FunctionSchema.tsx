@@ -31,9 +31,9 @@ export default function FunctionSchema({
   functionConfig,
 }: FunctionSchemaProps) {
   const schemas = {
-    system: functionConfig.system_schema?.value,
-    user: functionConfig.user_schema?.value,
-    assistant: functionConfig.assistant_schema?.value,
+    system: functionConfig.schemas.system?.value,
+    user: functionConfig.schemas.user?.value,
+    assistant: functionConfig.schemas.assistant?.value,
     ...(functionConfig.type === "json"
       ? { output: functionConfig.output_schema?.value }
       : {}),

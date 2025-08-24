@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::{
-    config_parser::{
+    config::{
         path::TomlRelativePath, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
-        MetricConfigType, PathWithContents, TimeoutsConfig,
+        MetricConfigType, PathWithContents, SchemaData, TimeoutsConfig,
     },
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
@@ -18,7 +18,7 @@ use crate::{
             BestOfNEvaluatorConfig as OnlineEvaluatorConfig, BestOfNSamplingConfig,
         },
         chain_of_thought::ChainOfThoughtConfig,
-        chat_completion::ChatCompletionConfig,
+        chat_completion::{ChatCompletionConfig, ChatTemplates, TemplateWithSchema},
         dicl::DiclConfig,
         mixture_of_n::{FuserConfig, MixtureOfNConfig},
         JsonMode, RetryConfig, VariantConfig, VariantInfo,
@@ -311,12 +311,44 @@ impl UninitializedEvaluatorConfig {
                 },
             )),
             UninitializedEvaluatorConfig::LLMJudge(params) => {
+                let user_schema_value: Option<serde_json::Value> = match params.input_format {
+                    LLMJudgeInputFormat::Serialized => Some(serde_json::from_str(LLM_JUDGE_USER_SCHEMA_TEXT)
+                        .map_err(|e| {
+                            Error::new(ErrorDetails::JsonSchema {
+                                message: format!("Failed to parse LLM judge user schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
+                            })
+                        })?),
+                    LLMJudgeInputFormat::Messages => None,
+                };
+                let user_schema = user_schema_value
+                    .map(StaticJSONSchema::from_value)
+                    .transpose()?;
+                let output_schema_str = match params.output_type {
+                    LLMJudgeOutputType::Float => LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT,
+                    LLMJudgeOutputType::Boolean => LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT,
+                };
+                let output_schema_value = serde_json::from_str(output_schema_str)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::JsonSchema {
+                            message: format!("Failed to parse LLM judge output schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
+                        })
+                    })?;
+                let output_schema = StaticJSONSchema::from_value(output_schema_value)?;
+                let implicit_tool_call_config =
+                    create_implicit_tool_call_config(output_schema.clone());
+
                 let mut variants = params
                     .variants
                     .into_iter()
                     .map(|(name, variant)| {
                         variant
-                            .load(evaluation_name, evaluator_name, &params.input_format, &name)
+                            .load(
+                                evaluation_name,
+                                evaluator_name,
+                                &params.input_format,
+                                &name,
+                                user_schema.clone(),
+                            )
                             .map(|v| (name, v))
                     })
                     .collect::<Result<HashMap<_, _>, Error>>()?;
@@ -365,39 +397,17 @@ impl UninitializedEvaluatorConfig {
                         }
                     };
                 }
-                let user_schema_value: Option<serde_json::Value> = match params.input_format {
-                    LLMJudgeInputFormat::Serialized => Some(serde_json::from_str(LLM_JUDGE_USER_SCHEMA_TEXT)
-                        .map_err(|e| {
-                            Error::new(ErrorDetails::JsonSchema {
-                                message: format!("Failed to parse LLM judge user schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
-                            })
-                        })?),
-                    LLMJudgeInputFormat::Messages => None,
-                };
-                let output_schema_str = match params.output_type {
-                    LLMJudgeOutputType::Float => LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT,
-                    LLMJudgeOutputType::Boolean => LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT,
-                };
-                let output_schema_value = serde_json::from_str(output_schema_str)
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::JsonSchema {
-                            message: format!("Failed to parse LLM judge output schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
-                        })
-                    })?;
-                let output_schema = StaticJSONSchema::from_value(&output_schema_value)?;
-                let implicit_tool_call_config =
-                    create_implicit_tool_call_config(output_schema.clone());
                 let variants = variants
                     .into_iter()
                     .map(|(name, variant)| (name, Arc::new(variant)))
                     .collect();
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,
-                    system_schema: None,
-                    user_schema: user_schema_value
-                        .map(|v| StaticJSONSchema::from_value(&v))
-                        .transpose()?,
-                    assistant_schema: None,
+                    schemas: SchemaData {
+                        system: None,
+                        user: user_schema,
+                        assistant: None,
+                    },
                     output_schema,
                     implicit_tool_call_config,
                     description: None,
@@ -476,6 +486,7 @@ fn convert_chat_completion_judge_to_variant(
     variant_name: &str,
     input_format: &LLMJudgeInputFormat,
     params: UninitializedLLMJudgeChatCompletionVariantConfig,
+    user_schema: Option<StaticJSONSchema>,
 ) -> Result<ChatCompletionConfig, Error> {
     let system_instructions = &params.system_instructions.read()?;
     let templated_system_instructions = format!(
@@ -503,9 +514,17 @@ fn convert_chat_completion_judge_to_variant(
     Ok(ChatCompletionConfig {
         weight: get_weight(params.active),
         model: params.model,
-        system_template: Some(system_template),
-        user_template,
-        assistant_template: None,
+        templates: ChatTemplates {
+            system: Some(TemplateWithSchema {
+                template: system_template,
+                schema: None,
+            }),
+            user: user_template.map(|t| TemplateWithSchema {
+                template: t,
+                schema: user_schema,
+            }),
+            assistant: None,
+        },
         temperature: params.temperature,
         top_p: params.top_p,
         max_tokens: params.max_tokens,
@@ -608,6 +627,7 @@ impl UninitializedLLMJudgeVariantInfo {
         evaluator_name: &str,
         input_format: &LLMJudgeInputFormat,
         variant_name: &str,
+        user_schema: Option<StaticJSONSchema>,
     ) -> Result<VariantInfo, Error> {
         let inner = match self.inner {
             UninitializedLLMJudgeVariantConfig::ChatCompletion(params) => {
@@ -617,6 +637,7 @@ impl UninitializedLLMJudgeVariantInfo {
                     variant_name,
                     input_format,
                     params,
+                    user_schema,
                 )?)
             }
             UninitializedLLMJudgeVariantConfig::BestOfNSampling(params) => {
@@ -652,9 +673,17 @@ impl UninitializedLLMJudgeVariantInfo {
                         inner: ChatCompletionConfig {
                             weight: None,
                             model: params.evaluator.model,
-                            system_template: Some(evaluator_system_template),
-                            user_template: evaluator_user_template,
-                            assistant_template: None,
+                            templates: ChatTemplates {
+                                system: Some(TemplateWithSchema {
+                                    template: evaluator_system_template,
+                                    schema: None,
+                                }),
+                                user: evaluator_user_template.map(|t| TemplateWithSchema {
+                                    template: t,
+                                    schema: user_schema,
+                                }),
+                                assistant: None,
+                            },
                             temperature: params.evaluator.temperature,
                             top_p: params.evaluator.top_p,
                             max_tokens: params.evaluator.max_tokens,
@@ -703,9 +732,17 @@ impl UninitializedLLMJudgeVariantInfo {
                         inner: ChatCompletionConfig {
                             weight: None,
                             model: params.fuser.model,
-                            system_template: Some(fuser_system_template),
-                            user_template: fuser_user_template,
-                            assistant_template: None,
+                            templates: ChatTemplates {
+                                system: Some(TemplateWithSchema {
+                                    template: fuser_system_template,
+                                    schema: None,
+                                }),
+                                user: fuser_user_template.map(|t| TemplateWithSchema {
+                                    template: t,
+                                    schema: user_schema,
+                                }),
+                                assistant: None,
+                            },
                             temperature: params.fuser.temperature,
                             top_p: params.fuser.top_p,
                             max_tokens: params.fuser.max_tokens,
@@ -760,6 +797,7 @@ impl UninitializedLLMJudgeVariantInfo {
                         variant_name,
                         input_format,
                         params.inner,
+                        user_schema,
                     )?,
                 })
             }
@@ -925,9 +963,7 @@ mod tests {
         let function_name = "generate_draft";
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             output_schema: create_test_schema(),
             implicit_tool_call_config: create_implicit_tool_call_config(create_test_schema()),
             description: None,
@@ -1059,8 +1095,8 @@ mod tests {
                 FunctionConfig::Json(json_config) => {
                     assert_eq!(json_config.variants.len(), 1);
                     assert!(json_config.variants.contains_key("test_variant"));
-                    assert!(json_config.system_schema.is_none());
-                    assert!(json_config.user_schema.is_some());
+                    assert!(json_config.schemas.system.is_none());
+                    assert!(json_config.schemas.user.is_some());
                     assert!(json_config.output_schema.value.is_object());
                 }
                 _ => panic!("Expected Json function config"),
@@ -1363,9 +1399,7 @@ mod tests {
                 Arc::new(FunctionConfig::Json(FunctionConfigJson {
                     variants: HashMap::new(),
                     output_schema: create_test_schema(),
-                    system_schema: None,
-                    user_schema: None,
-                    assistant_schema: None,
+                    schemas: SchemaData::default(),
                     implicit_tool_call_config: create_implicit_tool_call_config(
                         create_test_schema(),
                     ),
@@ -1612,6 +1646,6 @@ mod tests {
             },
             "required": ["result"]
         });
-        StaticJSONSchema::from_value(&schema_value).unwrap()
+        StaticJSONSchema::from_value(schema_value).unwrap()
     }
 }

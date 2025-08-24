@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use futures::future::join_all;
 
-use crate::config_parser::Config;
+use crate::config::Config;
 use crate::endpoints::dynamic_evaluation_run::validate_variant_pins;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::stored_inference::{

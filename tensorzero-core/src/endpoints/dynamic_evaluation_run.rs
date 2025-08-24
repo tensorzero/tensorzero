@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    clickhouse::{escape_string_for_clickhouse_literal, ClickHouseConnectionInfo},
-    config_parser::Config,
+    config::Config,
+    db::clickhouse::{escape_string_for_clickhouse_literal, ClickHouseConnectionInfo},
     endpoints::validate_tags,
     error::{Error, ErrorDetails},
     gateway_util::{AppState, AppStateData, StructuredJson},

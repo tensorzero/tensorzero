@@ -10,7 +10,7 @@ use evaluations::{Clients, ThrottledTensorZeroClient};
 use serde_json::json;
 use tensorzero::input_handling::resolved_input_to_client_input;
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     select_human_static_evaluation_feedback_clickhouse, select_model_inferences_clickhouse,
 };
 use tensorzero_core::endpoints::datasets::Datapoint;
@@ -29,7 +29,7 @@ use std::{path::PathBuf, sync::Arc};
 use tensorzero::{ClientBuilder, ClientBuilderMode, FeedbackParams};
 use tensorzero::{InferenceResponse, Role};
 use tensorzero_core::{
-    clickhouse::test_helpers::{
+    db::clickhouse::test_helpers::{
         clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
         select_feedback_by_target_id_clickhouse, select_json_inference_clickhouse,
     },
@@ -80,6 +80,7 @@ async fn run_evaluations_json() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(2)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -276,6 +277,7 @@ async fn run_evaluations_json() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(2)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut total_sports = 0;
@@ -349,7 +351,7 @@ async fn run_exact_match_evaluation_chat() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    sleep(Duration::from_secs(2)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -471,6 +473,7 @@ async fn run_llm_judge_evaluation_chat() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(2)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -615,6 +618,7 @@ async fn run_llm_judge_evaluation_chat() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(2)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut total_topic_fs = 0;
@@ -687,7 +691,7 @@ async fn run_image_evaluation() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
-    sleep(Duration::from_secs(1)).await;
+    sleep(Duration::from_secs(2)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -900,7 +904,7 @@ async fn check_invalid_image_evaluation() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
-    sleep(Duration::from_secs(1)).await;
+    sleep(Duration::from_secs(2)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     for line in output_lines {
@@ -999,6 +1003,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
     run_evaluation(args, evaluation_run_id, &mut output)
         .await
         .unwrap();
+    sleep(Duration::from_secs(2)).await;
     let output_str = String::from_utf8(output).unwrap();
     // Check for run info at the beginning
     assert!(output_str.contains("Run ID:"));
@@ -1040,6 +1045,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
     let err = run_evaluation(args, evaluation_run_id, &mut output)
         .await
         .unwrap_err();
+    sleep(Duration::from_secs(2)).await;
     let output_str = String::from_utf8(output).unwrap();
     // Check for run info at the beginning
     assert!(output_str.contains("Run ID:"));
@@ -1194,6 +1200,7 @@ async fn run_evaluations_errors() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(2)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     for line in output_lines {
@@ -1222,6 +1229,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         clickhouse_url: None,
         timeout: None,
         verify_credentials: true,
+        allow_batch_writes: true,
     })
     .build()
     .await
@@ -1592,6 +1600,7 @@ async fn run_evaluations_best_of_3() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(2)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -1777,6 +1786,7 @@ async fn run_evaluations_mixture_of_3() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(2)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -1965,6 +1975,7 @@ async fn run_evaluations_dicl() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(2)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();

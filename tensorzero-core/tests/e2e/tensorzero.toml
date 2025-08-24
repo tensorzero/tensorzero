@@ -10,6 +10,7 @@
 bind_address = "0.0.0.0:3000"
 debug = true
 template_filesystem_access.enabled = true
+template_filesystem_access.base_path = "."
 export.otlp.traces.enabled = true
 unstable_error_json = true
 observability.skip_completed_migrations = true
@@ -726,6 +727,20 @@ type = "azure"
 endpoint = "https://t0-azure-openai-east.openai.azure.com/"
 deployment_id = "text-embedding-3-small"
 
+[embedding_models.voyage_3_5_lite_256]
+routing = ["voyage"]
+
+[embedding_models.voyage_3_5_lite_256.providers.voyage]
+type = "openai"
+api_base = "https://api.voyageai.com/v1"
+model_name = "voyage-3.5-lite"
+api_key_location = "env::VOYAGE_API_KEY"
+extra_body = [
+  { pointer = "/dimensions", delete = true },
+  { pointer = "/encoding_format", delete = true },
+  { pointer = "/output_dimension", value = 256 },
+]
+
 [embedding_models.fallback]
 routing = ["slow", "openai"]
 
@@ -843,7 +858,7 @@ type = "chat"
 [functions.basic_test_template_no_schema.variants.test]
 type = "chat_completion"
 model = "dummy::echo_request_messages"
-system_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/system_template.minijinja"
+input_wrappers.system = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/system_template.minijinja"
 assistant_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/assistant_template.minijinja"
 user_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/user_template.minijinja"
 
@@ -854,7 +869,7 @@ candidates = ["test", "test"]
 [functions.basic_test_template_no_schema.variants.mixture_of_n.fuser]
 model = "dummy::echo_request_messages"
 system_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/system_template_2.minijinja"
-assistant_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/assistant_template_2.minijinja"
+input_wrappers.assistant = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/assistant_template_2.minijinja"
 user_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/user_template_2.minijinja"
 
 [functions.basic_test_template_no_schema.variants.best_of_n]
@@ -865,7 +880,7 @@ candidates = ["test", "test"]
 model = "dummy::best_of_n_0"
 system_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/system_template_2.minijinja"
 assistant_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/assistant_template_2.minijinja"
-user_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/user_template_2.minijinja"
+input_wrappers.user = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/user_template_2.minijinja"
 
 
 [functions.basic_test_no_system_schema]
