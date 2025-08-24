@@ -9,7 +9,7 @@ on:
     branches: ["main"]
 
 jobs:
-  unit-tests:
+  merge-queue-tests:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger a Buildkite Build on Push using v2.0.0
