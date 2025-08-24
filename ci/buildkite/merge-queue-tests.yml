@@ -29,6 +29,7 @@ steps:
       - docker:
           image: "rust"
           mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":node: Node.js Tests"
     # command: bash ./ci/buildkite/node-unit-tests.sh
