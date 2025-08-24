@@ -6,6 +6,10 @@ import {
   TooltipTrigger,
 } from "../ui/tooltip";
 
+/* This component displays a list of tag keys and values as badges.
+ * They will be truncated if long, so we offer a tooltop on hover with the full value.
+ */
+
 interface TagsBadgesProps {
   tags: Record<string, string>;
 }
