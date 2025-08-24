@@ -4,13 +4,7 @@ import type {
 } from "~/utils/clickhouse/function";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
+import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import {
   ChartContainer,
   ChartLegend,
@@ -54,12 +48,6 @@ export function VariantThroughput({
     <div className="space-y-8">
       <Card>
         <CardHeader className="flex flex-row items-start justify-between">
-          <div>
-            <CardTitle>Throughput Over Time</CardTitle>
-            <CardDescription>
-              <span>Showing inference counts by variant over time</span>
-            </CardDescription>
-          </div>
           <TimeGranularitySelector
             time_granularity={time_granularity}
             onTimeGranularityChange={onTimeGranularityChange}
@@ -83,6 +71,11 @@ export function VariantThroughput({
                 tickLine={false}
                 tickMargin={10}
                 axisLine={true}
+                label={{
+                  value: "Inference Count",
+                  angle: -90,
+                  position: "insideLeft",
+                }}
                 tickFormatter={(value) => {
                   const num = Number(value);
                   if (num >= 1000000) {
@@ -120,7 +113,7 @@ export function VariantThroughput({
                                 className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
                                 style={{ backgroundColor: entry.color }}
                               />
-                              <div className="flex flex-1 items-center justify-between leading-none">
+                              <div className="flex flex-1 items-center justify-between gap-2 leading-none">
                                 <span className="text-muted-foreground">
                                   {entry.name}
                                 </span>
