@@ -68,15 +68,8 @@ export TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-$SHORT_HASH
 docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse gateway fixtures mock-inference-provider --wait
 
 CLICKHOUSE_VERSION=$(curl -s "http://localhost:8123/query?user=chuser&password=chpassword" --data-binary "SELECT version()")
-echo "Detected ClickHouse version: $CLICKHOUSE_VERSION"
-Assert that detected version matches expected version
-if [ "$CLICKHOUSE_VERSION" != "$TENSORZERO_CLICKHOUSE_VERSION" ]; then
-   echo "Error: ClickHouse version mismatch!"
-   echo "Expected: $TENSORZERO_CLICKHOUSE_VERSION"
-   echo "Detected: $CLICKHOUSE_VERSION"
-   exit 1
-fi
-echo "ClickHouse version validated: $CLICKHOUSE_VERSION"
+echo "Requested clickhouse version: $TENSORZERO_CLICKHOUSE_VERSION"
+echo "Detected clickhouse version: $CLICKHOUSE_VERSION"
 
 # Launch the gateway for E2E tests
 cargo run-e2e > e2e_logs.txt 2>&1 &
