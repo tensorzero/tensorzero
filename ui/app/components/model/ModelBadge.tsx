@@ -95,6 +95,12 @@ function formatProvider(provider: ProviderConfig["type"]): {
         className:
           "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
       };
+    case "nvidia_nim":
+      return {
+        name: "NVIDIA NIM",
+        className:
+          "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+      };
     case "openai":
       return {
         name: "OpenAI",
