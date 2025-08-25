@@ -1,5 +1,4 @@
 use std::str::FromStr;
-use std::sync::LazyLock;
 
 use axum::extract::MatchedPath;
 use axum::Router;
@@ -47,6 +46,8 @@ struct TracerWrapper {
     custom_tracers: Cache<CustomTracerKey, CustomTracer>,
 }
 
+const CUSTOM_TRACER_KEY_ATTR_NAME: &str = "__tensorzero_custom_tracer_";
+
 impl Tracer for TracerWrapper {
     type Span = <SdkTracer as Tracer>::Span;
 
@@ -56,7 +57,7 @@ impl Tracer for TracerWrapper {
         parent_cx: &opentelemetry::Context,
     ) -> Self::Span {
         for attr in builder.attributes.iter().flatten() {
-            if attr.key.as_str() == "__tensorzero_custom_tracer_" {
+            if attr.key.as_str() == CUSTOM_TRACER_KEY_ATTR_NAME {
                 if let opentelemetry::Value::String(value) = &attr.value {
                     let key: CustomTracerKey = serde_json::from_str(value.as_str()).unwrap();
                     let tracer =
@@ -323,6 +324,13 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
             span.set_parent(
                 tracing_opentelemetry_instrumentation_sdk::http::extract_context(req.headers()),
             );
+            if let Some(custom_tracer_key) = extract_tensorzero_headers(req.headers()) {
+                let serialized = serde_json::to_string(&custom_tracer_key).unwrap();
+                span.set_attribute(
+                    CUSTOM_TRACER_KEY_ATTR_NAME,
+                    opentelemetry::Value::String(serialized.into()),
+                );
+            }
             span
         }
         self.layer(TraceLayer::new_for_http().make_span_with(make_span))
