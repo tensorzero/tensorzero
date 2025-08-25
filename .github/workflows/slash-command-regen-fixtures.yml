@@ -42,6 +42,7 @@ jobs:
             sleep 10
             attempt=$((attempt + 1))
           done
+        shell: bash
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile
       - name: Setup Playwright

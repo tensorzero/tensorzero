@@ -124,6 +124,7 @@ jobs:
             sleep 10
             attempt=$((attempt + 1))
           done
+        shell: bash
 
       - name: Install dependencies
         working-directory: internal/tensorzero-node
@@ -194,6 +195,7 @@ jobs:
             sleep 10
             attempt=$((attempt + 1))
           done
+        shell: bash
 
       - name: Print Rust version
         run: rustc --version
@@ -217,6 +219,7 @@ jobs:
             sleep 10
             attempt=$((attempt + 1))
           done
+        shell: bash
 
       - name: Install uv
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh

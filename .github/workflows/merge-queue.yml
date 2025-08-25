@@ -99,6 +99,7 @@ jobs:
             sleep 10
             attempt=$((attempt + 1))
           done
+        shell: bash
 
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
@@ -134,6 +135,7 @@ jobs:
             sleep 10
             attempt=$((attempt + 1))
           done
+        shell: bash
 
       - name: Configure Namespace cache for Python (uv), and pnpm
         uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
