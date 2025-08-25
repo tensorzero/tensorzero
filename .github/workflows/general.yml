@@ -170,8 +170,16 @@ jobs:
       # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
       - name: Install Rust 1.86.0
         run: |
-          rustup install 1.86.0 --component clippy,rustfmt
-          rustup default 1.86.0
+          for attempt in {1..3}; do
+            if rustup install 1.86.0 --component clippy,rustfmt && rustup default 1.86.0; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust 1.86.0 after 3 attempts"
+              exit 1
+            fi
+            sleep 10
+          done
 
       - name: Print Rust version
         run: rustc --version
