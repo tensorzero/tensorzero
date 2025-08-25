@@ -1,20 +1,24 @@
 use chrono::DateTime;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{borrow::Cow, collections::HashMap};
 
 use super::{
     prepare_openai_messages, tensorzero_to_openai_assistant_message, OpenAIFileID,
-    OpenAIRequestMessage, OpenAISFTTool,
+    OpenAIRequestMessage, OpenAISFTTool, PrepareOpenAIMessagesArgs,
 };
 use crate::{
     config::TimeoutsConfig,
+    endpoints::openai_compatible::JsonSchemaInfo,
     error::{Error, ErrorDetails},
-    inference::types::ContentBlock,
+    inference::types::{ContentBlock, ContentBlockChatOutput},
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     optimization::{OptimizationJobInfo, OptimizerOutput},
-    providers::openai::PROVIDER_TYPE,
+    providers::openai::{OpenAIRequestToolCall, PROVIDER_TYPE},
     stored_inference::RenderedSample,
+    tool::ToolCall,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -55,7 +59,7 @@ pub struct Supervised {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Reinforcement {
-    pub grader: Box<Grader>,
+    pub grader: Box<OpenAIGrader>,
     pub hyperparameters: Option<ReinforcementHyperparameters>,
 }
 
@@ -99,50 +103,204 @@ pub struct ReinforcementHyperparameters {
     pub reasoning_effort: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum Grader {
+pub enum OpenAIGrader {
     StringCheck {
-        input: String,
         name: String,
-        operation: String,
+        operation: OpenAIStringCheckOp,
+        input: String,
         reference: String,
     },
     TextSimilarity {
-        evaluation_metric: String,
-        input: String,
         name: String,
+        evaluation_metric: OpenAISimilarityMetric,
+        input: String,
         reference: String,
     },
-    // TODO: add an option to load from uninitialized with a Python script
-    // We cannot ship Python in TOML here
-    Python {
-        name: String,
-        source: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        image_tag: Option<String>,
-    },
     ScoreModel {
-        input: Vec<serde_json::Value>,
-        model: String,
         name: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        model: String,
+        input: Vec<OpenAIModelGraderInput>, // system and user template formatted as system and user messages
         range: Option<[f64; 2]>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        sampling_params: Option<serde_json::Value>,
+        // sampling_params: Option<Value>, TODO: add this back in
     },
     LabelModel {
-        input: Vec<serde_json::Value>,
-        labels: Vec<String>,
-        model: String,
         name: String,
-        passing_labels: Vec<String>,
+        model: String,
+        labels: Vec<String>,
+        passing_labels: Vec<String>,        // Subset of labels
+        input: Vec<OpenAIModelGraderInput>, // Templates for constructing the input
+    },
+    Python {
+        name: String,
+        source: String,            // The source code of the python script.
+        image_tag: Option<String>, // Docker image for isolation
     },
     Multi {
-        calculate_output: String,
-        graders: HashMap<String, Box<Grader>>,
+        calculate_output: String, // Expression to combine grader outputs (e.g. "0.5 * grader_1_key + 0.5 * grader_2_key")
+        graders: HashMap<String, Box<OpenAIGrader>>,
         name: String,
     },
+}
+
+impl std::fmt::Display for OpenAIGrader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+impl<'py> FromPyObject<'py> for Box<OpenAIGrader> {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        Ok(Box::new(OpenAIGrader::extract_bound(ob)?))
+    }
+}
+
+#[cfg(feature = "pyo3")]
+impl<'py> IntoPyObject<'py> for Box<OpenAIGrader> {
+    type Target = <OpenAIGrader as IntoPyObject<'py>>::Target;
+    type Output = <OpenAIGrader as IntoPyObject<'py>>::Output;
+    type Error = <OpenAIGrader as IntoPyObject<'py>>::Error;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        (*self).into_pyobject(py)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIStringCheckOp"))]
+#[serde(rename_all = "snake_case")]
+pub enum OpenAIStringCheckOp {
+    Eq,    // equals
+    Ne,    // not equals
+    Like,  // case-sensitive pattern matching
+    Ilike, // case-insensitive pattern matching
+}
+
+impl std::fmt::Display for OpenAIStringCheckOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISimilarityMetric"))]
+#[serde(rename_all = "snake_case")]
+pub enum OpenAISimilarityMetric {
+    FuzzyMatch, // fuzzy_match
+    Bleu,       // bleu
+    Gleu,       // gleu
+    Meteor,     // meteor
+    Rouge1,     // rouge_1
+    Rouge2,     // rouge_2
+    Rouge3,     // rouge_3
+    Rouge4,     // rouge_4
+    Rouge5,     // rouge_5
+    RougeL,     // rouge_l
+}
+
+impl std::fmt::Display for OpenAISimilarityMetric {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIModelGraderInputMessage"))]
+pub struct OpenAIModelGraderInput {
+    pub role: OpenAIRFTRole,
+    pub content: String,
+}
+
+impl std::fmt::Display for OpenAIModelGraderInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+#[ts(export)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "pyo3", pyclass)]
+pub enum OpenAIRFTRole {
+    Developer,
+    User,
+}
+
+impl std::fmt::Display for OpenAIRFTRole {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OpenAIRFTRole::User => write!(f, "user"),
+            OpenAIRFTRole::Developer => write!(f, "developer"),
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl OpenAIRFTRole {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+/// Response format configuration for OpenAI Reinforcement Fine-Tuning (RFT).
+///
+/// When a response format is specified, the model being fine-tuned will produce
+/// structured outputs that conform to the provided JSON schema during RFT sampling.
+/// These structured outputs will be populated in the `output_json` field of the
+/// Sample namespace.
+///
+/// If no response format is specified but the model is instructed (e.g., via prompts)
+/// to produce structured outputs, those outputs will be returned as raw JSON strings
+/// in the `output_text` field of the Sample namespace instead.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTResponseFormat"))]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum OpenAIRFTResponseFormat {
+    JsonSchema {
+        json_schema: RFTJsonSchemaInfoOption,
+    },
+}
+
+impl std::fmt::Display for OpenAIRFTResponseFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "RFTJsonSchemaInfoOption"))]
+#[serde(untagged)]
+pub enum RFTJsonSchemaInfoOption {
+    JsonSchema(JsonSchemaInfo),
+}
+
+impl std::fmt::Display for RFTJsonSchemaInfoOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -163,12 +321,13 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAISupervisedRow<'a> {
             ),
             None => (false, vec![]),
         };
-        let mut messages = prepare_openai_messages(
-            inference.input.system.as_deref(),
-            &inference.input.messages,
-            None,
-            PROVIDER_TYPE,
-        )?;
+        let mut messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
+            system: inference.input.system.as_deref(),
+            developer: None,
+            messages: &inference.input.messages,
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+        })?;
         let Some(output) = &inference.output else {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
                 message: "No output in inference".to_string(),
@@ -207,6 +366,108 @@ pub struct OpenAIPreferenceRow<'a> {
 #[derive(Debug, Serialize)]
 pub struct OpenAIReinforcementRow<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
+    #[serde(flatten)]
+    output: OpenAIReinforcementOutput<'a>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tools: Vec<OpenAISFTTool<'a>>,
+    parallel_tool_calls: bool,
+}
+
+impl<'a> TryFrom<&'a RenderedSample> for OpenAIReinforcementRow<'a> {
+    type Error = Error;
+    fn try_from(inference: &'a RenderedSample) -> Result<Self, Self::Error> {
+        let (parallel_tool_calls, tools) = match &inference.tool_params {
+            Some(tool_params) => (
+                tool_params.parallel_tool_calls.unwrap_or_default(),
+                tool_params.tools_available.iter().map(Into::into).collect(),
+            ),
+            None => (false, vec![]),
+        };
+        let messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
+            system: None,
+            developer: inference.input.system.as_deref(),
+            messages: &inference.input.messages,
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+        })?;
+        let Some(output) = &inference.output else {
+            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+                message: "No output in inference".to_string(),
+            }));
+        };
+        if output.is_empty() {
+            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+                message: "No output in inference".to_string(),
+            }));
+        }
+        let openai_output = output.try_into()?;
+        Ok(Self {
+            messages,
+            output: openai_output,
+            tools,
+            parallel_tool_calls,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OpenAIReinforcementOutput<'a> {
+    /// Combined text from all Text content blocks
+    pub reference_text: Option<String>,
+    /// All tool calls from the output
+    pub reference_tools: Option<Vec<OpenAIRequestToolCall<'a>>>,
+}
+
+impl<'a> TryFrom<&'a Vec<ContentBlockChatOutput>> for OpenAIReinforcementOutput<'a> {
+    type Error = Error;
+
+    fn try_from(blocks: &'a Vec<ContentBlockChatOutput>) -> Result<Self, Self::Error> {
+        if blocks.is_empty() {
+            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+                message: "Output content blocks is empty".to_string(),
+            }));
+        }
+
+        let mut text_parts = Vec::new();
+        let mut tool_calls: Vec<ToolCall> = Vec::new();
+
+        for block in blocks {
+            match block {
+                ContentBlockChatOutput::Text(text) => {
+                    text_parts.push(text.text.clone());
+                }
+                ContentBlockChatOutput::ToolCall(tool_call_output) => {
+                    // Convert ToolCallOutput to ToolCall using the From impl
+                    let tool_call: ToolCall = tool_call_output.clone().into();
+                    tool_calls.push(tool_call);
+                }
+                ContentBlockChatOutput::Thought(_) => {
+                    // Thoughts are not included in OpenAI reinforcement output
+                }
+                ContentBlockChatOutput::Unknown { .. } => {
+                    // Unknown blocks are skipped
+                }
+            }
+        }
+
+        let reference_text = if text_parts.is_empty() {
+            None
+        } else {
+            Some(text_parts.join(""))
+        };
+
+        // Convert ToolCall references to OpenAIRequestToolCall using the From impl
+        let reference_tools = if tool_calls.is_empty() {
+            None
+        } else {
+            Some(tool_calls.into_iter().map(Into::into).collect())
+        };
+
+        Ok(Self {
+            reference_text,
+            reference_tools,
+        })
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -365,6 +626,128 @@ mod tests {
             panic!("Second message should be a text message");
         };
         assert_eq!(text, "The capital of France is Paris.");
+        assert!(!row.parallel_tool_calls);
+        assert_eq!(row.tools.len(), 0);
+    }
+
+    #[test]
+    fn test_convert_to_rft_row() {
+        let inference = RenderedSample {
+            function_name: "test".to_string(),
+            input: ModelInput {
+                system: Some("You are a helpful assistant named Dr. M.M. Patel.".to_string()),
+                messages: vec![RequestMessage {
+                    role: Role::User,
+                    content: vec![ContentBlock::Text(Text {
+                        text: "What is the capital of France?".to_string(),
+                    })],
+                }],
+            },
+            stored_input: ResolvedInput {
+                system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("What is the capital of France?"),
+                    }],
+                }],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "The capital of France is Paris.".to_string(),
+            })]),
+            episode_id: Some(uuid::Uuid::now_v7()),
+            inference_id: Some(uuid::Uuid::now_v7()),
+            tool_params: None,
+            output_schema: None,
+            dispreferred_outputs: vec![],
+            tags: HashMap::new(),
+        };
+        let row = OpenAIReinforcementRow::try_from(&inference).unwrap();
+        assert_eq!(row.messages.len(), 2); // System and User messages (no assistant message added)
+        let OpenAIRequestMessage::Developer(system_message) = &row.messages[0] else {
+            panic!("First message should be a developer message");
+        };
+        assert_eq!(
+            system_message.content,
+            "You are a helpful assistant named Dr. M.M. Patel."
+        );
+        let OpenAIRequestMessage::User(user_message) = &row.messages[1] else {
+            panic!("Second message should be a user message");
+        };
+        let OpenAIContentBlock::Text { text } = &user_message.content[0] else {
+            panic!("User message should be a text message");
+        };
+        assert_eq!(text, "What is the capital of France?");
+
+        // Check the output structure
+        assert_eq!(
+            row.output.reference_text,
+            Some("The capital of France is Paris.".to_string())
+        );
+        assert!(row.output.reference_tools.is_none());
+        assert!(!row.parallel_tool_calls);
+        assert_eq!(row.tools.len(), 0);
+    }
+
+    #[test]
+    fn test_convert_to_rft_row_with_tool_calls() {
+        use crate::tool::ToolCallOutput;
+
+        let inference = RenderedSample {
+            function_name: "test".to_string(),
+            input: ModelInput {
+                system: Some("You are a helpful assistant.".to_string()),
+                messages: vec![RequestMessage {
+                    role: Role::User,
+                    content: vec![ContentBlock::Text(Text {
+                        text: "What's the weather like?".to_string(),
+                    })],
+                }],
+            },
+            stored_input: ResolvedInput {
+                system: Some(json!("You are a helpful assistant.")),
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("What's the weather like?"),
+                    }],
+                }],
+            },
+            output: Some(vec![
+                ContentBlockChatOutput::Text(Text {
+                    text: "I'll check the weather for you.".to_string(),
+                }),
+                ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                    id: "call_123".to_string(),
+                    name: Some("get_weather".to_string()),
+                    raw_name: "get_weather".to_string(),
+                    raw_arguments: r#"{"location": "New York"}"#.to_string(),
+                    arguments: Some(serde_json::json!({"location": "New York"})),
+                }),
+            ]),
+            episode_id: Some(uuid::Uuid::now_v7()),
+            inference_id: Some(uuid::Uuid::now_v7()),
+            tool_params: None,
+            output_schema: None,
+            dispreferred_outputs: vec![],
+            tags: HashMap::new(),
+        };
+        let row = OpenAIReinforcementRow::try_from(&inference).unwrap();
+
+        // Check the output structure
+        assert_eq!(
+            row.output.reference_text,
+            Some("I'll check the weather for you.".to_string())
+        );
+        assert!(row.output.reference_tools.is_some());
+        let tool_calls = row.output.reference_tools.unwrap();
+        assert_eq!(tool_calls.len(), 1);
+        assert_eq!(tool_calls[0].id, "call_123");
+        assert_eq!(tool_calls[0].function.name, "get_weather");
+        assert_eq!(
+            tool_calls[0].function.arguments,
+            r#"{"location": "New York"}"#
+        );
         assert!(!row.parallel_tool_calls);
         assert_eq!(row.tools.len(), 0);
     }
