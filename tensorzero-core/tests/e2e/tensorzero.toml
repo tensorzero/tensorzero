@@ -13,7 +13,6 @@ template_filesystem_access.enabled = true
 template_filesystem_access.base_path = "."
 export.otlp.traces.enabled = true
 unstable_error_json = true
-observability.skip_completed_migrations = true
 
 [object_storage]
 type = "disabled"

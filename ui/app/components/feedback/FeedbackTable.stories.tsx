@@ -16,7 +16,6 @@ const config: Config = {
     observability: {
       enabled: true,
       async_writes: false,
-      skip_completed_migrations: false,
       batch_writes: {
         enabled: false,
         __force_allow_embedded_batch_writes: false,
