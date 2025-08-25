@@ -17,9 +17,9 @@ steps:
     command: bash ./ci/buildkite/build-ui-container.sh
     key: "build-ui-container"
 
-  - label: "Build E2E Tests Container"
-    command: bash ./ci/buildkite/build-e2e-tests-container.sh
-    key: "build-e2e-tests-container"
+  - label: "Build UI E2E Tests Container"
+    command: bash ./ci/buildkite/build-ui-e2e-tests-container.sh
+    key: "build-ui-e2e-tests-container"
 
   - label: ":node: Node.js Tests"
     command: ./ci/buildkite/node-unit-tests.sh
@@ -33,4 +33,4 @@ steps:
       - "build-gateway-container"
       - "build-mock-inference-provider-container"
       - "build-ui-container"
-      - "build-e2e-tests-container"
+      - "build-ui-e2e-tests-container"
