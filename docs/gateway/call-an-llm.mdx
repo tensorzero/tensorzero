@@ -1,0 +1,470 @@
+---
+title: How to call any LLM
+sidebarTitle: Call any LLM
+description: Learn how to call any LLM with a unified API using the TensorZero Gateway.
+---
+
+This page shows how to:
+
+- **Call any LLM with the same API.** TensorZero unifies every major LLM API (e.g. OpenAI) and inference server (e.g. Ollama).
+- **Get started with a few lines of code.** Later, you can optionally add observability, automatic fallbacks, A/B testing, and much more.
+- **Use any programming language.** You can use TensorZero with its Python SDK, any OpenAI SDK (Python, Node, Go, etc.), or its HTTP API.
+
+<Tip>
+
+We provide [complete code examples](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/gateway/call-any-llm) on Github.
+
+</Tip>
+
+<Tabs>
+
+<Tab title="Python">
+
+The TensorZero Python SDK provides a unified API for calling any LLM.
+
+<Steps>
+
+<Step title="Set up the credentials for your LLM provider">
+
+For example, if you're using OpenAI, you can set the `OPENAI_API_KEY` environment variable with your API key.
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+<Tip>
+
+See the [Integrations](./integrations/) page to learn how to set up credentials for other LLM providers.
+
+</Tip>
+
+</Step>
+
+<Step title="Install the TensorZero Python SDK">
+
+You can install the TensorZero SDK with a Python package manager like `pip`.
+
+```bash
+pip install tensorzero
+```
+
+</Step>
+
+<Step title="Initialize the TensorZero Gateway">
+
+Let's initialize the TensorZero Gateway.
+For simplicity, we'll use an embedded gateway without observability or custom configuration.
+
+```python
+from tensorzero import TensorZeroGateway
+
+t0 = TensorZeroGateway.build_embedded()
+```
+
+<Tip>
+
+The TensorZero Python SDK includes a synchronous `TensorZeroGateway` client and an asynchronous `AsyncTensorZeroGateway` client.
+Both options support running the gateway embedded in your application with `build_embedded` or connecting to a standalone gateway with `build_http`.
+See [Clients](./clients) for more details.
+
+</Tip>
+
+</Step>
+
+<Step title="Call the LLM">
+
+```python
+response = t0.inference(
+    model_name="openai::gpt-5-mini",
+    # or: model="anthropic::claude-sonnet-4-20250514"
+    # or: Google, AWS, Azure, xAI, vLLM, Ollama, and many more
+    input={
+        "messages": [
+            {
+                "role": "user",
+                "content": "Tell me a fun fact.",
+            }
+        ]
+    },
+)
+```
+
+<Accordion title="Sample Response">
+
+```python
+ChatInferenceResponse(
+    inference_id=UUID('0198d339-be77-74e0-b522-e08ec12d3831'),
+    episode_id=UUID('0198d339-be77-74e0-b522-e09f578f34d0'),
+    variant_name='openai::gpt-5-mini',
+    content=[
+        Text(
+            text='Fun fact: Botanically, bananas are berries but strawberries are not. \n\nA true berry develops from a single ovary and has seeds embedded in the flesh—bananas fit that definition. Strawberries are "aggregate accessory fruits": the tiny seeds on the outside are each from a separate ovary.',
+            arguments=None,
+            type='text'
+        )
+    ],
+    usage=Usage(input_tokens=12, output_tokens=261),
+    finish_reason=FinishReason.STOP,
+    original_response=None
+)
+```
+
+</Accordion>
+
+<Tip>
+
+See the [Inference API Reference](./api-reference/inference) for more details on the request and response formats.
+
+</Tip>
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+<Tab title="Python (OpenAI SDK)">
+
+The TensorZero Python SDK integrates with the OpenAI Python SDK to provide a unified API for calling any LLM.
+
+<Steps>
+
+<Step title="Set up the credentials for your LLM provider">
+
+For example, if you're using OpenAI, you can set the `OPENAI_API_KEY` environment variable with your API key.
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+<Tip>
+
+See the [Integrations](./integrations/) page to learn how to set up credentials for other LLM providers.
+
+</Tip>
+
+</Step>
+
+<Step title="Install the OpenAI and TensorZero Python SDKs">
+
+You can install the OpenAI and TensorZero SDKs with a Python package manager like `pip`.
+
+```bash
+pip install openai tensorzero
+```
+
+</Step>
+
+<Step title="Initialize the OpenAI client">
+
+Let's initialize the TensorZero Gateway and patch the OpenAI client to use it.
+For simplicity, we'll use an embedded gateway without observability or custom configuration.
+
+```python
+from openai import OpenAI
+from tensorzero import patch_openai_client
+
+client = OpenAI()
+patch_openai_client(client, async_setup=False)
+```
+
+<Tip>
+
+The TensorZero Python SDK supports both the synchronous `OpenAI` client and the asynchronous `AsyncOpenAI` client.
+Both options support running the gateway embedded in your application with `patch_openai_client` or connecting to a standalone gateway with `base_url`.
+The embedded gateway supports synchronous initialization with `async_setup=False` or asynchronous initialization with `async_setup=True`.
+See [Clients](./clients) for more details.
+
+</Tip>
+
+</Step>
+
+<Step title="Call the LLM">
+
+```python
+response = client.chat.completions.create(
+    model="tensorzero::model_name::openai::gpt-5-mini",
+    # or: model="tensorzero::model_name::anthropic::claude-sonnet-4-20250514"
+    # or: Google, AWS, Azure, xAI, vLLM, Ollama, and many more
+    messages=[
+        {
+            "role": "user",
+            "content": "Tell me a fun fact.",
+        }
+    ],
+)
+```
+
+<Accordion title="Sample Response">
+
+```python
+ChatCompletion(
+    id='0198d33f-24f6-7cc3-9dd0-62ba627b27db',
+    choices=[
+        Choice(
+            finish_reason='stop',
+            index=0,
+            logprobs=None,
+            message=ChatCompletionMessage(
+                content='Sure! Did you know that octopuses have three hearts? Two pump blood to the gills, while the third pumps it to the rest of the body. And, when an octopus swims, the heart that delivers blood to the body actually **stops beating**—which is why they prefer to crawl rather than swim!',
+                refusal=None,
+                role='assistant',
+                annotations=None,
+                audio=None,
+                function_call=None,
+                tool_calls=[]
+            )
+        )
+    ],
+    created=1755890789,
+    model='tensorzero::model_name::openai::gpt-5-mini',
+    object='chat.completion',
+    service_tier=None,
+    system_fingerprint='',
+    usage=CompletionUsage(
+        completion_tokens=67,
+        prompt_tokens=13,
+        total_tokens=80,
+        completion_tokens_details=None,
+        prompt_tokens_details=None
+    ),
+    episode_id='0198d33f-24f6-7cc3-9dd0-62cd7028c3d7'
+)
+```
+
+</Accordion>
+
+<Tip>
+
+See the [Inference (OpenAI) API Reference](./api-reference/inference-openai-compatible) for more details on the request and response formats.
+
+</Tip>
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+<Tab title="Node (OpenAI SDK)">
+
+You can point the OpenAI Node SDK to a TensorZero Gateway to call any LLM with a unified API.
+
+<Steps>
+
+<Step title="Set up the credentials for your LLM provider">
+
+For example, if you're using OpenAI, you can set the `OPENAI_API_KEY` environment variable with your API key.
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+<Tip>
+
+See the [Integrations](./integrations/) page to learn how to set up credentials for other LLM providers.
+
+</Tip>
+
+</Step>
+
+<Step title="Install the OpenAI Node SDK">
+
+You can install the OpenAI SDK with a package manager like `npm`.
+
+```bash
+npm i openai
+```
+
+</Step>
+
+<Step title="Deploy a standalone (HTTP) TensorZero Gateway">
+
+Let's deploy a standalone TensorZero Gateway using Docker.
+For simplicity, we'll use the gateway without observability or custom configuration.
+
+```bash
+docker run \
+  -e OPENAI_API_KEY \
+  -p 3000:3000 \
+  tensorzero/gateway \
+  --default-config
+```
+
+<Tip>
+
+See the [TensorZero Gateway Deployment](./deployment) page for more details.
+
+</Tip>
+
+</Step>
+
+<Step title="Initialize the OpenAI client">
+
+Let's initialize the OpenAI SDK and point it to the gateway we just launched.
+
+```ts
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "http://localhost:3000/openai/v1",
+});
+```
+
+</Step>
+
+<Step title="Call the LLM">
+
+```ts
+const response = await client.chat.completions.create({
+  model: "tensorzero::model_name::openai::gpt-5-mini",
+  // or: model: "tensorzero::model_name::anthropic::claude-sonnet-4-20250514",
+  // or: Google, AWS, Azure, xAI, vLLM, Ollama, and many more
+  messages: [
+    {
+      role: "user",
+      content: "Tell me a fun fact.",
+    },
+  ],
+});
+```
+
+<Accordion title="Sample Response">
+
+```ts
+{
+  id: '0198d345-4bd5-79a2-a235-ebaea8c16d91',
+  episode_id: '0198d345-4bd5-79a2-a235-ebbf6eb49cb8',
+  choices: [
+    {
+      index: 0,
+      finish_reason: 'stop',
+      message: {
+        content: 'Sure! Did you know that honey never spoils? Archaeologists have found pots of honey in ancient Egyptian tombs that are over 3,000 years old—and still perfectly edible!',
+        tool_calls: [],
+        role: 'assistant'
+      }
+    }
+  ],
+  created: 1755891192,
+  model: 'tensorzero::model_name::openai::gpt-5-mini',
+  system_fingerprint: '',
+  service_tier: null,
+  object: 'chat.completion',
+  usage: { prompt_tokens: 13, completion_tokens: 37, total_tokens: 50 }
+}
+```
+
+</Accordion>
+
+<Tip>
+
+See the [Inference (OpenAI) API Reference](./api-reference/inference-openai-compatible) for more details on the request and response formats.
+
+</Tip>
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+<Tab title="HTTP">
+
+You can call the TensorZero Gateway directly over HTTP to call any LLM with a unified API.
+
+<Steps>
+
+<Step title="Set up the credentials for your LLM provider">
+
+For example, if you're using OpenAI, you can set the `OPENAI_API_KEY` environment variable with your API key.
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+<Tip>
+
+See the [Integrations](./integrations/) page to learn how to set up credentials for other LLM providers.
+
+</Tip>
+
+</Step>
+
+<Step title="Deploy a standalone (HTTP) TensorZero Gateway">
+
+Let's deploy a standalone TensorZero Gateway using Docker.
+For simplicity, we'll use the gateway without observability or custom configuration.
+
+```bash
+docker run \
+  -e OPENAI_API_KEY \
+  -p 3000:3000 \
+  tensorzero/gateway \
+  --default-config
+```
+
+<Tip>
+
+See the [TensorZero Gateway Deployment](./deployment) page for more details.
+
+</Tip>
+
+</Step>
+
+<Step title="Call the LLM">
+
+You can call the LLM by sending a `POST` request to the `/inference` endpoint of the TensorZero Gateway.
+
+```bash
+curl -X POST "http://localhost:3000/inference" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_name": "openai::gpt-5-mini",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "Tell me a fun fact."
+        }
+      ]
+    }
+  }'
+```
+
+<Accordion title="Sample Response">
+
+```json
+{
+  "inference_id": "0198d351-b250-70d1-a24a-a255d148d7a6",
+  "episode_id": "0198d351-b250-70d1-a24a-a2690343bcf0",
+  "variant_name": "openai::gpt-5-mini",
+  "content": [
+    {
+      "type": "text",
+      "text": "Fun fact: botanically, bananas are berries but strawberries are not. \n\nIn botanical terms a \"berry\" develops from a single ovary and has seeds embedded in the flesh—bananas fit that definition, while strawberries are aggregate accessory fruits (the little \"seeds\" on the outside are actually separate ovaries). Want another fun fact?"
+    }
+  ],
+  "usage": {
+    "input_tokens": 12,
+    "output_tokens": 334
+  },
+  "finish_reason": "stop"
+}
+```
+
+</Accordion>
+
+<Tip>
+
+See the [Inference API Reference](./api-reference/inference) for more details on the request and response formats.
+
+</Tip>
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+</Tabs>

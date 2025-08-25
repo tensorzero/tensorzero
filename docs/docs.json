@@ -42,6 +42,7 @@
             "group": "Gateway",
             "pages": [
               "gateway/index",
+              "gateway/call-an-llm",
               "gateway/tutorial",
               {
                 "group": "Guides",
