@@ -860,6 +860,8 @@ describe("OpenAI Compatibility", () => {
     expect(usage?.prompt_tokens).toBe(10);
     expect(usage?.completion_tokens).toBe(1);
     expect(usage?.total_tokens).toBe(11);
+    // Sleep so we're sure the cache is updated
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Test caching
     const cachedResult = await client.chat.completions.create({
@@ -952,6 +954,9 @@ describe("OpenAI Compatibility", () => {
     expect(finalChunk.usage?.prompt_tokens).toBe(10);
     expect(finalChunk.usage?.completion_tokens).toBe(16);
     expect(finalChunk.choices).toStrictEqual([]);
+
+    // Sleep so we're sure the cache is warmed up
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Second streaming request with cache
     // @ts-expect-error - custom TensorZero property
