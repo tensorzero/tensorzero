@@ -184,6 +184,8 @@ test("playground should work for data with tools", async ({ page }) => {
     page.getByRole("heading", { name: "Inference Error" }),
   ).toHaveCount(0);
 
+  await page.waitForTimeout(1000);
+
   // Click the refresh button to reload inference
   // Find the refresh button in the output area
   const refreshButton = page.getByTestId(
