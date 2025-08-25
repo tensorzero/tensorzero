@@ -17,4 +17,16 @@ echo "$DOCKER_HUB_ACCESS_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --passw
 
 docker compose -f ui/fixtures/docker-compose.unit.yml pull
 
+echo $BUILDKITE_ANALYTICS_TOKEN >> ui/fixtures/.env
+{
+  echo "FIREWORKS_ACCOUNT_ID=not_used"
+  echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
+  echo "TENSORZERO_GATEWAY_TAG=sha-$SHORT_HASH"
+  echo "TENSORZERO_UI_TAG=sha-$SHORT_HASH"
+} >> ui/fixtures/.env
+{
+  echo "FIREWORKS_API_KEY=not_used"
+  echo "OPENAI_API_KEY=not_used"
+} >> ui/fixtures/.env-gateway
+
 docker compose -f ui/fixtures/docker-compose.unit.yml run --rm unit-tests
