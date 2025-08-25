@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Get all env vars
-source ./utils/live-tests-env.sh
+source .ci/buildkite/utils/live-tests-env.sh
 
 # Install `gdb`
 sudo apt-get update && sudo apt-get install -y gdb
