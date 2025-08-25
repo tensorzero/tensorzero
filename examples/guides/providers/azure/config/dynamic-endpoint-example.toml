@@ -1,0 +1,25 @@
+# Example configuration showing dynamic Azure endpoint support
+
+[models.gpt_4o_mini_2024_07_18]
+routing = ["azure"]
+
+[models.gpt_4o_mini_2024_07_18.providers.azure]
+type = "azure"
+deployment_id = "gpt-4o"
+
+# Option 1: Environment variable endpoint
+# endpoint = "env::AZURE_OPENAI_API_BASE"
+# Option 2: Dynamic endpoint - resolved at runtime from request credentials
+endpoint = "dynamic::AZURE_OPENAI_API_BASE"
+# Option 3: Static endpoint (current way)
+# endpoint = "https://your-endpoint.openai.azure.com"
+
+# Dynamic API key - will be resolved at runtime from credentials
+api_key_location = "dynamic::azure_openai_api_key"
+
+[functions.my_function_name]
+type = "chat"
+
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "gpt_4o_mini_2024_07_18"
