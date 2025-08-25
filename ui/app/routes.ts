@@ -117,6 +117,8 @@ export default [
         "routes/observability/episodes/$episode_id/route.tsx",
       ),
     ]),
+
+    route("models", "routes/observability/models/route.tsx"),
   ]),
 
   // Optimization
