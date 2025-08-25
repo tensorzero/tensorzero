@@ -37,6 +37,7 @@ echo $BUILDKITE_ANALYTICS_TOKEN >> ui/fixtures/.env
   echo "TENSORZERO_GATEWAY_TAG=ci-sha-$SHORT_HASH"
   echo "TENSORZERO_UI_TAG=ci-sha-$SHORT_HASH"
   echo "TENSORZERO_NODE_UNIT_TESTS_TAG=ci-sha-$SHORT_HASH"
+  echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=ci-sha-$SHORT_HASH"
 } >> ui/fixtures/.env
 {
   echo "FIREWORKS_API_KEY=not_used"
