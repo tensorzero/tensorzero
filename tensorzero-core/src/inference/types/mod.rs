@@ -57,6 +57,9 @@ pub mod file;
 pub mod pyo3_helpers;
 pub mod resolved_input;
 pub mod storage;
+pub mod stored_input;
+
+pub use stored_input::{StoredInput, StoredInputMessage, StoredInputMessageContent};
 
 /*
  * Data flow in TensorZero
@@ -795,7 +798,7 @@ pub struct ChatInferenceDatabaseInsert {
     pub variant_name: String,
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -817,7 +820,7 @@ pub struct JsonInferenceDatabaseInsert {
     pub variant_name: String,
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: JsonInferenceOutput,
     // We at one point wrote empty auxiliary content to the database as "" but now write it as []
@@ -1244,7 +1247,7 @@ pub async fn parse_chat_output(
 impl ChatInferenceDatabaseInsert {
     pub fn new(
         chat_result: ChatInferenceResult,
-        input: ResolvedInput,
+        input: StoredInput,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata
@@ -1274,7 +1277,7 @@ impl ChatInferenceDatabaseInsert {
 impl JsonInferenceDatabaseInsert {
     pub fn new(
         json_result: JsonInferenceResult,
-        input: ResolvedInput,
+        input: StoredInput,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata

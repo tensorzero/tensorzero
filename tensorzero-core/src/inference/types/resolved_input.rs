@@ -1,9 +1,13 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::tool::{ToolCall, ToolResult};
-
 use super::{storage::StoragePath, Base64File, Role, Thought};
+use crate::inference::types::file::Base64FileMetadata;
+use crate::inference::types::stored_input::StoredFile;
+use crate::inference::types::stored_input::{
+    StoredInput, StoredInputMessage, StoredInputMessageContent,
+};
+use crate::tool::{ToolCall, ToolResult};
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
@@ -26,6 +30,21 @@ pub struct ResolvedInput {
 
     #[serde(default)]
     pub messages: Vec<ResolvedInputMessage>,
+}
+
+/// Produces a `StoredInput` from a `ResolvedInput` by discarding the data for any nested `File`s.
+/// The data can be recovered later by re-fetching from the object store using `StoredInput::reresolve`.
+impl ResolvedInput {
+    pub fn into_stored_input(self) -> StoredInput {
+        StoredInput {
+            system: self.system,
+            messages: self
+                .messages
+                .into_iter()
+                .map(ResolvedInputMessage::into_stored_input_message)
+                .collect(),
+        }
+    }
 }
 
 impl std::fmt::Display for ResolvedInput {
@@ -61,6 +80,19 @@ impl ResolvedInput {
 pub struct ResolvedInputMessage {
     pub role: Role,
     pub content: Vec<ResolvedInputMessageContent>,
+}
+
+impl ResolvedInputMessage {
+    pub fn into_stored_input_message(self) -> StoredInputMessage {
+        StoredInputMessage {
+            role: self.role,
+            content: self
+                .content
+                .into_iter()
+                .map(ResolvedInputMessageContent::into_stored_input_message_content)
+                .collect(),
+        }
+    }
 }
 
 impl std::fmt::Display for ResolvedInputMessage {
@@ -115,6 +147,44 @@ pub enum ResolvedInputMessageContent {
         model_provider_name: Option<String>,
     },
     // We may extend this in the future to include other types of content
+}
+
+impl ResolvedInputMessageContent {
+    pub fn into_stored_input_message_content(self) -> StoredInputMessageContent {
+        match self {
+            ResolvedInputMessageContent::Text { value } => {
+                StoredInputMessageContent::Text { value }
+            }
+            ResolvedInputMessageContent::ToolCall(tool_call) => {
+                StoredInputMessageContent::ToolCall(tool_call)
+            }
+            ResolvedInputMessageContent::ToolResult(tool_result) => {
+                StoredInputMessageContent::ToolResult(tool_result)
+            }
+            ResolvedInputMessageContent::RawText { value } => {
+                StoredInputMessageContent::RawText { value }
+            }
+            ResolvedInputMessageContent::Thought(thought) => {
+                StoredInputMessageContent::Thought(thought)
+            }
+            ResolvedInputMessageContent::File(file) => {
+                StoredInputMessageContent::File(Box::new(StoredFile {
+                    file: Base64FileMetadata {
+                        url: file.file.url.clone(),
+                        mime_type: file.file.mime_type.clone(),
+                    },
+                    storage_path: file.storage_path.clone(),
+                }))
+            }
+            ResolvedInputMessageContent::Unknown {
+                data,
+                model_provider_name,
+            } => StoredInputMessageContent::Unknown {
+                data,
+                model_provider_name,
+            },
+        }
+    }
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]

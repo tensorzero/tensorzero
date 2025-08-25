@@ -32,9 +32,9 @@ import type { InferenceResponse } from "~/utils/tensorzero";
 import { logger } from "~/utils/logger";
 import type {
   ClientInferenceParams,
-  ResolvedInput as TensorZeroResolvedInput,
-  ResolvedInputMessage as TensorZeroResolvedInputMessage,
-  ResolvedInputMessageContent as TensorZeroResolvedInputMessageContent,
+  StoredInput as TensorZeroStoredInput,
+  StoredInputMessage as TensorZeroStoredInputMessage,
+  StoredInputMessageContent as TensorZeroStoredInputMessageContent,
   ToolCallConfigDatabaseInsert,
   ContentBlockChatOutput,
   JsonInferenceOutput,
@@ -189,29 +189,27 @@ export function useInferenceActionFetcher() {
   } satisfies ActionFetcher;
 }
 
-// Convert TensorZero's ResolvedInput to our Input type
-export function tensorZeroResolvedInputToInput(
-  resolvedInput: TensorZeroResolvedInput,
+// Convert TensorZero's StoredInput to our Input type
+export function tensorZeroStoredInputToInput(
+  resolvedInput: TensorZeroStoredInput,
 ): Input {
   return {
     system: resolvedInput.system ?? undefined,
-    messages: resolvedInput.messages.map(
-      tensorZeroResolvedMessageToInputMessage,
-    ),
+    messages: resolvedInput.messages.map(tensorZeroStoredMessageToInputMessage),
   };
 }
 
-function tensorZeroResolvedMessageToInputMessage(
-  message: TensorZeroResolvedInputMessage,
+function tensorZeroStoredMessageToInputMessage(
+  message: TensorZeroStoredInputMessage,
 ): InputMessage {
   return {
     role: message.role,
-    content: message.content.map(tensorZeroResolvedContentToInputContent),
+    content: message.content.map(tensorZeroStoredContentToInputContent),
   };
 }
 
-function tensorZeroResolvedContentToInputContent(
-  content: TensorZeroResolvedInputMessageContent,
+function tensorZeroStoredContentToInputContent(
+  content: TensorZeroStoredInputMessageContent,
 ): InputMessageContent {
   switch (content.type) {
     case "text":

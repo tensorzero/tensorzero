@@ -434,7 +434,7 @@ mod tests {
     use tensorzero_core::endpoints::inference::JsonInferenceResponse;
     use tensorzero_core::evaluations::LLMJudgeIncludeConfig;
     use tensorzero_core::evaluations::LLMJudgeOptimize;
-    use tensorzero_core::inference::types::ResolvedInput;
+    use tensorzero_core::inference::types::StoredInput;
     use tensorzero_core::inference::types::Usage;
     use tensorzero_core::tool::ToolCallInput;
     use tensorzero_core::{
@@ -585,7 +585,7 @@ mod tests {
                 function_name: "foo".to_string(),
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: ResolvedInput {
+                input: StoredInput {
                     // This shouldn't get used
                     system: None,
                     messages: Vec::new(),
@@ -653,7 +653,7 @@ mod tests {
                 function_name: "foo".to_string(),
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: ResolvedInput {
+                input: StoredInput {
                     // This shouldn't get used
                     system: None,
                     messages: Vec::new(),
@@ -884,7 +884,7 @@ mod tests {
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: None,
                 messages: Vec::new(),
             },
@@ -915,7 +915,7 @@ mod tests {
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: None,
                 messages: Vec::new(),
             },
@@ -940,7 +940,7 @@ mod tests {
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: None,
                 messages: Vec::new(),
             },
@@ -966,7 +966,7 @@ mod tests {
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: None,
                 messages: Vec::new(),
             },
@@ -1070,7 +1070,7 @@ mod tests {
                 function_name: "function".to_string(),
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: ResolvedInput {
+                input: StoredInput {
                     system: None,
                     messages: Vec::new(),
                 },
@@ -1183,7 +1183,7 @@ mod tests {
                 function_name: "function".to_string(),
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: ResolvedInput {
+                input: StoredInput {
                     system: None,
                     messages: Vec::new(),
                 },
