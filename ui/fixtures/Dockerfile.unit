@@ -52,5 +52,8 @@ COPY . .
 # Install buildkite-test-collector for test reporting
 RUN pnpm add -D -w buildkite-test-collector
 
-# Set the entrypoint to run UI tests
-ENTRYPOINT ["pnpm", "ui:test"]
+# Set CI environment variable for non-interactive mode
+ENV CI=true
+
+# Set the entrypoint to run UI tests non-interactively
+ENTRYPOINT ["pnpm", "ui:test", "--run"]
