@@ -102,7 +102,7 @@ jobs:
         run: rustc --version
 
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/0.6.4/install.sh | sh
+        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
