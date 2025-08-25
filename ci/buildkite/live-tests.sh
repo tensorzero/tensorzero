@@ -43,8 +43,8 @@ echo "Loaded all containers"
 # ------------------------------------------------------------------------------
 # Setup Node.js and pnpm using shared utility
 # ------------------------------------------------------------------------------
-source "$(dirname "$0")/utils/setup-node.sh"
-pnpm install --frozen-lockfile
+# source "$(dirname "$0")/utils/setup-node.sh"
+# pnpm install --frozen-lockfile
 
 # Install cargo-binstall
 curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
