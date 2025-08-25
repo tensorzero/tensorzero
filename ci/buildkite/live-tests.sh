@@ -19,6 +19,7 @@ curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorz
 # ------------------------------------------------------------------------------
 SHORT_HASH=${BUILDKITE_COMMIT:0:7}
 export TENSORZERO_GATEWAY_TAG=sha-$SHORT_HASH
+export TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-$SHORT_HASH
 # ------------------------------------------------------------------------------
 # Setup Rust
 # ------------------------------------------------------------------------------
