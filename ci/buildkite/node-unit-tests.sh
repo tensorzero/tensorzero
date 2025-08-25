@@ -29,4 +29,4 @@ echo $BUILDKITE_ANALYTICS_TOKEN >> ui/fixtures/.env
   echo "OPENAI_API_KEY=not_used"
 } >> ui/fixtures/.env-gateway
 
-docker compose -f ui/fixtures/docker-compose.unit.yml run --rm unit-tests
+docker compose -f ui/fixtures/docker-compose.unit.yml run --rm node-unit-tests
