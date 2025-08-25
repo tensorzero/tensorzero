@@ -1,4 +1,6 @@
 #[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
+#[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -33,8 +35,8 @@ use url::Url;
 
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 
-#[derive(Debug, Clone, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize)]
 #[cfg_attr(test, ts(export))]
 pub struct TogetherSFTConfig {
     pub model: String,
@@ -54,22 +56,16 @@ pub struct TogetherSFTConfig {
     pub weight_decay: Option<f64>,
     pub suffix: Option<String>,
     // Learning rate scheduler
-    pub lr_scheduler_type: Option<String>, // "linear", "cosine", "constant", etc.
-    pub lr_scheduler_min_lr_ratio: Option<f64>,
+    pub lr_scheduler: Option<TogetherLRScheduler>,
     // Weights & Biases integration
     pub wandb_api_key: Option<String>,
     pub wandb_base_url: Option<String>,
     pub wandb_project_name: Option<String>,
     pub wandb_name: Option<String>,
     // Training method
-    pub train_on_inputs: Option<String>, // "auto", "true", "false" for SFT
+    pub training_method: TogetherTrainingMethod,
     // Training type
-    pub training_type: Option<String>, // "Full" or "LoRA"
-    // LoRA parameters (only used when training_type is "LoRA")
-    pub lora_r: Option<u32>,
-    pub lora_alpha: Option<u32>,
-    pub lora_dropout: Option<f64>,
-    pub lora_trainable_modules: Option<String>,
+    pub training_type: Option<TogetherTrainingType>,
     // Advanced options
     pub from_checkpoint: Option<String>,
     pub from_hf_model: Option<String>,
@@ -117,23 +113,17 @@ pub struct UninitializedTogetherSFTConfig {
     pub max_grad_norm: Option<f64>,
     pub weight_decay: Option<f64>,
     pub suffix: Option<String>,
-    // Learning rate scheduler
-    pub lr_scheduler_type: Option<String>,
-    pub lr_scheduler_min_lr_ratio: Option<f64>,
+    // Learning rate scheduler - nested like Together API
+    pub lr_scheduler: Option<TogetherLRScheduler>,
     // Weights & Biases integration
     pub wandb_api_key: Option<String>,
     pub wandb_base_url: Option<String>,
     pub wandb_project_name: Option<String>,
     pub wandb_name: Option<String>,
-    // Training method
-    pub train_on_inputs: Option<String>,
-    // Training type
-    pub training_type: Option<String>,
-    // LoRA parameters
-    pub lora_r: Option<u32>,
-    pub lora_alpha: Option<u32>,
-    pub lora_dropout: Option<f64>,
-    pub lora_trainable_modules: Option<String>,
+    // Training method - nested like Together API
+    pub training_method: Option<TogetherTrainingMethod>,
+    // Training type - nested like Together API
+    pub training_type: Option<TogetherTrainingType>,
     // Advanced options
     pub from_checkpoint: Option<String>,
     pub from_hf_model: Option<String>,
@@ -206,8 +196,9 @@ impl UninitializedTogetherSFTConfig {
     /// ($self, /, *args, **kwargs)
     #[expect(clippy::too_many_arguments)]
     #[new]
-    #[pyo3(signature = (*, model, credentials=None, api_base=None, n_epochs=None, n_checkpoints=None, n_evals=None, batch_size=None, learning_rate=None, warmup_ratio=None, max_grad_norm=None, weight_decay=None, suffix=None, lr_scheduler_type=None, lr_scheduler_min_lr_ratio=None, wandb_api_key=None, wandb_base_url=None, wandb_project_name=None, wandb_name=None, train_on_inputs=None, training_type=None, lora_r=None, lora_alpha=None, lora_dropout=None, lora_trainable_modules=None, from_checkpoint=None, from_hf_model=None, hf_model_revision=None, hf_api_token=None, hf_output_repo_name=None))]
+    #[pyo3(signature = (*, model, credentials=None, api_base=None, n_epochs=None, n_checkpoints=None, n_evals=None, batch_size=None, learning_rate=None, warmup_ratio=None, max_grad_norm=None, weight_decay=None, suffix=None, lr_scheduler=None, wandb_api_key=None, wandb_base_url=None, wandb_project_name=None, wandb_name=None, training_method=None, training_type=None, from_checkpoint=None, from_hf_model=None, hf_model_revision=None, hf_api_token=None, hf_output_repo_name=None))]
     pub fn new(
+        py: Python,
         model: String,
         credentials: Option<String>,
         api_base: Option<String>,
@@ -220,18 +211,13 @@ impl UninitializedTogetherSFTConfig {
         max_grad_norm: Option<f64>,
         weight_decay: Option<f64>,
         suffix: Option<String>,
-        lr_scheduler_type: Option<String>,
-        lr_scheduler_min_lr_ratio: Option<f64>,
+        lr_scheduler: Option<&Bound<'_, PyAny>>,
         wandb_api_key: Option<String>,
         wandb_base_url: Option<String>,
         wandb_project_name: Option<String>,
         wandb_name: Option<String>,
-        train_on_inputs: Option<String>,
-        training_type: Option<String>,
-        lora_r: Option<u32>,
-        lora_alpha: Option<u32>,
-        lora_dropout: Option<f64>,
-        lora_trainable_modules: Option<String>,
+        training_method: Option<&Bound<'_, PyAny>>,
+        training_type: Option<&Bound<'_, PyAny>>,
         from_checkpoint: Option<String>,
         from_hf_model: Option<String>,
         hf_model_revision: Option<String>,
@@ -250,6 +236,45 @@ impl UninitializedTogetherSFTConfig {
                     .map_err(|e| PyErr::new::<PyValueError, std::string::String>(e.to_string()))
             })
             .transpose()?;
+        // Deserialize lr_scheduler from Python dict to Rust TogetherLRScheduler
+        let lr_scheduler: Option<TogetherLRScheduler> = if let Some(ls) = lr_scheduler {
+            if let Ok(lr_scheduler) = ls.extract::<TogetherLRScheduler>() {
+                // If it's already a TogetherLRScheduler object, use it directly
+                Some(lr_scheduler)
+            } else {
+                // Otherwise, try to deserialize from a Python dict
+                Some(deserialize_from_pyobj(py, ls)?)
+            }
+        } else {
+            None
+        };
+
+        // Deserialize training_method from Python dict to Rust TogetherTrainingMethod
+        let training_method: Option<TogetherTrainingMethod> = if let Some(tm) = training_method {
+            if let Ok(training_method) = tm.extract::<TogetherTrainingMethod>() {
+                // If it's already a TogetherTrainingMethod object, use it directly
+                Some(training_method)
+            } else {
+                // Otherwise, try to deserialize from a Python dict
+                Some(deserialize_from_pyobj(py, tm)?)
+            }
+        } else {
+            None
+        };
+
+        // Deserialize training_type from Python dict to Rust TogetherTrainingType
+        let training_type: Option<TogetherTrainingType> = if let Some(tt) = training_type {
+            if let Ok(training_type) = tt.extract::<TogetherTrainingType>() {
+                // If it's already a TogetherTrainingType object, use it directly
+                Some(training_type)
+            } else {
+                // Otherwise, try to deserialize from a Python dict
+                Some(deserialize_from_pyobj(py, tt)?)
+            }
+        } else {
+            None
+        };
+
         Ok(Self {
             model,
             credentials,
@@ -263,18 +288,13 @@ impl UninitializedTogetherSFTConfig {
             max_grad_norm,
             weight_decay,
             suffix,
-            lr_scheduler_type,
-            lr_scheduler_min_lr_ratio,
+            lr_scheduler,
             wandb_api_key,
             wandb_base_url,
             wandb_project_name,
             wandb_name,
-            train_on_inputs,
+            training_method,
             training_type,
-            lora_r,
-            lora_alpha,
-            lora_dropout,
-            lora_trainable_modules,
             from_checkpoint,
             from_hf_model,
             hf_model_revision,
@@ -284,6 +304,8 @@ impl UninitializedTogetherSFTConfig {
     }
 
     /// Initialize the TogetherSFTConfig. All parameters are optional except for `model`.
+    ///
+    /// For detailed parameter documentation, see: https://docs.together.ai/reference/post-fine-tunes
     ///
     /// :param model: Name of the base model to run fine-tune job on.
     /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::TOGETHER_API_KEY". See docs for more details.
@@ -297,25 +319,20 @@ impl UninitializedTogetherSFTConfig {
     /// :param max_grad_norm: Max gradient norm for gradient clipping. Default: 1. Set to 0 to disable.
     /// :param weight_decay: Regularization parameter for the optimizer. Default: 0.
     /// :param suffix: Suffix that will be added to your fine-tuned model name.
-    /// :param lr_scheduler_type: The learning rate scheduler type to use. Options: 'linear', 'cosine'. Default: 'linear'.
-    /// :param lr_scheduler_min_lr_ratio: Minimum learning rate ratio for the scheduler. Default: 0.0.
+    /// :param lr_scheduler: Learning rate scheduler configuration as a dictionary. For linear: {'lr_scheduler_type': 'linear', 'lr_scheduler_args': {'min_lr_ratio': 0.0}}. For cosine: {'lr_scheduler_type': 'cosine', 'lr_scheduler_args': {'min_lr_ratio': 0.0, 'num_cycles': 0.5}}.
     /// :param wandb_api_key: Weights & Biases API key for experiment tracking.
     /// :param wandb_base_url: Weights & Biases base URL for dedicated instance.
     /// :param wandb_project_name: Weights & Biases project name. Default: 'together'.
     /// :param wandb_name: Weights & Biases run name.
-    /// :param train_on_inputs: Whether to train on input tokens for SFT. Options: 'auto', 'true', 'false'. Default: 'auto'.
-    /// :param training_type: Type of training to perform. Options: 'Full', 'Lora'. Default: 'Lora'.
-    /// :param lora_r: LoRA rank parameter. Default: 8. Only used when training_type is 'Lora'.
-    /// :param lora_alpha: LoRA alpha parameter. Default: 32. Only used when training_type is 'Lora'.
-    /// :param lora_dropout: LoRA dropout parameter. Default: 0.0. Only used when training_type is 'Lora'.
-    /// :param lora_trainable_modules: LoRA trainable modules specification. Default: 'all-linear'. Only used when training_type is 'Lora'.
+    /// :param training_method: Training method configuration as a dictionary with 'method' and 'train_on_inputs'.
+    /// :param training_type: Training type configuration as a dictionary. For 'full': {'type': 'full'}. For 'lora': {'type': 'lora', 'r': 8, 'alpha': 32, 'dropout': 0.0, 'trainable_modules': 'all-linear'}.
     /// :param from_checkpoint: Continue training from a previous checkpoint job ID.
     /// :param from_hf_model: Start training from a Hugging Face model repository.
     /// :param hf_model_revision: Specific model version/commit from Hugging Face repository.
     /// :param hf_api_token: Hugging Face API token for authentication.
     /// :param hf_output_repo_name: Hugging Face repository name for uploading the fine-tuned model.
     #[expect(unused_variables, clippy::too_many_arguments)]
-    #[pyo3(signature = (*, model, credentials=None, api_base=None, n_epochs=None, n_checkpoints=None, n_evals=None, batch_size=None, learning_rate=None, warmup_ratio=None, max_grad_norm=None, weight_decay=None, suffix=None, lr_scheduler_type=None, lr_scheduler_min_lr_ratio=None, wandb_api_key=None, wandb_base_url=None, wandb_project_name=None, wandb_name=None, train_on_inputs=None, training_type=None, lora_r=None, lora_alpha=None, lora_dropout=None, lora_trainable_modules=None, from_checkpoint=None, from_hf_model=None, hf_model_revision=None, hf_api_token=None, hf_output_repo_name=None))]
+    #[pyo3(signature = (*, model, credentials=None, api_base=None, n_epochs=None, n_checkpoints=None, n_evals=None, batch_size=None, learning_rate=None, warmup_ratio=None, max_grad_norm=None, weight_decay=None, suffix=None, lr_scheduler=None, wandb_api_key=None, wandb_base_url=None, wandb_project_name=None, wandb_name=None, training_method=None, training_type=None, from_checkpoint=None, from_hf_model=None, hf_model_revision=None, hf_api_token=None, hf_output_repo_name=None))]
     fn __init__(
         this: Py<Self>,
         model: String,
@@ -330,18 +347,13 @@ impl UninitializedTogetherSFTConfig {
         max_grad_norm: Option<f64>,
         weight_decay: Option<f64>,
         suffix: Option<String>,
-        lr_scheduler_type: Option<String>,
-        lr_scheduler_min_lr_ratio: Option<f64>,
+        lr_scheduler: Option<&Bound<'_, PyAny>>,
         wandb_api_key: Option<String>,
         wandb_base_url: Option<String>,
         wandb_project_name: Option<String>,
         wandb_name: Option<String>,
-        train_on_inputs: Option<String>,
-        training_type: Option<String>,
-        lora_r: Option<u32>,
-        lora_alpha: Option<u32>,
-        lora_dropout: Option<f64>,
-        lora_trainable_modules: Option<String>,
+        training_method: Option<&Bound<'_, PyAny>>,
+        training_type: Option<&Bound<'_, PyAny>>,
         from_checkpoint: Option<String>,
         from_hf_model: Option<String>,
         hf_model_revision: Option<String>,
@@ -375,22 +387,18 @@ impl UninitializedTogetherSFTConfig {
             weight_decay: self.weight_decay,
             suffix: self.suffix,
             // Learning rate scheduler
-            lr_scheduler_type: self.lr_scheduler_type,
-            lr_scheduler_min_lr_ratio: self.lr_scheduler_min_lr_ratio,
+            lr_scheduler: self.lr_scheduler,
             // Weights & Biases integration
             wandb_api_key: self.wandb_api_key,
             wandb_base_url: self.wandb_base_url,
             wandb_project_name: self.wandb_project_name,
             wandb_name: self.wandb_name,
             // Training method
-            train_on_inputs: self.train_on_inputs,
+            training_method: self.training_method.unwrap_or(TogetherTrainingMethod::Sft {
+                train_on_inputs: None,
+            }),
             // Training type
             training_type: self.training_type,
-            // LoRA parameters
-            lora_r: self.lora_r,
-            lora_alpha: self.lora_alpha,
-            lora_dropout: self.lora_dropout,
-            lora_trainable_modules: self.lora_trainable_modules,
             // Advanced options
             from_checkpoint: self.from_checkpoint,
             from_hf_model: self.from_hf_model,
@@ -536,36 +544,24 @@ struct TogetherCreateJobRequest {
     pub hf_output_repo_name: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-struct TogetherLRScheduler {
-    lr_scheduler_type: TogetherLRSchedulerType,
-    lr_scheduler_args: TogetherLRSchedulerArgs,
+// Nested configuration structs that match Together's API format
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass)]
+#[serde(tag = "lr_scheduler_type", rename_all = "snake_case")]
+pub enum TogetherLRScheduler {
+    Linear { min_lr_ratio: f64 },
+    Cosine { min_lr_ratio: f64, num_cycles: f64 },
 }
 
-impl TogetherLRScheduler {
-    fn from_config(
-        lr_scheduler_type: Option<&str>,
-        min_lr_ratio: Option<f64>,
-    ) -> Result<Self, Error> {
-        let scheduler_type = if let Some(scheduler_type) = lr_scheduler_type {
-            TogetherLRSchedulerType::try_from(scheduler_type)?
-        } else {
-            TogetherLRSchedulerType::Linear
-        };
-
-        Ok(TogetherLRScheduler {
-            lr_scheduler_type: scheduler_type,
-            lr_scheduler_args: TogetherLRSchedulerArgs {
-                min_lr_ratio: min_lr_ratio.unwrap_or(0.0),
-            },
-        })
-    }
-}
-
-#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(tag = "type")]
-enum TogetherTrainingType {
-    Full,
+pub enum TogetherTrainingType {
+    Full {},
     Lora {
         #[serde(skip_serializing_if = "Option::is_none")]
         lora_r: Option<u32>,
@@ -578,68 +574,17 @@ enum TogetherTrainingType {
     },
 }
 
-impl TogetherTrainingType {
-    fn from_config(
-        training_type: Option<&str>,
-        lora_r: Option<u32>,
-        lora_alpha: Option<u32>,
-        lora_dropout: Option<f64>,
-        lora_trainable_modules: Option<&str>,
-    ) -> Result<Self, Error> {
-        match training_type {
-            Some("full") => Ok(TogetherTrainingType::Full),
-            Some("lora") | None => Ok(TogetherTrainingType::Lora {
-                lora_r: lora_r.or(Some(8)),
-                lora_alpha: lora_alpha.or(Some(32)),
-                lora_dropout: lora_dropout.or(Some(0.0)),
-                lora_trainable_modules: Some(lora_trainable_modules.unwrap_or("all-linear").to_string()),
-            }),
-            Some(invalid_type) => Err(Error::new(ErrorDetails::Config {
-                message: format!("Invalid training_type '{invalid_type}' for Together provider. Supported types: 'Full', 'Lora'"),
-            })),
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(tag = "method")]
-enum TogetherTrainingMethod {
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass)]
+#[serde(tag = "method", rename_all = "snake_case")]
+pub enum TogetherTrainingMethod {
     #[serde(rename = "sft")]
-    Sft { train_on_inputs: String },
-}
-
-impl TogetherTrainingMethod {
-    fn from_config(train_on_inputs: Option<&str>) -> Self {
-        TogetherTrainingMethod::Sft {
-            train_on_inputs: train_on_inputs.unwrap_or("auto").to_string(),
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum TogetherLRSchedulerType {
-    Linear,
-    Cosine,
-}
-
-impl TryFrom<&str> for TogetherLRSchedulerType {
-    type Error = Error;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "linear" => Ok(TogetherLRSchedulerType::Linear),
-            "cosine" => Ok(TogetherLRSchedulerType::Cosine),
-            _ => Err(Error::new(ErrorDetails::Config {
-                message: format!("Invalid lr_scheduler_type '{value}' for Together provider. Supported types: 'linear', 'cosine'"),
-            })),
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct TogetherLRSchedulerArgs {
-    min_lr_ratio: f64,
+    Sft {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        train_on_inputs: Option<String>,
+    },
 }
 
 impl Optimizer for TogetherSFTConfig {
@@ -688,21 +633,42 @@ impl Optimizer for TogetherSFTConfig {
             Some(0)
         };
 
-        // Build configurations using clean impl methods
-        let lr_scheduler = TogetherLRScheduler::from_config(
-            self.lr_scheduler_type.as_deref(),
-            self.lr_scheduler_min_lr_ratio,
-        )?;
+        // Build API configurations with defaults
+        let lr_scheduler = self
+            .lr_scheduler
+            .clone()
+            .unwrap_or(TogetherLRScheduler::Linear { min_lr_ratio: 0.0 });
 
-        let training_method = TogetherTrainingMethod::from_config(self.train_on_inputs.as_deref());
+        let training_method = match &self.training_method {
+            TogetherTrainingMethod::Sft { train_on_inputs } => TogetherTrainingMethod::Sft {
+                train_on_inputs: train_on_inputs.clone().or_else(|| Some("auto".to_string())),
+            },
+        };
 
-        let training_type = TogetherTrainingType::from_config(
-            self.training_type.as_deref(),
-            self.lora_r,
-            self.lora_alpha,
-            self.lora_dropout,
-            self.lora_trainable_modules.as_deref(),
-        )?;
+        let training_type = match &self.training_type {
+            Some(TogetherTrainingType::Full {}) => TogetherTrainingType::Full {},
+            Some(TogetherTrainingType::Lora {
+                lora_r,
+                lora_alpha,
+                lora_dropout,
+                lora_trainable_modules,
+            }) => TogetherTrainingType::Lora {
+                lora_r: lora_r.or(Some(8)),
+                lora_alpha: lora_alpha.or(Some(32)),
+                lora_dropout: lora_dropout.or(Some(0.0)),
+                lora_trainable_modules: Some(
+                    lora_trainable_modules
+                        .clone()
+                        .unwrap_or_else(|| "all-linear".to_string()),
+                ),
+            },
+            None => TogetherTrainingType::Lora {
+                lora_r: Some(8),
+                lora_alpha: Some(32),
+                lora_dropout: Some(0.0),
+                lora_trainable_modules: Some("all-linear".to_string()),
+            },
+        };
 
         let res: TogetherCreateJobResponse = client
             .post(self.api_base.join("fine-tunes").convert_parse_error()?)
@@ -825,95 +791,5 @@ impl JobHandle for TogetherSFTJobHandle {
                 })
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_invalid_training_type_error() {
-        let result = TogetherTrainingType::from_config(
-            Some("invalid_type"),
-            Some(8),
-            Some(32),
-            Some(0.0),
-            Some("all-linear"),
-        );
-
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Invalid training_type 'invalid_type'"));
-        assert!(err.to_string().contains("Supported types: 'Full', 'Lora'"));
-    }
-
-    #[test]
-    fn test_invalid_lr_scheduler_type_error() {
-        let result = TogetherLRScheduler::from_config(Some("invalid_scheduler"), Some(0.1));
-
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Invalid lr_scheduler_type 'invalid_scheduler'"));
-        assert!(err
-            .to_string()
-            .contains("Supported types: 'linear', 'cosine'"));
-    }
-
-    #[test]
-    fn test_valid_training_type_full() {
-        let result = TogetherTrainingType::from_config(
-            Some("full"),
-            Some(8),
-            Some(32),
-            Some(0.0),
-            Some("all-linear"),
-        );
-
-        assert!(result.is_ok());
-        match result.unwrap() {
-            TogetherTrainingType::Full => (),
-            _ => panic!("Expected Full training type"),
-        }
-    }
-
-    #[test]
-    fn test_valid_training_type_lora() {
-        let result = TogetherTrainingType::from_config(
-            Some("lora"),
-            Some(16),
-            Some(64),
-            Some(0.1),
-            Some("all-linear"),
-        );
-
-        assert!(result.is_ok());
-        match result.unwrap() {
-            TogetherTrainingType::Lora {
-                lora_r,
-                lora_alpha,
-                lora_dropout,
-                lora_trainable_modules,
-            } => {
-                assert_eq!(lora_r, Some(16));
-                assert_eq!(lora_alpha, Some(64));
-                assert_eq!(lora_dropout, Some(0.1));
-                assert_eq!(lora_trainable_modules, Some("all-linear".to_string()));
-            }
-            _ => panic!("Expected Lora training type"),
-        }
-    }
-
-    #[test]
-    fn test_valid_lr_scheduler_cosine() {
-        let result = TogetherLRScheduler::from_config(Some("cosine"), Some(0.2));
-
-        assert!(result.is_ok());
-        let scheduler = result.unwrap();
-        assert_eq!(scheduler.lr_scheduler_args.min_lr_ratio, 0.2);
     }
 }

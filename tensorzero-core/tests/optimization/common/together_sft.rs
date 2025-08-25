@@ -37,21 +37,16 @@ impl OptimizationTestCase for TogetherSFTTestCase {
                     weight_decay: None,
                     suffix: None,
                     // Learning rate scheduler
-                    lr_scheduler_type: None,
-                    lr_scheduler_min_lr_ratio: None,
+                    lr_scheduler: None,
                     // Weights & Biases integration
                     wandb_api_key: None,
                     wandb_base_url: None,
                     wandb_project_name: None,
                     wandb_name: None,
                     // Training method
-                    train_on_inputs: None,
+                    training_method: None,
                     // Training type - use defaults
                     training_type: None,
-                    lora_r: None,
-                    lora_alpha: None,
-                    lora_dropout: None,
-                    lora_trainable_modules: None,
                     // Advanced options
                     from_checkpoint: None,
                     from_hf_model: None,
