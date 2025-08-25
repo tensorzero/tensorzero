@@ -79,13 +79,13 @@ export TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensor
 #     echo "__force_allow_embedded_batch_writes = true" >> tensorzero-core/tests/e2e/tensorzero.toml
 
 # TODO: Download provider proxy cache
-#  AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/download-provider-proxy-cache.sh
+./ci/download-provider-proxy-cache.sh
 
 # Launch services for E2E tests
 docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait
 
 # Launch the provider proxy cache for E2E tests
-./ci/run-provider-proxy-cache.sh ci
+./ci/run-provider-proxy.sh ci
 
 # Build the gateway for E2E tests
 cargo build-e2e
