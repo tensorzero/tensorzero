@@ -104,7 +104,7 @@ services:
       - ./test-results:/app/test-results
     depends_on:
       fixtures:
-        condition: service_healthy
+        condition: service_completed_successfully
       gateway:
         condition: service_healthy
       clickhouse:
