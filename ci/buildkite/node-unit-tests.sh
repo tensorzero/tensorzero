@@ -7,6 +7,7 @@ if [ -z "$BUILDKITE_ANALYTICS_TOKEN" ]; then
     echo "Error: BUILDKITE_ANALYTICS_TOKEN is not set"
     exit 1
 fi
+SHORT_HASH=${BUILDKITE_COMMIT:0:7}
 
 
 source ci/buildkite/utils/docker-hub-credentials.sh
