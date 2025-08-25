@@ -24,7 +24,10 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
     });
 
     const loadingIndicator = (
-      <div className="flex min-h-[8rem] items-center justify-center">
+      <div
+        className="flex min-h-[8rem] items-center justify-center"
+        data-testid="datapoint-playground-output-loading"
+      >
         <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
       </div>
     );
