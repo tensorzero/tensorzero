@@ -695,6 +695,7 @@ mod tests {
                     }),
                     timeouts: TimeoutsConfig::default(),
                     provider_name: Arc::from("dummy"),
+                    extra_body: None,
                 },
             );
             EmbeddingModelConfig {

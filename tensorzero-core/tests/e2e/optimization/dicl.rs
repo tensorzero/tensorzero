@@ -64,6 +64,20 @@ async fn test_insert_dicl_examples_with_batching_success() {
     .await;
 
     assert!(result.is_ok());
+
+    // Verify the data was actually written to ClickHouse by querying the DynamicInContextLearningExample table
+    // We should find exactly 2 rows with the expected function_name and variant_name
+    let query = "SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = 'test_function_e2e' AND variant_name = 'test_variant_e2e'";
+    let count_result = clickhouse
+        .run_query_synchronous_no_params(query.to_string())
+        .await
+        .unwrap();
+    let count_str = count_result.response;
+    let count: u32 = count_str.trim().parse().unwrap();
+    assert_eq!(
+        count, 2,
+        "Expected 2 DICL examples to be inserted, but found {count}"
+    );
 }
 
 #[tokio::test]
@@ -92,6 +106,20 @@ async fn test_insert_dicl_examples_batching_logic() {
     .await;
 
     assert!(result.is_ok());
+
+    // Verify the batching logic worked correctly by checking that all 5 examples were inserted
+    // This test specifically validates that the batching with size 2 creates 3 batches (2+2+1) and all data is preserved
+    let query = "SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = 'test_function_batching_e2e' AND variant_name = 'test_variant_batching_e2e'";
+    let count_result = clickhouse
+        .run_query_synchronous_no_params(query.to_string())
+        .await
+        .unwrap();
+    let count_str = count_result.response;
+    let count: u32 = count_str.trim().parse().unwrap();
+    assert_eq!(
+        count, 5,
+        "Expected 5 DICL examples to be inserted across 3 batches, but found {count}"
+    );
 }
 
 #[tokio::test]
@@ -111,6 +139,20 @@ async fn test_insert_dicl_examples_with_empty_batch() {
 
     // Should handle empty batch gracefully
     assert!(result.is_ok());
+
+    // Verify that no data was written to ClickHouse for empty batch
+    // This confirms that empty batches are handled properly without creating spurious database entries
+    let query = "SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = 'test_function_empty_e2e' AND variant_name = 'test_variant_empty_e2e'";
+    let count_result = clickhouse
+        .run_query_synchronous_no_params(query.to_string())
+        .await
+        .unwrap();
+    let count_str = count_result.response;
+    let count: u32 = count_str.trim().parse().unwrap();
+    assert_eq!(
+        count, 0,
+        "Expected 0 DICL examples for empty batch, but found {count}"
+    );
 }
 
 #[tokio::test]
@@ -135,4 +177,44 @@ async fn test_insert_dicl_examples_json_serialization() {
     .await;
 
     assert!(result.is_ok());
+
+    // Verify that the data with special characters was correctly inserted and can be retrieved
+    // This test ensures JSON serialization handles quotes, newlines, and Unicode characters properly
+    let count_query = "SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = 'test_function_json_e2e' AND variant_name = 'test_variant_json_e2e'";
+    let count_result = clickhouse
+        .run_query_synchronous_no_params(count_query.to_string())
+        .await
+        .unwrap();
+    let count_str = count_result.response;
+    let count: u32 = count_str.trim().parse().unwrap();
+    assert_eq!(
+        count, 1,
+        "Expected 1 DICL example with special characters to be inserted, but found {count}"
+    );
+
+    // Also verify that the input and output contain the expected special characters
+    let content_query = "SELECT input, output FROM DynamicInContextLearningExample WHERE function_name = 'test_function_json_e2e' AND variant_name = 'test_variant_json_e2e' FORMAT JSONEachRow";
+    let content_result = clickhouse
+        .run_query_synchronous_no_params(content_query.to_string())
+        .await
+        .unwrap();
+    let content_str = content_result.response;
+
+    // Parse the JSON line to verify the content
+    let parsed: serde_json::Value = serde_json::from_str(content_str.trim()).unwrap();
+    let input_str = parsed["input"].as_str().unwrap();
+    let output_str = parsed["output"].as_str().unwrap();
+
+    assert!(
+        input_str.contains("\\\"quotes\\\""),
+        "Input should contain escaped quotes: {input_str}"
+    );
+    assert!(
+        input_str.contains("\\n"),
+        "Input should contain escaped newlines: {input_str}"
+    );
+    assert!(
+        output_str.contains("àáâã"),
+        "Output should contain Unicode chars: {output_str}"
+    );
 }
