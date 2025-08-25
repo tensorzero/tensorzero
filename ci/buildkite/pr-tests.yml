@@ -13,8 +13,24 @@ steps:
     command: bash ./ci/buildkite/build-node-unit-tests-container.sh
     key: "build-node-unit-tests-container"
 
+  - label: "Build UI Container"
+    command: bash ./ci/buildkite/build-ui-container.sh
+    key: "build-ui-container"
+
+  - label: "Build E2E Tests Container"
+    command: bash ./ci/buildkite/build-e2e-tests-container.sh
+    key: "build-e2e-tests-container"
+
   - label: ":node: Node.js Tests"
     command: ./ci/buildkite/node-unit-tests.sh
     depends_on:
       - "build-gateway-container"
       - "build-node-unit-tests-container"
+
+  - label: ":playwright: UI E2E Tests"
+    command: ./ci/buildkite/ui-e2e-tests.sh
+    depends_on:
+      - "build-gateway-container"
+      - "build-mock-inference-provider-container"
+      - "build-ui-container"
+      - "build-e2e-tests-container"
