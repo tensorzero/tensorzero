@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    ContentBlockOutput, FinishReason, ModelInferenceRequest, RequestMessage, ResolvedInput, Usage,
+    ContentBlockOutput, FinishReason, ModelInferenceRequest, RequestMessage, StoredInput, Usage,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -199,7 +199,7 @@ pub struct BatchModelInferenceRow<'a> {
     pub variant_name: Cow<'a, str>,
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub input_messages: Vec<RequestMessage>,
     pub system: Option<Cow<'a, str>>,

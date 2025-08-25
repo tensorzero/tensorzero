@@ -35,7 +35,7 @@ use tensorzero_core::{
         clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
         select_feedback_by_target_id_clickhouse, select_json_inference_clickhouse,
     },
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, Usage},
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Usage},
 };
 use tensorzero_core::{
     endpoints::{
@@ -717,8 +717,8 @@ async fn run_image_evaluation() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        // Check the input to the inference parses as ResolvedInput
-        let _clickhouse_input: ResolvedInput =
+        // Check the input to the inference parses as StoredInput
+        let _clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // assert_eq!(&clickhouse_input, parsed.datapoint.input());
         let clickhouse_output: Vec<ContentBlockChatOutput> =
@@ -929,8 +929,8 @@ async fn check_invalid_image_evaluation() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        // Check the input to the inference parses as ResolvedInput
-        let _clickhouse_input: ResolvedInput =
+        // Check the input to the inference parses as StoreInput
+        let _clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // assert_eq!(&clickhouse_input, parsed.datapoint.input());
         let clickhouse_output: Vec<ContentBlockChatOutput> =
