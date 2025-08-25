@@ -3,6 +3,12 @@ steps:
     command: bash ./ci/buildkite/build-gateway-container.sh
     key: "build-gateway-container"
 
+  - label: "Build Mock Inference Provider Container"
+    command: bash ./ci/buildkite/build-mock-inference-provider-container.sh
+    key: "build-mock-inference-provider-container"
+    artifact_paths:
+      - mock-inference-provider-container.tar
+
   - label: "Build Node Unit Tests Container"
     command: bash ./ci/buildkite/build-node-unit-tests-container.sh
     key: "build-node-unit-tests-container"

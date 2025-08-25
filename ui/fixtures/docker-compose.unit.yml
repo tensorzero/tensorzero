@@ -79,6 +79,21 @@ services:
       start_interval: 1s
       start_period: 300s # Give the script time to start
 
+  mock-inference-provider:
+    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-latest}
+    build:
+      context: ../../
+      dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
+    environment:
+      RUST_LOG: debug
+    ports:
+      - "3030:3030"
+    healthcheck:
+      test: wget --spider --tries 1 http://localhost:3030/status
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
   node-unit-tests:
     image: tensorzero/node-unit-tests:${TENSORZERO_NODE_UNIT_TESTS_TAG:-latest}
     build:
