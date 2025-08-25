@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-
 # Set up Buildkite test analytics collection
 export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get NODE_UNIT_ANALYTICS_ACCESS_TOKEN)
 if [ -z "$BUILDKITE_ANALYTICS_TOKEN" ]; then
@@ -14,8 +13,8 @@ source ci/buildkite/utils/docker-hub-credentials.sh
 
 # Login to Docker Hub (make sure DOCKER_HUB_USERNAME and DOCKER_HUB_ACCESS_TOKEN are set)
 echo "$DOCKER_HUB_ACCESS_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
+echo "Logged in to Docker Hub"
 
-docker compose -f ui/fixtures/docker-compose.unit.yml pull
 
 echo $BUILDKITE_ANALYTICS_TOKEN >> ui/fixtures/.env
 {
@@ -28,5 +27,10 @@ echo $BUILDKITE_ANALYTICS_TOKEN >> ui/fixtures/.env
   echo "FIREWORKS_API_KEY=not_used"
   echo "OPENAI_API_KEY=not_used"
 } >> ui/fixtures/.env-gateway
+echo "Set up environment variables"
+
+docker compose -f ui/fixtures/docker-compose.unit.yml pull
+
+echo "Pulled Docker images"
 
 docker compose -f ui/fixtures/docker-compose.unit.yml run --rm node-unit-tests
