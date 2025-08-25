@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use std::sync::LazyLock;
 
 use axum::extract::MatchedPath;
@@ -17,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use tower_http::trace::TraceLayer;
 use tracing::level_filters::LevelFilter;
 use tracing::Span;
-use tracing_opentelemetry::OpenTelemetrySpanExt;
+use tracing_opentelemetry::{OpenTelemetrySpanExt, PreSampledTracer};
 use tracing_subscriber::layer::Filter;
 use tracing_subscriber::{filter, EnvFilter, Registry};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -33,7 +34,7 @@ pub enum LogFormat {
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 struct CustomTracerKey {
-    extra_headers: Vec<(HeaderName, HeaderValue)>,
+    extra_headers: Vec<(String, String)>,
 }
 
 #[derive(Clone, Debug)]
@@ -62,7 +63,10 @@ impl Tracer for TracerWrapper {
                         self.custom_tracers.get_with_by_ref(&key, || {
                             let mut headers = HeaderMap::new();
                             for (name, value) in &key.extra_headers {
-                                headers.insert(name.clone(), value.clone());
+                                headers.insert(
+                                    HeaderName::from_str(name).unwrap(),
+                                    HeaderValue::from_str(value).unwrap(),
+                                );
                             }
                             let metadata = MetadataMap::from_headers(headers);
                             let exporter = opentelemetry_otlp::SpanExporter::builder()
@@ -128,8 +132,22 @@ impl Tracer for TracerWrapper {
     }
 }
 
-static CUSTOM_TRACERS: LazyLock<Cache<CustomTracerKey, CustomTracer>> =
-    LazyLock::new(|| Cache::new(100));
+impl PreSampledTracer for TracerWrapper {
+    fn sampled_context(
+        &self,
+        data: &mut tracing_opentelemetry::OtelData,
+    ) -> opentelemetry::Context {
+        self.default_tracer.sampled_context(data)
+    }
+
+    fn new_trace_id(&self) -> opentelemetry::trace::TraceId {
+        self.default_tracer.new_trace_id()
+    }
+
+    fn new_span_id(&self) -> opentelemetry::trace::SpanId {
+        self.default_tracer.new_span_id()
+    }
+}
 
 // Builds the internal OpenTelemetry layer, without any filtering applied.
 fn internal_build_otel_layer<T: SpanExporter + 'static>(
@@ -162,7 +180,10 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
     let tracer = provider.tracer("tensorzero");
     opentelemetry::global::set_tracer_provider(provider.clone());
     Ok(tracing_opentelemetry::layer()
-        .with_tracer(tracer)
+        .with_tracer(TracerWrapper {
+            default_tracer: tracer,
+            custom_tracers: Cache::new(100),
+        })
         .with_level(true))
 }
 
