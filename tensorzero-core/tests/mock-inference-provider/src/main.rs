@@ -3,8 +3,6 @@
 
 mod error;
 mod fireworks;
-mod together;
-mod gcp_vertex_gemini;
 
 use async_stream::try_stream;
 use axum::http::StatusCode;
@@ -29,10 +27,6 @@ use std::{
 };
 use tokio::signal;
 use tower_http::trace::TraceLayer;
-
-// Re-exports for the new modules
-use together::*;
-use gcp_vertex_gemini::*;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -157,26 +151,6 @@ fn make_router() -> axum::Router {
         .route(
             "/fireworks/v1/accounts/{account_id}/deployedModels",
             axum::routing::post(fireworks::create_deployed_model),
-        )
-        .route(
-            "/together/v1/files/upload",
-            axum::routing::post(together::upload_file),
-        )
-        .route(
-            "/together/v1/fine-tunes",
-            axum::routing::post(together::create_fine_tune),
-        )
-        .route(
-            "/together/v1/fine-tunes/{job_id}",
-            axum::routing::get(together::get_fine_tune),
-        )
-        .route(
-            "/gcp_vertex_gemini/v1/projects/{project_id}/locations/{region}/tuningJobs",
-            axum::routing::post(gcp_vertex_gemini::create_fine_tune),
-        )
-        .route(
-            "/gcp_vertex_gemini/v1/{project_id}/locations/{region}/tuningJobs/{job_id}",
-            axum::routing::get(gcp_vertex_gemini::get_fine_tune_job),
         )
         .route("/status", axum::routing::get(status_handler))
         .layer(TraceLayer::new_for_http())
