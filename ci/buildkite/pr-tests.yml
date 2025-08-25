@@ -8,13 +8,7 @@ steps:
     key: "build-node-unit-tests-container"
 
   - label: ":node: Node.js Tests"
-    plugins:
-      - docker-login#v3.0.0:
-          username: $DOCKER_HUB_USERNAME
-          password-env: DOCKER_HUB_ACCESS_TOKEN
-      - docker-compose#v5.2.0:
-          run: node-unit-tests
-          config: ui/fixtures/docker-compose.unit.yml
+    command: ./ci/buildkite/node-unit-tests.sh
     depends_on:
       - "build-gateway-container"
       - "build-node-unit-tests-container"
