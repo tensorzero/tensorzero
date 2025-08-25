@@ -609,3 +609,26 @@ export const TextIsJSON: Story = {
     ],
   },
 };
+
+export const UnknownAndThoughtContent: Story = {
+  args: {
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "unknown",
+            data: null,
+            model_provider_name: null,
+          },
+          {
+            type: "thought",
+            text: "This is a thought content block for testing.",
+            signature: null,
+            _internal_provider_type: null,
+          },
+        ],
+      },
+    ],
+  },
+};

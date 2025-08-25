@@ -151,6 +151,28 @@ function renderContentBlock(
 
     case "file_error":
       return <FileErrorMessage key={key} error="Failed to retrieve file" />;
+
+    case "unknown":
+      return (
+        <TextMessage
+          key={key}
+          label="Unknown Content"
+          content="Unknown content type"
+        />
+      );
+
+    case "thought":
+      return (
+        <TextMessage
+          key={key}
+          label="Thought"
+          content={block.text || ""}
+          isEditing={isEditing}
+          onChange={(updatedText) => {
+            onChange?.({ ...block, text: updatedText });
+          }}
+        />
+      );
   }
 }
 

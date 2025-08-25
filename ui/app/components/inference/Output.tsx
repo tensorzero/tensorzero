@@ -254,6 +254,22 @@ function ChatInferenceOutputComponent({
                     toolCallId={block.id}
                   />
                 );
+              case "unknown":
+                return (
+                  <TextMessage
+                    key={index}
+                    label="Unknown Content"
+                    content="Unknown content type"
+                  />
+                );
+              case "thought":
+                return (
+                  <TextMessage
+                    key={index}
+                    label="Thought"
+                    content={block.text || ""}
+                  />
+                );
               default:
                 return null;
             }
