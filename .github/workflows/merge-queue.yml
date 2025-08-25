@@ -87,8 +87,7 @@ jobs:
 
       - name: Update Rust
         run: |
-          attempt=1
-          while [ $attempt -le 3 ]; do
+          for attempt in 1 2 3; do
             if rustup update stable && rustup default stable; then
               break
             fi
@@ -97,7 +96,6 @@ jobs:
               exit 1
             fi
             sleep $((10 * attempt))
-            attempt=$((attempt + 1))
           done
         shell: bash
 
@@ -106,8 +104,7 @@ jobs:
 
       - name: Install Rust toolchain
         run: |
-          attempt=1
-          while [ $attempt -le 3 ]; do
+          for attempt in 1 2 3; do
             if rustup toolchain install stable && rustup default stable; then
               break
             fi
@@ -116,7 +113,6 @@ jobs:
               exit 1
             fi
             sleep $((10 * attempt))
-            attempt=$((attempt + 1))
           done
         shell: bash
       # Start testing workload identity federation credentials once the SDK adds support: https://github.com/googleapis/google-cloud-rust/issues/1342
@@ -137,8 +133,7 @@ jobs:
 
       - name: Install pnpm
         run: |
-          attempt=1
-          while [ $attempt -le 3 ]; do
+          for attempt in 1 2 3; do
             if npm install -g pnpm@latest; then
               break
             fi
@@ -147,7 +142,6 @@ jobs:
               exit 1
             fi
             sleep $((10 * attempt))
-            attempt=$((attempt + 1))
           done
         shell: bash
 

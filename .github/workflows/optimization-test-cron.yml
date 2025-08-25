@@ -29,8 +29,7 @@ jobs:
 
       - name: Install Rust
         run: |
-          attempt=1
-          while [ $attempt -le 3 ]; do
+          for attempt in 1 2 3; do
             if rustup toolchain install stable && rustup default stable; then
               break
             fi
@@ -39,7 +38,6 @@ jobs:
               exit 1
             fi
             sleep $((10 * attempt))
-            attempt=$((attempt + 1))
           done
         shell: bash
 
