@@ -21,7 +21,8 @@ SHORT_HASH=${BUILDKITE_COMMIT:0:7}
 # Install cargo-binstall
 curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
-# TODO (Claude): if env var REPLICATED="1" then set TENSORZERO_CLICKHOUSE_CLUSTER_NAME=tensorzero_e2e_tests_cluster in the environment of the script
+# TODO: handle replication (for merge queue checks)
+# if env var REPLICATED="1" then set TENSORZERO_CLICKHOUSE_CLUSTER_NAME=tensorzero_e2e_tests_cluster in the environment of the script
 
 # Get the fixtures
 buildkite-agent artifact download fixtures.tar.gz ui/fixtures
@@ -58,16 +59,24 @@ cargo binstall -y cargo-nextest --secure
 export TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests"
 export TENSORZERO_SKIP_LARGE_FIXTURES=1
 export TENSORZERO_GATEWAY_TAG=sha-$SHORT_HASH
-# TODO: handle replication
 # Default version was "24.12-alpine" - now required as environment variable
 export TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-$SHORT_HASH
+# TODO: handle replication
+# We'll need to set the cluster name environment variable
 
 # Launch non-replicated ClickHouse containers for E2E tensorzero_e2e_tests
 docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse gateway fixtures mock-inference-provider --wait
 
 CLICKHOUSE_VERSION=$(curl -s "http://localhost:8123/query?user=chuser&password=chpassword" --data-binary "SELECT version()")
 echo "Detected ClickHouse version: $CLICKHOUSE_VERSION"
-# TODO: assert that this matches the TENSORZERO_CLICKHOUSE_VERSION
+Assert that detected version matches expected version
+if [ "$CLICKHOUSE_VERSION" != "$TENSORZERO_CLICKHOUSE_VERSION" ]; then
+   echo "Error: ClickHouse version mismatch!"
+   echo "Expected: $TENSORZERO_CLICKHOUSE_VERSION"
+   echo "Detected: $CLICKHOUSE_VERSION"
+   exit 1
+fi
+echo "ClickHouse version validated: $CLICKHOUSE_VERSION"
 
 # Launch the gateway for E2E tests
 cargo run-e2e > e2e_logs.txt 2>&1 &
