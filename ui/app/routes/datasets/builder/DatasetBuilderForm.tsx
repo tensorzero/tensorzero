@@ -14,7 +14,7 @@ import {
 import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 import { useFetcher } from "react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "~/components/ui/button";
 import OutputSourceSelector from "./OutputSourceSelector";
 import { DatasetCountDisplay } from "./DatasetCountDisplay";
@@ -27,6 +27,10 @@ export function DatasetBuilderForm() {
   >("idle");
   const [countToInsert, setCountToInsert] = useState<number | null>(null);
   const [isNewDataset, setIsNewDataset] = useState<boolean | null>(null);
+  // Track loading flags from child fetchers
+  const [isMetricSelectorLoading, setIsMetricSelectorLoading] = useState(false);
+  const [isOutputSourceLoading, setIsOutputSourceLoading] = useState(false);
+  const [isInsertCountLoading, setIsInsertCountLoading] = useState(false);
 
   const form = useForm<DatasetBuilderFormValues>({
     defaultValues: {
@@ -69,6 +73,21 @@ export function DatasetBuilderForm() {
     }
   }, [metricName, functionName, config, form, functionConfig]);
 
+  // Compute whether any part of the form is loading
+  const isAnyLoading = useMemo(
+    () =>
+      counts.isLoading ||
+      isMetricSelectorLoading ||
+      isOutputSourceLoading ||
+      isInsertCountLoading,
+    [
+      counts.isLoading,
+      isMetricSelectorLoading,
+      isOutputSourceLoading,
+      isInsertCountLoading,
+    ],
+  );
+
   // Handle form submission response
   useEffect(() => {
     if (formFetcher.data) {
@@ -91,6 +110,9 @@ export function DatasetBuilderForm() {
   // Form submission handler
   const onSubmit = async (data: DatasetBuilderFormValues) => {
     try {
+      if (isAnyLoading) {
+        return;
+      }
       const submitData = new FormData();
       submitData.append("data", JSON.stringify(data));
 
@@ -152,17 +174,24 @@ export function DatasetBuilderForm() {
             addDemonstrations={false}
             feedbackCount={counts.feedbackCount}
             curatedInferenceCount={counts.curatedInferenceCount}
+            isLoading={counts.isLoading}
+            onMetricsLoadingChange={setIsMetricSelectorLoading}
           />
-          <OutputSourceSelector control={form.control} />
+          <OutputSourceSelector
+            control={form.control}
+            onLoadingChange={setIsOutputSourceLoading}
+          />
         </div>
         <DatasetCountDisplay
           control={form.control}
           setCountToInsert={setCountToInsert}
+          onLoadingChange={setIsInsertCountLoading}
         />
         <Button
           type="submit"
           disabled={
             submissionPhase !== "idle" ||
+            isAnyLoading ||
             countToInsert === null ||
             countToInsert === 0 ||
             !selectedDataset
