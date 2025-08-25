@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Clear disk space
+./ci/free-disk-space.sh
+
 # Get all env vars
 source ci/buildkite/utils/live-tests-env.sh
 
