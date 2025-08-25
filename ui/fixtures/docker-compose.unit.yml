@@ -20,7 +20,6 @@ services:
       start_interval: 1s
       timeout: 1s
 
-
   gateway:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
     build:
@@ -85,7 +84,7 @@ services:
   node-unit-tests:
     image: tensorzero/node-unit-tests:${TENSORZERO_UI_TESTS_TAG:-latest}
     build:
-      context: ../..  # Same context as gateway since you need access to the whole monorepo
+      context: ../.. # Same context as gateway since you need access to the whole monorepo
       dockerfile: ui/fixtures/Dockerfile.unit # Or wherever you put the test Dockerfile
       args:
         NODE_VERSION: ${NODE_VERSION:-22}
@@ -112,9 +111,3 @@ services:
         condition: service_healthy
       clickhouse:
         condition: service_healthy
-      mock-inference-provider:
-        condition: service_healthy
-    # Don't auto-start this service with `docker compose up`
-    # Run it explicitly with `docker compose run --rm ui-tests`
-    profiles:
-      - tests

@@ -3,16 +3,15 @@ steps:
     command: bash ./ci/buildkite/build-gateway-container.sh
     key: "build-gateway-container"
 
-  - label: "Build Mock Inference Provider Container"
-    command: bash ./ci/buildkite/build-mock-inference-provider-container.sh
-    key: "build-mock-inference-provider-container"
-
   - label: "Build Node Unit Tests Container"
     command: bash ./ci/buildkite/build-node-unit-tests-container.sh
     key: "build-node-unit-tests-container"
 
   - label: ":node: Node.js Tests"
-    command: bash ./ci/buildkite/node-unit-tests.sh
+    plugins:
+      - docker-compose#v5.2.0:
+          run: node-unit-tests
+          config: ui/fixtures/docker-compose.unit.yml
     depends_on:
       - "build-gateway-container"
       - "build-node-unit-tests-container"
