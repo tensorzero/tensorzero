@@ -59,8 +59,7 @@ curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-
 cargo binstall -y cargo-nextest --secure
 
 # Write GCP JWT key to file
-# TODO: do this correctly with a secret
-echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
+buildkite-agent secret get GCP_JWT_KEY > ~/gcp_jwt_key.json
 
 # Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
 export TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests"
