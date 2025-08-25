@@ -231,6 +231,9 @@ async fn main() {
             "/batch_inference/{batch_id}/inference/{inference_id}",
             get(endpoints::batch_inference::poll_batch_inference_handler),
         )
+        // TODO(# 3191): Implement a trait for openai compatible endpoints
+        // so this logic can be centralized to one place and not reimplemented in
+        // our gateway utils.
         .route(
             "/openai/v1/chat/completions",
             post(endpoints::openai_compatible::inference_handler),

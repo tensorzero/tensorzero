@@ -1,0 +1,84 @@
+---
+title: "API Reference: Datasets & Datapoints"
+sidebarTitle: Datasets & Datapoints
+description: API reference for endpoints that manage datasets and datapoints.
+---
+
+In TensorZero, datasets are collections of data that can be used for workflows like evaluations and optimization recipes.
+You can create and manage datasets using the TensorZero UI or programmatically using the TensorZero Gateway.
+
+A dataset is a named collection of datapoints.
+Each datapoint belongs to a function, with fields that depend on the function's type.
+Broadly speaking, each datapoint largely mirrors the structure of an inference, with an input, an optional output, and other associated metadata (e.g. tags).
+
+<Tip>
+
+You can find a complete runnable example of how to use the datasets and datapoints API in our [GitHub repository](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/datasets-datapoints).
+
+</Tip>
+
+## Endpoints & Methods
+
+### List datapoints in a dataset
+
+This endpoint returns a list of datapoints in the dataset.
+Each datapoint is an object that includes all the relevant fields (e.g. input, output, tags).
+
+- **Gateway Endpoint:** `GET /datasets/{dataset_name}/datapoints`
+- **Client Method:** `list_datapoints`
+- **Parameters:**
+  - `dataset_name` (string)
+  - `function` (string, optional)
+  - `limit` (int, optional, defaults to 100)
+  - `offset` (int, optional, defaults to 0)
+
+If `function` is set, this method only returns datapoints in the dataset for the specified function.
+
+### Get a datapoint
+
+This endpoint returns the datapoint with the given ID, including all the relevant fields (e.g. input, output, tags).
+
+- **Gateway Endpoint:** `GET /datasets/{dataset_name}/datapoints/{datapoint_id}`
+- **Client Method:** `get_datapoint`
+- **Parameters:**
+  - `dataset_name` (string)
+  - `datapoint_id` (string)
+
+### Add datapoints to a dataset (or create a dataset)
+
+This endpoint adds a list of datapoints to a dataset.
+If the dataset does not exist, it will be created with the given name.
+
+- **Gateway Endpoint:** `POST /datasets/{dataset_name}/datapoints/bulk`
+- **Client Method:** `bulk_insert_datapoints`
+- **Parameters:**
+  - `dataset_name` (string)
+  - `datapoints` (list of objects, see below)
+
+For `chat` functions, each datapoint object must have the following fields:
+
+- `function_name` (string)
+- `input` (object, identical to an inference's `input`)
+- `output` (a list of objects, optional, each object must be a content block like in an inference's output)
+- `allowed_tools` (list of strings, optional, identical to an inference's `allowed_tools`)
+- `tool_choice` (string, optional, identical to an inference's `tool_choice`)
+- `parallel_tool_calls` (boolean, optional, defaults to `false`)
+- `tags` (map of string to string, optional)
+
+For `json` functions, each datapoint object must have the following fields:
+
+- `function_name` (string)
+- `input` (object, identical to an inference's `input`)
+- `output` (object, optional, an object that matches the `output_schema` of the function)
+- `output_schema` (object, optional, a dynamic JSON schema that overrides the output schema of the function)
+- `tags` (map of string to string, optional)
+
+### Delete a datapoint
+
+This endpoint performs a **soft deletion**: the datapoint is marked as stale and will be disregarded by the system in the future (e.g. when listing datapoints or running evaluations), but the data remains in the database.
+
+- **Gateway Endpoint:** `DELETE /datasets/{dataset_name}/datapoints/{datapoint_id}`
+- **Client Method:** `delete_datapoint`
+- **Parameters:**
+  - `dataset_name` (string)
+  - `datapoint_id` (string)

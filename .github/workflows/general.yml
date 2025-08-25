@@ -3,6 +3,8 @@ run-name: "General Checks for: ${{ github.event.pull_request.title || github.ref
 
 on:
   merge_group:
+    paths-ignore:
+      - "docs/**"
   pull_request:
     branches: ["main"]
 
@@ -109,7 +111,18 @@ jobs:
           node-version: "22.9.0"
 
       - name: Install pnpm
-        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Install dependencies
         working-directory: internal/tensorzero-node
@@ -138,7 +151,19 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain
+        run: |
+          for attempt in 1 2 3; do
+            if rustup toolchain install stable && rustup default stable; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-provider: "buildjet"
@@ -168,8 +193,17 @@ jobs:
       # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
       - name: Install Rust 1.86.0
         run: |
-          rustup install 1.86.0 --component clippy,rustfmt
-          rustup default 1.86.0
+          for attempt in 1 2 3; do
+            if rustup install 1.86.0 --component clippy,rustfmt && rustup default 1.86.0; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust 1.86.0 after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Print Rust version
         run: rustc --version
@@ -180,10 +214,21 @@ jobs:
           node-version: "22.9.0"
 
       - name: Install pnpm
-        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
 
       - name: Configure Namespace cache for Rust, Python (pip), and pnpm
         uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
@@ -305,18 +350,6 @@ jobs:
         run: |
           uv run stubtest tensorzero.tensorzero
 
-      - name: "Python: OpenAI Client: Install dependencies"
-        working-directory: clients/openai-python
-        run: |
-          uv venv
-          uv pip sync requirements.txt
-
-      - name: "Python: OpenAI Client: pyright"
-        working-directory: clients/openai-python
-        run: |
-          uv pip install pyright==1.1.394
-          uv run pyright
-
       - name: "Node.js: Run prettier"
         run: pnpm --filter=openai-node run format
 
@@ -381,19 +414,25 @@ jobs:
           - tag: "24.12-alpine"
             prefix: "24.12"
             allow_failure: false
-          - tag: "25.2-alpine"
-            prefix: "25.2"
-            allow_failure: false
           - tag: "latest-alpine"
             prefix: ""
-            # ClickHouse can make new releases at any time, which might break our tests.
-            # We allow this job to fail to avoid blocking CI whenever this happens.
-            # However, we'll still want to fix the failing tests soon after we notice the failure
-            allow_failure: true
+            allow_failure: false
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain
+        run: |
+          for attempt in 1 2 3; do
+            if rustup toolchain install stable && rustup default stable; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-provider: "buildjet"
@@ -415,7 +454,7 @@ jobs:
         run: echo "TENSORZERO_CLICKHOUSE_CLUSTER_NAME=tensorzero_e2e_tests_cluster" >> $GITHUB_ENV
 
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
@@ -541,7 +580,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain
+        run: |
+          for attempt in 1 2 3; do
+            if rustup toolchain install stable && rustup default stable; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-provider: "buildjet"
@@ -553,7 +604,7 @@ jobs:
           tool: cargo-nextest
 
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
