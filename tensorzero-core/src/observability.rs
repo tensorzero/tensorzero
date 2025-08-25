@@ -1,11 +1,19 @@
+use std::sync::LazyLock;
+
 use axum::extract::MatchedPath;
 use axum::Router;
 use clap::ValueEnum;
+use http::{HeaderMap, HeaderName, HeaderValue};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
-use opentelemetry::trace::TracerProvider as _;
+use moka::sync::Cache;
+use opentelemetry::trace::{Tracer, TracerProvider as _};
 use opentelemetry::KeyValue;
+use opentelemetry_otlp::tonic_types::metadata::MetadataMap;
+use opentelemetry_otlp::WithTonicConfig;
+use opentelemetry_sdk::trace::SdkTracer;
 use opentelemetry_sdk::trace::{SdkTracerProvider, SpanExporter};
 use opentelemetry_sdk::Resource;
+use serde::{Deserialize, Serialize};
 use tower_http::trace::TraceLayer;
 use tracing::level_filters::LevelFilter;
 use tracing::Span;
@@ -22,6 +30,106 @@ pub enum LogFormat {
     Pretty,
     Json,
 }
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+struct CustomTracerKey {
+    extra_headers: Vec<(HeaderName, HeaderValue)>,
+}
+
+#[derive(Clone, Debug)]
+struct CustomTracer {
+    inner: SdkTracer,
+}
+
+struct TracerWrapper {
+    default_tracer: SdkTracer,
+    custom_tracers: Cache<CustomTracerKey, CustomTracer>,
+}
+
+impl Tracer for TracerWrapper {
+    type Span = <SdkTracer as Tracer>::Span;
+
+    fn build_with_context(
+        &self,
+        builder: opentelemetry::trace::SpanBuilder,
+        parent_cx: &opentelemetry::Context,
+    ) -> Self::Span {
+        for attr in builder.attributes.iter().flatten() {
+            if attr.key.as_str() == "__tensorzero_custom_tracer_" {
+                if let opentelemetry::Value::String(value) = &attr.value {
+                    let key: CustomTracerKey = serde_json::from_str(value.as_str()).unwrap();
+                    let tracer =
+                        self.custom_tracers.get_with_by_ref(&key, || {
+                            let mut headers = HeaderMap::new();
+                            for (name, value) in &key.extra_headers {
+                                headers.insert(name.clone(), value.clone());
+                            }
+                            let metadata = MetadataMap::from_headers(headers);
+                            let exporter = opentelemetry_otlp::SpanExporter::builder()
+                                .with_tonic()
+                                .with_metadata(metadata)
+                                .build()
+                                .unwrap();
+
+                            let provider = SdkTracerProvider::builder().with_resource(
+                                Resource::builder_empty()
+                                    .with_attribute(KeyValue::new(
+                                        opentelemetry_semantic_conventions::resource::SERVICE_NAME,
+                                        "tensorzero-gateway",
+                                    ))
+                                    .build(),
+                            ).with_simple_exporter(exporter).build();
+
+                            let tracer = provider.tracer("tensorzero");
+
+                            CustomTracer { inner: tracer }
+                        });
+
+                    return tracer.inner.build_with_context(builder, parent_cx);
+                }
+            }
+        }
+
+        self.default_tracer.build_with_context(builder, parent_cx)
+    }
+
+    fn start<T>(&self, name: T) -> Self::Span
+    where
+        T: Into<std::borrow::Cow<'static, str>>,
+    {
+        self.default_tracer.start(name)
+    }
+
+    fn start_with_context<T>(&self, name: T, parent_cx: &opentelemetry::Context) -> Self::Span
+    where
+        T: Into<std::borrow::Cow<'static, str>>,
+    {
+        self.default_tracer.start_with_context(name, parent_cx)
+    }
+
+    fn span_builder<T>(&self, name: T) -> opentelemetry::trace::SpanBuilder
+    where
+        T: Into<std::borrow::Cow<'static, str>>,
+    {
+        self.default_tracer.span_builder(name)
+    }
+
+    fn build(&self, builder: opentelemetry::trace::SpanBuilder) -> Self::Span {
+        self.default_tracer.build(builder)
+    }
+
+    fn in_span<T, F, N>(&self, name: N, f: F) -> T
+    where
+        F: FnOnce(opentelemetry::Context) -> T,
+        N: Into<std::borrow::Cow<'static, str>>,
+        Self::Span: Send + Sync + 'static,
+    {
+        self.default_tracer.in_span(name, f)
+    }
+}
+
+static CUSTOM_TRACERS: LazyLock<Cache<CustomTracerKey, CustomTracer>> =
+    LazyLock::new(|| Cache::new(100));
 
 // Builds the internal OpenTelemetry layer, without any filtering applied.
 fn internal_build_otel_layer<T: SpanExporter + 'static>(

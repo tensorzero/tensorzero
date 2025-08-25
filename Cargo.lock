@@ -4874,6 +4874,7 @@ dependencies = [
  "mime 0.4.0-a.0",
  "mime_guess",
  "minijinja",
+ "moka",
  "object_store",
  "opentelemetry",
  "opentelemetry-otlp",
