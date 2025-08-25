@@ -184,6 +184,8 @@ test("playground should work for data with tools", async ({ page }) => {
     page.getByRole("heading", { name: "Inference Error" }),
   ).toHaveCount(0);
 
+  // TODO - clicking the refresh button immediately after the inference loads doesn't seem to work
+  // We should figure out what event to wait for, and remove this sleep
   await page.waitForTimeout(1000);
 
   // Click the refresh button to reload inference
