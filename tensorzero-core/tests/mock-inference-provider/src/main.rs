@@ -3,6 +3,7 @@
 
 mod error;
 mod fireworks;
+mod gcp_vertex_gemini;
 mod together;
 
 use async_stream::try_stream;
@@ -164,6 +165,14 @@ fn make_router() -> axum::Router {
         .route(
             "/together/fine-tunes/{job_id}",
             axum::routing::get(together::get_fine_tuning_job),
+        )
+        .route(
+            "/gcp_vertex_gemini/v1/projects/{project_id}/locations/{region}/tuningJobs",
+            axum::routing::post(gcp_vertex_gemini::create_fine_tuning_job),
+        )
+        .route(
+            "/gcp_vertex_gemini/v1/projects/{project_id}/locations/{region}/tuningJobs/{*job_name}",
+            axum::routing::get(gcp_vertex_gemini::get_fine_tuning_job),
         )
         .route("/status", axum::routing::get(status_handler))
         .layer(TraceLayer::new_for_http())

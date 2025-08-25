@@ -1,3 +1,4 @@
+import os
 from time import sleep
 from typing import List
 
@@ -5,6 +6,7 @@ import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
     FireworksSFTConfig,
+    GCPVertexGeminiSFTConfig,
     OpenAISFTConfig,
     OptimizationJobStatus,
     RenderedSample,
@@ -80,6 +82,41 @@ def test_sync_together_sft(
         sleep(1)
 
 
+def test_sync_gcp_vertex_gemini_sft(
+    embedded_sync_client: TensorZeroGateway,
+    mixed_rendered_samples: List[RenderedSample],
+):
+    # Skip test if GCP credentials are not available
+    has_credentials = os.getenv("GCP_VERTEX_CREDENTIALS_PATH") or os.getenv(
+        "GOOGLE_APPLICATION_CREDENTIALS"
+    )
+
+    if not has_credentials:
+        pytest.skip(
+            "Skipping GCP Vertex Gemini test: No GCP credentials found. Set GCP_VERTEX_CREDENTIALS_PATH or GOOGLE_APPLICATION_CREDENTIALS environment variable."
+        )
+
+    optimization_config = GCPVertexGeminiSFTConfig(
+        model="gemini-2.0-flash-001",
+        bucket_name="tensorzero-e2e-tests",
+        project_id="tensorzero-public",
+        region="us-central1",
+        api_base="http://localhost:3030/gcp_vertex_gemini/",
+    )
+    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
+        train_samples=mixed_rendered_samples,
+        val_samples=None,
+        optimization_config=optimization_config,
+    )
+    while True:
+        job_info = embedded_sync_client.experimental_poll_optimization(
+            job_handle=optimization_job_handle
+        )
+        if job_info.status == OptimizationJobStatus.Completed:
+            break
+        sleep(1)
+
+
 @pytest.mark.asyncio
 async def test_async_openai_sft(
     embedded_async_client: AsyncTensorZeroGateway,
@@ -138,6 +175,43 @@ async def test_async_together_sft(
     optimization_config = TogetherSFTConfig(
         model="meta-llama/Meta-Llama-3.1-8B-Instruct-Reference",
         api_base="http://localhost:3030/together/",
+    )
+    optimization_job_handle = (
+        await embedded_async_client.experimental_launch_optimization(
+            train_samples=mixed_rendered_samples,
+            val_samples=None,
+            optimization_config=optimization_config,
+        )
+    )
+    while True:
+        job_info = await embedded_async_client.experimental_poll_optimization(
+            job_handle=optimization_job_handle
+        )
+        if job_info.status == OptimizationJobStatus.Completed:
+            break
+        sleep(1)
+
+
+@pytest.mark.asyncio
+async def test_async_gcp_vertex_gemini_sft(
+    embedded_async_client: AsyncTensorZeroGateway,
+    mixed_rendered_samples: List[RenderedSample],
+):
+    # Skip test if GCP credentials are not available
+    has_credentials = os.getenv("GCP_VERTEX_CREDENTIALS_PATH") or os.getenv(
+        "GOOGLE_APPLICATION_CREDENTIALS"
+    )
+
+    if not has_credentials:
+        pytest.skip(
+            "Skipping GCP Vertex Gemini test: No GCP credentials found. Set GCP_VERTEX_CREDENTIALS_PATH or GOOGLE_APPLICATION_CREDENTIALS environment variable."
+        )
+    optimization_config = GCPVertexGeminiSFTConfig(
+        model="gemini-2.0-flash-001",
+        bucket_name="tensorzero-e2e-tests",
+        project_id="tensorzero-public",
+        region="us-central1",
+        api_base="http://localhost:3030/gcp_vertex_gemini/",
     )
     optimization_job_handle = (
         await embedded_async_client.experimental_launch_optimization(

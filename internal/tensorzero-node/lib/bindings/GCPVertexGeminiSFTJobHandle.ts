@@ -5,4 +5,5 @@ export type GCPVertexGeminiSFTJobHandle = {
   credential_location: string | null;
   region: string;
   project_id: string;
+  api_base: string | null;
 };

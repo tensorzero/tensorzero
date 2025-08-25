@@ -11,6 +11,7 @@ use uuid::Uuid;
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, ResolvedInput, ResolvedInputMessageContent};
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
+use crate::optimization::gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig;
 use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
 use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
 use crate::optimization::UninitializedOptimizerConfig;
@@ -326,9 +327,13 @@ pub fn deserialize_optimization_config(
         Ok(UninitializedOptimizerConfig::FireworksSFT(obj.extract()?))
     } else if obj.is_instance_of::<UninitializedTogetherSFTConfig>() {
         Ok(UninitializedOptimizerConfig::TogetherSFT(obj.extract()?))
+    } else if obj.is_instance_of::<UninitializedGCPVertexGeminiSFTConfig>() {
+        Ok(UninitializedOptimizerConfig::GCPVertexGeminiSFT(
+            obj.extract()?,
+        ))
     } else {
         Err(PyValueError::new_err(
-            "Invalid optimization config. Expected OpenAISFTConfig, FireworksSFTConfig, or TogetherSFTConfig",
+            "Invalid optimization config. Expected OpenAISFTConfig, FireworksSFTConfig, GCPVertexGeminiSFTConfig, or TogetherSFTConfig",
         ))
     }
 }
