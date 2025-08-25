@@ -96,8 +96,7 @@ while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
   echo "Waiting for gateway to be healthy..."
   sleep 1
 done
-echo "GATEWAY_PID=$!" >> $GITHUB_ENV
-
+export GATEWAY_PID=$!
 # TODO: add all the othe auxiliary tests
 TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-e2e --no-fail-fast
 
