@@ -38,6 +38,7 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
         variant="ghost"
         size="icon"
         className="absolute top-1 right-1 z-5 cursor-pointer opacity-25 transition-opacity hover:opacity-100"
+        data-testid="datapoint-playground-output-refresh-button"
         onClick={() => query.refetch()}
       >
         <Refresh />

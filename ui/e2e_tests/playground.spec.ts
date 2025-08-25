@@ -186,9 +186,9 @@ test("playground should work for data with tools", async ({ page }) => {
 
   // Click the refresh button to reload inference
   // Find the refresh button in the output area
-  const refreshButton = page
-    .getByRole("button")
-    .filter({ has: page.locator("svg") });
+  const refreshButton = page.getByTestId(
+    "datapoint-playground-output-refresh-button",
+  );
   await refreshButton.first().click();
 
   // Wait for the refresh to start
