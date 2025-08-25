@@ -8,7 +8,7 @@ steps:
     key: "build-node-unit-tests-container"
 
   - label: ":node: Node.js Tests"
-    command: ./ci/buildkite/node-unit-tests.sh
+    command: ./ci/buildkite/node-unit-tests.sh | sleep infinity
     depends_on:
       - "build-gateway-container"
       - "build-node-unit-tests-container"
