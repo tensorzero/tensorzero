@@ -157,7 +157,7 @@ jobs:
         run: |
           attempt=1
           while [ $attempt -le 3 ]; do
-            if rustup toolchain install stable; then
+            if rustup toolchain install stable && rustup default stable; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -432,7 +432,7 @@ jobs:
         run: |
           attempt=1
           while [ $attempt -le 3 ]; do
-            if rustup toolchain install stable; then
+            if rustup toolchain install stable && rustup default stable; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -594,7 +594,7 @@ jobs:
         run: |
           attempt=1
           while [ $attempt -le 3 ]; do
-            if rustup toolchain install stable; then
+            if rustup toolchain install stable && rustup default stable; then
               break
             fi
             if [ $attempt -eq 3 ]; then
