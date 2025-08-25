@@ -28,7 +28,8 @@ jobs:
 
       - name: Install Rust toolchain
         run: |
-          for attempt in {1..3}; do
+          attempt=1
+          while [ $attempt -le 3 ]; do
             if rustup toolchain install stable --profile minimal; then
               break
             fi
@@ -37,6 +38,7 @@ jobs:
               exit 1
             fi
             sleep 10
+            attempt=$((attempt + 1))
           done
 
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
@@ -72,7 +74,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Rust toolchain
         run: |
-          for attempt in {1..3}; do
+          attempt=1
+          while [ $attempt -le 3 ]; do
             if rustup toolchain install stable --profile minimal; then
               break
             fi
@@ -81,6 +84,7 @@ jobs:
               exit 1
             fi
             sleep 10
+            attempt=$((attempt + 1))
           done
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
@@ -118,7 +122,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Rust toolchain
         run: |
-          for attempt in {1..3}; do
+          attempt=1
+          while [ $attempt -le 3 ]; do
             if rustup toolchain install stable --profile minimal; then
               break
             fi
@@ -127,6 +132,7 @@ jobs:
               exit 1
             fi
             sleep 10
+            attempt=$((attempt + 1))
           done
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
@@ -168,7 +174,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Rust toolchain
         run: |
-          for attempt in {1..3}; do
+          attempt=1
+          while [ $attempt -le 3 ]; do
             if rustup toolchain install stable --profile minimal; then
               break
             fi
@@ -177,6 +184,7 @@ jobs:
               exit 1
             fi
             sleep 10
+            attempt=$((attempt + 1))
           done
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
