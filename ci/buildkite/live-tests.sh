@@ -82,7 +82,7 @@ export TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensor
 AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/download-provider-proxy-cache.sh
 
 # Launch services for E2E tests
-docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait
+docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait
 
 # Launch the provider proxy cache for E2E tests
 ./ci/run-provider-proxy.sh ci
