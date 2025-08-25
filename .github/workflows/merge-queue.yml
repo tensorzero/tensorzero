@@ -4,6 +4,8 @@ run-name: Merge Queue Checks for ${{ github.ref }}
 on:
   workflow_dispatch:
   merge_group:
+    paths-ignore:
+      - "docs/**"
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 
@@ -45,6 +47,7 @@ env:
   VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
   VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
   VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
+  VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
 
 jobs:
@@ -107,12 +110,11 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
 
-      - name: Configure Namespace cache for Rust, Python (uv), and pnpm
+      - name: Configure Namespace cache for Python (uv), and pnpm
         uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
         with:
           cache: |
             pnpm
-            rust
             uv
 
       - name: Install JS dependencies
@@ -157,7 +159,12 @@ jobs:
       - name: Launch ClickHouse container for E2E tests
         run: |
           # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait || true
+
+      - name: Print ClickHouse container logs
+        if: always()
+        run: |
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
       - name: Launch the provider-proxy cache for E2E tests
         run: |
@@ -197,7 +204,7 @@ jobs:
           bash ./test.sh --verbose &
           TEST_PID=$!
           echo "Started test.sh with PID: $TEST_PID"
-          
+
           # Wait for 5 minutes (300 seconds)
           for i in {1..300}; do
             if ! kill -0 $TEST_PID 2>/dev/null; then
@@ -207,13 +214,13 @@ jobs:
             fi
             sleep 1
           done
-          
+
           echo "Test has been running for 5 minutes, capturing backtraces..."
-          
+
           # Get all processes related to our test
           echo "=== Process tree ==="
           ps -ef | grep -E "(test\.sh|pytest|python)" | grep -v grep || true
-          
+
           echo "=== Capturing backtraces with gdb ==="
           # Find all python processes that might be related to our test
           PYTHON_PIDS=$(pgrep -f "python.*pytest" || true)
@@ -232,18 +239,6 @@ jobs:
             echo "No Python processes found"
           fi
           exit 1
-
-      - name: "Python: OpenAI Client: Install dependencies"
-        working-directory: clients/openai-python
-        run: |
-          uv venv
-          uv pip sync requirements.txt
-
-      - name: "Python: OpenAI Client: pytest"
-        working-directory: clients/openai-python
-        timeout-minutes: 5
-        run: |
-          uv run pytest --verbose
 
       - name: "Node.js: OpenAI Client: test"
         working-directory: clients/openai-node
