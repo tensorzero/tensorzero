@@ -104,7 +104,21 @@ jobs:
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain
+        run: |
+          attempt=1
+          while [ $attempt -le 3 ]; do
+            if rustup toolchain install stable; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep 10
+            attempt=$((attempt + 1))
+          done
+        shell: bash
       # Start testing workload identity federation credentials once the SDK adds support: https://github.com/googleapis/google-cloud-rust/issues/1342
 
       # - uses: 'google-github-actions/auth@v2'
