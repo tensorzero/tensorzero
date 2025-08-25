@@ -1,12 +1,11 @@
-name: Buildkite Test Suite
-run-name: "Buildkite Test Suite: ${{ github.event.pull_request.title || github.ref }}"
+name: Buildkite PR Tests
+run-name: "Buildkite PR Tests: ${{ github.event.pull_request.title || github.ref }}"
 
 on:
-  # Temporarily disabled
   workflow_dispatch:
 
-  # pull_request:
-  #   branches: ["main"]
+  pull_request:
+    branches: ["main"]
 
 jobs:
   unit-tests:

@@ -2,11 +2,8 @@ name: Buildkite Merge Queue Tests
 run-name: "Buildkite Merge Queue Tests: ${{ github.event.pull_request.title || github.ref }}"
 
 on:
-  # merge_group:
+  merge_group:
   workflow_dispatch:
-  # Temporarily enabled on PR
-  pull_request:
-    branches: ["main"]
 
 jobs:
   merge-queue-tests:
